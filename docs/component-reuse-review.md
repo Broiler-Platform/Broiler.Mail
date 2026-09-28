@@ -13,8 +13,9 @@ protocol, and message policies should remain in Broiler.Mail.
 
 This review compared Mail with the local UI, Graphics, Native, Input, Code, Writer,
 Browser, Net, DOM/HTML, Documents, Fond, Plate, and JSeal sources where relevant.
-Mail currently pins UI `0.1.0-preview.9` and Graphics `0.1.0-preview.5` in
-[Directory.Packages.props](D:/Broiler.Mail/Directory.Packages.props:4).
+When this review was written, Mail pinned UI `0.1.0-preview.9` and Graphics
+`0.1.0-preview.5` in [Directory.Packages.props](D:/Broiler.Mail/Directory.Packages.props:4);
+the [follow-up](#follow-up) records the current pins.
 Local sibling source is evidence of implementation and ownership, not evidence
 that a fix is available in a published package. Proposed API/package names below
 are suggestions, not existing products.
@@ -28,7 +29,7 @@ are suggestions, not existing products.
 | Next | Native declarations in clipboard, IME, credentials, and window sizing | `Broiler.Native.Windows` | Reuse existing bindings and add missing binding families. |
 | Next | DPI handling and minimum-window-size mechanics | `Broiler.Graphics` / `.Windows` | Expose size constraints and implement them in the backend. |
 | Next | Generic focus traversal and scrolling focused controls into view | `Broiler.UI` / control implementations | Add neutral focus and reveal contracts. |
-| Next | Literal label text and real UI dispatch | `Broiler.UI.Label` and UI infrastructure | Add small reusable capabilities; preserve existing behavior. |
+| Next | Literal label text and real UI dispatch | `Broiler.UI.Label` and UI infrastructure | Add small reusable capabilities; preserve existing behavior. Dispatch is completed; see the follow-up. |
 | Later | Windows host, clipboard adapter, caret integration, system theme query | A new `Broiler.Hosting.Windows` component | Package the integration shared by several applications. |
 | Evaluate later | JSON configuration mechanics and a generic credential service | New narrowly scoped shared libraries, if adopted by another app | No suitable existing general-purpose owner was found. |
 
@@ -100,15 +101,20 @@ message reader, message header, and status label. A literal-text mode should ret
 the original text in both rendering and accessibility semantics, without creating
 an inferred access key. Keep mnemonic behavior available for form labels.
 
-[WindowsUiDispatcher](D:/Broiler.Mail/src/Broiler.Mail.Windows/Hosting/WindowsUiDispatcher.cs:5)
-is another reusable piece: thread-affinity checking plus a host-supplied posting
-delegate. Code independently has a queued
+Mail's former `WindowsUiDispatcher` was another reusable piece: thread-affinity
+checking plus a host-supplied posting delegate. Code independently has a queued
 [UiThreadDispatcher](D:/Broiler.Code/src/Broiler.Code.Core/Hosting/UiThreadDispatcher.cs:21).
 A neutral implementation can live in UI infrastructure, with the native wake-up
 and window lifetime in its host. Define callback ordering and shutdown semantics
 before consolidating them: Mail runs same-thread callbacks immediately, whereas
 Code queues them. UI's existing `ImmediateUiDispatcher` is not a replacement for
 Mail's background completion dispatch.
+
+**Completed:** Broiler.UI `0.1.0-preview.10` added `StandardQueuedUiDispatcher`,
+which settles both questions the way Code does. Callbacks from any thread, the owner
+included, run in order only when the host drains them on the owner thread, and a
+closed host simply stops draining. Mail's window now uses it, and `WindowsUiDispatcher`
+is removed.
 
 ### 4. Package Windows hosting separately
 
@@ -203,3 +209,24 @@ Use versioned package references after upstream releases, not permanent absolute
 project references to neighboring checkouts. This investigation ran no builds or
 runtime tests because it changed documentation only. Existing acceptance coverage
 is identified above as a migration requirement, not a new validation result.
+
+## Follow-up
+
+2026-09-28: Mail now pins Broiler.UI `0.1.0-preview.10` and Graphics
+`0.1.0-preview.7`, the Graphics release that UI preview.10 requires. Of the moves
+above, that UI release contains only the shared dispatch. TabView and ScrollView
+measurement, label mnemonics, and focus traversal are unchanged, so `TabContent`,
+`ViewportScrollView`, the `ScrollableMessageText` wrapper, ampersand escaping, and
+`MailKeyboardNavigation` stay in Mail. The release's other changes, a RichEdit
+decomposition and a cancellable directory provider for the file dialog, concern
+controls Mail does not use yet. The provider matters once attachments need a file
+dialog in version 4. Graphics preview.6 and preview.7 changed only the window class
+icon and packaging.
+
+Validation: the Release build has no warnings, all 77 tests pass, and the headless
+smoke check passes. The inbox and configuration workflow tests now use the real
+dispatcher and drain it on the thread that created it. One test checks that the
+receiver runs on a worker while every change is published on that thread. The native
+demo was driven with posted window messages. Mail received from the thread pool,
+selected a message, and rendered its body. Closing the window during a receive
+exited cleanly with code 0.

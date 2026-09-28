@@ -17,15 +17,17 @@ namespace Broiler.Mail.Tests;
 public sealed class ConfigurationWorkflowTests
 {
     [Fact]
-    public async Task SaveResultIsPublishedThroughTheDispatcher()
+    public void SaveResultIsPublishedThroughTheDispatcher()
     {
-        var dispatcher = new QueuedDispatcher();
+        var dispatcher = new StandardQueuedUiDispatcher();
         var store = new MemoryAccountStore();
         var model = NewModel(store, dispatcher);
-        await model.SaveAsync();
+        // The memory store finishes at once, so the result is posted from the UI thread itself.
+        // It still waits for the next drain rather than running inside the save.
+        Assert.True(model.SaveAsync().IsCompletedSuccessfully);
         Assert.True(model.IsBusy);
         Assert.Null(model.Profile);
-        dispatcher.Drain();
+        Assert.Equal(1, dispatcher.Drain());
         Assert.False(model.IsBusy);
         Assert.Equal(store.Saved, model.Profile);
         Assert.Contains("saved", model.Status);
@@ -180,14 +182,6 @@ public sealed class ConfigurationWorkflowTests
         foreach (var child in root.Children)
             foreach (var element in Descendants(child))
                 yield return element;
-    }
-
-    private sealed class QueuedDispatcher : IUiDispatcher
-    {
-        private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _callbacks = new();
-        public bool CheckAccess() => false;
-        public void Post(Action callback) => _callbacks.Enqueue(callback);
-        public void Drain() { while (_callbacks.TryDequeue(out var callback)) callback(); }
     }
 
     private sealed class MemoryAccountStore : IAccountStore

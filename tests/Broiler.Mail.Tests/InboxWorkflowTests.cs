@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Mail.Application.Preview;
@@ -70,19 +69,34 @@ public sealed class InboxWorkflowTests
     }
 
     [Fact]
-    public async Task ResultsArePublishedOnlyThroughTheUiDispatcher()
+    public void ResultsArePublishedOnlyThroughTheUiDispatcher()
     {
         var account = TestDirectory.Profile();
-        var receiver = new TestMailReceiver { Inbox = (_, _) => Task.FromResult(new MailInboxPage([Message(account, 1)], null)) };
-        var dispatcher = new QueuedDispatcher();
-        using var model = new InboxViewModel(receiver, dispatcher);
+        int uiThread = Environment.CurrentManagedThreadId;
+        int receiverThread = uiThread;
+        var receiver = new TestMailReceiver
+        {
+            Inbox = (_, _) =>
+            {
+                receiverThread = Environment.CurrentManagedThreadId;
+                return Task.FromResult(new MailInboxPage([Message(account, 1)], null));
+            },
+        };
+        using var ui = new TestUiQueue();
+        using var model = new InboxViewModel(receiver, ui.Dispatcher);
+        var changedOn = new List<int>();
+        model.Changed += (_, _) => changedOn.Add(Environment.CurrentManagedThreadId);
         model.SetAccount(account);
-        await model.ReceiveAsync();
+        _ = model.ReceiveAsync();
+        ui.WaitForPost();
         Assert.True(model.IsBusy);
         Assert.Empty(model.Messages);
-        dispatcher.Drain();
+        Assert.Equal(1, ui.Dispatcher.Drain());
         Assert.False(model.IsBusy);
         Assert.Single(model.Messages);
+        // The receiver ran on a worker, and every change was published on the thread that owns the dispatcher.
+        Assert.NotEqual(uiThread, receiverThread);
+        Assert.All(changedOn, thread => Assert.Equal(uiThread, thread));
     }
 
     [Fact]
@@ -121,18 +135,19 @@ public sealed class InboxWorkflowTests
     [InlineData("cancel")]
     [InlineData("account")]
     [InlineData("dispose")]
-    public async Task PendingPageCannotPublishAfterCancellationAccountEditOrClose(string action)
+    public void PendingPageCannotPublishAfterCancellationAccountEditOrClose(string action)
     {
         var account = TestDirectory.Profile();
-        var dispatcher = new QueuedDispatcher();
+        using var ui = new TestUiQueue();
         using var model = new InboxViewModel(new TestMailReceiver
-        { Inbox = (_, _) => Task.FromResult(new MailInboxPage([Message(account, 1)], null)) }, dispatcher);
+        { Inbox = (_, _) => Task.FromResult(new MailInboxPage([Message(account, 1)], null)) }, ui.Dispatcher);
         model.SetAccount(account);
-        await model.ReceiveAsync(); // Result queued; cancellation must still prevent the pending commit.
+        _ = model.ReceiveAsync();
+        ui.WaitForPost(); // Result queued; cancellation must still prevent the pending commit.
         if (action == "cancel") model.Cancel();
         if (action == "account") model.SetAccount(account with { IncomingServer = account.IncomingServer with { Host = "other.example.test" } });
         if (action == "dispose") model.Dispose();
-        dispatcher.Drain();
+        Assert.Equal(1, ui.Dispatcher.Drain());
         Assert.Empty(model.Messages);
         Assert.False(model.IsBusy);
         if (action == "cancel") Assert.Contains("canceled", model.Status);
@@ -141,7 +156,7 @@ public sealed class InboxWorkflowTests
     [Theory]
     [InlineData(1100, 720)]
     [InlineData(640, 480)]
-    public async Task ControlsSelectMailAndRenderLongTextWithAWorkingScrollbar(int width, int height)
+    public void ControlsSelectMailAndRenderLongTextWithAWorkingScrollbar(int width, int height)
     {
         var account = TestDirectory.Profile();
         var message = Message(account, 1);
@@ -150,20 +165,22 @@ public sealed class InboxWorkflowTests
             Inbox = (_, _) => Task.FromResult(new MailInboxPage([message], null)),
             Body = (key, _) => Task.FromResult(new MailMessageBody(key, string.Join('\n', Enumerable.Repeat("Hello & welcome. This is a line of mail text.", 100))) { IsHtmlFallback = true }),
         };
-        var dispatcher = new QueuedDispatcher();
-        using var model = new InboxViewModel(receiver, dispatcher);
+        using var ui = new TestUiQueue();
+        using var model = new InboxViewModel(receiver, ui.Dispatcher);
         model.SetAccount(account);
         using var content = new InboxView(model).CreateContent();
-        using var session = new StandardUiSessionBuilder().Build(new HeadlessHost(width, height));
+        // One dispatcher for the session and the view models, as in the native host.
+        using var session = new StandardUiSessionBuilder().WithDispatcher(ui.Dispatcher).Build(new HeadlessHost(width, height));
         session.AddRoot(content);
-        await model.ReceiveAsync();
-        dispatcher.Drain();
+        _ = model.ReceiveAsync();
+        ui.WaitForPost();
+        ui.Dispatcher.Drain();
         var list = Descendants(content).OfType<StandardListView>().Single();
         Assert.Contains("Unread", Assert.Single(list.Items).Text);
         // Drive the selection event, then wait for the posted completion without touching controls off-thread.
         list.SelectIndex(0);
-        await dispatcher.Posted.Task.WaitAsync(TimeSpan.FromSeconds(5));
-        dispatcher.Drain();
+        ui.WaitForPost();
+        ui.Dispatcher.Drain();
         Assert.NotNull(model.Body);
         _ = session.RenderFrame();
         var scroll = Descendants(content).OfType<StandardScrollView>().Single();
@@ -190,17 +207,16 @@ public sealed class InboxWorkflowTests
 
     private static IEnumerable<UiElement> Descendants(UiElement element) => element.Children.SelectMany(child => new[] { child }.Concat(Descendants(child)));
 
-    private sealed class QueuedDispatcher : IUiDispatcher
+    /// <summary>The host's queued dispatcher, owned by the test thread as the native window owns its own.</summary>
+    private sealed class TestUiQueue : IDisposable
     {
-        private readonly ConcurrentQueue<Action> _queue = new();
-        public TaskCompletionSource Posted { get; private set; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        public bool CheckAccess() => false;
-        public void Post(Action callback) { _queue.Enqueue(callback); Posted.TrySetResult(); }
-        public void Drain()
-        {
-            while (_queue.TryDequeue(out var callback)) callback();
-            Posted = new(TaskCreationOptions.RunContinuationsAsynchronously);
-        }
+        private readonly SemaphoreSlim _woken = new(0);
+        public TestUiQueue() => Dispatcher = new(() => _woken.Release());
+        public StandardQueuedUiDispatcher Dispatcher { get; }
+
+        // Block instead of awaiting: an await can resume on another thread, and only the owner may drain.
+        public void WaitForPost() => Assert.True(_woken.Wait(TimeSpan.FromSeconds(5)), "Nothing was posted to the UI dispatcher.");
+        public void Dispose() => _woken.Dispose();
     }
 
     private sealed class HeadlessHost(int width, int height) : IUiHost

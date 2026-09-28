@@ -35,7 +35,7 @@ Broiler.Graphics dependency; upgrades should be deliberate and validated togethe
 | Area | Files/classes | Current behavior / next step |
 | --- | --- | --- |
 | Startup | `Program`, `CompositionRoot`, `MailApplication` | Loads account/settings independently, shows read errors, and opens the shell without invoking mail adapters. |
-| Native hosting | `WindowsMailWindow`, `WindowsUiHost`, `WindowsUiDispatcher` | Broiler Direct2D, native input, UI dispatch, clipboard, default IME placement, minimum size, and DPI-aware resizing. |
+| Native hosting | `WindowsMailWindow`, `WindowsUiHost` | Broiler Direct2D, native input, UI dispatch through Broiler.UI's queued dispatcher, clipboard, default IME placement, minimum size, and DPI-aware resizing. |
 | Shell | `MailShellView`, `MailShellViewModel`, `InboxView` | Inbox, Account, and Settings tabs; receive/load older/read/cancel actions and visible operation status. |
 | Account setup | `AccountProfileView`, `AccountProfileViewModel`, `AccountProfile` | Validated profile, explicit password save/removal, cancellable connection test, and visible outcomes. |
 | Settings | `SettingsView`, `SettingsViewModel`, `ApplicationSettings` | Theme and initial window size save/reload; preferences apply at startup. |
@@ -67,10 +67,13 @@ results or pretending data has been saved.
   selection/profile, or disposal. A failed refresh preserves the loaded list.
 - Configuration view models publish busy/error/success changes and commit saved
   state only after a successful write. Forms disable editing while a save is pending.
-- The native host supplies `WindowsUiDispatcher`, which posts save results through
-  the Broiler native window's message loop. Only headless checks use the immediate
-  dispatcher. Initialization completes before the window is created, preserving
-  the entry point's STA thread. Controls are never updated by storage continuations.
+- The native host uses Broiler.UI's `StandardQueuedUiDispatcher`. Results posted
+  from any thread, the UI thread included, wait in its queue until the window drains
+  it on the UI thread: on a message posted to the Broiler native window, and before
+  each frame. A closing window stops draining, so late results are dropped. Only
+  headless checks use the immediate dispatcher. Initialization completes before the
+  window is created, preserving the entry point's STA thread. Controls are never
+  updated by storage continuations.
 - The Windows host implements `IUiClipboardHost` using bounded Unicode clipboard
   access and `IUiTextInputHost` to place the default IME composition window. Committed
   text flows through the Graphics WM_CHAR bridge. A per-monitor-v2 manifest and
@@ -92,7 +95,8 @@ The headless check is not a native-window or provider-compatibility test.
 loopback IMAP fixture for TLS, STARTTLS, authentication rejection, missing credentials,
 certificate rejection, cancellation, timeouts, bounded read-only paging, deleted
 messages, UIDVALIDITY changes, MIME/HTML text, transfer limits, and failed fetches.
-Inbox workflow tests cover stale completions and the reader scrollbar at two sizes.
+Inbox workflow tests drain the host's queued dispatcher on its own thread and cover
+worker-thread publication, stale completions, and the reader scrollbar at two sizes.
 `Version1AcceptanceTests` exercises profile/settings restart, authentication,
 receive/read/refresh, failure recovery, full-shell measurement, focus traversal,
 and password clipboard behavior. Native demo inspection separately verified the

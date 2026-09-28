@@ -14,6 +14,7 @@ namespace Broiler.Mail.Windows.Hosting;
 internal sealed class WindowsMailWindow : Direct2DWindow
 {
     private readonly WindowsUiHost _host;
+    private readonly StandardQueuedUiDispatcher _dispatcher;
     private readonly UiSession _session;
     private readonly MailShellView _shell;
     private readonly MailKeyboardNavigation _keyboard;
@@ -34,9 +35,11 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         })
     {
         _host = new WindowsUiHost(this);
-        var dispatcher = new WindowsUiDispatcher(PostToUiThread);
-        _session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(_host);
-        _shell = application.CreateShell(dispatcher);
+        // Results posted from any thread, this one included, wait until the window drains them:
+        // on the message the wake-up posts, or before the next frame if no window existed yet.
+        _dispatcher = new StandardQueuedUiDispatcher(() => PostToUiThread(DrainDispatcher));
+        _session = new StandardUiSessionBuilder().WithDispatcher(_dispatcher).Build(_host);
+        _shell = application.CreateShell(_dispatcher);
         _session.AddRoot(_shell.Window);
         _keyboard = _shell.CreateKeyboardNavigation(_session);
         _session.SetFocus(_shell.Navigation);
@@ -45,7 +48,16 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     protected override BRenderList? BuildRenderList(BSize clientSize)
     {
         _host.Update(clientSize, DpiScale);
+        DrainDispatcher();
         return _session.RenderFrame();
+    }
+
+    private void DrainDispatcher()
+    {
+        // Log a failing callback as Direct2DWindow logs its own posted callbacks. The callbacks
+        // after it stay queued, and the dispatcher has already asked for another drain.
+        try { _dispatcher.Drain(); }
+        catch (Exception exception) { System.Diagnostics.Debug.WriteLine(exception); }
     }
 
     protected override void OnResized(BSize clientSize, double dpiScale)
