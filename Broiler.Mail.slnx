@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Broiler.Mail.Core/Broiler.Mail.Core.csproj" />
+    <Project Path="src/Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
+    <Project Path="src/Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
+    <Project Path="src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Broiler.Mail.Tests/Broiler.Mail.Tests.csproj" />
+    <Project Path="tests/Broiler.Mail.Windows.Tests/Broiler.Mail.Windows.Tests.csproj" />
+  </Folder>
+</Solution>
