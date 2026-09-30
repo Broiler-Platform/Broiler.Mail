@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   3
+// Annotated:        3/3
+// Exempt:           13
+// Human-reviewed:   0/3
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         3/2
+// Resource impact:  4/10 max
+// Unverified:       3
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Services;
@@ -12,6 +29,9 @@ using Broiler.Mail.Application.Preview;
 namespace Broiler.Mail.Application;
 
 /// <summary>Application composition without native platform or protocol-library dependencies.</summary>
+// Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=92648C
+// Broiler-Falsified-If: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
+// Broiler-Human:        PENDING
 public sealed class MailApplication(
     IAccountStore accounts, ISettingsStore settings, IMailReceiver receiver, IMailSender sender, ICredentialStore credentials, IDraftStore? drafts = null, ISentCopyWriter? sentCopies = null)
 {
@@ -30,6 +50,9 @@ public sealed class MailApplication(
     public string? AccountLoadError { get; private set; }
     public string? SettingsLoadError { get; private set; }
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=C77BBA
+    // Broiler-Falsified-If: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
+    // Broiler-Human:        PENDING
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         try
@@ -65,6 +88,9 @@ public sealed class MailApplication(
         }
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=277523
+    // Broiler-Falsified-If: a draft or account load error recorded by InitializeAsync is not passed to its view model, so saving is enabled over the unreadable file
+    // Broiler-Human:        PENDING
     public MailShellView CreateShell(IUiDispatcher? dispatcher = null, IHtmlPreviewHost? htmlPreview = null)
     {
         dispatcher ??= new ImmediateUiDispatcher();

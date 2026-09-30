@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   6
+// Annotated:        6/6
+// Exempt:           0
+// Human-reviewed:   0/6
+// IP risk:          Low
+// Security risk:    Medium
+// Criteria:         6/0
+// Resource impact:  7/10 max
+// Unverified:       6
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Graphics.Geometry;
 using Broiler.Input.Keyboard;
 using Broiler.Mail.Application.ViewModels;
@@ -12,8 +29,14 @@ using Broiler.UI.RichEdit.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
+// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=6389B4
+// Broiler-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
+// Broiler-Human:        PENDING
 public sealed class MailKeyboardNavigation(UiSession session, MailShellView shell, MailShellViewModel model)
 {
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=D11D0A
+    // Broiler-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
+    // Broiler-Human:        PENDING
     public bool Handle(UiInputEvent input)
     {
         if (input.Kind != UiInputEventKind.KeyboardKey || input.KeyTransition != KeyboardKeyTransition.Down) return false;
@@ -56,6 +79,9 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         return false;
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=609020
+    // Broiler-Falsified-If: Tab moves focus onto a disabled control or into the collapsed SMTP fields
+    // Broiler-Human:        PENDING
     public void MoveFocus(int direction)
     {
         var controls = new List<UiElement> { shell.Navigation };
@@ -67,6 +93,9 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         Reveal(controls[next]);
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=36A581
+    // Broiler-Falsified-If: a focused field below the visible area of its scroll view stays out of view after Tab
+    // Broiler-Human:        PENDING
     private void Reveal(UiElement element)
     {
         // Layout first so newly selected tabs have useful bounds. Then reveal off-screen form fields.
@@ -80,6 +109,9 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         }
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=A40427
+    // Broiler-Falsified-If: a disabled edit, button or combo box is reported focusable
+    // Broiler-Human:        PENDING
     private static bool IsFocusable(UiElement element) => element switch
     {
         StandardEdit edit => edit.IsEnabled,
@@ -91,6 +123,9 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         _ => false,
     };
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=7860E1
+    // Broiler-Falsified-If: an element inside a collapsed panel is returned
+    // Broiler-Human:        PENDING
     private static IEnumerable<UiElement> Descendants(UiElement element)
     {
         if (element.Visibility != UiVisibility.Visible) yield break;

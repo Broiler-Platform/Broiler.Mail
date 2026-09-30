@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   13
+// Annotated:        13/13
+// Exempt:           4
+// Human-reviewed:   0/13
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         12/11
+// Resource impact:  7/10 max
+// Unverified:       13
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
@@ -9,17 +26,32 @@ using System.Net.Sockets;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
+// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=C55898
+// Broiler-Falsified-If: the IMAP password is sent over a connection whose server certificate failed platform validation or that never upgraded to TLS
+// Broiler-Human:        PENDING
 public sealed class ImapMailReceiver : IMailReceiver
 {
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=431894
+    // Broiler-Falsified-If: GetInboxAsync accepts a maximumCount of 51 and fetches more than 50 envelopes in one request
+    // Broiler-Human:        PENDING
     public const int MaximumPageSize = 50;
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=3C945E
+    // Broiler-Falsified-If: a message body of more than 2 MiB is transferred in full and passed to the MIME decoder
+    // Broiler-Human:        PENDING
     public const int MaximumMessageBytes = 2 * 1024 * 1024;
     private readonly ICredentialStore _credentials;
     private readonly Func<ImapClient> _createClient;
     private readonly TimeSpan _timeout;
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=8F6932
+    // Broiler-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
+    // Broiler-Human:        PENDING
     public ImapMailReceiver(ICredentialStore credentials) : this(credentials, () => new ImapClient(), TimeSpan.FromSeconds(20)) { }
 
     // Test-only seam for a fixture certificate and a short deadline; production uses platform certificate validation.
+    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=0F261A
+    // Broiler-Falsified-If: code outside the test assembly reaches this constructor with a client factory that replaces certificate validation
+    // Broiler-Human:        PENDING
     internal ImapMailReceiver(ICredentialStore credentials, Func<ImapClient> createClient, TimeSpan timeout)
     {
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
@@ -27,9 +59,15 @@ public sealed class ImapMailReceiver : IMailReceiver
         _timeout = timeout;
     }
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=705856
+    // Broiler-Falsified-If: a connection test selects or examines a mailbox, or fetches a message, after authenticating
+    // Broiler-Human:        PENDING
     public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default) =>
         WithConnectionAsync(account, (_, _) => Task.FromResult(true), cancellationToken);
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=2E32CD
+    // Broiler-Falsified-If: an account configured for STARTTLS authenticates in plaintext when the server does not advertise STARTTLS
+    // Broiler-Human:        PENDING
     private async Task<T> WithConnectionAsync<T>(AccountProfile account,
         Func<ImapClient, CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
     {
@@ -87,6 +125,9 @@ public sealed class ImapMailReceiver : IMailReceiver
         { throw new MailConnectionException("The connection or protected credential could not be read. Check the network and try saving the password again."); }
     }
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=53B5C5
+    // Broiler-Falsified-If: a FETCH reply that omits the envelope or UID of a message in the requested range yields a page instead of the inbox-changed error
+    // Broiler-Human:        PENDING
     public Task<MailInboxPage> GetInboxAsync(AccountProfile account, int maximumCount,
         MailInboxCursor? older = null, CancellationToken cancellationToken = default)
     {
@@ -124,6 +165,9 @@ public sealed class ImapMailReceiver : IMailReceiver
         }, cancellationToken);
     }
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=AA9481
+    // Broiler-Falsified-If: a message larger than 2 MiB reaches MessageTextDecoder.DecodeAsync instead of being refused with the reading-limit error
+    // Broiler-Human:        PENDING
     public Task<MailMessageBody> GetBodyAsync(
         AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default)
     {
@@ -142,11 +186,22 @@ public sealed class ImapMailReceiver : IMailReceiver
         }, cancellationToken);
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=90B19F
+    // Broiler-Human:        PENDING
     private static MailConnectionException InboxChanged() => new("The inbox changed. Receive mail again before loading more messages.");
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=7B28BA
+    // Broiler-Falsified-If: the reading limit stated in the message differs from MaximumMessageBytes
+    // Broiler-Human:        PENDING
     private static MailConnectionException MessageTooLarge() => new("This message exceeds the version 1 reading limit of 2 MiB (including attachments).");
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=0; Fingerprint=1ED042
+    // Broiler-Falsified-If: a server that announces or sends more than 2 MiB plus one byte for the partial body fetch is read on instead of aborted
+    // Broiler-Human:        PENDING
     private sealed class SizeLimitProgress : ITransferProgress
     {
+        // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=0; Fingerprint=B96F7A
+        // Broiler-Falsified-If: a progress report of 2,097,153 bytes transferred returns instead of throwing the message-too-large error
+        // Broiler-Human:        PENDING
         public void Report(long bytesTransferred, long totalSize)
         {
             if (bytesTransferred > MaximumMessageBytes || totalSize > MaximumMessageBytes + 1) throw MessageTooLarge();

@@ -1,19 +1,50 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   5
+// Annotated:        5/5
+// Exempt:           2
+// Human-reviewed:   0/5
+// IP risk:          Low
+// Security risk:    Medium
+// Criteria:         4/0
+// Resource impact:  7/10 max
+// Unverified:       5
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.UI;
 using Broiler.Mail.Core.Services;
 
 namespace Broiler.Mail.Application.ViewModels;
 
 /// <summary>Publishes save results on the UI thread and keeps failures visible to the user.</summary>
+// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=A6ED99
+// Broiler-Falsified-If: a save runs while loadError is set, overwriting a configuration file that failed to load
+// Broiler-Human:        PENDING
 public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
 {
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=8C487F
+    // Broiler-Human:        PENDING
     public event EventHandler? Changed;
     public bool IsBusy { get; private set; }
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=0E18E7
+    // Broiler-Falsified-If: CanSave is true while loadError is set
+    // Broiler-Human:        PENDING
     public bool CanSave => !IsBusy && loadError is null;
     public string Status { get; private set; } = loadError ?? string.Empty;
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=80FC04
+    // Broiler-Falsified-If: a save whose operation throws still runs its commit action, so the view model shows values that never reached the store
+    // Broiler-Human:        PENDING
     protected Task SaveAsync(Func<Task> save, Action commit, string successMessage) =>
         RunAsync(save, commit, "Saving…", successMessage, "Not saved", "Save canceled.");
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=3B4A10
+    // Broiler-Falsified-If: a second call made while the first operation is still running starts its operation instead of returning
+    // Broiler-Human:        PENDING
     protected async Task RunAsync(Func<Task> operation, Action commit, string busyMessage,
         string successMessage, string failurePrefix, string canceledMessage, Action? completed = null)
     {

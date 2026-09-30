@@ -1,0 +1,19 @@
+{
+  "schema": 1,
+  "component": "Broiler.Mail",
+  "projects": [
+    "src/Broiler.Mail.Core/Broiler.Mail.Core.csproj",
+    "src/Broiler.Mail.Application/Broiler.Mail.Application.csproj",
+    "src/Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj",
+    "src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj"
+  ],
+  "exclude": [],
+  "exemptionPredicate": "owning-component",
+  "spdx": {
+    "copyright": ["2026 Broiler Platform contributors"],
+    "license": "Apache-2.0"
+  },
+  "spdxOverrides": [],
+  "adrDirectory": "docs/decisions",
+  "regenerateCommand": "dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance generate --root Broiler.Mail"
+}

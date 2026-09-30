@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   4
+// Annotated:        4/4
+// Exempt:           4
+// Human-reviewed:   0/4
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         4/4
+// Resource impact:  8/10 max
+// Unverified:       4
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using System.Diagnostics;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Core.Messages;
@@ -5,6 +22,9 @@ using Broiler.Mail.Infrastructure.Preview;
 
 namespace Broiler.Mail.Windows.Preview;
 
+// Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=5F4FCA
+// Broiler-Falsified-If: a URI whose scheme is not http or https is passed to Process.Start with shell execution by the preview's open-external callback
+// Broiler-Human:        PENDING
 internal sealed class WindowsHtmlPreviewHost : IHtmlPreviewHost
 {
     private readonly object _gate = new();
@@ -12,6 +32,9 @@ internal sealed class WindowsHtmlPreviewHost : IHtmlPreviewHost
     private bool _active, _disposed;
     private int _generation;
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=B20A8C
+    // Broiler-Falsified-If: a Close or Dispose that runs before the preview thread publishes its window leaves that window open and shown
+    // Broiler-Human:        PENDING
     public Task<string> ShowAsync(MailMessageBody message)
     {
         if (message.HtmlText is null) return Task.FromResult("No HTML is available for this message.");
@@ -66,6 +89,9 @@ internal sealed class WindowsHtmlPreviewHost : IHtmlPreviewHost
         return ready.Task;
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=2A0B85
+    // Broiler-Falsified-If: a preview window already published in _window is never closed after Close is called
+    // Broiler-Human:        PENDING
     public void Close()
     {
         lock (_gate)
@@ -76,5 +102,8 @@ internal sealed class WindowsHtmlPreviewHost : IHtmlPreviewHost
         }
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=3163DB
+    // Broiler-Falsified-If: a ShowAsync call made after Dispose opens a preview window
+    // Broiler-Human:        PENDING
     public void Dispose() { lock (_gate) _disposed = true; Close(); }
 }
