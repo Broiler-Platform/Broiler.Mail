@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   3
+// Annotated:        3/3
+// Exempt:           4
+// Human-reviewed:   0/3
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         3/3
+// Resource impact:  7/10 max
+// Unverified:       3
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
@@ -9,15 +26,24 @@ using MimeKit;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
+// Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=6C5483
+// Broiler-Falsified-If: the IMAP password is sent to the Sent-copy server over a connection whose certificate failed platform validation or that never upgraded to TLS
+// Broiler-Human:        PENDING
 public sealed class ImapSentCopyWriter : ISentCopyWriter
 {
     private readonly ICredentialStore _credentials;
     private readonly Func<ImapClient> _createClient;
     private readonly TimeSpan _timeout;
+    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=25C087
+    // Broiler-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
+    // Broiler-Human:        PENDING
     public ImapSentCopyWriter(ICredentialStore credentials) : this(credentials, () => new ImapClient(), TimeSpan.FromSeconds(20)) { }
     internal ImapSentCopyWriter(ICredentialStore credentials, Func<ImapClient> createClient, TimeSpan timeout)
     { _credentials = credentials; _createClient = createClient; _timeout = timeout; }
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=4B2DD6
+    // Broiler-Falsified-If: an APPEND interrupted after it was sent is reported as Failed rather than Unknown
+    // Broiler-Human:        PENDING
     public async Task<SentCopyState> AppendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)
     {
         bool appending = false, saved = false;

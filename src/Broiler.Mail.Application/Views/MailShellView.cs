@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   5
+// Annotated:        5/5
+// Exempt:           3
+// Human-reviewed:   0/5
+// IP risk:          Low
+// Security risk:    Medium
+// Criteria:         4/0
+// Resource impact:  7/10 max
+// Unverified:       5
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Mail.Application.ViewModels;
 using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
@@ -12,9 +29,15 @@ using Broiler.Mail.Application.Preview;
 namespace Broiler.Mail.Application.Views;
 
 /// <summary>Single-account inbox, reading pane, and configuration workflow.</summary>
+// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=126B98
+// Broiler-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
+// Broiler-Human:        PENDING
 public sealed class MailShellView : IDisposable
 {
     private readonly MailShellViewModel _model;
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=D556FF
+    // Broiler-Falsified-If: with a recovered draft or a draft load error the window opens on a tab other than Compose
+    // Broiler-Human:        PENDING
     public MailShellView(MailShellViewModel model, IHtmlPreviewHost? htmlPreview = null)
     {
         _model = model;
@@ -56,10 +79,18 @@ public sealed class MailShellView : IDisposable
 
     public StandardWindow Window { get; }
     public StandardTabView Navigation { get; }
+    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=A9E9EB
+    // Broiler-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
+    // Broiler-Human:        PENDING
     public Task<bool> PrepareCloseAsync() => _model.Composer.PrepareCloseAsync();
 
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=886976
+    // Broiler-Human:        PENDING
     public MailKeyboardNavigation CreateKeyboardNavigation(UiSession session) => new(session, this, _model);
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=53D728
+    // Broiler-Falsified-If: a connection test still running when the view is disposed is not canceled
+    // Broiler-Human:        PENDING
     public void Dispose()
     {
         _model.Account.CancelConnectionTest();

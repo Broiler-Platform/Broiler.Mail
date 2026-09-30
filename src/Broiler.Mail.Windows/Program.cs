@@ -1,11 +1,34 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   2
+// Annotated:        2/2
+// Exempt:           0
+// Human-reviewed:   0/2
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         2/2
+// Resource impact:  7/10 max
+// Unverified:       2
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Mail.Windows.Hosting;
 using Broiler.Mail.Windows.Services;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows;
 
+// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=D26BF0
+// Broiler-Falsified-If: a --smoke-test run creates or reads files under the default data directory instead of only a fresh directory under the temp path
+// Broiler-Human:        PENDING
 internal static class Program
 {
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=366F93
+    // Broiler-Falsified-If: an argument list other than none, --help, --demo, --smoke-test or --data-directory with a non-blank path starts the application instead of returning exit code 2
+    // Broiler-Human:        PENDING
     [STAThread]
     private static int Main(string[] args)
     {

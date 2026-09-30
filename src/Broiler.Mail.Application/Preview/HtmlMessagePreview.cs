@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   2
+// Annotated:        2/2
+// Exempt:           0
+// Human-reviewed:   0/2
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         2/2
+// Resource impact:  8/10 max
+// Unverified:       2
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Mail.Core.Messages;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
@@ -8,8 +25,14 @@ using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Application.Preview;
 
+// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=AFC62E
+// Broiler-Falsified-If: an exception thrown by host.ShowAsync escapes the async click handler instead of becoming the HTML preview unavailable status
+// Broiler-Human:        PENDING
 public sealed class HtmlMessagePreview(IHtmlPreviewHost host) : IMessagePreview
 {
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=1190B1
+    // Broiler-Falsified-If: an exception thrown by host.ShowAsync escapes the async click handler instead of becoming the HTML preview unavailable status
+    // Broiler-Human:        PENDING
     public UiElement CreateContent(MailMessageBody message)
     {
         var panel = new StandardPanel { Spacing = 4 };
