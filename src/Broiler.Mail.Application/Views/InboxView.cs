@@ -14,7 +14,7 @@ using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-public sealed class InboxView(InboxViewModel model)
+public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPreview = null)
 {
     public UiElement CreateContent()
     {
@@ -35,6 +35,9 @@ public sealed class InboxView(InboxViewModel model)
         var header = new StandardLabel { Wrapping = UiTextWrapping.Wrap, Foreground = StandardControlPaint.Text };
         reading.AddChild(header);
         reading.SetDock(header, UiDock.Top);
+        var previewActions = new StandardPanel();
+        reading.AddChild(previewActions);
+        reading.SetDock(previewActions, UiDock.Top);
         var text = new ScrollableMessageText();
         reading.AddChild(text);
         IReadOnlyList<MailMessageSummary>? shown = null;
@@ -65,7 +68,14 @@ public sealed class InboxView(InboxViewModel model)
                 : "Use Read message to retry if loading is canceled or fails.")
                 : (body.IsHtmlFallback ? "Text extracted from HTML (formatting omitted).\n\n" : "") + body.PlainText +
                   (body.IsTruncated ? "\n\n[Preview limited to 32,000 characters.]" : "");
-            if (!ReferenceEquals(shownBody, body)) text.ScrollToStart();
+            if (!ReferenceEquals(shownBody, body))
+            {
+                htmlPreview?.Close();
+                text.ScrollToStart();
+                foreach (var child in previewActions.Children.ToArray()) { previewActions.RemoveChild(child); child.Dispose(); }
+                if (htmlPreview is not null && body is not null && (body.HtmlText is not null || body.HtmlUnavailableReason is not null))
+                    previewActions.AddChild(new HtmlMessagePreview(htmlPreview).CreateContent(body));
+            }
             shownBody = body;
             updating = false;
         }

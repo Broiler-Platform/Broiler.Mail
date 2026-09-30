@@ -6,8 +6,14 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="Broiler.HTML.Core" />
+    <PackageReference Include="Broiler.HTML.Image" />
+    <PackageReference Include="Broiler.HTML.Image.Compat" />
+    <PackageReference Include="Broiler.Media.Image.Managed" />
+    <InternalsVisibleTo Include="Broiler.Mail.Windows.Tests" />
     <ProjectReference Include="../Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
     <ProjectReference Include="../Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
     <PackageReference Include="Broiler.Graphics.Windows" />
+    <PackageReference Include="Broiler.Native.Windows" />
   </ItemGroup>
 </Project>

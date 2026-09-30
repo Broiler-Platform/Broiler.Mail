@@ -5,18 +5,25 @@ using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Settings;
 using Broiler.UI;
 using Broiler.UI.Standard;
+using Broiler.Mail.Core.Messages;
+using Broiler.Mail.Application.Persistence;
+using Broiler.Mail.Application.Preview;
 
 namespace Broiler.Mail.Application;
 
 /// <summary>Application composition without native platform or protocol-library dependencies.</summary>
 public sealed class MailApplication(
-    IAccountStore accounts, ISettingsStore settings, IMailReceiver receiver, IMailSender sender, ICredentialStore credentials)
+    IAccountStore accounts, ISettingsStore settings, IMailReceiver receiver, IMailSender sender, ICredentialStore credentials, IDraftStore? drafts = null, ISentCopyWriter? sentCopies = null)
 {
     public IAccountStore Accounts { get; } = accounts ?? throw new ArgumentNullException(nameof(accounts));
     public ISettingsStore Settings { get; } = settings ?? throw new ArgumentNullException(nameof(settings));
     public IMailReceiver Receiver { get; } = receiver ?? throw new ArgumentNullException(nameof(receiver));
     public IMailSender Sender { get; } = sender ?? throw new ArgumentNullException(nameof(sender));
     public ICredentialStore Credentials { get; } = credentials ?? throw new ArgumentNullException(nameof(credentials));
+    public IDraftStore Drafts { get; } = drafts ?? new MemoryDraftStore();
+    public ISentCopyWriter? SentCopies { get; } = sentCopies;
+    public DraftStoreState LoadedDraft { get; private set; } = new(0, null);
+    public string? DraftLoadError { get; private set; }
 
     public AccountProfile? LoadedAccount { get; private set; }
     public ApplicationSettings LoadedSettings { get; private set; } = new();
@@ -25,6 +32,15 @@ public sealed class MailApplication(
 
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
+        try
+        {
+            LoadedDraft = await Drafts.LoadAsync(cancellationToken).ConfigureAwait(false);
+            DraftLoadError = null;
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException)
+        {
+            DraftLoadError = "The saved draft could not be loaded. Draft creation and saving are disabled; restore or repair drafts.json before restarting.";
+        }
         try
         {
             var profiles = await Accounts.LoadAsync(cancellationToken).ConfigureAwait(false);
@@ -49,12 +65,13 @@ public sealed class MailApplication(
         }
     }
 
-    public MailShellView CreateShell(IUiDispatcher? dispatcher = null)
+    public MailShellView CreateShell(IUiDispatcher? dispatcher = null, IHtmlPreviewHost? htmlPreview = null)
     {
         dispatcher ??= new ImmediateUiDispatcher();
         return new(new MailShellViewModel(
             new AccountProfileViewModel(Accounts, Credentials, Receiver, dispatcher, LoadedAccount, AccountLoadError),
             new SettingsViewModel(Settings, dispatcher, LoadedSettings, SettingsLoadError),
-            new InboxViewModel(Receiver, dispatcher)));
+            new InboxViewModel(Receiver, dispatcher),
+            new ComposerViewModel(Drafts, LoadedDraft, dispatcher, Sender, DraftLoadError, SentCopies)), htmlPreview);
     }
 }

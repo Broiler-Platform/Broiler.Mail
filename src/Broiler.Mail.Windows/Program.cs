@@ -35,8 +35,8 @@ internal static class Program
                 smokeApplication.InitializeAsync().GetAwaiter().GetResult();
                 using var shell = smokeApplication.CreateShell();
                 ShellSmokeCheck.Run(shell);
-                Console.WriteLine("Broiler.Mail: composition and all three UI tabs rendered successfully.");
-                Console.WriteLine("Account settings, protected passwords, IMAP receiving, and plain-text reading are available. Sending remains unfinished.");
+                Console.WriteLine("Broiler.Mail: composition and all four UI tabs rendered successfully.");
+                Console.WriteLine("Account settings, protected passwords, IMAP reading, recoverable drafts, SMTP sending, and isolated HTML preview are available.");
                 return 0;
             }
 

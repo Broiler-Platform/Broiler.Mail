@@ -6,5 +6,6 @@ namespace Broiler.Mail.Core.Services;
 /// <summary>Version 2 seam. Implementations must check draft/account identity before submission.</summary>
 public interface IMailSender
 {
+    bool IsAvailable => true;
     Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default);
 }

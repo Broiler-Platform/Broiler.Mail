@@ -3,7 +3,6 @@ using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Settings;
-using Broiler.Mail.Infrastructure.Mail;
 
 namespace Broiler.Mail.Windows;
 
@@ -13,7 +12,14 @@ internal static class DemoApplication
     public static MailApplication Create()
     {
         var store = new DemoStore();
-        return new(store, store, new DemoReceiver(), new SmtpMailSender(store), store);
+        return new(store, store, new DemoReceiver(), new DemoSender(), store);
+    }
+
+    private sealed class DemoSender : IMailSender
+    {
+        public bool IsAvailable => false;
+        public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new SendResult(SubmissionStatus.Rejected, "Demo mode never sends mail."));
     }
 
     private sealed class DemoStore : IAccountStore, ISettingsStore, ICredentialStore
@@ -56,10 +62,31 @@ internal static class DemoApplication
         public async Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default)
         {
             await Task.Delay(300, cancellationToken);
+            var composition = new MailCompositionSource
+            {
+                From = ["hello@example.test"], To = [account.EmailAddress],
+                Subject = message.Uid == 55 ? "Welcome to Broiler.Mail" : message.Uid == 54 ? "HTML-only mail — text preview" : $"Sample message {message.Uid}",
+                MessageId = $"demo-{message.Uid}@example.test",
+            };
             if (message.Uid == 54)
-                return new(message, "Hello & welcome!\n\nThis sample demonstrates the labeled text fallback for HTML-only mail.\n\nImages and external resources stay unloaded.") { IsHtmlFallback = true };
+            {
+                var embedded = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase)
+                {
+                    ["demo-logo@example.test"] = new MailEmbeddedImage(
+                        "demo-logo@example.test",
+                        "image/png",
+                        Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
+                };
+                return new(message, "Hello & welcome!\n\nThis sample demonstrates the labeled text fallback for HTML-only mail.\n\nSelect Open HTML preview to view formatted HTML.",
+                    "<h1>Hello &amp; welcome!</h1><p>This sample demonstrates the <b>HTML reading mode</b> with isolated rendering.</p><p><img src=\"cid:demo-logo@example.test\" alt=\"Demo dot\"></p><p>Links like <a href=\"https://example.test\">example.test</a> open in your default browser.</p>")
+                {
+                    IsHtmlFallback = true,
+                    Composition = composition,
+                    EmbeddedImages = embedded,
+                };
+            }
             return new(message, "Welcome to Broiler.Mail version 1.\n\nThis is a synthetic message. Demo mode never accesses your account, saved password, or network.\n\nUse Receive mail, Load older, and select a message.\n\nKeyboard: Tab / Shift+Tab moves focus, Ctrl+1/2/3 switches tabs, F5 receives, and Escape cancels.\n\n" +
-                string.Join("\n\n", Enumerable.Range(1, 35).Select(index => $"Paragraph {index}: The reading pane wraps and scrolls. Grüße, café, and literal ampersands & remain readable.")));
+                string.Join("\n\n", Enumerable.Range(1, 35).Select(index => $"Paragraph {index}: The reading pane wraps and scrolls. Grüße, café, and literal ampersands & remain readable."))) { Composition = composition };
         }
     }
 }

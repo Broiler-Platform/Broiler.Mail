@@ -46,16 +46,27 @@ internal sealed class LocalImapServer : IAsyncDisposable
     public bool DisconnectOnFetch { get; set; }
     public bool MalformedFetch { get; set; }
     public bool StallOnFetch { get; set; }
+    public bool MissingSentFolder { get; set; }
+    public bool RejectAppend { get; set; }
+    public bool DropAfterAppend { get; set; }
+    public bool StallAfterAppend { get; set; }
+    public int AppendCount { get; private set; }
+    public string? AppendedMessage { get; private set; }
+    public TaskCompletionSource AppendReceived { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private string Capabilities(bool encrypted) => "IMAP4rev1 AUTH=PLAIN SASL-IR" + (!encrypted && _advertiseStartTls ? " STARTTLS" : "");
 
     private async Task RunAsync()
     {
-        while (!_lifetime.IsCancellationRequested)
+        try
         {
-            using var client = await _listener.AcceptTcpClientAsync(_lifetime.Token);
-            await RunClientAsync(client);
+            while (!_lifetime.IsCancellationRequested)
+            {
+                using var client = await _listener.AcceptTcpClientAsync(_lifetime.Token);
+                await RunClientAsync(client);
+            }
         }
+        catch (Exception error) when (error is OperationCanceledException or SocketException or ObjectDisposedException) { }
     }
 
     private async Task RunClientAsync(TcpClient client)
@@ -74,7 +85,8 @@ internal sealed class LocalImapServer : IAsyncDisposable
             await initialWriter.WriteLineAsync($"* OK [CAPABILITY {Capabilities(encrypted)}] Fixture ready");
             while (true)
             {
-                using var reader = new StreamReader(transport, Encoding.ASCII, false, 1024, leaveOpen: true);
+                // Latin-1 preserves each literal octet as one char, including 8-bit MIME from APPEND.
+                using var reader = new StreamReader(transport, Encoding.Latin1, false, 1024, leaveOpen: true);
                 using var writer = Writer(transport);
                 bool upgrade = false;
                 string? line;
@@ -117,10 +129,37 @@ internal sealed class LocalImapServer : IAsyncDisposable
                             }
                             break;
                         case "LIST":
-                            if (line.EndsWith("\"\" \"\"", StringComparison.Ordinal))
+                            if (line.Contains("Sent", StringComparison.Ordinal))
+                                await writer.WriteLineAsync(MissingSentFolder ? $"{tag} OK No matching folder" : $"* LIST (\\HasNoChildren) \"/\" \"Sent\"\r\n{tag} OK List");
+                            else if (line.EndsWith("\"\" \"\"", StringComparison.Ordinal))
                                 await writer.WriteLineAsync($"* LIST (\\Noselect) \"/\" \"\"\r\n{tag} OK List");
                             else
                                 await writer.WriteLineAsync($"* LIST (\\HasNoChildren) \"/\" \"INBOX\"\r\n{tag} OK List");
+                            break;
+                        case "APPEND":
+                            if (!AuthenticatedOverTls) throw new InvalidOperationException("APPEND must authenticate over TLS.");
+                            AppendCount++;
+                            MailCommands.Enqueue(line[(tag.Length + 1)..]);
+                            if (RejectAppend) { await writer.WriteLineAsync($"{tag} NO Permission denied {Password}"); break; }
+                            var literal = Regex.Match(line, @"\{(\d+)\}$");
+                            if (!literal.Success) throw new InvalidOperationException("Expected synchronizing APPEND literal.");
+                            int size = int.Parse(literal.Groups[1].Value);
+                            if (size > 2 * 1024 * 1024) throw new InvalidOperationException("Fixture literal too large.");
+                            await writer.WriteLineAsync("+ Send literal");
+                            var buffer = new char[size];
+                            int offset = 0;
+                            while (offset < size)
+                            {
+                                int read = await reader.ReadAsync(buffer.AsMemory(offset), _lifetime.Token);
+                                if (read == 0) throw new IOException("Incomplete APPEND literal.");
+                                offset += read;
+                            }
+                            if (await reader.ReadLineAsync(_lifetime.Token) != "") throw new InvalidOperationException("Unexpected APPEND terminator.");
+                            AppendedMessage = Encoding.UTF8.GetString(Encoding.Latin1.GetBytes(buffer));
+                            AppendReceived.TrySetResult();
+                            if (DropAfterAppend) return;
+                            if (StallAfterAppend) { await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token); return; }
+                            await writer.WriteLineAsync($"{tag} OK Appended");
                             break;
                         case "LOGIN" when _rejectAuthentication:
                             await writer.WriteLineAsync($"{tag} NO [AUTHENTICATIONFAILED] Rejected {Password}");
@@ -224,7 +263,7 @@ internal sealed class LocalImapServer : IAsyncDisposable
         _lifetime.Cancel();
         _listener.Stop();
         try { await _session; }
-        catch (Exception error) when (error is OperationCanceledException or IOException or AuthenticationException or SocketException) { }
+        catch (Exception error) when (error is OperationCanceledException or IOException or AuthenticationException or SocketException or ObjectDisposedException) { }
         finally { _lifetime.Dispose(); Certificate.Dispose(); }
     }
 }

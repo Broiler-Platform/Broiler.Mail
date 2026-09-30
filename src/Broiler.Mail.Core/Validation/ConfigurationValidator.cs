@@ -18,6 +18,11 @@ public static class ConfigurationValidator
         ValidateServer(profile.IncomingServer);
         if (profile.OutgoingServer is not null)
             ValidateServer(profile.OutgoingServer);
+        if (!Enum.IsDefined(profile.SentCopyMode)) throw new ArgumentException("Choose a supported Sent-copy mode.");
+        if (profile.SentCopyMode == SentCopyMode.AppendToFolder)
+            RequireText(profile.SentFolder, "Sent folder path", 512);
+        else if (profile.SentFolder is not null)
+            throw new ArgumentException("A Sent folder path is only used when appending a copy.");
     }
 
     public static void Validate(ApplicationSettings settings)

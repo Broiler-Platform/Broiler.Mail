@@ -4,13 +4,15 @@ namespace Broiler.Mail.Application.ViewModels;
 
 public sealed class MailShellViewModel
 {
-    public MailShellViewModel(AccountProfileViewModel account, SettingsViewModel settings, InboxViewModel inbox)
+    public MailShellViewModel(AccountProfileViewModel account, SettingsViewModel settings, InboxViewModel inbox, ComposerViewModel? composer = null)
     {
         Account = account;
         Settings = settings;
         Inbox = inbox;
+        Composer = composer ?? new ComposerViewModel();
+        Composer.SetAccount(account.Profile);
         Inbox.SetAccount(account.Profile);
-        Account.Changed += (_, _) => Inbox.SetAccount(Account.Profile);
+        Account.Changed += (_, _) => { Inbox.SetAccount(Account.Profile); Composer.SetAccount(Account.Profile); };
     }
     public string Title => "Broiler.Mail";
     public AccountProfile? CurrentAccount => Account.Profile;
@@ -18,4 +20,5 @@ public sealed class MailShellViewModel
     public SettingsViewModel Settings { get; }
     public AccountProfileViewModel Account { get; }
     public InboxViewModel Inbox { get; }
+    public ComposerViewModel Composer { get; }
 }

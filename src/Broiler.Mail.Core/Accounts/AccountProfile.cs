@@ -8,5 +8,7 @@ public sealed record AccountProfile
     public required string EmailAddress { get; init; }
     public required MailServerSettings IncomingServer { get; init; }
     public MailServerSettings? OutgoingServer { get; init; }
+    public SentCopyMode SentCopyMode { get; init; }
+    public string? SentFolder { get; init; }
     public bool IsEnabled { get; init; } = true;
 }

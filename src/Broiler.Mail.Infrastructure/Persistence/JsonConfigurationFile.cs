@@ -5,9 +5,8 @@ using System.Text.Json.Serialization;
 namespace Broiler.Mail.Infrastructure.Persistence;
 
 /// <summary>Versioned configuration with same-directory replacement and a cross-process write lock.</summary>
-internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefault, Action<T> validate) where T : class
+internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefault, Action<T> validate, long maximumBytes = 1024 * 1024) where T : class
 {
-    private const long MaximumBytes = 1024 * 1024;
     private readonly string _path = Path.GetFullPath(path);
     private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
     {
@@ -23,8 +22,8 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
         {
             await using var stream = new FileStream(_path, FileMode.Open, FileAccess.Read,
                 FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
-            if (stream.Length > MaximumBytes)
-                throw new InvalidDataException("Configuration exceeds the 1 MiB limit.");
+            if (stream.Length > maximumBytes)
+                throw new InvalidDataException($"Configuration exceeds the {maximumBytes} byte limit.");
             var envelope = await JsonSerializer.DeserializeAsync<Envelope>(stream, Options, cancellationToken).ConfigureAwait(false);
             if (envelope is null || envelope.SchemaVersion != 1 || envelope.Data is null)
                 throw new InvalidDataException("Unsupported or incomplete configuration. The file has not been changed.");
@@ -56,8 +55,8 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
                 await JsonSerializer.SerializeAsync(stream, new Envelope { SchemaVersion = 1, Data = data }, Options, cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                 stream.Flush(flushToDisk: true);
-                if (stream.Length > MaximumBytes)
-                    throw new InvalidDataException("Configuration exceeds the 1 MiB limit.");
+                if (stream.Length > maximumBytes)
+                    throw new InvalidDataException($"Configuration exceeds the {maximumBytes} byte limit.");
             }
             cancellationToken.ThrowIfCancellationRequested();
             File.Move(temporaryPath, _path, overwrite: true);

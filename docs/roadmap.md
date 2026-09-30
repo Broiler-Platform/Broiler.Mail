@@ -4,7 +4,9 @@ Status: version 1 implementation is complete and packaged for Windows x64.
 Automated acceptance and native demo checks passed. The user deferred live-provider
 testing to a later run; no public provider is claimed as certified. See the
 [acceptance checklist](version-1-acceptance.md) and
-[implementation notes](architecture.md). Updated: 2026-09-28.
+[implementation notes](architecture.md). Version 2 now includes optional SMTP
+account configuration, the plain-text composer, local draft recovery, and secure
+SMTP submission with configurable Sent-copy handling. Updated: 2026-09-30.
 
 Broiler.Mail should become a straightforward, responsive mail client that reuses
 Broiler components where they fit. The first release should make one workflow work
@@ -91,20 +93,60 @@ connection is recoverable without restarting the app.
 
 **Goal:** turn the reader into a basic two-way mail client.
 
-- [ ] Extend the account profile with SMTP host, port, TLS, and authentication.
-- [ ] Add a plain-text composer with To, Cc, Bcc, subject, and body; support reply,
+- [x] Extend the account profile with SMTP host, port, TLS, and authentication.
+  Optional SMTP setup now saves/reloads a separate host, port, username, TLS mode,
+  and authentication method. Password/app-password is the available setup choice;
+  separate SMTP credential storage and submission are implemented below. Connection
+  testing remains IMAP-only. Existing IMAP-only profiles remain compatible.
+- [x] Add a plain-text composer with To, Cc, Bcc, subject, and body; support reply,
   reply-all, and forward, including correct reply threading headers.
-- [ ] Preserve unfinished composition locally across failures and restart. Show
+  The Compose tab reuses Broiler.UI.RichEdit, pins the sender, and preserves an
+  existing draft until explicitly discarded. Parsed source headers supply
+  Reply-To/From, visible recipients, Message-ID, In-Reply-To, and References.
+  Reply-all excludes the account's address and received Bcc recipients. Check draft
+  validates without sending. The active composition is now saved locally.
+- [x] Preserve unfinished composition locally across failures and restart. Show
   sending, accepted-by-server, failed, and outcome-unknown states explicitly.
-- [ ] Save sent mail according to the tested provider's behavior: use its automatic
+  Autosave retains raw edits, sender identity, and reply metadata. Failed saves
+  keep edits open; normal closing waits for saving. Conflicting instances cannot
+  overwrite newer saved work. Interrupted submission recovers as unknown with no
+  automatic resend. Submission transitions are tested with injected senders and
+  the controlled SMTP fixture.
+- [x] Implement SMTP submission with separate protected SMTP credentials, required
+  TLS, certificate validation, bounded operations, and MIME serialization that
+  keeps Bcc out of delivered headers. Validate acceptance/rejection/unknown outcomes
+  against a controlled server. MailKit submits plain-text MIME with stable message
+  IDs and reply headers; rejected recipients abort before DATA. No automatic retry
+  occurs after disconnect, timeout, or cancellation with uncertain acceptance.
+- [ ] **Provider validation remains with the user:** verify SMTP sending and the
+  provider's Sent-copy behavior using the [SMTP checklist](version-2-smtp-checklist.md).
+- [x] Save sent mail according to the tested provider's behavior: use its automatic
   Sent copy or append a copy once. Treat a failed Sent-copy operation separately
   from delivery, so it never triggers a resend.
-- [ ] Add an HTML reading mode with a plain-text toggle and bounded inline images.
+  The account explicitly chooses provider-managed copies or one IMAP append to an
+  existing folder; older accounts default to unconfigured. SMTP acceptance is saved
+  before the append attempt. Copy status survives restart; an interrupted append
+  becomes unknown without retry. Controlled TLS/STARTTLS fixtures verify copying,
+  permissions, missing folders, lost acknowledgements, and persistence failures.
+  Live-provider policy selection/validation remains in the user checklist above.
+- [x] Add an HTML reading mode with a plain-text toggle and bounded inline images.
   Resolve embedded `cid:` resources only within the current message; keep remote
   images blocked until the user chooses to load them.
-- [ ] Isolate untrusted rendering; disable scripts, forms, frames, plugins, local
+  HTML reading mode opens through an isolated WebView2 window with a plain-text
+  toggle button and bounded embedded `cid:` resolution (up to 1 MiB per image,
+  16 images maximum, raster types only). Remote images are blocked by default and
+  can be explicitly loaded via a controlled HTTP channel that enforces non-SVG image
+  verification and 5 MB size bounds.
+- [x] Isolate untrusted rendering; disable scripts, forms, frames, plugins, local
   file access, and automatic navigation. Control all resource-loading paths,
   including stylesheets, fonts, and CSS images. Open user-selected links externally.
+  HTML markup is reduced to passive formatting with strict CSP (`default-src 'none'`).
+  Native `Broiler.HTML` (`HtmlContainer` / `BBitmap`) is hosted inside a `Direct2DWindow`
+  with zero script evaluation. All subresource requests are intercepted by a strict
+  `DenyingRequestTransport` returning 403 Forbidden without network dispatch, plus
+  `StylesheetLoad` and `ImageLoad` blocking handlers. External HTTP/HTTPS links open
+  exclusively in the system browser. Render failures gracefully fall back to plain-text
+  display without affecting the shell.
 
 **Scope boundary:** HTML is for received-message preview. A rich HTML composer,
 attachment sending, scheduled sending, and automatic send retries are deferred.

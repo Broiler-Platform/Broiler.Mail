@@ -13,7 +13,7 @@ internal static class ShellSmokeCheck
     {
         using var session = new StandardUiSessionBuilder().Build(new HeadlessHost());
         session.AddRoot(shell.Window);
-        foreach (string tabId in new[] { "inbox", "account", "settings" })
+        foreach (string tabId in new[] { "inbox", "account", "settings", "compose" })
         {
             if (!shell.Navigation.SelectTab(tabId))
                 throw new InvalidOperationException($"Missing shell tab: {tabId}");

@@ -86,14 +86,20 @@ public sealed class Version1AcceptanceTests
     }
 
     [Theory]
-    [InlineData(640, 480, false)]
-    [InlineData(1100, 720, true)]
-    public async Task FullShellUsesAvailableWidthAndKeepsKeyboardFocusVisible(int width, int height, bool dark)
+    [InlineData(640, 480, false, false)]
+    [InlineData(1100, 720, true, false)]
+    [InlineData(640, 480, false, true)]
+    [InlineData(1100, 720, true, true)]
+    public async Task FullShellUsesAvailableWidthAndKeepsKeyboardFocusVisible(int width, int height, bool dark, bool smtp)
     {
         // These static theme tokens are shared with other UI tests, so use a collection for all UI tests.
         StandardControlPaint.ApplyTheme(dark ? StandardThemeTokens.Dark : StandardThemeTokens.Light);
         using var directory = new TestDirectory();
         var account = TestDirectory.Profile();
+        if (smtp) account = account with
+        {
+            OutgoingServer = new() { Host = "smtp.example.test", Port = 587, UserName = "outgoing", Security = TransportSecurity.StartTls },
+        };
         var accounts = new JsonAccountStore(directory.File("accounts.json"));
         await accounts.SaveAsync(account);
         var credentials = new TestCredentialStore();
@@ -120,6 +126,18 @@ public sealed class Version1AcceptanceTests
         Assert.Same(edits[0], session.FocusedElement);
         Assert.True(keyboard.Handle(Key(9, shift: true)));
         Assert.Same(shell.Navigation, session.FocusedElement);
+        if (smtp)
+        {
+            var smtpHost = Descendants(shell.Navigation.SelectedTab.Content!).OfType<StandardLabel>()
+                .Single(item => item.Text == "SMTP server (hostname only)").Target;
+            for (int attempt = 0; attempt < 20 && session.FocusedElement != smtpHost; attempt++)
+                Assert.True(keyboard.Handle(Key(9)));
+            Assert.Same(smtpHost, session.FocusedElement);
+            var formScroll = Descendants(shell.Navigation.SelectedTab.Content!).OfType<StandardScrollView>().Single();
+            Assert.InRange(smtpHost!.Bounds.Top, formScroll.ContentBounds.Top - 1, formScroll.ContentBounds.Bottom);
+            Assert.InRange(smtpHost.Bounds.Bottom, formScroll.ContentBounds.Top, formScroll.ContentBounds.Bottom + 1);
+            session.SetFocus(shell.Navigation);
+        }
         // Backward traversal lands on the final enabled button and reveals it below the fold.
         Assert.True(keyboard.Handle(Key(9, shift: true)));
         var button = Assert.IsType<StandardButton>(session.FocusedElement);
@@ -147,13 +165,13 @@ public sealed class Version1AcceptanceTests
         using var session = new StandardUiSessionBuilder().Build(host);
         session.AddRoot(shell.Window);
         Assert.Equal("account", shell.Navigation.SelectedTab!.Id);
-        Assert.False(Descendants(shell.Window).OfType<StandardEdit>().Single(edit => edit.IsPassword).IsEnabled);
+        Assert.All(Descendants(shell.Window).OfType<StandardEdit>().Where(edit => edit.IsPassword), edit => Assert.False(edit.IsEnabled));
         await accounts.SaveAsync(TestDirectory.Profile());
         await app.InitializeAsync();
         using var configured = app.CreateShell();
         session.AddRoot(configured.Window);
         configured.Navigation.SelectTab("account");
-        var password = Descendants(configured.Window).OfType<StandardEdit>().Single(edit => edit.IsPassword);
+        var password = Descendants(configured.Window).OfType<StandardEdit>().Last(edit => edit.IsPassword);
         Assert.True(password.IsEnabled);
         password.Text = "synthetic-secret";
         password.SelectAll();

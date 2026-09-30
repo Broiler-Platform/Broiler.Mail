@@ -5,4 +5,9 @@ public sealed record MailMessageBody(MailMessageKey Key, string PlainText, strin
 {
     public bool IsHtmlFallback { get; init; }
     public bool IsTruncated { get; init; }
+    public string? HtmlUnavailableReason { get; init; }
+    public MailCompositionSource? Composition { get; init; }
+    public string? CompositionUnavailableReason { get; init; }
+    public IReadOnlyDictionary<string, MailEmbeddedImage> EmbeddedImages { get; init; } =
+        new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase);
 }

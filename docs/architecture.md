@@ -3,6 +3,9 @@
 Version 1 includes account/settings configuration, protected password storage,
 IMAP connection testing, manual receiving, and plain-text reading. Version 1
 implementation is complete; live-provider acceptance was deferred by the user.
+Version 2 includes optional SMTP account configuration, a plain-text composer,
+durable recovery of the active draft, secure SMTP submission, configurable
+Sent-copy handling, and isolated HTML preview.
 
 ## Project boundaries
 
@@ -34,21 +37,22 @@ Broiler.Graphics dependency; upgrades should be deliberate and validated togethe
 
 | Area | Files/classes | Current behavior / next step |
 | --- | --- | --- |
-| Startup | `Program`, `CompositionRoot`, `MailApplication` | Loads account/settings independently, shows read errors, and opens the shell without invoking mail adapters. |
+| Startup | `Program`, `CompositionRoot`, `MailApplication` | Loads accounts/settings/drafts independently, shows read errors, and opens the shell without invoking mail adapters. |
 | Native hosting | `WindowsMailWindow`, `WindowsUiHost` | Broiler Direct2D, native input, UI dispatch through Broiler.UI's queued dispatcher, clipboard, default IME placement, minimum size, and DPI-aware resizing. |
-| Shell | `MailShellView`, `MailShellViewModel`, `InboxView` | Inbox, Account, and Settings tabs; receive/load older/read/cancel actions and visible operation status. |
-| Account setup | `AccountProfileView`, `AccountProfileViewModel`, `AccountProfile` | Validated profile, explicit password save/removal, cancellable connection test, and visible outcomes. |
+| Shell | `MailShellView`, `MailShellViewModel`, `InboxView`, `ComposerView` | Inbox, Account, Settings, and Compose tabs; receiving and recoverable composition. |
+| Account setup | `AccountProfileView`, `AccountProfileViewModel`, `AccountProfile` | Validated IMAP and optional SMTP settings; separate password controls reuse account/protocol bindings. Connection testing remains IMAP-only. |
 | Settings | `SettingsView`, `SettingsViewModel`, `ApplicationSettings` | Theme and initial window size save/reload; preferences apply at startup. |
-| Persistence | `JsonAccountStore`, `JsonSettingsStore`, `JsonConfigurationFile` | Versioned JSON, explicit paths, write locks, bounded reads, same-directory replacement, and visible errors. |
+| Persistence | `JsonAccountStore`, `JsonSettingsStore`, `JsonDraftStore`, `JsonConfigurationFile` | Versioned JSON, explicit paths, write locks, bounded reads, same-directory replacement, and visible errors. |
 | Credentials | `CredentialKey`, `ICredentialStore`, `WindowsCredentialStore` | Windows generic credentials scoped to account/protocol and bound to connection identity. |
 | Receiving | `IMailReceiver`, `ImapMailReceiver`, `InboxViewModel` | Read-only IMAP, bounded header pages, on-demand bodies, cancellation, and safe errors. |
 | Reading | `MessageTextDecoder`, `ScrollableMessageText`, `PlainTextMessagePreview` | MIME/charset decoding, HTML text extraction, and a bounded wrapping/scrolling reader. |
-| Sending | `MailDraft`, `IMailSender`, `SmtpMailSender`, `SendResult` | Version 2 contracts only; account validation and uncertain outcomes need implementation. |
-| HTML | `HtmlMessagePreview` | Throws until the version 2 isolation/resource-policy gate is met. |
+| Sending | `MailDraft`, `IMailSender`, `SmtpMailSender`, `SendResult` | MailKit SMTP with required TLS, protected SMTP credentials, plain-text MIME, and durable submission outcomes. |
+| Sent copies | `ISentCopyWriter`, `ImapSentCopyWriter`, `OutgoingMessageFactory` | Explicit provider-managed mode or one append to an existing IMAP folder after durable SMTP acceptance. |
+| Composition | `MailCompositionSource`, `MailComposition`, `ComposerViewModel`, `ComposerView` | New/reply/reply-all/forward, independent recipient fields, pinned sender, plain-text body, and reply-thread metadata. |
+| HTML | `HtmlMessagePreview`, `WindowsHtmlPreviewHost`, `HtmlPreviewWindow` | Native Broiler.HTML (`HtmlContainer` / `BBitmap`) host in `Direct2DWindow` with passive HTML reduction, bounded cid images, plain-text toggle, remote image blocking, and external link handling. |
 
-Sending and isolated HTML rendering are the remaining skeleton integration points.
-Unimplemented operations throw explicitly instead of returning successful empty
-results or pretending data has been saved.
+Sent-folder copying reports its outcome independently of SMTP acceptance. Isolated
+HTML preview enforces renderer isolation, passive markup reduction, and bounded resources.
 
 ## Data and threading decisions
 
@@ -113,7 +117,7 @@ in `finally`. Tests never enumerate credentials or use real account data.
 
 The Windows composition root uses `%LOCALAPPDATA%\Broiler.Mail`; tests inject file
 paths. Files have a `schemaVersion: 1` envelope with `data` containing an account
-array (at most one entry for version 1) or application settings. Unknown fields,
+array (at most one entry for version 1), application settings, or revisioned draft state. Unknown fields,
 unknown enum values, invalid data, and unsupported versions are rejected.
 
 Updates acquire an exclusive `.lock` file, re-read/validate the existing document,
@@ -124,8 +128,9 @@ filesystem durability guarantees have not been validated.
 
 Unreadable configuration blocks saving on the affected form. The other form can
 still be used. Repair/restore the file and restart, or intentionally move the file
-to a backup location to start fresh. Missing files alone trigger defaults. Secrets
-are never part of the configuration models or JSON. The masked password field is
+to a backup location to start fresh. Missing files alone trigger defaults. Authentication
+secrets are never part of the configuration models or JSON. Draft JSON does contain
+readable message content and recipients, including Bcc. The masked password field is
 cleared after submission and is never populated from stored credentials.
 
 ## Passwords and connection testing
@@ -189,9 +194,160 @@ Physical multi-monitor and IME language coverage are also recorded as user check
 
 ## Next implementation slice
 
-Continue with version 2 SMTP/composition and the isolated HTML preview boundary.
-Record the user's provider test results when available.
+The first version 2 entry is complete: `AccountProfileViewModel` now edits the
+existing optional `OutgoingServer` value. Configuration reuses `MailServerSettings`,
+`ConfigurationValidator`, and `JsonAccountStore`, so no new storage schema or package
+is needed. Absent/null outgoing settings still load as IMAP-only. Configured SMTP
+defaults to required STARTTLS on port 587, has an independent username and explicit
+port, and accepts no plaintext transport. Disabling setup and saving clears only
+the outgoing settings. Existing unsupported authentication modes are preserved
+when editing other fields; this does not implement OAuth authentication.
+
+Tests cover TLS/STARTTLS persistence, old profiles without `outgoingServer`, invalid
+edits preserving disk contents, form capture, removal of outgoing settings, IMAP
+credential isolation, and keyboard/scroll layout with SMTP expanded at both
+640×480 and 1100×720. Separate SMTP password save/forget controls now reuse the
+existing credential workflow. Connection testing remains IMAP-only.
+
+The composer entry is also complete. `MessageTextDecoder` now extracts bounded
+composition headers from the fetched MIME message, separately from abbreviated
+inbox labels. Oversized/invalid metadata leaves the body readable but disables
+reply/forward preparation. There is no received Bcc field in `MailCompositionSource`.
+`MailComposition` prefers Reply-To, excludes the account's address, deduplicates
+reply-all recipients, and quotes only the bounded plain-text preview.
+
+Reply threading follows [RFC 5322 section 3.6.4](https://www.rfc-editor.org/rfc/rfc5322#section-3.6.4):
+the parent Message-ID becomes In-Reply-To; References contains the parent's chain
+(or its sole In-Reply-To when no chain exists) followed by its Message-ID. Missing
+IDs are not invented. A forward starts a new conversation. The
+[MimeKit ReplyTo contract](https://mimekit.net/docs/html/P_MimeKit_MimeMessage_ReplyTo.htm)
+defines the Reply-To/From fallback. The SMTP sender serializes these draft fields
+into MIME reply headers.
+
+`ComposerViewModel` retains raw edits even when validation fails, allows only one
+active draft, and preserves its ID, sender, and thread metadata across inbox and
+profile changes. Sender identity changes block a successful draft check without
+discarding text. Draft checks allow 1–100 recipients across To/Cc/Bcc, 998 subject
+characters, and 100,000 body characters. Imported fields are not silently shortened
+to fit editors. A composition source is limited to 100 addresses per header group,
+100 reference IDs, and 998 characters per ID; an over-limit reply chain is rejected
+instead of silently dropping ancestors.
+
+The body editor uses the matching `Broiler.UI.RichEdit.Standard` package and only
+its plain-text input/output surface. No document codecs or HTML renderer are added.
+The Windows host routes application shortcuts before editor input so Tab navigation
+cannot also insert text; subsequent key events still update UI focus visibility.
+Compose is fourth in the tab order, preserving the original Ctrl+1/2/3 shortcuts.
+Tests cover source MIME/IMAP integration, threading, recipient privacy, invalid
+draft retention, sender changes, action enablement, and keyboard/layout behavior.
+
+The draft recovery entry is complete. `IDraftStore` and `JsonDraftStore` reuse
+`JsonConfigurationFile` for locking, schema validation, bounded IO, and file
+replacement. The draft file allows up to 4 MiB; account/settings limits remain
+1 MiB. Draft storage accepts incomplete or invalid recipient text independently
+of send validation: raw To/Cc/Bcc fields are authoritative, while `MailDraft`
+retains the original sender, ID, and reply metadata. Storage bounds exceed send
+bounds (400,000 body characters, 16,000 subject characters, and 32,000 characters
+per raw recipient field) so validation errors do not discard recoverable edits.
+
+`DraftJournal` serializes and coalesces snapshots off the UI thread. Every write
+checks the expected persisted revision under the file lock. Discard writes a null
+draft with a new revision, preventing an older instance from resurrecting it.
+Conflicts retain local edits and require resolving the saved file before restart;
+they never silently choose a winner. Broken/unsupported draft files disable
+composition without blocking account/settings loading. `MemoryDraftStore` keeps
+demo and default headless composition free of disk writes.
+
+The native host uses Broiler.Graphics' delegated close mode and a message loop
+through `Broiler.Native.Windows`, allowing normal close to wait for the journal.
+Editing is frozen during that flush; a failed save keeps the window and draft open.
+The flush itself never waits on the UI dispatcher. Forced termination can recover
+only the latest completed save. The native close test verifies that a blocked
+write keeps the window alive until saving finishes.
+
+Submission persists `Sending` before invoking `IMailSender`. Accepted, rejected,
+and uncertain results become `Accepted`, `Failed`, and `Unknown`; transport
+exceptions conservatively become unknown. A recovered `Sending` becomes unknown,
+and accepted/unknown drafts cannot be resent. Failed persistence before submission
+prevents transport invocation; failed persistence afterward retains the result
+in memory and the earlier sending record on disk. Tests cover these transitions,
+restart recovery, malformed files, conflicts, coalescing, and failed save/discard.
+`SmtpMailSender.IsAvailable` now enables Send for configured accounts. Demo mode
+injects an unavailable sender that never accesses the network.
+
+SMTP submission uses the existing MailKit dependency and the existing
+`CredentialKey.For(account, MailProtocol.Smtp)`/`ICredentialStore` path. No new
+credential format or platform interop is needed. Shared `MailComposition.ValidateDraft`
+checks sender/account identity and bounded content both in the composer and again
+at the transport boundary. Configuration and OAuth checks happen before connecting.
+An operation deadline covers credential lookup, connection, authentication, and send.
+Production uses platform certificate validation with explicit `SslOnConnect` or
+required `StartTls`; only internal test construction can pin a fixture certificate.
+
+The [MailKit explicit-envelope SendAsync overload](https://mimekit.net/docs/html/M_MailKit_Net_Smtp_SmtpClient_SendAsync.htm)
+separates SMTP recipients from MIME headers. Broiler.Mail never constructs a Bcc
+header for SMTP; the deduplicated envelope includes To/Cc/Bcc. MIME contains Unicode plain
+text, a GUID-based message ID retained across retries, and reply threading headers.
+Tests inspect actual DATA and envelope commands, including Bcc-only mail and dot
+stuffing. A rejection of one recipient stops the transaction before DATA even if
+an earlier recipient was accepted. Explicit sender/recipient/message rejection is
+safe to retry; other failures after entering SendAsync are conservatively unknown.
+Pre-submission failures are rejected. Successful SendAsync fixes acceptance even
+if subsequent disposal fails; no QUIT round trip can reverse it. All user-facing
+transport diagnostics are fixed messages, without server responses or secrets.
+
+The loopback SMTP fixture verifies TLS/STARTTLS, certificate rejection, no plaintext
+authentication fallback, authentication/recipient/message rejection, lost or malformed
+acknowledgements, cancellation, timeouts, restart state, and retained draft content.
+SMTP credential tests verify protocol isolation, changed bindings, masked/cleared
+fields, and retry after storage failure. Provider validation remains with the user;
+see the [SMTP checklist](version-2-smtp-checklist.md).
+
+Sent-copy policy is explicit per account: `NotConfigured` (the compatible default),
+`ProviderManaged`, or `AppendToFolder` with a bounded exact IMAP path. Changing only
+this policy does not invalidate credential bindings. The provider-managed status
+does not assert that the provider's copy was verified. Demo mode has no copy writer.
+
+`ComposerViewModel` captures the account and submitted draft, including its timestamp,
+before SMTP begins. After acceptance it persists `Accepted` plus `Pending` copy
+intent before invoking `ISentCopyWriter` once. Failure to persist that boundary
+prevents the append. The copy result is then persisted separately. Restoring a
+pending copy produces `Unknown`, while keeping SMTP accepted. A failed or lost
+copy acknowledgement never enables resend, and there is no copy retry on restart,
+Save draft, or repeated Send. A post-copy persistence failure leaves the earlier
+pending record to recover conservatively. The local composition remains available.
+
+`ImapSentCopyWriter` reuses MailKit and the existing protected IMAP credential slot,
+with platform certificate validation, required TLS/STARTTLS, and its own 20-second
+deadline. It resolves the exact existing folder and calls
+[MailKit AppendAsync](https://mimekit.net/docs/html/Overload_MailKit_IMailFolderExtensions_AppendAsync.htm)
+once with the Seen flag and submission date; it does not SELECT, CREATE, or alter
+other messages. A tagged OK confirms saving even without APPENDUID. A command
+rejection is failed; an ambiguous interruption after entering APPEND is unknown.
+No raw server diagnostics are shown. SMTP and IMAP use `OutgoingMessageFactory`
+for the same message ID, date, thread headers, and text; only the private Sent copy
+includes Bcc. Received-mail access remains read-only.
+
+Tests inspect actual SMTP DATA and IMAP APPEND, compare content, verify credential
+and folder failures, and simulate interruption and storage failure on either side
+of the acceptance/copy boundary. Legacy accounts and accepted drafts load without
+assuming a Sent copy exists. Provider testing remains pending.
+
+Isolated HTML preview is implemented behind `IHtmlPreviewHost` and `HtmlMessagePreview`.
+Untrusted markup is sanitized to passive typography and tables by `HtmlPreviewPolicy`,
+injecting a strict `default-src 'none'` Content-Security-Policy. Embedded `cid:` images
+are resolved from the MIME message's `multipart/related` parts by `MessageTextDecoder`
+under bounded constraints (1 MiB per image, 16 images maximum, raster types only)
+and converted into data URIs; missing or non-message CIDs are omitted. Remote images
+are blocked by default and can be loaded via a controlled HTTP fetcher. The preview
+window provides a seamless toggle between HTML and plain-text views. All interactive
+elements (scripts, forms, frames, plugins, devtools, web messages) are disabled, and
+selected HTTP/HTTPS links open externally.
+
+Record the user's provider test results when available using the [SMTP checklist](version-2-smtp-checklist.md).
 The [initial decision](decisions/0001-version-1-foundation.md) records the foundation.
 The [connection decision](decisions/0002-credentials-and-imap-test.md) records credentials/testing.
 The [receiving decision](decisions/0003-read-only-receiving.md) records the current reader.
-Sending and HTML preview remain separate version 2 work.
+The [sending and sent-copy decision](decisions/0004-smtp-and-sent-copies.md) records SMTP submission and Sent copies.
+The [isolated HTML preview decision](decisions/0005-isolated-html-preview.md) records renderer isolation and content policy.
+Version 2 implementation is complete; proceed with version 3 (multiple accounts).

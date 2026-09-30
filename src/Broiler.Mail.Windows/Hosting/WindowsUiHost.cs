@@ -1,14 +1,15 @@
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
-using Broiler.UI;
+using Broiler.Graphics.Windows;
 using Broiler.Mail.Windows.Services;
+using Broiler.UI;
 
 namespace Broiler.Mail.Windows.Hosting;
 
-internal sealed class WindowsUiHost(WindowsMailWindow window) : IUiHost, IUiClipboardHost, IUiTextInputHost
+internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandle) : IUiHost, IUiClipboardHost, IUiTextInputHost
 {
     private readonly WindowsClipboard _clipboard = new(() => window.NativeHandle);
-    private readonly WindowsTextInput _textInput = new(() => window.InputHandle, () => window.DpiScale);
+    private readonly WindowsTextInput _textInput = new(inputHandle, () => window.DpiScale);
     public bool TryGetText(out string text) => _clipboard.TryGetText(out text);
     public void SetText(string text) => _clipboard.SetText(text);
     public void PublishCaret(UiTextCaretInfo caret) => _textInput.PublishCaret(caret);

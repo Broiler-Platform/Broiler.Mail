@@ -8,6 +8,7 @@ using Broiler.UI.Edit.Standard;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.TabView.Standard;
+using Broiler.UI.RichEdit.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
@@ -22,13 +23,14 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         {
             if (control)
             {
-                shell.Navigation.SelectedIndex = (shell.Navigation.SelectedIndex + (shift ? 2 : 1)) % 3;
+                int count = shell.Navigation.Tabs.Count;
+                shell.Navigation.SelectedIndex = (shell.Navigation.SelectedIndex + (shift ? count - 1 : 1)) % count;
                 session.SetFocus(shell.Navigation);
             }
             else MoveFocus(shift ? -1 : 1);
             return true;
         }
-        if (control && input.NativeKeyCode is >= 0x31 and <= 0x33)
+        if (control && input.NativeKeyCode is >= 0x31 and <= 0x34)
         {
             shell.Navigation.SelectedIndex = input.NativeKeyCode - 0x31;
             session.SetFocus(shell.Navigation);
@@ -81,10 +83,11 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     private static bool IsFocusable(UiElement element) => element switch
     {
         StandardEdit edit => edit.IsEnabled,
+        StandardRichEdit edit => edit.IsEnabled,
         StandardButton button => button.IsEnabled,
         StandardComboBox combo => combo.IsEnabled,
         StandardListView => true,
-        StandardScrollView scroll => !Descendants(scroll).Any(item => item is StandardEdit or StandardButton or StandardComboBox or StandardListView),
+        StandardScrollView scroll => !Descendants(scroll).Any(item => item is StandardEdit or StandardRichEdit or StandardButton or StandardComboBox or StandardListView),
         _ => false,
     };
 

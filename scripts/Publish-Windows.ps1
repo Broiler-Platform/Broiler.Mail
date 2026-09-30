@@ -15,16 +15,16 @@ try {
     dotnet publish src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj -c Release -r $Runtime --self-contained true -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "Publishing failed (exit $LASTEXITCODE)." }
     Copy-Item -LiteralPath (Join-Path $repository 'LICENSE') -Destination (Join-Path $output 'LICENSE')
-    Copy-Item -LiteralPath (Join-Path $repository 'docs/version-1-acceptance.md') -Destination (Join-Path $output 'START-HERE.md')
+    Copy-Item -LiteralPath (Join-Path $repository 'docs/version-2-acceptance.md') -Destination (Join-Path $output 'START-HERE.md')
 
     # Include package identity/license metadata and license files from the actual restored graph.
-    $assets = Get-Content -LiteralPath 'src/Broiler.Mail.Windows/obj/project.assets.json' -Raw | ConvertFrom-Json -AsHashtable
-    $dependencies = Get-Content -LiteralPath (Join-Path $output 'Broiler.Mail.Windows.deps.json') -Raw | ConvertFrom-Json -AsHashtable
-    $runtimeKey = $dependencies.libraries.Keys | Where-Object { $_ -like "runtimepack.Microsoft.NETCore.App.Runtime.$Runtime/*" } | Select-Object -First 1
+    $assets = Get-Content -LiteralPath 'src/Broiler.Mail.Windows/obj/project.assets.json' -Raw | ConvertFrom-Json
+    $dependencies = Get-Content -LiteralPath (Join-Path $output 'Broiler.Mail.Windows.deps.json') -Raw | ConvertFrom-Json
+    $runtimeKey = $dependencies.libraries.psobject.Properties | Where-Object { $_.Name -like "runtimepack.Microsoft.NETCore.App.Runtime.$Runtime/*" } | Select-Object -First 1 -ExpandProperty Name
     if (!$runtimeKey) { throw 'The self-contained runtime is missing from the dependency manifest.' }
     $runtimeVersion = ($runtimeKey -split '/')[-1]
     $runtimeDirectory = $null
-    foreach ($root in $assets.packageFolders.Keys) {
+    foreach ($root in ($assets.packageFolders.psobject.Properties | ForEach-Object { $_.Name })) {
         $candidate = Join-Path $root "microsoft.netcore.app.runtime.$Runtime/$runtimeVersion"
         if (Test-Path -LiteralPath $candidate) { $runtimeDirectory = $candidate; break }
     }
@@ -34,14 +34,14 @@ try {
     }
     $notices = [System.Collections.Generic.List[string]]::new()
     $notices.Add("# Third-party components`n`nThis self-contained build includes the .NET runtime and the packages below. See also the runtime's LICENSE.txt and THIRD-PARTY-NOTICES.txt.`n")
-    foreach ($entry in $assets.libraries.GetEnumerator() | Sort-Object Key) {
+    foreach ($entry in ($assets.libraries.psobject.Properties | Sort-Object Name)) {
         if ($entry.Value.type -ne 'package') { continue }
         $packageDirectory = $null
-        foreach ($root in $assets.packageFolders.Keys) {
+        foreach ($root in ($assets.packageFolders.psobject.Properties | ForEach-Object { $_.Name })) {
             $candidate = Join-Path $root $entry.Value.path
             if (Test-Path -LiteralPath $candidate) { $packageDirectory = $candidate; break }
         }
-        if (!$packageDirectory) { throw "Restored package not found: $($entry.Key)" }
+        if (!$packageDirectory) { throw "Restored package not found: $($entry.Name)" }
         $specFile = Get-ChildItem -LiteralPath $packageDirectory -Filter '*.nuspec' | Select-Object -First 1
         [xml]$spec = Get-Content -LiteralPath $specFile.FullName -Raw
         $metadata = $spec.package.metadata

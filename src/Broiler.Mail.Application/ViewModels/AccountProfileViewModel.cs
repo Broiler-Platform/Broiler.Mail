@@ -29,6 +29,14 @@ public sealed class AccountProfileViewModel : SaveViewModel
         UserName = profile?.IncomingServer.UserName ?? string.Empty;
         Security = profile?.IncomingServer.Security ?? TransportSecurity.Tls;
         Authentication = profile?.IncomingServer.Authentication ?? AuthenticationMethod.Password;
+        ConfigureSmtp = profile?.OutgoingServer is not null;
+        SmtpHost = profile?.OutgoingServer?.Host ?? string.Empty;
+        SmtpPort = (profile?.OutgoingServer?.Port ?? 587).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        SmtpUserName = profile?.OutgoingServer?.UserName ?? string.Empty;
+        SmtpSecurity = profile?.OutgoingServer?.Security ?? TransportSecurity.StartTls;
+        SmtpAuthentication = profile?.OutgoingServer?.Authentication ?? AuthenticationMethod.Password;
+        SentCopyMode = profile?.SentCopyMode ?? SentCopyMode.NotConfigured;
+        SentFolder = profile?.SentFolder ?? string.Empty;
     }
 
     public AccountProfile? Profile { get; private set; }
@@ -39,7 +47,16 @@ public sealed class AccountProfileViewModel : SaveViewModel
     public string UserName { get; set; }
     public TransportSecurity Security { get; set; }
     public AuthenticationMethod Authentication { get; set; }
+    public bool ConfigureSmtp { get; set; }
+    public string SmtpHost { get; set; }
+    public string SmtpPort { get; set; }
+    public string SmtpUserName { get; set; }
+    public TransportSecurity SmtpSecurity { get; set; }
+    public AuthenticationMethod SmtpAuthentication { get; set; }
+    public SentCopyMode SentCopyMode { get; set; }
+    public string SentFolder { get; set; }
     public bool CanManagePassword => CanSave && Profile is not null;
+    public bool CanManageSmtpPassword => CanManagePassword && Profile?.OutgoingServer is not null;
     public bool CanCancelTest => IsBusy && _connectionCancellation is not null;
 
     public Task SaveAsync(CancellationToken cancellationToken = default)
@@ -50,18 +67,24 @@ public sealed class AccountProfileViewModel : SaveViewModel
         {
             candidate = BuildProfile();
             await _store.SaveAsync(candidate, cancellationToken).ConfigureAwait(false);
-        }, () => Profile = candidate!, "Account profile saved. Save a password for these connection details, then test the connection.");
+        }, () => Profile = candidate!, "Account profile saved. Save each protocol's password separately; connection testing applies to IMAP.");
     }
 
     public Task SavePasswordAsync(string password, CancellationToken cancellationToken = default) =>
+        SavePasswordAsync(password, MailProtocol.Imap, cancellationToken);
+
+    public Task SavePasswordAsync(string password, MailProtocol protocol, CancellationToken cancellationToken = default) =>
         RunAsync(() =>
         {
-            var account = RequireSavedProfile();
-            return _credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Imap), password, cancellationToken);
+            var account = RequireSavedProfile(protocol);
+            return _credentials.WriteAsync(CredentialKey.For(account, protocol), password, cancellationToken);
         }, () => { }, "Saving password…", "Password saved in Windows Credential Manager.", "Password not saved", "Password save canceled.");
 
     public Task ForgetPasswordAsync(CancellationToken cancellationToken = default) =>
-        RunAsync(() => _credentials.DeleteAsync(CredentialKey.For(RequireSavedProfile(), MailProtocol.Imap), cancellationToken),
+        ForgetPasswordAsync(MailProtocol.Imap, cancellationToken);
+
+    public Task ForgetPasswordAsync(MailProtocol protocol, CancellationToken cancellationToken = default) =>
+        RunAsync(() => _credentials.DeleteAsync(CredentialKey.For(RequireSavedProfile(protocol), protocol), cancellationToken),
             () => { }, "Removing password…", "Saved password removed.", "Password not removed", "Password removal canceled.");
 
     public Task TestConnectionAsync(CancellationToken cancellationToken = default)
@@ -80,11 +103,12 @@ public sealed class AccountProfileViewModel : SaveViewModel
 
     public void CancelConnectionTest() => _connectionCancellation?.Cancel();
 
-    private AccountProfile RequireSavedProfile()
+    private AccountProfile RequireSavedProfile(MailProtocol protocol = MailProtocol.Imap)
     {
         if (Profile is null) throw new InvalidOperationException("Save the account profile first.");
         if (BuildProfile() != Profile) throw new InvalidOperationException("Save your account changes before using the password or testing the connection.");
-        if (Profile.IncomingServer.Authentication != AuthenticationMethod.Password)
+        var server = protocol == MailProtocol.Smtp ? Profile.OutgoingServer ?? throw new InvalidOperationException("Configure and save SMTP first.") : Profile.IncomingServer;
+        if (server.Authentication != AuthenticationMethod.Password)
             throw new InvalidOperationException("Only password or app-password authentication is currently supported.");
         return Profile;
     }
@@ -92,7 +116,18 @@ public sealed class AccountProfileViewModel : SaveViewModel
     private AccountProfile BuildProfile()
     {
         if (!int.TryParse(Port, out int port))
-            throw new ArgumentException("Server port must be a number between 1 and 65535.");
+            throw new ArgumentException("IMAP port must be a number between 1 and 65535.");
+        MailServerSettings? outgoingServer = null;
+        if (ConfigureSmtp)
+        {
+            if (!int.TryParse(SmtpPort, out int smtpPort))
+                throw new ArgumentException("SMTP port must be a number between 1 and 65535.");
+            outgoingServer = new MailServerSettings
+            {
+                Host = SmtpHost.Trim(), Port = smtpPort, UserName = SmtpUserName.Trim(),
+                Security = SmtpSecurity, Authentication = SmtpAuthentication,
+            };
+        }
         var candidate = new AccountProfile
         {
             Id = _id, DisplayName = DisplayName.Trim(), EmailAddress = EmailAddress.Trim(),
@@ -100,7 +135,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
             {
                 Host = Host.Trim(), Port = port, UserName = UserName.Trim(), Security = Security, Authentication = Authentication,
             },
-            OutgoingServer = Profile?.OutgoingServer,
+            OutgoingServer = outgoingServer,
+            SentCopyMode = ConfigureSmtp ? SentCopyMode : SentCopyMode.NotConfigured,
+            SentFolder = ConfigureSmtp && SentCopyMode == SentCopyMode.AppendToFolder ? SentFolder.Trim() : null,
             IsEnabled = Profile?.IsEnabled ?? true,
         };
         ConfigurationValidator.Validate(candidate);

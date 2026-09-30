@@ -1,12 +1,15 @@
 using Broiler.Mail.Core.Accounts;
+using System.Text.Json.Serialization;
 
 namespace Broiler.Mail.Core.Messages;
 
-/// <summary>Version 2 composition contract; no send operation is implemented yet.</summary>
+/// <summary>A plain-text composition snapshot with a pinned sender and optional reply thread.</summary>
 public sealed record MailDraft
 {
-    public Guid Id { get; init; } = Guid.NewGuid();
+    [JsonRequired] public Guid Id { get; init; } = Guid.NewGuid();
     public required AccountId AccountId { get; init; }
+    [JsonRequired] public string FromAddress { get; init; } = string.Empty;
+    public DateTimeOffset? SubmissionDate { get; init; }
     public IReadOnlyList<string> To { get; init; } = [];
     public IReadOnlyList<string> Cc { get; init; } = [];
     public IReadOnlyList<string> Bcc { get; init; } = [];

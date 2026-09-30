@@ -91,7 +91,7 @@ public sealed class CredentialWorkflowTests
         var credentials = new TestCredentialStore();
         var model = Model(directory, credentials, new TestMailReceiver(), TestDirectory.Profile());
         using var form = new AccountProfileView(model).CreateContent();
-        var password = Descendants(form).OfType<StandardEdit>().Single(edit => edit.IsPassword);
+        var password = Descendants(form).OfType<StandardEdit>().Last(edit => edit.IsPassword);
         var test = Descendants(form).OfType<StandardButton>().Single(button => button.Text == "Test connection");
         password.Text = LocalImapServer.Password;
         Assert.False(test.IsEnabled); // Never silently test a different, previously saved password.

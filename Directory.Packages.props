@@ -6,13 +6,19 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="MailKit" Version="4.18.1" />
+    <PackageVersion Include="Broiler.HTML.Core" Version="0.1.0-preview.9" />
+    <PackageVersion Include="Broiler.HTML.Image" Version="0.1.0-preview.9" />
+    <PackageVersion Include="Broiler.HTML.Image.Compat" Version="0.1.0-preview.9" />
+    <PackageVersion Include="Broiler.Media.Image.Managed" Version="0.1.0-preview.14" />
     <PackageVersion Include="Broiler.Graphics.Windows" Version="$(BroilerGraphicsVersion)" />
+    <PackageVersion Include="Broiler.Native.Windows" Version="0.1.0-preview.6" />
     <PackageVersion Include="Broiler.UI.Button.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.ComboBox.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Edit.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Label.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.ListView.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Panel.Standard" Version="$(BroilerUiVersion)" />
+    <PackageVersion Include="Broiler.UI.RichEdit.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.ScrollView.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.TabView.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Window.Standard" Version="$(BroilerUiVersion)" />

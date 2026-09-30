@@ -160,7 +160,7 @@ public sealed class ImapReceivingTests
         Assert.DoesNotContain("hidden", body.PlainText);
         Assert.DoesNotContain("example.test", body.PlainText);
         Assert.DoesNotContain("<", body.PlainText);
-        Assert.Null(body.HtmlText);
+        Assert.Contains("<script>", body.HtmlText); // Untrusted source retained only for the isolated preview boundary.
     }
 
     [Fact]
