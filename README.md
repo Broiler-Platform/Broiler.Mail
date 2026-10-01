@@ -35,16 +35,10 @@ folder, or extract the matching ZIP. It includes its .NET runtime.
 See [Start here / provider checklist](docs/version-2-acceptance.md).
 
 Install the .NET 10 SDK. The native application currently targets Windows.
-This C-04 development checkout consumes a local Broiler.UI forms preview. With the
-matching `Broiler.UI` checkout beside this repository, build its versioned packages
-once before restoring Mail (PowerShell 7):
-
-```powershell
-./scripts/Build-C04Preview.ps1
-```
-
-Other dependencies restore from NuGet.org. See the [C-04 implementation notes](docs/c04-forms/README.md)
-for package publication and accessibility follow-ups.
+Dependencies restore from NuGet.org, including Broiler.UI **0.1.0-preview.11** and
+its shared forms package. Sibling Broiler checkouts and a local package feed are
+not required. See the [C-04 implementation notes](docs/c04-forms/README.md)
+for validation evidence and remaining accessibility checks.
 
 ```powershell
 dotnet restore Broiler.Mail.slnx

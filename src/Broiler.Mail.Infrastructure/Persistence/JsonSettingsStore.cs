@@ -26,7 +26,7 @@ namespace Broiler.Mail.Infrastructure.Persistence;
 // Broiler-Human:        PENDING
 public sealed class JsonSettingsStore(string path) : ISettingsStore
 {
-    private readonly JsonConfigurationFile<ApplicationSettings> _file = new(path, () => new(), ConfigurationValidator.Validate);
+    private readonly JsonConfigurationFile<ApplicationSettings> _file = new(path, () => new(), ConfigurationValidator.Validate, ConfigurationJsonContext.Storage.Settings);
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=None; Security=High; Resources=4; Fingerprint=C2AA06
     // Broiler-Falsified-If: a corrupt or oversized settings file loads as default settings instead of throwing InvalidDataException

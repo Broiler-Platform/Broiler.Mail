@@ -1,8 +1,9 @@
 # C-04 — compact forms and feedback
 
 Implemented on 1 October 2026 in Broiler.Mail and the sibling Broiler.UI checkout.
-Shared controls and Mail integration are ready for review; public package publication,
-native accessibility, and full RTL/system text-scale acceptance remain release work.
+Shared controls and Mail integration now consume the published Broiler.UI
+**0.1.0-preview.11** packages from NuGet.org. Remaining accessibility and
+RTL/system text-scale acceptance is tracked in the component roadmap.
 
 ## Shared package
 
@@ -37,35 +38,42 @@ activation. The package does not introduce a second button or icon implementatio
 - SMTP outcome handling, credential storage, draft durability, and recipient parsing
   remain Mail responsibilities. This work adds no automatic send, resend, or copy retry.
 
-## Reproduce the package build
+## Build with published packages
 
-Mail now pins UI **0.1.0-preview.10.c04.3**, a local development version. It is not a
-published NuGet.org release. `NuGet.config` includes `artifacts/c04/packages`.
+Mail pins all its UI packages to **0.1.0-preview.11**, including
+[`Broiler.UI.Forms.Standard`](https://www.nuget.org/packages/Broiler.UI.Forms.Standard/0.1.0-preview.11).
+`NuGet.config` uses NuGet.org only. No sibling checkout, local package feed, or
+bootstrap packaging script is needed.
 
 ```powershell
-./scripts/Build-C04Preview.ps1 -UiRoot ../Broiler.UI
+dotnet restore Broiler.Mail.slnx
 dotnet build Broiler.Mail.slnx -c Release --no-restore
 dotnet test Broiler.Mail.slnx -c Release --no-restore
 dotnet run --project src/Broiler.Mail.Windows -c Release --no-build -- --demo
 ```
 
-The helper discovers Mail's UI package references, follows their project references,
-and packs the entire required UI dependency graph with one version. Mail continues to
-consume packages, without sibling project references or overwriting existing cached
-package DLLs. Preserve both repositories' changes when transferring this work. The
-generated feed is ignored by Git and must be rebuilt on a fresh machine.
+The published release separates neutral form contracts into `Broiler.UI.Forms`.
+Mail imports `FeedbackKind` from that namespace; concrete controls remain in
+`Broiler.UI.Forms.Standard`. The C-04 behavior is retained.
 
-This consistency matters: the original local preview.10 cache mixed a newer core
+Historical context: the original local preview.10 cache mixed a newer core
 semantic-node constructor with older control assemblies. New semantic tests exposed a
 `MissingMethodException`; rebuilding the complete graph eliminated it. This observation
 does not establish a defect in the published preview.10 packages.
 
-After further UI source edits, use a new preview version in `Directory.Packages.props`
-before packing, because NuGet caches versions as immutable. For release, publish the
-reviewed UI graph under the agreed official version, update Mail's pin, remove the
-local feed/bootstrap requirement, and restore/test from a clean package cache.
+For this upgrade, the solution was restored with `--no-http-cache --force` into a
+new, empty package directory using NuGet.org only. This checks the published packages
+independently of the earlier development cache and locally built C-04 packages.
 
-## Verification and evidence
+## Original C-04 verification and evidence
+
+Published preview.11 upgrade verification (1 October 2026): fresh NuGet.org-only
+restore; all 28 resolved UI libraries at preview.11; 238 Mail solution tests passing
+(202 portable, 33 Windows, 3 Linux); Release build with zero warnings/errors; all
+four tabs rendered by the smoke check; published managed API probe passed.
+These results include the later Windows bridge
+and preview tests present in this checkout. No new sibling UI source test run was
+needed for this package-consumer upgrade; the shared UI results below are historical.
 
 - Shared UI suite: 256 tests pass, including six new C-04 cases covering long feedback,
   narrow layouts, light/dark/high-contrast tokens, doubled label/button font sizes,
@@ -81,8 +89,9 @@ local feed/bootstrap requirement, and restore/test from a clean package cache.
   status events, and finite unconstrained measurement. Mail subsequently moved submission
   and Sent-copy banners into the persistent feedback region. The pictured states are
   visually unchanged. Capture final release baselines after the package is published.
-- Native tree capture still exposes only the host pane. Group/status semantics and
-  events are tested at toolkit level; Narrator/UIA acceptance depends on H-01.
+- The original native tree capture exposed only the host pane. This is historical
+  evidence from the C-04 inspection, before the subsequent H-01 bridge work; current
+  accessibility implementation and acceptance are tracked in the component roadmap.
 - Doubled fonts and mixed-script samples are layout tests, not proof of Windows 200%
   text-setting integration or full RTL shaping/mirroring. Those remain explicit release
   checks. No Linux desktop visual session was run.

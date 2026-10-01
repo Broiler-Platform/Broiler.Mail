@@ -15,6 +15,7 @@
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
+using Broiler.Hosting.Windows;
 using Broiler.Mail.Windows.Hosting;
 using Broiler.Mail.Windows.Services;
 using Broiler.UI.Standard;
@@ -67,7 +68,13 @@ internal static class Program
             var application = demo ? DemoApplication.Create() : CompositionRoot.CreateApplication(dataDirectory);
             // Before the window exists, complete initialization without changing the STA thread.
             application.InitializeAsync().GetAwaiter().GetResult();
-            StandardControlPaint.ApplyTheme(WindowsTheme.Resolve(application.LoadedSettings.Theme));
+            bool isDark = application.LoadedSettings.Theme switch
+            {
+                Broiler.Mail.Core.Settings.AppTheme.Dark => true,
+                Broiler.Mail.Core.Settings.AppTheme.Light => false,
+                _ => WindowsTheme.IsDarkThemePreferred()
+            };
+            StandardControlPaint.ApplyTheme(WindowsTheme.ResolveTheme(isDark));
             Console.WriteLine(demo ? "Demo mode: synthetic mail; no files, saved credentials, or network access." : $"Configuration directory: {dataDirectory}");
             using var window = new WindowsMailWindow(application, demo);
             return window.Run();

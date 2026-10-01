@@ -27,7 +27,7 @@ namespace Broiler.Mail.Infrastructure.Persistence;
 // Broiler-Human:        PENDING
 public sealed class JsonAccountStore(string path) : IAccountStore
 {
-    private readonly JsonConfigurationFile<AccountProfile[]> _file = new(path, () => [], ValidateAccounts);
+    private readonly JsonConfigurationFile<AccountProfile[]> _file = new(path, () => [], ValidateAccounts, ConfigurationJsonContext.Storage.Accounts);
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=None; Security=High; Resources=4; Fingerprint=13CB12
     // Broiler-Falsified-If: a corrupt or oversized accounts file loads as an empty account list instead of throwing InvalidDataException

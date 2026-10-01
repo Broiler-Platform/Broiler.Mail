@@ -25,6 +25,9 @@ using Broiler.Mail.Application.Views;
 using Broiler.Input.Keyboard;
 using Broiler.UI;
 using Broiler.UI.Standard;
+using Broiler.Hosting.Windows;
+using Broiler.Hosting.Windows.Accessibility;
+using Broiler.Hosting.Windows.Input;
 using Broiler.Mail.Windows.Preview;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -48,6 +51,10 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
     // Broiler-Falsified-If: IME positioning calls receive the top-level frame handle instead of the render child window that holds keyboard focus, so the composition window is placed against the wrong client origin
     // Broiler-Human:        PENDING
+    private readonly WindowsAutomationBridge _automationBridge;
+    private readonly WindowsInputBridge _inputBridge;
+    internal WindowsAutomationBridge AutomationBridge => _automationBridge;
+    internal WindowsInputBridge InputBridge => _inputBridge;
     internal nint InputHandle => RenderNativeHandle;
 
     // Broiler.Graphics currently exposes legacy events at this host boundary.
@@ -82,6 +89,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _session.AddRoot(_shell.Window);
         _keyboard = _shell.CreateKeyboardNavigation(_session);
         _session.SetFocus(_shell.Navigation);
+        _automationBridge = new WindowsAutomationBridge(RenderNativeHandle, _session, _shell.Window, () => DpiScale);
+        _inputBridge = new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboard.Handle, () => DpiScale, Invalidate);
         CloseRequested += (_, _) => RequestClose();
         Closed += (_, _) => PostQuitMessage(0);
     }
@@ -157,7 +166,15 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Broiler-Human:        PENDING
     protected override void OnNativeWindowMessage(nint hwnd, uint message, nint wParam, nint lParam)
     {
-        if (hwnd == NativeHandle) WindowsWindowSizing.OnMessage(hwnd, message, lParam, DpiScale);
+        if (hwnd == NativeHandle)
+        {
+            WindowsWindowSizing.OnMessage(hwnd, message, lParam, DpiScale);
+            _inputBridge.OnTopLevelMessage(message, wParam, lParam);
+            if (message is 0x001A or 0x031A)
+            {
+                _host.RefreshSettings();
+            }
+        }
     }
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=626D97
@@ -187,7 +204,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=7E8B06
     // Broiler-Falsified-If: a character committed through WM_CHAR or the IME is inserted into the focused editor a number of times other than once
     // Broiler-Human:        PENDING
-    protected override void OnTextInput(BTextInputEventArgs e) => Dispatch(_input.FromText(e));
+    protected override void OnTextInput(BTextInputEventArgs e) => _inputBridge.ProcessTextInput(e.Character);
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=7ABD26
     // Broiler-Falsified-If: an input that MailKeyboardNavigation handles, such as Tab, is also dispatched to the UI session and inserts text into the focused editor
@@ -206,6 +223,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     {
         if (disposing)
         {
+            _automationBridge.Dispose();
+            _inputBridge.Dispose();
             _htmlPreview.Dispose();
             _shell.Dispose();
             _session.Dispose();

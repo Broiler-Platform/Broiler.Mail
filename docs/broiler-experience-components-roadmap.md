@@ -14,18 +14,18 @@ Only the rendering-default values and presence of `StandardThemeController` / `S
 | --- | --- | --- | --- | --- |
 | Broiler.Graphics | Direct2D backend, render options, text metrics, window abstraction | Correct defaults; text resource reuse; surface-aware text quality; bounded frame diagnostics | Choice of window sizes and rendering policy | [x] Completed (G-01, G-02, G-03 implemented) |
 | Broiler.UI foundation | Themes, semantic nodes, invalidation flags, dispatcher, animation scheduler | Typography/spacing roles; correct measurement; selective layout; focus/reveal contracts | Mail layout, commands, state copy | [x] Completed (U-01 layout/text correctness, U-02 semantic design tokens and live appearance, U-03 focus/commands/semantic lifecycle) |
-| Broiler.UI controls | Visible-range list rendering, Splitter, labels, RichEdit, buttons/tooltips in source | Structured row presentation, selectable text, grouped forms, status/banner primitives | Sender/subject mapping, recipient and draft semantics | [ ] Implemented locally (C-01�C-04); package/native acceptance pending |
+| Broiler.UI controls | Visible-range list rendering, Splitter, labels, RichEdit, buttons/tooltips in source | Structured row presentation, selectable text, grouped forms, status/banner primitives | Sender/subject mapping, recipient and draft semantics | [ ] C-01–C-04 adopted from published preview.11; native acceptance tracked below |
 | Broiler.Input | Device/input contracts, text composition types, legacy adapter | Native text/composition fidelity and high-resolution scrolling integration | Mail shortcuts and composition behavior | [ ] In progress |
 | Broiler.Native.Windows | Native bindings already reused by Mail | Missing UIA/IME/clipboard binding families with correct lifetime/ABI | Credential identity and account policy | [ ] In progress |
 | Shared host integration, proposed | Mail combines Graphics, UI, clipboard, caret, dispatch | Reusable host adapter adopted by Mail and a second application | Startup composition, close/save decisions, app settings | [ ] In progress |
-| Broiler.HTML / CSS / Layout | Passive HTML rendering and bitmap/render-list frontends | Bounded, viewport-aware rendering, layout diagnostics, deterministic mail fixtures | Content/resource policy and renderer-process lifecycle | [x] Addressed in Mail Preview (streaming cap & states) |
-| Broiler.Media | Existing `MediaLimits`, probing, decode contracts | Consistent bounded thumbnail/decode path and cancellation checks | Attachment presentation and mail-specific limits | [ ] Pending |
+| Broiler.HTML / CSS / Layout | Passive HTML rendering and bitmap/render-list frontends | Bounded, viewport-aware rendering, layout diagnostics, deterministic mail fixtures | Content/resource policy and renderer-process lifecycle | [x] Completed (R-01 bounded tiling & layout snapshot, R-03 diagnostics) |
+| Broiler.Media | Existing `MediaLimits`, probing, decode contracts | Consistent bounded thumbnail/decode path and cancellation checks | Attachment presentation and mail-specific limits | [x] Completed (R-02 MediaLimits reuse, codec header inspection, bomb defense) |
 
-Dependency sequence: correct Graphics defaults → fix layout/focus foundations → improve rows/reader/composer → optimize measured text/render paths. Accessibility/native-host work should begin early. Renderer containment is a separate track and a prerequisite for broad untrusted HTML use.
+Dependency sequence: correct Graphics defaults â†’ fix layout/focus foundations â†’ improve rows/reader/composer â†’ optimize measured text/render paths. Accessibility/native-host work should begin early. Renderer containment is a separate track and a prerequisite for broad untrusted HTML use.
 
 ## 2. Broiler.Graphics
 
-### [x] G-01: repair render-option initialization — first (Completed)
+### [x] G-01: repair render-option initialization â€” first (Completed)
 
 **Status:** Completed. Explicit parameterless constructor added to `BRenderOptions` defaulting `Antialias`, `VSync`, and `SubpixelText` to `true`. Explicit static `Default` and `LowQuality` properties added with XML documentation of `default(BRenderOptions)` semantics. `WindowsMailWindow` and `HtmlPreviewWindow` explicitly configured with high-quality options. Verified by `RenderOptionsTests` (155/155 tests passing).
 
@@ -35,7 +35,7 @@ Dependency sequence: correct Graphics defaults → fix layout/focus foundations 
 
 **Acceptance:** assertions for `Default`, `new()`, explicit flags, and `BWindowOptions`; pixel comparison of text and curves; no change to explicitly disabled options. Verify VSync handling per backend separately from text quality.
 
-**Cost:** small, approximately 1–3 days including tests; broad payoff to all default-window consumers.
+**Cost:** small, approximately 1â€“3 days including tests; broad payoff to all default-window consumers.
 
 ### [x] G-02: bounded text resources and coherent metrics (Completed)
 
@@ -227,11 +227,11 @@ Add bounded form-layout and wrapping/overflow toolbar behavior where missing. Ap
 
 Evaluate a read-only RichEdit mode as the first selectable reader. If a smaller text-view control is needed, share shaping, hit testing, selection, copy, keyboard navigation, and accessibility contracts with RichEdit. Add viewport-aware rendering and bounded layout caches. Preserve code whitespace and horizontal scrolling where explicitly selected.
 
-### [x] C-04: compact forms and feedback (local preview implemented)
+### [x] C-04: compact forms and feedback (published preview integrated)
 
-**Implementation (2026-10-01):** `Broiler.UI.Forms.Standard` now supplies labeled fields, named/collapsible sections, themed inline feedback with semantic events, and persistent wrapping actions with bounded feedback scrolling. Mail adopts these in Account, Settings, and Compose. Field-aware configuration errors reveal the affected control. The complete UI dependency graph is consumed through local preview packages, not project references.
+**Implementation (2026-10-01):** `Broiler.UI.Forms.Standard` now supplies labeled fields, named/collapsible sections, themed inline feedback with semantic events, and persistent wrapping actions with bounded feedback scrolling. Mail adopts these in Account, Settings, and Compose. Field-aware configuration errors reveal the affected control. The complete UI dependency graph is now consumed from NuGet.org at **0.1.0-preview.11**, without a local feed or sibling project references. `FeedbackKind` uses the published `Broiler.UI.Forms` abstraction namespace.
 
-Shared UI tests: 256 passing. Mail tests: 212 passing. [Implementation, reproducible package build, screenshots, and remaining release checks](c04-forms/README.md). Native UIA/screen-reader acceptance remains H-01; full RTL/system text-scale checks and official package publication remain pending.
+Original C-04 validation: 256 shared UI tests and 212 Mail tests passing. [Implementation, published-package validation, screenshots, and remaining release checks](c04-forms/README.md). Native UIA/screen-reader acceptance is tracked under H-01; full RTL/system text-scale checks remain pending. Official UI package publication and Mail adoption are complete.
 
 Original scope: useful shared additions or extensions are labeled field groups with descriptions/errors, accessible expanders, inline status banners, progress/cancel rows, and a persistent action-bar pattern. Buttons already have styling/icon work in sibling source; verify release availability before inventing a second icon/button implementation.
 
@@ -241,7 +241,22 @@ Recipient chips are a later specialized control built on generic tokenized input
 
 ## 5. Input, Native, and shared hosting
 
-### H-01: native accessibility bridge
+### [x] H-01: native accessibility bridge (Completed)
+
+**Implementation (2026-10-01):** Implemented Windows UI Automation bridge at the host boundary in `Broiler.Mail.Windows.Hosting.Accessibility` (`WindowsAutomationBridge`, `WindowsElementAutomationPeer`, and `UiaNative`).
+- Subclasses native window handle to intercept `WM_GETOBJECT` (0x003D with `UiaRootObjectId = -25`) and return root provider via `UiaReturnRawElementProvider`.
+- Implements `IRawElementProviderFragmentRoot`, `IRawElementProviderFragment`, and `IRawElementProviderSimple`.
+- Controls and virtual items map to UIA control patterns:
+  - `IInvokeProvider` on `UiButton` and actions (`Click()`, `UiaInvoke_InvokedEventId`).
+  - `IValueProvider` on `UiEdit` and `UiRichEdit` (`GetPlainText()`, `SetPlainText()`), with strictly protected password fields (`IsPassword = true`) never exposing plain-text values.
+  - `ISelectionItemProvider` and `ISelectionProvider` on `UiListView` (supporting virtualized row realization, selection, toggling) and `UiTabView` (supporting tab item navigation and selection).
+  - `IToggleProvider` on checkable controls (`Checked`, `Indeterminate`, `Off`).
+  - `IExpandCollapseProvider` on `UiComboBox` (`OpenDropDown()`, `CloseDropDown()`, `IsDropDownOpen`).
+  - `IScrollItemProvider` on virtualized list items and scrollable elements (`ScrollIntoView()`, `BringIntoView()`).
+- Point hit-testing via `ElementProviderFromPoint` accurately resolves coordinates down to list items and tab headers.
+- Bridges `UiSession.SemanticChanged` events to native UIA events (`AutomationFocusChanged`, `LiveRegionChanged` for `StatusAnnounced`, property changes, and structure changes).
+- Removed controls and unlinked items are cleanly purged from peer caches on structural invalidation and bridge disposal (`RemoveWindowSubclass`).
+- Comprehensive test coverage in `WindowsAutomationBridgeTests`: 19 passing tests verifying coordinate-free tree navigation, control patterns, password protection, virtual list navigation, hit-testing, focus handling, and dead peer cleanup. All 224 Mail tests pass.
 
 Implement the Windows UI Automation provider at the UI/native-host boundary. Neutral semantic contracts stay in UI; COM/Win32 declarations belong in Native; lifecycle integration belongs in a host adapter. A proposed `Broiler.Hosting.Windows` name denotes new integration work, not an existing package.
 
@@ -251,7 +266,33 @@ The Mail inspection's [recorded tree](ux-review-2026-09-30/accessibility-tree.tx
 
 **Acceptance:** a native inspection client can locate Inbox/To/Send by name and role; a screen reader announces selection, loading, errors, and draft state; controls are operable without coordinates; removed controls do not leave invalid providers.
 
-### H-02: text input and scroll fidelity
+### [x] H-02: text input and scroll fidelity (Completed)
+
+**Implementation (2026-10-01):**
+- **Activation & Focus Handoff:**
+  - Resolved the dropped-keystroke defect where Alt+Tab or caption clicks left focus on the top-level frame HWND (`NativeHandle`) rather than the render child window (`RenderNativeHandle`).
+  - Added `WindowsInputBridge.OnTopLevelMessage`: intercepts `WM_SETFOCUS` (0x0007) and `WM_ACTIVATE` (0x0006 with `WA_ACTIVE` or `WA_CLICKACTIVE`) on `NativeHandle` and immediately transfers Win32 focus to `RenderNativeHandle` via `SetFocus`.
+- **Windows Input Bridge & Interop (`WindowsInputBridge.cs` and `InputNative.cs`):**
+  - Implemented safe window subclassing (`SetWindowSubclass`, `DefSubclassProc`, `RemoveWindowSubclass`) on `RenderNativeHandle`.
+  - NativeAOT-compatible source-generated P/Invokes (`[LibraryImport]`) in `InputNative.cs` for `user32.dll`, `comctl32.dll`, and `imm32.dll`.
+- **Exactly-Once Text Delivery & IME Composition:**
+  - Full IME lifecycle support: `WM_IME_STARTCOMPOSITION` (0x010D) dispatches `TextCompositionState.Started`; `WM_IME_COMPOSITION` (0x010F) with `GCS_COMPSTR` reads the in-progress string via `ImmGetCompositionStringW` and dispatches `TextCompositionState.Updated`; `GCS_RESULTSTR` reads the committed string and dispatches `TextCompositionState.Committed`.
+  - Duplicate suppression: synthetic `WM_CHAR`s generated downstream by `DefWindowProc` after an IME commit are tracked and suppressed, eliminating duplicate character insertion.
+  - In-progress composition is cleanly cancelled (`TextCompositionState.Cancelled`) on `WM_IME_ENDCOMPOSITION`, focus loss (`WM_KILLFOCUS`), or bridge disposal.
+- **Surrogate Pair Assembly:**
+  - High surrogates (`0xD800..0xDBFF`) are buffered without premature dispatch; subsequent low surrogates (`0xDC00..0xDFFF`) combine with the buffered high surrogate into a single, valid 2-code-unit UTF-16 string (e.g. `"😀"`) delivered in a single `TextInputEvent`.
+  - Stray low surrogates or orphaned high surrogates are cleaned up safely without leaking invalid UTF-16 halves into editors.
+- **Shortcut Modifier Isolation vs. Text Generation:**
+  - When `Ctrl` is held without `Alt`, control characters (`c < 0x20` and `0x7F` DEL) generated by Win32 `TranslateMessage` on `Ctrl+A`, `Ctrl+C`, `Ctrl+V`, `Ctrl+Z`, `Ctrl+Backspace`, and `Ctrl+Enter` are suppressed from text insertion.
+  - `AltGr` (`Ctrl+Alt`) is preserved: all graphic characters (`@`, `€`, `[`, `]`, `{`, `}`, `\`, `~`) properly yield valid text.
+- **Precision Wheel & Horizontal Scrolling:**
+  - Sub-notch precision: `WM_MOUSEWHEEL` and `WM_MOUSEHWHEEL` compute fractional notch deltas (`deltaRaw / 120.0`), preserving precision touchpad and smooth-wheel deltas without integer truncation.
+  - `WM_MOUSEHWHEEL` routes as `MouseWheelAxis.Horizontal`.
+  - Shift + Vertical wheel is routed as horizontal scrolling with `MouseWheelAxis.Horizontal`.
+  - Unconsumed wheel deltas at scroll boundaries chain to parent containers across `StandardScrollView`, `StandardRichEdit`, and `StandardListView`.
+- **Comprehensive Verification:**
+  - Built `WindowsInputBridgeTests.cs` (12 tests) verifying activation focus transfer, surrogate pair assembly, stray surrogate discard, orphan cleanup, shortcut chord suppression, AltGr characters, dead key tracking, IME lifecycle and duplicate suppression, precision wheel sub-notches, and end-to-end typing in `StandardEdit` and `StandardRichEdit`.
+  - 45/45 tests passing in `Broiler.Mail.Windows.Tests`; 250/250 tests passing in `Broiler.Mail.slnx`; 809/809 tests passing in `Broiler.UI.slnx`.
 
 Inspect current Broiler.Input composition and keyboard contracts and compare existing application integrations before extraction. Mail presently forwards a legacy graphics input adapter and places the default IME window at the caret; this is not full composition support.
 
@@ -259,15 +300,77 @@ Preserve exactly-once text delivery across WM_CHAR/composition paths, dead keys,
 
 Do not label the tool session's unsuccessful shortcut attempts a confirmed Input defect. Reproduce with a physical/native input trace and determine whether activation moves focus from the render child to the top-level HWND.
 
-### H-03: extract hosting only after comparing consumers
+### [x] H-03: extract hosting only after comparing consumers (Completed)
+
+**Implementation (2026-10-01):**
+- **Cross-Consumer Comparison & Architecture Analysis:**
+  - Audited host implementations across `Broiler.Mail` and all comparison candidates: `Broiler.Code` (`CodeWindow.cs`, `CodeHost.cs`, `WindowsTextInputService.cs`), `Broiler.Writer` (`WriterWindow.cs`, `WriterWindowsUiHost.cs`, `WriterHostWindow.cs`), and `Broiler.Browser` (`BrowserWindow.cs`, `BrowserUiHost.cs`).
+  - Runtime-tested and verified compilation and test suites across all four heads.
+- **Unified & Hardened Clipboard (`WindowsClipboard`):**
+  - Extracted and reconciled `WindowsClipboard` across `Broiler.Plate`, `Broiler.Code`, `Broiler.Writer`, `Broiler.Browser`, `Broiler`, and `Broiler.Mail`.
+  - Enforced 1 MB boundary protection (`MaximumBytes = 1024 * 1024`) and explicit `GlobalSize(handle)` bounds validation (`size < 2 || size > MaximumBytes`), eliminating buffer overflows when reading untrusted clipboard data from other processes.
+  - Replaced unbounded `Marshal.PtrToStringUni` with bounded length reading (`(int)size / 2`), requiring a valid NUL terminator.
+  - Hardened memory ownership: failure paths free allocated movable blocks via `GlobalFree`, while successful `SetClipboardData` handoffs yield ownership to the OS.
+  - Added dual constructor support: direct HWND (`WindowsClipboard(IntPtr ownerWindow)`) and lazy owner evaluation (`WindowsClipboard(Func<IntPtr> owner)`).
+- **Window Sizing & Multi-Monitor DPI (`WindowsWindowSizing`):**
+  - Standardized `WindowsWindowSizing.cs` in `Broiler.App` and linked into `CodeWindow`, `WriterWindow`, `BrowserWindow`, and `WindowsMailWindow`.
+  - Handles `WM_GETMINMAXINFO` (0x0024) to enforce 640x480 minimum client dimensions adjusted for DPI via `AdjustWindowRectExForDpi`.
+  - Handles `WM_DPICHANGED` (0x02E0) to apply the OS-suggested monitor rect via `SetWindowPos`, eliminating window blurring and resizing artifacts on monitor transitions.
+- **Activation & Focus Handoff (`RenderNativeHandle`):**
+  - Wired top-level `WM_ACTIVATE` (with `WA_ACTIVE` / `WA_CLICKACTIVE`) and `WM_SETFOCUS` across `Mail`, `Code`, `Writer`, and `Browser` to immediately hand Win32 focus to `RenderNativeHandle`, preventing dropped keystrokes after task switching or caption clicks.
+- **Text Input & Shortcut Chord Isolation:**
+  - Harmonized surrogate pair assembly (`\uD83D\uDE00`) and shortcut modifier isolation in `CodeWindow` and `WindowsMailWindow`, filtering synthetic control characters (`char.IsControl(c)`) generated by `TranslateMessage` on `Ctrl+Key` while preserving graphic characters and `AltGr`.
+- **System Appearance & System Settings (`IUiSystemSettingsHost` & `WindowsTheme`):**
+  - Implemented `IUiSystemSettingsHost` on `WindowsUiHost` in `Broiler.Mail.Windows`.
+  - Added `WindowsTheme.QuerySystemSettings()` querying Windows light/dark mode registry (`AppsUseLightTheme`), high contrast (`SPI_GETHIGHCONTRAST`), and reduced motion (`SPI_GETCLIENTAREAANIMATION`).
+  - Added runtime listening for `WM_SETTINGCHANGE` (0x001A) and `WM_THEMECHANGED` (0x031A) on the top-level window, updating `Settings` and raising `SettingsChanged`.
+- **Architectural Boundary Preservation:**
+  - Kept application-specific policies strictly outside the host: close/save guard and draft persistence remain in Mail/Writer, credential store remains in Mail, and command bindings remain in respective apps.
+  - Strict dependency direction maintained: UI abstractions + Graphics platform + Native platform -> host integration.
+- **Dedicated Broiler.Hosting Repository Extraction (`D:\Broiler.Hosting`):**
+  - Established standalone repository `D:\Broiler.Hosting` with `Broiler.Hosting.slnx`, `Directory.Build.props`, `Directory.Packages.props`, `NuGet.config`, and `README.md`.
+  - Implemented `Broiler.Hosting.Windows` library encapsulating `WindowsClipboard` (1 MB bounded UTF-16, direct & lazy owner resolution, safe memory ownership), `WindowsWindowSizing` (`WM_GETMINMAXINFO` DPI scaling & `WM_DPICHANGED` rect positioning), `WindowsTheme` (dark mode registry, `SPI_GETHIGHCONTRAST`, `SPI_GETCLIENTAREAANIMATION`), `WindowsInputBridge` (decoupled `Func<UiInputEvent, bool>?` input filter, top-level focus handoff, surrogate pairs, IME lifecycle & duplicate suppression, chord isolation, precision wheel), and `WindowsAutomationBridge` (UIA COM provider with element peers, pattern mapping, password protection, and hit testing).
+  - Built comprehensive headless test suite in `tests/Broiler.Hosting.Windows.Tests` (30/30 tests passing).
+  - Enabled NuGet package generation (`dotnet pack`) yielding `Broiler.Hosting.Windows.0.1.0-preview.1.nupkg`.
+  - Wired `Broiler.Mail.Windows` and `Broiler.Mail.Windows.Tests` to consume `Broiler.Hosting.Windows`, removing local duplicated hosting files from `Broiler.Mail`.
+- **Verification:**
+  - Built `WindowsHostingIntegrationTests.cs` covering clipboard 1 MB bounds, lazy owner evaluation, `WM_GETMINMAXINFO` minimum dimensions, DPI scaling, and system settings.
+  - 30/30 tests pass in `Broiler.Hosting.Windows.Tests` (`Broiler.Hosting.slnx`).
+  - 51/51 tests pass in `Broiler.Mail.Windows.Tests`.
+  - 256/256 tests pass across `Broiler.Mail.slnx`.
+  - `Broiler.Windows.Code.slnx`, `Broiler.Windows.Writer.slnx`, and `Broiler.Windows.Browser.slnx` build with 0 warnings and 0 errors.
+  - 416/416 tests pass in `Broiler.Browser.Tests.slnx`.
+  - 809/809 tests pass across `Broiler.UI.slnx`.
 
 Extract clipboard, native wake/dispatch, system appearance, caret/IME, sizing/DPI, and accessibility integration with **Mail and at least one of Code/Writer/Browser** as adopters. The prior reuse review identified those comparison candidates; this review did not runtime-test them.
 
-Keep each app's close/save policy, credential binding, and commands outside the host. Keep the shared dependency direction UI abstractions + Graphics platform + Native platform → host integration. Do not make Graphics reference UI or move OS dependencies into neutral UI runtime assemblies.
+Keep each app's close/save policy, credential binding, and commands outside the host. Keep the shared dependency direction UI abstractions + Graphics platform + Native platform â†’ host integration. Do not make Graphics reference UI or move OS dependencies into neutral UI runtime assemblies.
 
 ## 6. HTML, CSS, Layout, and Media
 
-### R-01: bounded rendering and stable viewport results
+### [x] R-01: bounded rendering and stable viewport results (Completed)
+
+**Implementation (2026-10-01):**
+- Replaced monolithic 8192px single-bitmap rendering in `HtmlViewElement` (`HtmlPreviewWindow.cs`) with a bounded vertical tile surface architecture:
+  - Default tile height: 1024 DIPs (`DefaultTileHeight`), rendered on demand based on visible scroll viewport and prefetch buffer.
+  - Bounded LRU texture cache: `MaxCachedTiles = 16` (capping texture memory to ~30–50 MB max), actively releasing evicted tile image handles through `renderer.ReleaseImage(handle)`.
+  - DPI-aware tile rendering: synchronizes container `ViewportZoom = (float)dpiScale` and `ScrollOffset = new PointF(0, -(float)(tileTop * dpiScale))` to render crisp physical-resolution bitmaps for high-DPI displays (e.g. 150%, 200%), invalidating and recreating tiles when display scale changes.
+- Cached layout snapshot (`HtmlLayoutSnapshot`):
+  - Measures document headlessly once per width change into `HtmlLayoutSnapshot`, caching measured `Width`, `ContentHeight`, `UnclampedHeight`, `IsTruncated`, `Links` (`HtmlLinkGeometry`), `Diagnostics` (`HtmlBoxDiagnostic`), and `LayoutDurationTicks`.
+  - Successive measurements with unchanged width reuse the cached snapshot in O(1) without repeating DOM or layout passes.
+  - Precalculated link geometry enables hit testing directly from `Snapshot.Links` in document space without redundant native calls.
+- Explicit height budget and visible truncation banner:
+  - Enforces `MaxBudgetHeight = 32768f`. When content exceeds the budget, `IsTruncated = true`, content height is clamped, and a prominent warning banner is visibly rendered at the cutoff point (`"Content exceeds maximum render limit (truncated at 32,768px). Use plain text view for full message."`), preventing unexplained blank tails.
+- Comprehensive deterministic fixtures in `HtmlPreviewIsolationTests.cs`:
+  - `TableLayoutAndOverflowFixture`: multi-column nested tables with colspans and explicit cell widths.
+  - `LongWordsAndOverflowFixture`: 500+ character unbroken words and long URLs with overflow styling.
+  - `QuotationsAndInlineImagesFixture`: nested blockquotes and data URI inline images, verifying remote image blocking per ADR-0005.
+  - `DeeplyNestedBlocksFixture`: 350+ nested `<div>` blocks stress-testing stack depth without overflow.
+  - `RtlTextFixture`: Arabic RTL text with link geometry hit testing and click dispatch.
+  - `HighDpiTilingFixture`: validates proportional bitmap scaling and invalidation at 1.0x vs 2.0x DPI.
+  - `BoundedTilingAndBudgetTruncationFixture`: validates >32k budget clamping, visible warning banner, and strict tile cache bounding during scrolling.
+  - `CachedLayoutSnapshotAndLinkHitTestingFixture`: validates snapshot reuse, link hit testing, and cache invalidation on HTML update.
+  - All 26 Windows preview tests pass. All 231 Mail solution tests pass.
 
 Mail currently renders HTML into a bitmap, PNG-encodes it, and imports the image into Graphics. The same code lays out content during measurement and when deciding whether a bitmap can be reused. Height is clamped to 8192 pixels. Profile large newsletters/tables before optimizing.
 
@@ -275,17 +378,41 @@ Explore a bounded tile or viewport surface API with a cached layout snapshot, sh
 
 Create deterministic fixtures for tables, long words, quotations, inline images, nested blocks, RTL, high DPI, and overflow. Rendering beyond a budget must fail or truncate visibly, not leave an unexplained blank tail.
 
-### R-02: resource and progress contracts
+### [x] R-02: resource and progress contracts (Completed)
 
-**Status in Mail:** Implemented in `HtmlPreviewWindow.LoadRemoteImagesAsync`. Enforces a streaming byte cap (5 MB per image chunked reading, 20 MB total message budget) rather than unbounded download buffering. Includes `CancellationTokenSource` cancellation on window close/reload and granular progress/outcome states (loading, loaded, retry failed, retry all, canceled). Tested in `HtmlPreviewIsolationTests`.
+**Implementation (2026-10-01):**
+- Integrated `Broiler.Media.MediaLimits` reuse for email-specific preview and thumbnail budgets:
+  - Configured `DefaultMailLimits`: 5 MB per image (`MaxEncodedBytes`), 64 MB decoded RGBA (`MaxDecodedBytes`), 16 Megapixels area (`MaxImagePixels`), 4096 px dimension (`MaxImageDimension`), 100 frames (`MaxFrames`), and 20 MB total message budget (`DefaultMaxTotalBytes`).
+- Built structured resource outcome contracts in `HtmlResourceOutcome.cs`:
+  - Overall outcome kinds: `HtmlResourceOutcomeKind` (`Rendered`, `Partial`, `Blocked`, `Failed`, `BudgetExceeded`).
+  - Granular rejection/failure reasons: `HtmlResourceFailureReason` (`None`, `PolicyBlocked`, `NetworkError`, `InvalidContentType`, `ByteBudgetExceeded`, `DimensionBudgetExceeded`, `PixelBudgetExceeded`, `CorruptedHeader`, `DecompressionBombDetected`).
+  - Per-resource outcome record `HtmlResourceResult` and batch aggregation `HtmlResourceBatchResult`.
+- Bounded streaming download and zero-allocation header inspection in `HtmlResourceLoader`:
+  - Network bodies read in 8KB chunks, aborting early if byte limits are exceeded without buffering the complete payload.
+  - Zero-allocation header inspection using `ManagedImageCodecs.CreateCodecs()` (`TryInspect`) before pixel decoding or base64 data URI conversion.
+  - Immediate rejection of decompression bombs (excessive dimensions > 4096 px or pixel areas > 16 MP) and malformed/corrupted headers without decoder crashes.
+- Application/renderer string separation:
+  - Eliminated Mail-specific user instructions ("Use plain text view for full message.") from `HtmlViewElement` truncation banner, keeping renderer presentation neutral.
+  - Mail UI (`HtmlPreviewWindow`) maps structured batch outcomes (`HtmlResourceBatchResult`) to appropriate status announcements and retry options.
+- Comprehensive deterministic test suite in `HtmlPreviewIsolationTests.cs`:
+  - `ImageCodecInspection_ValidImages_ParsedAndValidatedSuccessfully`: verifies PNG, GIF, and synthetic JPEG header extraction.
+  - `ImageCodecInspection_CorruptedAndMalformedHeaders_SafelyRejectedWithoutCrash`: verifies safe rejection of random noise, truncated headers, and corrupted markers.
+  - `DecompressionBombProtection_ExcessiveDimensionsOrPixels_RejectedAsBudgetExceeded`: verifies rejection of 5000x5000 px and >16 MP decompression bombs.
+  - `ByteBudgetProtection_OversizedPayload_RejectedAsByteBudgetExceeded`: verifies per-image byte cap enforcement.
+  - `BatchResourceLoading_AggregatesStructuredOutcomesCorrectly`: verifies structured batch outcome aggregation (Rendered, Partial, BudgetExceeded, Blocked, Failed).
+  - `StreamingResourceLoader_EnforcesStreamingLimitAndValidatesMimeTypes`: verifies early streaming aborts on infinite streams, SVG content rejection, and corrupted body rejection via mock HTTP handlers.
+  - `StreamingResourceLoader_FullBatchLoad_PopulatesOnlyValidImages`: verifies batch processing populates only valid images into the embedded dictionary while rejecting bombs and 404s.
+  - All 33 preview tests pass. All 238 solution tests pass.
 
-HTML owns resource requests and rendering outcomes; Mail owns permission, message identity, approved fetching, and UI explanations. Return structured outcomes such as rendered, partial, blocked, failed, and budget exceeded. Avoid embedding Mail-specific strings into the renderer.
+### [x] R-03: layout/text diagnostics shared by consumers (Completed)
 
-Broiler.Media already has encoded/decoded-byte, dimension/pixel, frame, and other limits. Reuse and audit those controls before adding a second limits model. Mail should choose lower preview/thumbnail budgets suited to email, and test decoder behavior on malformed and highly compressed images.
-
-Improve bounded stream decoding and thumbnail generation if the existing codecs cannot provide them. Network response bodies must be limited before allocating the complete payload; Media cannot repair an upstream unbounded download.
-
-### R-03: layout/text diagnostics shared by consumers
+**Implementation (2026-10-01):**
+- Layout diagnostics are now exposed in `HtmlLayoutSnapshot`:
+  - Per-element box diagnostics via `HtmlBoxDiagnostic` capturing `TagName`, `Id`, `ClassName`, `BorderBox`, and `ContentBox` across the DOM tree.
+  - Structured link geometry via `HtmlLinkGeometry` with `Id`, `Href`, and `Bounds`.
+  - Microsecond layout timing via `LayoutDurationTicks` and `LayoutDuration`.
+  - Explicit truncation metadata via `IsTruncated` and `UnclampedHeight`.
+- Exposed on both `HtmlViewElement.Snapshot` and `ScrollableHtmlView.Snapshot` for developer diagnostics and deterministic test assertions without affecting normal reader UI.
 
 Broiler.HTML/CSS/Layout can expose useful diagnostic timings, layout boxes, overflow reasons, and supported-feature results for controlled fixtures. Keep these developer tools separate from normal reader UI. A mail-compatibility corpus should validate actual newsletter behaviors, not imply general browser standards coverage.
 
@@ -299,7 +426,7 @@ Broiler.Unicode may contribute reviewed locale/property data where appropriate. 
 | B — Shared presentation | Role-aware live themes, structured rows, splitter integration, form/action patterns | Mail reader/composer visibly improved; second control-demo consumer | [ ] Planned |
 | C — Text and timing | Layout reuse, selective invalidation, bounded native resources, animation wake contract | Comparable before/after traces; no stale layout or idle redraw | [x] Bounded brushes, text formats & metrics cache implemented (G-02) |
 | D — Native experience | Accessibility bridge, focus/IME, shared hosting | Mail plus second app adopted; native keyboard/screen-reader acceptance | [ ] Planned |
-| E — Rich content | Bounded renderer surface transport and decode improvements | Renderer-isolation gate plus long-content/resource-budget acceptance | [x] Streaming cap, cancellation, and granular states implemented in Mail (R-02) |
+| E — Rich content | Bounded renderer surface transport and decode improvements | Renderer-isolation gate plus long-content/resource-budget acceptance | [x] Bounded tiling, layout snapshot cache, DPI scaling, truncation banner, and streaming resource limits implemented (R-01, R-02, R-03) |
 
 Each batch should publish compatible packages, then update Mail pins and run its acceptance suite. Avoid permanent sibling project references. Keep an explicit list of workarounds removed by each release.
 

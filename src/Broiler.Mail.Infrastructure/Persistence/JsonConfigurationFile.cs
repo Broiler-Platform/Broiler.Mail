@@ -17,7 +17,7 @@
 
 using System.Diagnostics;
 using System.Text.Json;
-using System.Text.Json.Serialization;
+using System.Text.Json.Serialization.Metadata;
 
 namespace Broiler.Mail.Infrastructure.Persistence;
 
@@ -25,18 +25,13 @@ namespace Broiler.Mail.Infrastructure.Persistence;
 // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=398D88
 // Broiler-Falsified-If: two overlapping UpdateAsync calls, in one process or two, both apply their change to the same prior state so that one change is lost
 // Broiler-Human:        PENDING
-internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefault, Action<T> validate, long maximumBytes = 1024 * 1024) where T : class
+internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefault, Action<T> validate,
+    JsonTypeInfo<ConfigurationEnvelope<T>> typeInfo, long maximumBytes = 1024 * 1024) where T : class
 {
     private readonly string _path = Path.GetFullPath(path);
     // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=4C6116
     // Broiler-Falsified-If: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
     // Broiler-Human:        PENDING
-    private static readonly JsonSerializerOptions Options = new(JsonSerializerDefaults.Web)
-    {
-        WriteIndented = true,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        Converters = { new JsonStringEnumConverter(allowIntegerValues: false) },
-    };
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=7A3C57
     // Broiler-Falsified-If: an existing file that is corrupt, larger than maximumBytes or of another schema version yields the default value instead of an exception
@@ -50,7 +45,7 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
                 FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
             if (stream.Length > maximumBytes)
                 throw new InvalidDataException($"Configuration exceeds the {maximumBytes} byte limit.");
-            var envelope = await JsonSerializer.DeserializeAsync<Envelope>(stream, Options, cancellationToken).ConfigureAwait(false);
+            var envelope = await JsonSerializer.DeserializeAsync(stream, typeInfo, cancellationToken).ConfigureAwait(false);
             if (envelope is null || envelope.SchemaVersion != 1 || envelope.Data is null)
                 throw new InvalidDataException("Unsupported or incomplete configuration. The file has not been changed.");
             validate(envelope.Data);
@@ -81,7 +76,7 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
             await using (var stream = new FileStream(temporaryPath, FileMode.CreateNew, FileAccess.Write,
                 FileShare.None, 4096, FileOptions.Asynchronous))
             {
-                await JsonSerializer.SerializeAsync(stream, new Envelope { SchemaVersion = 1, Data = data }, Options, cancellationToken).ConfigureAwait(false);
+                await JsonSerializer.SerializeAsync(stream, new ConfigurationEnvelope<T> { SchemaVersion = 1, Data = data }, typeInfo, cancellationToken).ConfigureAwait(false);
                 await stream.FlushAsync(cancellationToken).ConfigureAwait(false);
                 stream.Flush(flushToDisk: true);
                 if (stream.Length > maximumBytes)
@@ -117,9 +112,4 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=78B419
     // Broiler-Human:        PENDING
-    private sealed class Envelope
-    {
-        public required int SchemaVersion { get; init; }
-        public required T Data { get; init; }
-    }
 }

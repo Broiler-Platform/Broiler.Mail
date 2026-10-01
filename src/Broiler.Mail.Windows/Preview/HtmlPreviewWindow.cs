@@ -16,14 +16,17 @@
 // GENERATED - DO NOT EDIT MANUALLY
 
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Drawing;
 using System.Net.Http.Headers;
 using System.Runtime.InteropServices;
+using Broiler.Graphics.Color;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.Imaging;
 using Broiler.Graphics.Rendering;
 using Broiler.Graphics.RenderList;
 using Broiler.Graphics.Resources;
+using Broiler.Graphics.Text;
 using Broiler.Graphics.Windowing;
 using Broiler.Graphics.Windows;
 using Broiler.HTML.Image;
@@ -65,6 +68,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-Human:        PENDING
     static HtmlPreviewWindow()
     {
+        HtmlRuntime.Initialize();
         try { BImageCodecs.Use(new MediaCodecCatalog(ManagedImageCodecs.CreateCodecs())); }
         catch (InvalidOperationException) { }
     }
@@ -187,7 +191,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         };
         content.AddChild(_plainTextView);
 
-        _htmlView = new ScrollableHtmlView(_document.Html, () => Renderer, target => OpenLink(target, userInitiated: true));
+        _htmlView = new ScrollableHtmlView(_document.Html, () => Renderer, target => OpenLink(target, userInitiated: true), () => DpiScale);
         content.AddChild(_htmlView);
 
         root.AddChild(content);
@@ -252,6 +256,12 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-Human:        PENDING
     public void LoadRemoteImages() => _ = LoadRemoteImagesAsync();
 
+    /// <summary>
+    /// Last structured batch outcome from loading remote resources, providing detailed
+    /// per-resource and overall status for diagnostics and testing.
+    /// </summary>
+    public HtmlResourceBatchResult? LastResourceBatchResult { get; private set; }
+
     // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=F31BD1
     // Broiler-Falsified-If: a remote image response larger than 5,000,000 bytes is read fully into memory before the size check discards it
     // Broiler-Human:        PENDING
@@ -270,95 +280,15 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _status.Text = "Loading remote images… Scripts and active content remain blocked.";
         Invalidate();
 
-        var downloadedImages = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase);
-        if (_embeddedImages is not null)
-        {
-            foreach (var kvp in _embeddedImages) downloadedImages[kvp.Key] = kvp.Value;
-        }
-
-        const int maxImageBytes = 5_000_000; // 5 MB per image limit
-        const int maxTotalImageBytes = 20_000_000; // 20 MB total message budget
-        long totalDownloadedBytes = 0;
-        int totalRemote = _document.RemoteImageUrls.Count;
-        int succeeded = 0;
-        int failed = 0;
-
         try
         {
-            foreach (string url in _document.RemoteImageUrls)
-            {
-                token.ThrowIfCancellationRequested();
+            var (batchResult, downloadedImages) = await HtmlResourceLoader.LoadBatchAsync(
+                ImageHttpClient,
+                _document.RemoteImageUrls,
+                _embeddedImages,
+                cancellationToken: token).ConfigureAwait(false);
 
-                if (downloadedImages.ContainsKey(url))
-                {
-                    succeeded++;
-                    continue;
-                }
-
-                if (!HtmlPreviewPolicy.TryExternalLink(url, out var uri) || uri is null)
-                {
-                    failed++;
-                    continue;
-                }
-
-                try
-                {
-                    using var response = await ImageHttpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
-                    if (!response.IsSuccessStatusCode)
-                    {
-                        failed++;
-                        continue;
-                    }
-
-                    var mediaType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
-                    if (!mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
-                        mediaType.Contains("svg", StringComparison.OrdinalIgnoreCase))
-                    {
-                        failed++;
-                        continue;
-                    }
-
-                    if (response.Content.Headers.ContentLength is { } declaredLength && (declaredLength > maxImageBytes || totalDownloadedBytes + declaredLength > maxTotalImageBytes))
-                    {
-                        failed++;
-                        continue;
-                    }
-
-                    using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
-                    using var buffer = new MemoryStream();
-                    byte[] chunk = new byte[8192];
-                    int bytesRead;
-                    bool exceeded = false;
-                    while ((bytesRead = await stream.ReadAsync(chunk, 0, chunk.Length, token).ConfigureAwait(false)) > 0)
-                    {
-                        if (buffer.Length + bytesRead > maxImageBytes || totalDownloadedBytes + buffer.Length + bytesRead > maxTotalImageBytes)
-                        {
-                            exceeded = true;
-                            break;
-                        }
-                        buffer.Write(chunk, 0, bytesRead);
-                    }
-
-                    if (exceeded || buffer.Length == 0)
-                    {
-                        failed++;
-                        continue;
-                    }
-
-                    byte[] imageBytes = buffer.ToArray();
-                    totalDownloadedBytes += imageBytes.Length;
-                    downloadedImages[url] = new MailEmbeddedImage(url, mediaType, imageBytes);
-                    succeeded++;
-                }
-                catch (OperationCanceledException)
-                {
-                    throw;
-                }
-                catch
-                {
-                    failed++;
-                }
-            }
+            LastResourceBatchResult = batchResult;
 
             token.ThrowIfCancellationRequested();
 
@@ -378,25 +308,33 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             {
                 if (IsDisposed || token.IsCancellationRequested) return;
 
-                if (succeeded > 0 && failed == 0)
+                switch (batchResult.OverallOutcome)
                 {
-                    _allowRemoteImages = true;
-                    _loadImagesButton.IsEnabled = false;
-                    _loadImagesButton.Text = "Remote images loaded";
-                    _status.Text = "Remote images loaded. Scripts and active content remain blocked.";
-                }
-                else if (succeeded > 0)
-                {
-                    _allowRemoteImages = true;
-                    _loadImagesButton.IsEnabled = true;
-                    _loadImagesButton.Text = "Retry failed images";
-                    _status.Text = $"Loaded {succeeded} of {totalRemote} remote images. Some images failed to load.";
-                }
-                else
-                {
-                    _loadImagesButton.IsEnabled = true;
-                    _loadImagesButton.Text = "Retry remote images";
-                    _status.Text = "Failed to load remote images. Check your network connection and retry.";
+                    case HtmlResourceOutcomeKind.Rendered:
+                        _allowRemoteImages = true;
+                        _loadImagesButton.IsEnabled = false;
+                        _loadImagesButton.Text = "Remote images loaded";
+                        _status.Text = "Remote images loaded. Scripts and active content remain blocked.";
+                        break;
+
+                    case HtmlResourceOutcomeKind.Partial:
+                        _allowRemoteImages = true;
+                        _loadImagesButton.IsEnabled = true;
+                        _loadImagesButton.Text = "Retry failed images";
+                        _status.Text = $"Loaded {batchResult.TotalSucceeded} of {batchResult.TotalRequested} remote images. Some images failed or exceeded limits.";
+                        break;
+
+                    case HtmlResourceOutcomeKind.BudgetExceeded:
+                        _loadImagesButton.IsEnabled = true;
+                        _loadImagesButton.Text = "Retry remote images";
+                        _status.Text = "Remote images exceeded size or dimension limits.";
+                        break;
+
+                    default:
+                        _loadImagesButton.IsEnabled = true;
+                        _loadImagesButton.Text = "Retry remote images";
+                        _status.Text = "Failed to load remote images. Check your network connection and retry.";
+                        break;
                 }
 
                 _htmlView.UpdateHtml(_document.Html);
@@ -543,6 +481,30 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     }
 }
 
+internal sealed record HtmlBoxDiagnostic(
+    string TagName,
+    string? Id,
+    string? ClassName,
+    BRect BorderBox,
+    BRect ContentBox);
+
+internal sealed record HtmlLinkGeometry(
+    string? Id,
+    string Href,
+    BRect Bounds);
+
+internal sealed record HtmlLayoutSnapshot(
+    float Width,
+    float ContentHeight,
+    float UnclampedHeight,
+    bool IsTruncated,
+    IReadOnlyList<HtmlLinkGeometry> Links,
+    IReadOnlyList<HtmlBoxDiagnostic> Diagnostics,
+    long LayoutDurationTicks)
+{
+    public TimeSpan LayoutDuration => TimeSpan.FromTicks(LayoutDurationTicks);
+}
+
 // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=35E864
 // Broiler-Falsified-If: a document shown through this view has an http(s) image or stylesheet it names fetched over the network instead of denied
 // Broiler-Human:        PENDING
@@ -554,9 +516,13 @@ internal sealed class ScrollableHtmlView : UiElement
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=F1BC57
     // Broiler-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the view renders
     // Broiler-Human:        PENDING
-    public ScrollableHtmlView(string html, Func<IBroilerRenderer?> rendererProvider, Action<string> onLinkClicked)
+    public ScrollableHtmlView(
+        string html,
+        Func<IBroilerRenderer?> rendererProvider,
+        Action<string> onLinkClicked,
+        Func<double>? dpiScaleProvider = null)
     {
-        _content = new HtmlViewElement(html, rendererProvider, onLinkClicked);
+        _content = new HtmlViewElement(html, rendererProvider, onLinkClicked, dpiScaleProvider);
         _scroll.AddChild(_content);
         AddChild(_scroll);
     }
@@ -574,6 +540,7 @@ internal sealed class ScrollableHtmlView : UiElement
     // Broiler-Human:        PENDING
     public void ScrollToStart() => _scroll.ScrollToStart();
     internal HtmlViewElement Content => _content;
+    public HtmlLayoutSnapshot? Snapshot => _content.Snapshot;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=588444
     // Broiler-Falsified-If: an infinite or NaN available width sets a content width other than 800, or a width under 13 sets one below 1
@@ -602,21 +569,34 @@ internal sealed class ScrollableHtmlView : UiElement
 // Broiler-Human:        PENDING
 internal sealed class HtmlViewElement : UiElement
 {
+    public const int DefaultTileHeight = 1024;
+    public const float MaxBudgetHeight = 32768f;
+    public const int MaxCachedTiles = 16;
+
     private readonly Func<IBroilerRenderer?> _rendererProvider;
     private readonly Action<string> _onLinkClicked;
+    private readonly Func<double>? _dpiScaleProvider;
+    private readonly Dictionary<int, (BImageHandle Handle, int PixelWidth, int PixelHeight, double HeightDip)> _tiles = new();
+    private readonly LinkedList<int> _lruTiles = new();
+
     private HtmlContainer _container;
-    private BImageHandle _imageHandle = BImageHandle.Invalid;
-    private int _renderedWidth;
-    private int _renderedHeight;
+    private HtmlLayoutSnapshot? _layoutSnapshot;
+    private double _cachedDpiScale = 1.0;
     private string _html;
 
     public double ContentWidth { get; set; } = 800;
+
+    public HtmlLayoutSnapshot? Snapshot => _layoutSnapshot;
+    public int CachedTileCount => _tiles.Count;
+    public bool IsTileCached(int tileIndex) => _tiles.ContainsKey(tileIndex);
+    internal IReadOnlyCollection<int> CachedTileIndices => _tiles.Keys.ToArray();
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=EA9C6B
     // Broiler-Falsified-If: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
     // Broiler-Human:        PENDING
     private static HtmlContainer CreateContainer(string html)
     {
+        HtmlRuntime.Initialize();
         var container = new HtmlContainer();
         container.RequestTransport = new DenyingRequestTransport();
         container.StylesheetLoad += (_, e) => e.SetStyleSheet = string.Empty;
@@ -634,11 +614,16 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=E5E400
     // Broiler-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the element renders
     // Broiler-Human:        PENDING
-    public HtmlViewElement(string html, Func<IBroilerRenderer?> rendererProvider, Action<string> onLinkClicked)
+    public HtmlViewElement(
+        string html,
+        Func<IBroilerRenderer?> rendererProvider,
+        Action<string> onLinkClicked,
+        Func<double>? dpiScaleProvider = null)
     {
         _html = html;
         _rendererProvider = rendererProvider;
         _onLinkClicked = onLinkClicked;
+        _dpiScaleProvider = dpiScaleProvider;
         _container = CreateContainer(_html);
     }
 
@@ -650,95 +635,209 @@ internal sealed class HtmlViewElement : UiElement
         _html = html;
         _container.Dispose();
         _container = CreateContainer(_html);
-        InvalidateImage();
+        _layoutSnapshot = null;
+        InvalidateTiles();
         Invalidate(UiInvalidationKind.Measure);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=6565FC
-    // Broiler-Falsified-If: the same snapshot image handle is passed to ReleaseImage twice
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6565FC
+    // Broiler-Falsified-If: an allocated tile texture handle is leaked or passed to ReleaseImage after invalidation
     // Broiler-Human:        PENDING
-    private void InvalidateImage()
+    private void InvalidateTiles()
     {
-        if (_imageHandle.IsValid)
+        var renderer = _rendererProvider();
+        foreach (var entry in _tiles.Values)
         {
-            _rendererProvider()?.ReleaseImage(_imageHandle);
-            _imageHandle = BImageHandle.Invalid;
+            if (entry.Handle.IsValid && renderer is not null)
+            {
+                renderer.ReleaseImage(entry.Handle);
+            }
         }
-        _renderedWidth = 0;
-        _renderedHeight = 0;
+        _tiles.Clear();
+        _lruTiles.Clear();
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=8C1F1D
-    // Broiler-Falsified-If: text that sits directly in body after the last element is left out of the height, so a message of bare text is measured at the 100-pixel minimum and its snapshot is cut off
+    // Broiler-Falsified-If: layout geometry calculation ignores trailing content, leaving bare text or tail elements outside measured height
     // Broiler-Human:        PENDING
-    private float CalculateContentHeight(float width)
+    internal HtmlLayoutSnapshot CalculateLayout(float width)
     {
+        long start = Stopwatch.GetTimestamp();
         _container.MaxSize = new SizeF(width, 0);
         _container.PerformLayout();
         var geom = _container.GetLayoutGeometry(new SizeF(width, 0));
+
         float maxBottom = 0;
+        var diagnostics = new List<HtmlBoxDiagnostic>(geom.Count);
         foreach (var (k, v) in geom)
         {
+            diagnostics.Add(new HtmlBoxDiagnostic(
+                k.TagName,
+                k.Id,
+                k.ClassName,
+                new BRect(v.BorderBox.X, v.BorderBox.Y, v.BorderBox.Width, v.BorderBox.Height),
+                new BRect(v.ContentBox.X, v.ContentBox.Y, v.ContentBox.Width, v.ContentBox.Height)));
+
             if (k.TagName != "html" && k.TagName != "body")
             {
                 float bottom = v.BorderBox.Y + v.BorderBox.Height;
                 if (bottom > maxBottom) maxBottom = bottom;
             }
         }
-        return Math.Max(100f, maxBottom + 32f);
+
+        float rawHeight = Math.Max(100f, maxBottom + 32f);
+        bool isTruncated = rawHeight > MaxBudgetHeight;
+        float contentHeight = isTruncated ? MaxBudgetHeight : rawHeight;
+
+        var linksRaw = _container.GetLinks();
+        var links = new List<HtmlLinkGeometry>(linksRaw.Count);
+        foreach (var l in linksRaw)
+        {
+            links.Add(new HtmlLinkGeometry(
+                l.Id,
+                l.Href,
+                new BRect(l.Rectangle.X, l.Rectangle.Y, l.Rectangle.Width, l.Rectangle.Height)));
+        }
+
+        long elapsedTicks = Stopwatch.GetTimestamp() - start;
+        return new HtmlLayoutSnapshot(width, contentHeight, rawHeight, isTruncated, links, diagnostics, elapsedTicks);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=F7F59D
-    // Broiler-Falsified-If: a message of 10,000 nested div elements, inside the policy's 20,000-token cap, overflows the preview thread's stack while it is measured
+    // Broiler-Falsified-If: repeated measures with unchanged width rerun the full layout instead of reusing the cached snapshot
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
     {
         float targetWidth = (float)(double.IsFinite(availableSize.Width) && availableSize.Width > 50
             ? availableSize.Width
             : ContentWidth);
-        float height = CalculateContentHeight(targetWidth);
-        return new BSize(targetWidth, height);
+
+        if (_layoutSnapshot is null || Math.Abs(_layoutSnapshot.Width - targetWidth) > 0.5f)
+        {
+            InvalidateTiles();
+            _layoutSnapshot = CalculateLayout(targetWidth);
+        }
+
+        return new BSize(targetWidth, _layoutSnapshot.ContentHeight);
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Medium; Resources=8; Fingerprint=0ADDDF
-    // Broiler-Falsified-If: a document laid out taller than 8192 pixels produces a snapshot bitmap taller than 8192 rows
-    // Broiler-Human:        PENDING
-    private void EnsureRendered(int width, int height)
+    private void EnsureTile(int tileIndex, float targetWidth, double dpiScale, IBroilerRenderer renderer)
     {
-        int contentHeight = (int)Math.Ceiling(CalculateContentHeight(width));
-        int renderHeight = Math.Clamp(Math.Max(contentHeight, height), 100, 8192);
-
-        if (_imageHandle.IsValid && _renderedWidth == width && _renderedHeight == renderHeight)
+        if (_tiles.ContainsKey(tileIndex))
+        {
+            _lruTiles.Remove(tileIndex);
+            _lruTiles.AddFirst(tileIndex);
             return;
+        }
+
+        while (_tiles.Count >= MaxCachedTiles && _lruTiles.Count > 0)
+        {
+            int lru = _lruTiles.Last!.Value;
+            _lruTiles.RemoveLast();
+            if (_tiles.Remove(lru, out var evicted) && evicted.Handle.IsValid)
+            {
+                renderer.ReleaseImage(evicted.Handle);
+            }
+        }
+
+        double tileTop = tileIndex * DefaultTileHeight;
+        double tileH = Math.Min(DefaultTileHeight, _layoutSnapshot!.ContentHeight - tileTop);
+        if (tileH <= 0) return;
+
+        int pixelW = (int)Math.Max(1, Math.Ceiling(targetWidth * dpiScale));
+        int pixelH = (int)Math.Max(1, Math.Ceiling(tileH * dpiScale));
+
+        using var bitmap = new HtmlBitmap(pixelW, pixelH);
+        _container.ViewportZoom = (float)dpiScale;
+        _container.ScrollOffset = new PointF(0, -(float)(tileTop * dpiScale));
+        _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelW, pixelH));
+        _container.ScrollOffset = PointF.Empty;
+        _container.ViewportZoom = 1.0f;
+
+        byte[] png = bitmap.Encode(Broiler.Media.Image.ImageEncodeFormat.Png);
+        BImageHandle handle = renderer.CreateImage(png);
+
+        _tiles[tileIndex] = (handle, pixelW, pixelH, tileH);
+        _lruTiles.AddFirst(tileIndex);
+    }
+
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=98C950
+    // Broiler-Falsified-If: rendering tiles outside the visible viewport window allocates bitmaps for non-visible regions
+    // Broiler-Human:        PENDING
+    protected override void RenderCore(UiRenderContext context)
+    {
+        float w = (float)Math.Max(1, Bounds.Width);
+        if (_layoutSnapshot is null || Math.Abs(_layoutSnapshot.Width - w) > 0.5f)
+        {
+            InvalidateTiles();
+            _layoutSnapshot = CalculateLayout(w);
+        }
+
+        double dpiScale = _dpiScaleProvider?.Invoke() ?? context.Host?.Scale ?? 1.0;
+        if (dpiScale <= 0.1 || double.IsNaN(dpiScale)) dpiScale = 1.0;
+
+        if (Math.Abs(_cachedDpiScale - dpiScale) > 0.001)
+        {
+            InvalidateTiles();
+            _cachedDpiScale = dpiScale;
+        }
 
         var renderer = _rendererProvider();
         if (renderer is null) return;
 
-        InvalidateImage();
+        double docHeight = _layoutSnapshot.ContentHeight;
+        int totalTiles = (int)Math.Ceiling(docHeight / DefaultTileHeight);
+        if (totalTiles <= 0) totalTiles = 1;
 
-        _container.MaxSize = new SizeF(width, renderHeight);
-        _container.PerformLayout();
-
-        using var bitmap = new HtmlBitmap(width, renderHeight);
-        _container.PerformPaint(bitmap, new RectangleF(0, 0, width, renderHeight));
-        byte[] png = bitmap.Encode(Broiler.Media.Image.ImageEncodeFormat.Png);
-        _imageHandle = renderer.CreateImage(png);
-        _renderedWidth = width;
-        _renderedHeight = renderHeight;
-    }
-
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=98C950
-    // Broiler-Falsified-If: a repaint at an unchanged size with a valid cached snapshot still lays out the whole document again
-    // Broiler-Human:        PENDING
-    protected override void RenderCore(UiRenderContext context)
-    {
-        int w = (int)Math.Max(1, Bounds.Width);
-        int h = (int)Math.Max(1, Bounds.Height);
-        EnsureRendered(w, h);
-        if (_imageHandle.IsValid)
+        double parentViewportHeight;
+        double visibleTop;
+        if (Parent is StandardScrollView sv && sv.Bounds.Height > 0)
         {
-            var destRect = new BRect(Bounds.X, Bounds.Y, _renderedWidth, _renderedHeight);
-            context.RenderList.DrawImage(_imageHandle, new BRect(0, 0, _renderedWidth, _renderedHeight), destRect, 1.0);
+            visibleTop = Math.Max(0, sv.VerticalOffset);
+            parentViewportHeight = sv.Bounds.Height;
+        }
+        else
+        {
+            parentViewportHeight = context.Host?.ViewportSize.Height > 0 ? context.Host.ViewportSize.Height : docHeight;
+            visibleTop = Math.Max(0, -Bounds.Y);
+        }
+
+        if (parentViewportHeight <= 0) parentViewportHeight = docHeight;
+        double visibleBottom = Math.Min(docHeight, visibleTop + parentViewportHeight);
+        if (visibleBottom < visibleTop) visibleBottom = visibleTop;
+
+        double bufferTop = Math.Max(0, visibleTop - 256);
+        double bufferBottom = Math.Min(docHeight, visibleBottom + 256);
+
+        int firstTile = Math.Clamp((int)(bufferTop / DefaultTileHeight), 0, totalTiles - 1);
+        int lastTile = Math.Clamp((int)(bufferBottom / DefaultTileHeight), 0, totalTiles - 1);
+
+        for (int i = firstTile; i <= lastTile; i++)
+        {
+            EnsureTile(i, w, dpiScale, renderer);
+            if (_tiles.TryGetValue(i, out var tile) && tile.Handle.IsValid)
+            {
+                var srcRect = new BRect(0, 0, tile.PixelWidth, tile.PixelHeight);
+                var destRect = new BRect(Bounds.X, Bounds.Y + (i * DefaultTileHeight), Bounds.Width, tile.HeightDip);
+                context.RenderList.DrawImage(tile.Handle, srcRect, destRect, 1.0);
+            }
+        }
+
+        if (_layoutSnapshot.IsTruncated)
+        {
+            double bannerHeight = 44;
+            double bannerY = Bounds.Y + docHeight - bannerHeight;
+            if (bannerY < (Bounds.Y + visibleBottom + 64) && (bannerY + bannerHeight) > (Bounds.Y + visibleTop - 64))
+            {
+                var bannerRect = new BRect(Bounds.X + 8, bannerY - 4, Math.Max(100, Bounds.Width - 16), bannerHeight);
+                context.RenderList.FillRect(bannerRect, new BColor(255, 243, 205));
+                context.RenderList.StrokeRect(bannerRect, new BColor(255, 220, 150), 1);
+                context.RenderList.DrawText(
+                    new BTextRun($"Content exceeds maximum render limit (truncated at {_layoutSnapshot.ContentHeight:N0}px).",
+                        new BFontStyle("Segoe UI", 11),
+                        new BColor(133, 100, 4)),
+                    new BPoint(bannerRect.Left + 12, bannerRect.Top + 14));
+            }
         }
     }
 
@@ -751,23 +850,40 @@ internal sealed class HtmlViewElement : UiElement
         {
             float relX = (float)(e.Position.X - Bounds.X);
             float relY = (float)(e.Position.Y - Bounds.Y);
-            string? link = _container.GetLinkAt(new PointF(relX, relY));
-            if (!string.IsNullOrEmpty(link))
+
+            if (_layoutSnapshot is not null)
             {
-                _onLinkClicked(link);
+                foreach (var link in _layoutSnapshot.Links)
+                {
+                    if (link.Bounds.Contains(new BPoint(relX, relY)))
+                    {
+                        _onLinkClicked(link.Href);
+                        return true;
+                    }
+                }
+            }
+
+            _container.ScrollOffset = PointF.Empty;
+            string? linkUrl = _container.GetLinkAt(new PointF(relX, relY));
+            if (!string.IsNullOrEmpty(linkUrl))
+            {
+                _onLinkClicked(linkUrl);
                 return true;
             }
         }
         return base.OnInput(e);
     }
 
+    internal bool SendInput(UiInputEvent e) => OnInput(e);
+
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=578CC2
+    // Broiler-Falsified-If: disposing the element leaves cached tile image handles or the container undisposed
     // Broiler-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
-            InvalidateImage();
+            InvalidateTiles();
             _container.Dispose();
         }
         base.Dispose(disposing);

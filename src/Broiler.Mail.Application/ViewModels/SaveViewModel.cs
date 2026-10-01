@@ -15,7 +15,7 @@
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
-using Broiler.UI.Forms.Standard;
+using Broiler.UI.Forms;
 using Broiler.UI;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Validation;

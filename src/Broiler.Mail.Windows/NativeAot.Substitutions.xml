@@ -1,0 +1,16 @@
+<linker>
+  <!-- preview.9's compat loader uses Assembly.Load. Mail registers the sole supported
+       StubCompat provider explicitly before rendering. If registration is missed,
+       EnsureDefaultProvider still throws its normal missing-provider exception. -->
+  <assembly fullname="Broiler.HTML.Image">
+    <type fullname="Broiler.HTML.Image.CompatProvider">
+      <method signature="System.Void TryLoadDefaultProvider()" body="stub" />
+    </type>
+    <!-- StubCanvas.Save/Restore/Translate are no-ops: the managed raster canvas owns
+         transform state. Remove ONLY their reflection dispatch in this fixed backend.
+         Re-audit/remove this compatibility binding when upgrading Broiler.HTML. -->
+    <type fullname="Broiler.HTML.Image.CompatCanvasOperations">
+      <method signature="System.Void InvokeVoid(System.Object,System.String,System.Object[])" body="stub" />
+    </type>
+  </assembly>
+</linker>

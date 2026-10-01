@@ -25,7 +25,7 @@ namespace Broiler.Mail.Infrastructure.Persistence;
 // Broiler-Human:        PENDING
 public sealed class JsonDraftStore(string path) : IDraftStore
 {
-    private readonly JsonConfigurationFile<DraftStoreState> _file = new(path, () => new(0, null), Validate, 4 * 1024 * 1024);
+    private readonly JsonConfigurationFile<DraftStoreState> _file = new(path, () => new(0, null), Validate, ConfigurationJsonContext.Storage.Drafts, 4 * 1024 * 1024);
     public bool IsPersistent => true;
     // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=4; Fingerprint=BC3C29
     // Broiler-Falsified-If: a corrupt or oversized drafts file loads as an empty store (revision 0, no draft) instead of throwing

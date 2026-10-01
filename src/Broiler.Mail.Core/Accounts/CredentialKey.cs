@@ -51,10 +51,9 @@ public sealed record CredentialKey
             MailProtocol.Smtp => account.OutgoingServer ?? throw new ArgumentException("Configure the outgoing server first."),
             _ => throw new ArgumentOutOfRangeException(nameof(protocol)),
         };
-        string identity = JsonSerializer.Serialize(new
-        {
-            Host = server.Host.ToLowerInvariant(), server.Port, server.UserName, server.Security, server.Authentication,
-        });
+        string identity = JsonSerializer.Serialize(new CredentialBinding(
+            server.Host.ToLowerInvariant(), server.Port, server.UserName, server.Security, server.Authentication),
+            CredentialJsonContext.Default.CredentialBinding);
         return new(account.Id, protocol, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(identity))));
     }
 }

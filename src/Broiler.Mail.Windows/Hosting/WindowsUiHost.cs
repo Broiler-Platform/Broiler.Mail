@@ -3,21 +3,22 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   9
-// Annotated:        9/9
+// Relevant units:   11
+// Annotated:        11/11
 // Exempt:           4
-// Human-reviewed:   0/9
+// Human-reviewed:   0/11
 // IP risk:          Low
 // Security risk:    Critical
 // Criteria:         5/4
 // Resource impact:  3/10 max
-// Unverified:       9
+// Unverified:       11
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Graphics.Windows;
+using Broiler.Hosting.Windows;
 using Broiler.Mail.Windows.Services;
 using Broiler.UI;
 
@@ -26,10 +27,27 @@ namespace Broiler.Mail.Windows.Hosting;
 // Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=3; Fingerprint=087FCE
 // Broiler-Falsified-If: a paste reads clipboard memory past the size GlobalSize reports for a block another process placed there
 // Broiler-Human:        PENDING
-internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandle) : IUiHost, IUiClipboardHost, IUiTextInputHost
+internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandle) : IUiHost, IUiClipboardHost, IUiTextInputHost, IUiSystemSettingsHost
 {
     private readonly WindowsClipboard _clipboard = new(() => window.NativeHandle);
     private readonly WindowsTextInput _textInput = new(inputHandle, () => window.DpiScale);
+    private UiSystemSettings _settings = WindowsTheme.QuerySystemSettings();
+
+    public UiSystemSettings Settings => _settings;
+
+    public event EventHandler<UiSystemSettingsChangedEventArgs>? SettingsChanged;
+
+    public void RefreshSettings()
+    {
+        var newSettings = WindowsTheme.QuerySystemSettings();
+        if (_settings != newSettings)
+        {
+            _settings = newSettings;
+            SettingsChanged?.Invoke(this, new UiSystemSettingsChangedEventArgs(_settings));
+            window.Invalidate();
+        }
+    }
+
     // Broiler-AI:           Origin=AI; IP=None; Security=Critical; Resources=3; Fingerprint=E01786
     // Broiler-Falsified-If: PtrToStringUni reads more characters than half the GlobalSize of the locked clipboard block, reading past memory another process allocated
     // Broiler-Human:        PENDING

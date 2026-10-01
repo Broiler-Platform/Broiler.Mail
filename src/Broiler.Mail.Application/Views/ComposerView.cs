@@ -16,6 +16,7 @@
 // GENERATED - DO NOT EDIT MANUALLY
 
 using Broiler.UI.Forms.Standard;
+using Broiler.UI.Forms;
 using Broiler.Graphics.Geometry;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
