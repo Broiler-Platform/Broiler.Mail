@@ -27,6 +27,20 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     public bool CanLoadOlder => CanReceive && _older is not null && Messages.Count < MaximumLoadedMessages;
     public bool CanSelect => !_disposed && !_loadingPage;
 
+    private double _splitterFraction = 0.35;
+    public double SplitterFraction
+    {
+        get => _splitterFraction;
+        set
+        {
+            if (!double.IsFinite(value)) return;
+            double clamped = Math.Clamp(value, 0.05, 0.95);
+            if (_splitterFraction.Equals(clamped)) return;
+            _splitterFraction = clamped;
+            Notify();
+        }
+    }
+
     public void SetAccount(AccountProfile? account)
     {
         if (_disposed || _account == account) return;

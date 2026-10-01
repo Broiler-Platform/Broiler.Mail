@@ -4,6 +4,11 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+$hostArchitecture = [System.Runtime.InteropServices.RuntimeInformation]::ProcessArchitecture.ToString().ToLowerInvariant()
+if (![System.Runtime.InteropServices.RuntimeInformation]::IsOSPlatform([System.Runtime.InteropServices.OSPlatform]::Windows) -or
+    $Runtime -ne "win-$hostArchitecture") {
+    throw "Publishing includes executing the smoke test. Run $Runtime on a matching Windows .NET process (current: $hostArchitecture)."
+}
 $repository = Split-Path -Parent $PSScriptRoot
 $version = ([xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Build.props') -Raw)).Project.PropertyGroup.Version
 $releaseName = "Broiler.Mail-$version-$Runtime"
@@ -12,10 +17,18 @@ $archive = Join-Path $repository "artifacts/$releaseName.zip"
 
 Push-Location $repository
 try {
+    # Publish into a fresh directory, so stale files cannot enter the archive.
+    $artifactsRoot = [System.IO.Path]::GetFullPath((Join-Path $repository 'artifacts')) + [System.IO.Path]::DirectorySeparatorChar
+    $resolvedOutput = [System.IO.Path]::GetFullPath($output)
+    if (!$resolvedOutput.StartsWith($artifactsRoot, [System.StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Publish directory must be inside the repository artifacts directory.'
+    }
+    if (Test-Path -LiteralPath $resolvedOutput) { Remove-Item -LiteralPath $resolvedOutput -Recurse -Force }
     dotnet publish src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj -c Release -r $Runtime --self-contained true -p:PublishTrimmed=false -o $output
     if ($LASTEXITCODE -ne 0) { throw "Publishing failed (exit $LASTEXITCODE)." }
     Copy-Item -LiteralPath (Join-Path $repository 'LICENSE') -Destination (Join-Path $output 'LICENSE')
     Copy-Item -LiteralPath (Join-Path $repository 'docs/version-2-acceptance.md') -Destination (Join-Path $output 'START-HERE.md')
+    Copy-Item -LiteralPath (Join-Path $repository 'docs/html-renderer-security.md') -Destination (Join-Path $output 'html-renderer-security.md')
 
     # Include package identity/license metadata and license files from the actual restored graph.
     $assets = Get-Content -LiteralPath 'src/Broiler.Mail.Windows/obj/project.assets.json' -Raw | ConvertFrom-Json
@@ -55,9 +68,30 @@ try {
     Set-Content -LiteralPath (Join-Path $output 'PACKAGE-NOTICES.md') -Value ($notices -join "`n") -Encoding utf8
     & (Join-Path $output 'Broiler.Mail.Windows.exe') --smoke-test
     if ($LASTEXITCODE -ne 0) { throw 'Published executable smoke test failed.' }
+    $sdkVersion = dotnet --version
+    if ($LASTEXITCODE -ne 0) { throw 'Could not determine SDK version.' }
+    $revision = git rev-parse HEAD
+    if ($LASTEXITCODE -ne 0) { throw 'Could not determine source revision.' }
+    $workingTreeChanges = @(git status --porcelain --untracked-files=normal)
+    if ($LASTEXITCODE -ne 0) { throw 'Could not determine working-tree state.' }
+    [ordered]@{
+        schemaVersion = 1
+        applicationVersion = [string]$version
+        runtime = $Runtime
+        processArchitecture = $hostArchitecture
+        sdkVersion = [string]$sdkVersion
+        sourceRevision = [string]$revision
+        workingTreeDirty = $workingTreeChanges.Count -gt 0
+        builtAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
+        signingStatus = 'unsigned'
+        smokeTest = 'passed'
+        smokeScope = 'Headless composition and UI rendering; no provider or native-window acceptance.'
+        htmlRendererIsolation = 'not-implemented'
+        releaseReady = $false
+    } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'build-manifest.json') -Encoding utf8
     Compress-Archive -Path (Join-Path $output '*') -DestinationPath $archive -Force
     $hash = (Get-FileHash -LiteralPath $archive -Algorithm SHA256).Hash.ToLowerInvariant()
     Set-Content -LiteralPath "$archive.sha256" -Value "$hash  $releaseName.zip" -Encoding ascii
-    Write-Output "Created $archive"
+    Write-Output "Created unsigned validation artifact $archive (HTML process isolation remains pending)."
 }
 finally { Pop-Location }

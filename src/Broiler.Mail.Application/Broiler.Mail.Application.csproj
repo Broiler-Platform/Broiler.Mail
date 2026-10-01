@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
     <ProjectReference Include="../Broiler.Mail.Core/Broiler.Mail.Core.csproj" />
+    <PackageReference Include="Broiler.UI.Forms.Standard" />
     <PackageReference Include="Broiler.UI.Button.Standard" />
     <PackageReference Include="Broiler.UI.ComboBox.Standard" />
     <PackageReference Include="Broiler.UI.Edit.Standard" />
@@ -9,7 +10,9 @@
     <PackageReference Include="Broiler.UI.Panel.Standard" />
     <PackageReference Include="Broiler.UI.RichEdit.Standard" />
     <PackageReference Include="Broiler.UI.ScrollView.Standard" />
+    <PackageReference Include="Broiler.UI.Splitter.Standard" />
     <PackageReference Include="Broiler.UI.TabView.Standard" />
+    <PackageReference Include="Broiler.UI.Toolbar.Standard" />
     <PackageReference Include="Broiler.UI.Window.Standard" />
   </ItemGroup>
 </Project>

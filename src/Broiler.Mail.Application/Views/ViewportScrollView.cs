@@ -1,34 +1,22 @@
 using Broiler.Graphics.Geometry;
 using Broiler.UI;
+using Broiler.UI.ScrollView;
 using Broiler.UI.ScrollView.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-/// <summary>Wraps scroll content to the viewport width instead of measuring long labels on one line.</summary>
+/// <summary>Wraps scroll content to the viewport width using standard viewport-constrained scrolling.</summary>
 public sealed class ViewportScrollView : UiElement
 {
-    public StandardScrollView Scroll { get; } = new();
-    private readonly Content _content;
+    public StandardScrollView Scroll { get; } = new() { Constraint = UiScrollConstraint.ConstrainWidth };
 
     public ViewportScrollView(UiElement content)
     {
-        _content = new Content(content);
-        Scroll.AddChild(_content);
+        Scroll.AddChild(content);
         AddChild(Scroll);
     }
 
-    protected override BSize MeasureCore(BSize availableSize)
-    {
-        _content.Width = double.IsFinite(availableSize.Width) ? Math.Max(1, availableSize.Width - Scroll.ScrollbarThickness) : 520;
-        return Scroll.Measure(availableSize);
-    }
+    protected override BSize MeasureCore(BSize availableSize) => Scroll.Measure(availableSize);
 
-    private sealed class Content : UiElement
-    {
-        private readonly UiElement _child;
-        public Content(UiElement child) { _child = child; AddChild(child); }
-        public double Width { get; set; } = 520;
-        protected override BSize MeasureCore(BSize availableSize) => _child.Measure(new BSize(Width, double.PositiveInfinity));
-        protected override void ArrangeCore(BRect finalRect) => _child.Arrange(new BRect(finalRect.X, finalRect.Y, Width, finalRect.Height));
-    }
+    protected override void ArrangeCore(BRect finalRect) => Scroll.Arrange(finalRect);
 }

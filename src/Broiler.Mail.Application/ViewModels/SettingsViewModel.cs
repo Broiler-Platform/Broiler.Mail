@@ -29,9 +29,11 @@ public sealed class SettingsViewModel : SaveViewModel
         ApplicationSettings? candidate = null;
         return SaveAsync(async () =>
         {
-            if (!int.TryParse(WindowWidth, out int width) || !int.TryParse(WindowHeight, out int height))
-                throw new ArgumentException("Window width and height must be whole numbers.");
-            candidate = new ApplicationSettings { Theme = Theme, WindowWidth = width, WindowHeight = height };
+            if (!int.TryParse(WindowWidth, out int width))
+                throw new ConfigurationValidationException("WindowWidth", "Window width must be a whole number.");
+            if (!int.TryParse(WindowHeight, out int height))
+                throw new ConfigurationValidationException("WindowHeight", "Window height must be a whole number.");
+            candidate = Settings with { Theme = Theme, WindowWidth = width, WindowHeight = height };
             ConfigurationValidator.Validate(candidate);
             await _store.SaveAsync(candidate, cancellationToken).ConfigureAwait(false);
         }, () => Settings = candidate!, "Settings saved. Theme and window size apply the next time Broiler.Mail starts.");

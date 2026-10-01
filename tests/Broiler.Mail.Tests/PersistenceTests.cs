@@ -81,7 +81,8 @@ public sealed class PersistenceTests
         var store = new JsonAccountStore(path);
         var profile = TestDirectory.Profile();
         await store.SaveAsync(profile);
-        await Assert.ThrowsAsync<ArgumentException>(() => store.SaveAsync(profile with { IncomingServer = profile.IncomingServer with { Port = 70000 } }));
+        var error = await Assert.ThrowsAsync<Broiler.Mail.Core.Validation.ConfigurationValidationException>(() => store.SaveAsync(profile with { IncomingServer = profile.IncomingServer with { Port = 70000 } }));
+        Assert.Equal("IncomingServer.Port", error.Field);
         Assert.Equal(profile, Assert.Single(await store.LoadAsync()));
     }
 

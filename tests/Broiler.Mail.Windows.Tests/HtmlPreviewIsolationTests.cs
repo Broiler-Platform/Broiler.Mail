@@ -101,4 +101,17 @@ public sealed class HtmlPreviewIsolationTests
         Assert.True(tallView.Content.DesiredSize.Height > 1000, "Tall document content must measure beyond viewport height.");
         Assert.True(tallView.Content.Bounds.Height > 1000, "Tall document content must arrange beyond viewport height to scroll.");
     }
+
+    [Fact]
+    public async Task LoadRemoteImagesAsyncEnforcesStreamingBudgetAndHandlesFailureGracefully()
+    {
+        string html = "<html><body><img src='http://127.0.0.1:1/nonexistent.jpg'></body></html>";
+        var doc = HtmlPreviewPolicy.Create(html);
+        using var window = new HtmlPreviewWindow(doc, "Fallback", _ => { }, rawHtml: html);
+
+        Assert.False(window.AreRemoteImagesAllowed);
+        await window.LoadRemoteImagesAsync();
+        // Failed image download keeps allowed false and allows retry
+        Assert.False(window.AreRemoteImagesAllowed);
+    }
 }

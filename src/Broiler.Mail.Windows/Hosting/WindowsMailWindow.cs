@@ -1,4 +1,5 @@
 using Broiler.Graphics.Geometry;
+using Broiler.Graphics.Rendering;
 using Broiler.Graphics.RenderList;
 using Broiler.Graphics.Windowing;
 using Broiler.Graphics.Windows;
@@ -40,6 +41,10 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             ClientHeight = application.LoadedSettings.WindowHeight,
             // Application-managed close must be able to keep the window open after a failed draft save.
             OwnsMessageLoop = false,
+            RenderOptions = new BRenderOptions(
+                Antialias: true,
+                VSync: true,
+                SubpixelText: true),
         })
     {
         _host = new WindowsUiHost(this, () => InputHandle);

@@ -1,3 +1,5 @@
+using Broiler.UI.Forms.Standard;
+using Broiler.UI.Edit.Standard;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Accounts;
 using Broiler.UI;
@@ -12,32 +14,30 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
 {
     public UiElement CreateContent()
     {
-        var panel = new StandardPanel { Spacing = 8 };
-        ConfigurationForm.AddText(panel, "Account profile — one account");
-        ConfigurationForm.AddText(panel, "Save your account details, then save an IMAP password and test the receiving connection. No messages are fetched during the test.");
-        var name = ConfigurationForm.AddField(panel, "Display name", model.DisplayName);
-        var email = ConfigurationForm.AddField(panel, "Email address", model.EmailAddress);
-        ConfigurationForm.AddText(panel, "Incoming mail — IMAP");
-        var host = ConfigurationForm.AddField(panel, "IMAP server (hostname only)", model.Host);
-        var port = ConfigurationForm.AddField(panel, "IMAP port", model.Port);
-        var user = ConfigurationForm.AddField(panel, "Username", model.UserName);
+        var panel = new StandardPanel { Spacing = 20 };
+        var identity = ConfigurationForm.AddSection(panel, "Account identity", "Save the account, then save its passwords. Test connection checks receiving without fetching messages.");
+        var name = ConfigurationForm.AddField(identity, "Display name", model.DisplayName);
+        var email = ConfigurationForm.AddField(identity, "Email address", model.EmailAddress);
+        var incoming = ConfigurationForm.AddSection(panel, "Incoming mail — IMAP");
+        var host = ConfigurationForm.AddField(incoming, "IMAP server (hostname only)", model.Host);
+        var port = ConfigurationForm.AddField(incoming, "IMAP port", model.Port);
+        var user = ConfigurationForm.AddField(incoming, "Username", model.UserName);
         var security = new StandardComboBox();
         security.SetItems([new UiComboBoxItem("Tls", "TLS (usually port 993)"), new UiComboBoxItem("StartTls", "Required STARTTLS (usually port 143)")]);
         security.SelectedIndex = model.Security == TransportSecurity.StartTls ? 1 : 0;
-        ConfigurationForm.AddLabeledControl(panel, "Connection security", security);
+        ConfigurationForm.AddLabeledControl(incoming, "Connection security", security);
         var authentication = new StandardComboBox();
         authentication.SetItems([new UiComboBoxItem("Password", "Password or app password")]);
         authentication.SelectedIndex = 0;
-        ConfigurationForm.AddLabeledControl(panel, "Authentication (OAuth sign-in is not available yet)", authentication);
+        ConfigurationForm.AddLabeledControl(incoming, "Authentication (OAuth sign-in is not available yet)", authentication);
 
-        ConfigurationForm.AddText(panel, "Outgoing mail — SMTP");
-        ConfigurationForm.AddText(panel, "Configure outgoing mail and save its separate SMTP password. The connection test below checks IMAP only.");
+        var outgoing = ConfigurationForm.AddSection(panel, "Outgoing mail — SMTP", "Optional. Save a separate SMTP password before sending.");
         var smtpSetup = new StandardComboBox();
         smtpSetup.SetItems([new UiComboBoxItem("None", "Not configured"), new UiComboBoxItem("Smtp", "Configure SMTP")]);
         smtpSetup.SelectedIndex = model.ConfigureSmtp ? 1 : 0;
-        ConfigurationForm.AddLabeledControl(panel, "Outgoing mail setup", smtpSetup);
+        ConfigurationForm.AddLabeledControl(outgoing, "Outgoing mail setup", smtpSetup);
         var smtpFields = new StandardPanel { Spacing = 8 };
-        panel.AddChild(smtpFields);
+        outgoing.AddChild(smtpFields);
         var smtpHost = ConfigurationForm.AddField(smtpFields, "SMTP server (hostname only)", model.SmtpHost);
         var smtpPort = ConfigurationForm.AddField(smtpFields, "SMTP port", model.SmtpPort);
         var smtpUser = ConfigurationForm.AddField(smtpFields, "SMTP username", model.SmtpUserName);
@@ -58,33 +58,31 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         smtpPassword.MaxLength = 1280;
         var saveSmtpPassword = new StandardButton { Text = "Save SMTP password" };
         var forgetSmtpPassword = new StandardButton { Text = "Forget SMTP password" };
-        smtpFields.AddChild(saveSmtpPassword);
-        smtpFields.AddChild(forgetSmtpPassword);
-        ConfigurationForm.AddText(smtpFields, "Save account changes before saving a password. SMTP credentials are stored separately in Windows Credential Manager. Forget the SMTP password before removing outgoing setup.");
+        smtpFields.AddChild(FormSurface.ActionBar(saveSmtpPassword, forgetSmtpPassword));
+        ConfigurationForm.AddText(smtpFields, "Save account changes before saving a password. SMTP credentials are stored separately from IMAP credentials. Forget the SMTP password before removing outgoing setup.");
+        var advanced = new FormSection("Sent-copy settings", collapsible: true, expanded: model.SentCopyMode != SentCopyMode.NotConfigured);
+        smtpFields.AddChild(advanced);
         var sentCopy = new StandardComboBox();
         sentCopy.SetItems([new UiComboBoxItem("None", "Not configured — no app copy"),
             new UiComboBoxItem("Provider", "Provider saves a copy automatically"),
             new UiComboBoxItem("Append", "Broiler.Mail appends one copy via IMAP")]);
         sentCopy.SelectedIndex = (int)model.SentCopyMode;
-        ConfigurationForm.AddLabeledControl(smtpFields, "Sent-copy handling", sentCopy);
-        var sentFolder = ConfigurationForm.AddField(smtpFields, "Sent folder path (exact IMAP path)", model.SentFolder);
-        ConfigurationForm.AddText(smtpFields, "Choose append only after confirming that your provider does not save sent mail automatically. The folder must already exist; no folders are created. A failed or uncertain copy never resends mail or automatically retries the copy.");
-        var save = new StandardButton { Text = "Save account" };
-        panel.AddChild(save);
-        ConfigurationForm.AddText(panel, "IMAP password and connection test");
-        var password = ConfigurationForm.AddField(panel, "Password / app password", string.Empty);
+        ConfigurationForm.AddLabeledControl(advanced.Content, "Sent-copy handling", sentCopy);
+        var sentFolder = ConfigurationForm.AddField(advanced.Content, "Sent folder path (exact IMAP path)", model.SentFolder);
+        ConfigurationForm.AddText(advanced.Content, "Choose append only after confirming that your provider does not save sent mail automatically. The folder must already exist; no folders are created. A failed or uncertain copy never resends mail or automatically retries the copy.");
+        var save = new StandardButton { Text = "Save account", IsDefault = true };
+        var credentials = ConfigurationForm.AddSection(panel, "IMAP password", "Save profile changes before managing credentials or testing the connection.");
+        var password = ConfigurationForm.AddField(credentials, "Password / app password", string.Empty);
         password.IsPassword = true;
         password.MaxLength = 1280;
-        ConfigurationForm.AddText(panel, "Saved passwords are kept in Windows Credential Manager and are never filled back into this field. Connection changes require saving a password again.");
+        ConfigurationForm.AddText(credentials, "Saved passwords are managed by this device's credential store and are never filled back into this field. Connection changes require saving a password again.");
         var savePassword = new StandardButton { Text = "Save password" };
         var forgetPassword = new StandardButton { Text = "Forget saved password" };
         var test = new StandardButton { Text = "Test connection" };
         var cancel = new StandardButton { Text = "Cancel test" };
-        panel.AddChild(savePassword);
-        panel.AddChild(forgetPassword);
-        panel.AddChild(test);
-        panel.AddChild(cancel);
-        var status = ConfigurationForm.AddText(panel, model.Status);
+        credentials.AddChild(FormSurface.ActionBar(savePassword, forgetPassword));
+        var status = new InlineFeedback();
+        var surface = new FormSurface(panel, FormSurface.ActionBar(save, test, cancel), status);
 
         void RefreshState()
         {
@@ -106,9 +104,18 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             password.IsEnabled = savePassword.IsEnabled = forgetPassword.IsEnabled = test.IsEnabled = model.CanManagePassword;
             test.IsEnabled = model.CanManagePassword && password.Text.Length == 0;
             cancel.IsEnabled = model.CanCancelTest;
-            status.Text = model.Status;
+            if (!model.CanCancelTest && surface.Session?.FocusedElement == cancel)
+                surface.Session.SetFocus(test);
+            cancel.Visibility = model.CanCancelTest ? UiVisibility.Visible : UiVisibility.Collapsed;
         }
         model.Changed += (_, _) => RefreshState();
+        ConfigurationForm.BindFeedback(model, surface, status, new Dictionary<string, StandardEdit>
+        {
+            ["DisplayName"] = name, ["EmailAddress"] = email,
+            ["IncomingServer.Host"] = host, ["IncomingServer.Port"] = port, ["IncomingServer.UserName"] = user,
+            ["OutgoingServer.Host"] = smtpHost, ["OutgoingServer.Port"] = smtpPort, ["OutgoingServer.UserName"] = smtpUser,
+            ["SentFolder"] = sentFolder,
+        });
         password.TextChanged += (_, _) => RefreshState();
         smtpSetup.SelectionChanged += (_, _) => { smtpPassword.Text = string.Empty; RefreshState(); };
         sentCopy.SelectionChanged += (_, _) => RefreshState();
@@ -171,6 +178,6 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         };
         cancel.Clicked += (_, _) => model.CancelConnectionTest();
         RefreshState();
-        return ConfigurationForm.Wrap(panel);
+        return surface;
     }
 }

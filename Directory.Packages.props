@@ -1,8 +1,10 @@
 <Project>
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
-    <BroilerUiVersion>0.1.0-preview.10</BroilerUiVersion>
+    <BroilerUiVersion>0.1.0-preview.10.c04.3</BroilerUiVersion>
     <BroilerGraphicsVersion>0.1.0-preview.7</BroilerGraphicsVersion>
+    <BroilerNativeVersion>0.1.0-preview.6</BroilerNativeVersion>
+    <BroilerInputVersion>0.1.0-preview.5</BroilerInputVersion>
   </PropertyGroup>
   <ItemGroup>
     <PackageVersion Include="MailKit" Version="4.18.1" />
@@ -11,7 +13,16 @@
     <PackageVersion Include="Broiler.HTML.Image.Compat" Version="0.1.0-preview.9" />
     <PackageVersion Include="Broiler.Media.Image.Managed" Version="0.1.0-preview.14" />
     <PackageVersion Include="Broiler.Graphics.Windows" Version="$(BroilerGraphicsVersion)" />
-    <PackageVersion Include="Broiler.Native.Windows" Version="0.1.0-preview.6" />
+    <PackageVersion Include="Broiler.Native.Windows" Version="$(BroilerNativeVersion)" />
+    <!-- Verified by eng/Broiler.Mail.DependencyProbe before platform hosts consume them. -->
+    <PackageVersion Include="Broiler.Graphics.Linux.OpenGL" Version="$(BroilerGraphicsVersion)" />
+    <PackageVersion Include="Broiler.Graphics.Android" Version="$(BroilerGraphicsVersion)" />
+    <PackageVersion Include="Broiler.Native.Linux" Version="$(BroilerNativeVersion)" />
+    <PackageVersion Include="Broiler.Native.Android" Version="$(BroilerNativeVersion)" />
+    <PackageVersion Include="Broiler.Input.Touch.Android" Version="$(BroilerInputVersion)" />
+    <PackageVersion Include="Broiler.Input.Text.Android" Version="$(BroilerInputVersion)" />
+    <PackageVersion Include="Broiler.Input.Keyboard.Android" Version="$(BroilerInputVersion)" />
+    <PackageVersion Include="Broiler.UI.Forms.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Button.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.ComboBox.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Edit.Standard" Version="$(BroilerUiVersion)" />
@@ -20,7 +31,9 @@
     <PackageVersion Include="Broiler.UI.Panel.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.RichEdit.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.ScrollView.Standard" Version="$(BroilerUiVersion)" />
+    <PackageVersion Include="Broiler.UI.Splitter.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.TabView.Standard" Version="$(BroilerUiVersion)" />
+    <PackageVersion Include="Broiler.UI.Toolbar.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Window.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />

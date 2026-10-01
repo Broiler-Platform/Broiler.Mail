@@ -1,3 +1,4 @@
+using Broiler.UI.Forms.Standard;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
@@ -72,13 +73,17 @@ public sealed class ComposerViewModel : IDisposable
     };
     public string StorageStatus => _loadError ?? _journal.Error ?? (!_journal.IsSaved ? "Saving draft…" :
         _journal.IsPersistent ? "Draft saved locally." : "Demo/headless draft is in memory only.");
+    public FeedbackKind StorageKind => _loadError is not null || _journal.Error is not null ? FeedbackKind.Error :
+        !_journal.IsSaved ? FeedbackKind.Progress : FeedbackKind.Information;
     public string FromAddress => _seed?.FromAddress ?? _account?.EmailAddress ?? "No saved account";
     public string To { get; private set; } = "";
     public string Cc { get; private set; } = "";
     public string Bcc { get; private set; } = "";
     public string Subject { get; private set; } = "";
     public string PlainText { get; private set; } = "";
-    public string Status { get; private set; } = "Save an account, then start a new message or read a message to reply.";
+    private string _status = "Save an account, then start a new message or read a message to reply.";
+    public FeedbackKind StatusKind { get; private set; }
+    public string Status { get => _status; private set { _status = value; StatusKind = FeedbackKind.Information; } }
 
     public void SetAccount(AccountProfile? account)
     {
@@ -101,7 +106,7 @@ public sealed class ComposerViewModel : IDisposable
             return false;
         }
         try { _seed = body is null ? MailComposition.Create(_account!) : MailComposition.Create(_account!, body, kind!.Value); }
-        catch (ArgumentException error) { Status = error.Message; Notify(); return false; }
+        catch (ArgumentException error) { Status = error.Message; StatusKind = FeedbackKind.Error; Notify(); return false; }
         To = string.Join(", ", _seed.To);
         Cc = string.Join(", ", _seed.Cc);
         Bcc = string.Join(", ", _seed.Bcc);
@@ -141,8 +146,8 @@ public sealed class ComposerViewModel : IDisposable
 
     public void CheckDraft()
     {
-        try { _ = BuildDraft(); Status = "Draft fields are valid. No mail was sent."; }
-        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Status = error.Message; }
+        try { _ = BuildDraft(); Status = "Draft fields are valid. No mail was sent."; StatusKind = FeedbackKind.Success; }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Status = error.Message; StatusKind = FeedbackKind.Error; }
         Notify();
     }
 
@@ -181,6 +186,7 @@ public sealed class ComposerViewModel : IDisposable
             {
                 _journal.Update(previous, save: false);
                 Status = "Draft could not be discarded. Its text remains open.";
+                StatusKind = FeedbackKind.Error;
             }
             IsBusy = false;
             Notify();
@@ -193,7 +199,7 @@ public sealed class ComposerViewModel : IDisposable
         if (!CanSend) return;
         MailDraft draft;
         try { draft = BuildDraft(); }
-        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Status = error.Message; Notify(); return; }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Status = error.Message; StatusKind = FeedbackKind.Error; Notify(); return; }
         var account = _account!;
         draft = draft with { SubmissionDate = DateTimeOffset.UtcNow };
         _seed = _seed! with { SubmissionDate = draft.SubmissionDate };
@@ -211,6 +217,7 @@ public sealed class ComposerViewModel : IDisposable
                 SubmissionState = DraftSubmissionState.Failed;
                 IsBusy = false;
                 Status = "Sending was not started because the draft could not be saved.";
+                StatusKind = FeedbackKind.Error;
                 _journal.Update(Snapshot(), save: false);
                 Notify();
             }).ConfigureAwait(false);
@@ -268,6 +275,8 @@ public sealed class ComposerViewModel : IDisposable
         {
             IsBusy = false;
             Status = durable ? outcomeMessage ?? "Submission result saved. The draft is retained." : "Submission or Sent-copy result could not be saved. Keep the app open and retry Save draft; do not resend or repeat the copy.";
+            StatusKind = !durable || outcome == DraftSubmissionState.Failed ? FeedbackKind.Error :
+                outcome == DraftSubmissionState.Unknown ? FeedbackKind.Warning : FeedbackKind.Information;
             Notify();
         }).ConfigureAwait(false);
     }

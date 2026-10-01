@@ -1,3 +1,4 @@
+using Broiler.UI.Forms.Standard;
 using Broiler.Graphics.Geometry;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
@@ -7,6 +8,8 @@ using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Standard;
+using Broiler.UI.Toolbar;
+using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
@@ -15,9 +18,15 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
     public UiElement CreateContent()
     {
         var panel = new StandardPanel { Spacing = 8 };
-        ConfigurationForm.AddText(panel, "Plain-text composer — drafts are saved automatically in normal mode. Configure SMTP, its password, and Sent-copy handling in Account before sending.");
+        ConfigurationForm.AddText(panel, "Write a plain-text message. Configure outgoing mail in Account before sending.");
         var source = ConfigurationForm.AddText(panel, "");
-        var actions = new StandardPanel { StackOrientation = UiStackOrientation.Horizontal, Spacing = 8 };
+        var actions = new StandardToolbar
+        {
+            Overflow = UiToolbarOverflow.Wrap,
+            Padding = 4,
+            Spacing = 8,
+            PreferredSize = new BSize(0, 36),
+        };
         var create = new StandardButton { Text = "New message" };
         var reply = new StandardButton { Text = "Reply" };
         var replyAll = new StandardButton { Text = "Reply all" };
@@ -27,8 +36,10 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
         var sender = ConfigurationForm.AddText(panel, "");
         ConfigurationForm.AddText(panel, "Recipients: separate email addresses with commas. Only plain text is retained from the body editor.");
         var to = ConfigurationForm.AddField(panel, "To", "");
-        var cc = ConfigurationForm.AddField(panel, "Cc", "");
-        var bcc = ConfigurationForm.AddField(panel, "Bcc", "");
+        var copies = new FormSection("Cc and Bcc", "Additional recipients remain part of the draft when this group is collapsed.", collapsible: true, expanded: false);
+        panel.AddChild(copies);
+        var cc = ConfigurationForm.AddField(copies.Content, "Cc", "");
+        var bcc = ConfigurationForm.AddField(copies.Content, "Bcc", "");
         // Validate rather than truncate: imported recipients and prefixed subjects must remain intact.
         foreach (var field in new[] { to, cc, bcc }) field.MaxLength = int.MaxValue;
         var subject = ConfigurationForm.AddField(panel, "Subject", "");
@@ -39,15 +50,15 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
         var check = new StandardButton { Text = "Check draft" };
         var discard = new StandardButton { Text = "Discard draft" };
         var save = new StandardButton { Text = "Save draft" };
-        var send = new StandardButton { Text = "Send" };
-        panel.AddChild(check);
-        panel.AddChild(save);
-        panel.AddChild(send);
-        panel.AddChild(discard);
-        var submission = ConfigurationForm.AddText(panel, "");
-        var sentCopy = ConfigurationForm.AddText(panel, "");
-        var storage = ConfigurationForm.AddText(panel, "");
-        var status = ConfigurationForm.AddText(panel, "");
+        var send = new StandardButton { Text = "Send", IsDefault = true };
+        var submission = new InlineFeedback();
+        var sentCopy = new InlineFeedback();
+        var storage = new InlineFeedback();
+        var status = new InlineFeedback();
+        var feedback = new StandardPanel { Spacing = 4 };
+        feedback.AddChild(submission); feedback.AddChild(sentCopy);
+        feedback.AddChild(storage); feedback.AddChild(status);
+        var surface = new FormSurface(panel, FormSurface.ActionBar(send, check, save, discard), feedback);
         Guid? shown = null;
         bool updating = false;
         void Refresh()
@@ -59,6 +70,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
                 shown = model.DraftId;
                 to.Text = model.To; cc.Text = model.Cc; bcc.Text = model.Bcc;
                 subject.Text = model.Subject; body.SetPlainText(model.PlainText);
+                copies.IsExpanded = model.Cc.Length > 0 || model.Bcc.Length > 0;
             }
             create.IsEnabled = model.CanStart;
             reply.IsEnabled = replyAll.IsEnabled = forward.IsEnabled = model.CanStart && !inbox.IsBusy && inbox.Body?.Composition is not null;
@@ -69,14 +81,21 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
             discard.IsEnabled = model.CanDiscard;
             save.IsEnabled = model.HasDraft && !model.IsBusy;
             send.IsEnabled = model.CanSend;
-            submission.Text = model.SubmissionText;
-            sentCopy.Text = model.SentCopyText.Replace("&", "&&", StringComparison.Ordinal);
-            storage.Text = model.StorageStatus.Replace("&", "&&", StringComparison.Ordinal);
+            copies.Summary = string.Join(" · ", new[] { model.Cc.Length > 0 ? "Cc recipients included" : "", model.Bcc.Length > 0 ? "Bcc recipients included" : "" }.Where(text => text.Length > 0));
+            submission.Set(model.HasDraft && model.SubmissionState != DraftSubmissionState.Editing ? model.SubmissionText : "",
+                model.SubmissionState switch { DraftSubmissionState.Failed => FeedbackKind.Error, DraftSubmissionState.Unknown => FeedbackKind.Warning,
+                    DraftSubmissionState.Sending => FeedbackKind.Progress, DraftSubmissionState.Accepted => FeedbackKind.Success, _ => FeedbackKind.Information });
+            sentCopy.Set(model.SentCopy != SentCopyState.NotRequested || model.SubmissionState == DraftSubmissionState.Accepted ? model.SentCopyText : "",
+                model.SentCopy switch { SentCopyState.Failed => FeedbackKind.Error, SentCopyState.Unknown => FeedbackKind.Warning,
+                    SentCopyState.Pending => FeedbackKind.Progress, SentCopyState.Saved => FeedbackKind.Success, _ => FeedbackKind.Information });
+            storage.Set(model.HasDraft || model.HasLoadError ? model.StorageStatus : "", model.StorageKind);
             sender.Text = ("From: " + model.FromAddress).Replace("&", "&&", StringComparison.Ordinal);
             source.Text = (inbox.Body is { } loaded
                 ? loaded.CompositionUnavailableReason ?? $"Selected message: {loaded.Composition?.Subject ?? "Read the message again to load reply headers."}"
                 : "Select and read a message in Inbox before replying or forwarding.").Replace("&", "&&", StringComparison.Ordinal);
-            status.Text = model.Status.Replace("&", "&&", StringComparison.Ordinal);
+            status.Set(model.IsBusy ? model.SubmissionState == DraftSubmissionState.Sending ? "Submitting message…"
+                : model.SentCopy == SentCopyState.Pending ? "Saving Sent copy…" : "Updating draft…" : model.Status,
+                model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
             updating = false;
         }
         void Capture()
@@ -96,6 +115,6 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
         model.Changed += (_, _) => Refresh();
         inbox.Changed += (_, _) => Refresh();
         Refresh();
-        return ConfigurationForm.Wrap(panel);
+        return surface;
     }
 }

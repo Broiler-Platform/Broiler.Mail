@@ -242,8 +242,7 @@ Common reading and composition workflows are efficient with the keyboard.
 - [ ] Expand a documented provider/authentication matrix, including OAuth sign-in,
   refresh, revocation, and reauthorization for selected providers. Bring any
   required provider integration forward to the milestone that first needs it.
-- [ ] Add Linux through the existing Broiler host patterns, including secure
-  credential storage and platform-specific integration tests.
+- [ ] Add Linux and Android through the existing Broiler host patterns (`Broiler.Graphics.Linux`, `Broiler.Native.Android`), including secure credential storage (Secret Service / Keystore), mobile adaptations, and platform-specific integration tests. See the [Cross-Platform Roadmap](cross-platform-roadmap.md).
 - [ ] Complete screen-reader integration, high-contrast support, localization,
   right-to-left text, DPI scaling, and input-method testing. Basic labels, focus
   order, keyboard operation, and readable contrast are requirements from version 1.

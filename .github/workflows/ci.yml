@@ -1,0 +1,108 @@
+name: Phase 0 CI
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: phase0-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+  # Fresh hosted-runner storage; no developer cache or sibling checkout is used.
+  NUGET_PACKAGES: ${{ github.workspace }}/.nuget/ci-packages
+
+defaults:
+  run:
+    shell: pwsh
+
+jobs:
+  tests:
+    name: Tests and API probe (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Record validation environment
+        run: |
+          New-Item -ItemType Directory -Force artifacts/validation | Out-Null
+          "Revision: $env:GITHUB_SHA`nRunner: $env:RUNNER_OS / $env:RUNNER_ARCH" | Set-Content artifacts/validation/environment.txt
+          dotnet --info | Add-Content artifacts/validation/environment.txt
+          if ($LASTEXITCODE -ne 0) { throw 'Cannot record SDK information.' }
+      - name: Build published API probe
+        run: dotnet build eng/Broiler.Mail.DependencyProbe/Broiler.Mail.DependencyProbe.csproj -c Release
+      - name: Record published API and dependency evidence
+        run: |
+          dotnet run --project eng/Broiler.Mail.DependencyProbe/Broiler.Mail.DependencyProbe.csproj -c Release --no-build --no-restore > artifacts/validation/dependency-probe.json
+          if ($LASTEXITCODE -ne 0) { throw 'API probe failed.' }
+          dotnet list eng/Broiler.Mail.DependencyProbe/Broiler.Mail.DependencyProbe.csproj package --include-transitive --format json --no-restore > artifacts/validation/dependency-graph.json
+          if ($LASTEXITCODE -ne 0) { throw 'Dependency inventory failed.' }
+      - name: Shared tests
+        run: dotnet test tests/Broiler.Mail.Tests/Broiler.Mail.Tests.csproj -c Release --logger 'trx;LogFileName=shared.trx' --results-directory artifacts/validation --blame-hang-timeout 2m
+      - name: Managed Linux adapter tests (no native display)
+        run: dotnet test tests/Broiler.Mail.Linux.Tests/Broiler.Mail.Linux.Tests.csproj -c Release --logger 'trx;LogFileName=linux-host.trx' --results-directory artifacts/validation --blame-hang-timeout 2m
+      - name: Windows host tests
+        if: runner.os == 'Windows'
+        run: dotnet test tests/Broiler.Mail.Windows.Tests/Broiler.Mail.Windows.Tests.csproj -c Release --logger 'trx;LogFileName=windows-host.trx' --results-directory artifacts/validation --blame-hang-timeout 2m
+      - name: Verify and summarize test results
+        if: always()
+        run: ./scripts/Confirm-TestResults.ps1 -ResultsDirectory artifacts/validation -IncludeLinuxHost -IncludeWindowsHost:($env:RUNNER_OS -eq 'Windows')
+      - name: Upload validation evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: validation-${{ matrix.runner }}
+          path: |
+            artifacts/validation/*.txt
+            artifacts/validation/*.json
+            artifacts/validation/*.trx
+          if-no-files-found: error
+
+  windows-package:
+    name: Unsigned package (${{ matrix.runtime }})
+    needs: tests
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-2025
+            runtime: win-x64
+          - runner: windows-11-arm
+            runtime: win-arm64
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Publish and smoke-test matching architecture
+        run: ./scripts/Publish-Windows.ps1 -Runtime '${{ matrix.runtime }}'
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: unsigned-${{ matrix.runtime }}
+          path: |
+            artifacts/*.zip
+            artifacts/*.sha256
+          if-no-files-found: error
+  # Phase 0 validates unsigned artifacts only. Release publishing/signing remains
+  # gated on the renderer security acceptance in docs/html-renderer-security.md.

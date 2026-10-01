@@ -6,6 +6,7 @@ using Broiler.Mail.Application;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
+using Broiler.UI.Forms.Standard;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
@@ -16,6 +17,7 @@ using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Edit.Standard;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
 using MailKit.Net.Imap;
@@ -113,7 +115,7 @@ public sealed class Version1AcceptanceTests
         var text = Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
         text.Text = string.Join("\n", Enumerable.Repeat("A readable message with words & symbols.", 40));
         session.RenderFrame();
-        var label = Descendants(text).OfType<StandardLabel>().Single();
+        var label = Descendants(text).OfType<StandardRichEdit>().Single();
         Assert.True(label.Bounds.Width > 250, $"Reader collapsed to {label.Bounds.Width} DIP.");
         Assert.True(label.Bounds.Height < 3000, "Text was wrapped into a narrow column.");
 
@@ -133,18 +135,18 @@ public sealed class Version1AcceptanceTests
             for (int attempt = 0; attempt < 20 && session.FocusedElement != smtpHost; attempt++)
                 Assert.True(keyboard.Handle(Key(9)));
             Assert.Same(smtpHost, session.FocusedElement);
-            var formScroll = Descendants(shell.Navigation.SelectedTab.Content!).OfType<StandardScrollView>().Single();
+            var formScroll = Descendants(shell.Navigation.SelectedTab.Content!).OfType<FormSurface>().Single().Content.Scroll;
             Assert.InRange(smtpHost!.Bounds.Top, formScroll.ContentBounds.Top - 1, formScroll.ContentBounds.Bottom);
             Assert.InRange(smtpHost.Bounds.Bottom, formScroll.ContentBounds.Top, formScroll.ContentBounds.Bottom + 1);
             session.SetFocus(shell.Navigation);
         }
-        // Backward traversal lands on the final enabled button and reveals it below the fold.
+        // Backward traversal reaches the persistent action bar, outside the scrolling fields.
         Assert.True(keyboard.Handle(Key(9, shift: true)));
         var button = Assert.IsType<StandardButton>(session.FocusedElement);
         Assert.Equal("Test connection", button.Text);
-        var scroll = Descendants(shell.Navigation.SelectedTab.Content!).OfType<StandardScrollView>().Single();
-        Assert.True(scroll.VerticalOffset > 0);
-        Assert.InRange(button.Bounds.Bottom, scroll.ContentBounds.Top, scroll.ContentBounds.Bottom + 1);
+        var scroll = Descendants(shell.Navigation.SelectedTab.Content!).OfType<FormSurface>().Single().Content.Scroll;
+        Assert.InRange(button.Bounds.Top, scroll.Bounds.Bottom, height);
+        Assert.InRange(button.Bounds.Bottom, button.Bounds.Top, height);
         Assert.False(scroll.HasHorizontalScrollbar);
         Assert.True(keyboard.Handle(Key(0x33, control: true)));
         Assert.Equal("settings", shell.Navigation.SelectedTab!.Id);

@@ -65,6 +65,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private bool _isShowingPlainText;
     private bool _allowRemoteImages;
     private bool _initialShownRaised;
+    private CancellationTokenSource? _imageLoadCts;
 
     internal nint InputHandle => RenderNativeHandle;
 
@@ -93,6 +94,10 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             ClientWidth = 900,
             ClientHeight = 700,
             OwnsMessageLoop = false,
+            RenderOptions = new BRenderOptions(
+                Antialias: true,
+                VSync: true,
+                SubpixelText: true),
         })
     {
         _document = document;
@@ -150,9 +155,14 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         root.AddChild(content);
         _session.AddRoot(root);
 
-        CloseRequested += (_, _) => Close();
+        CloseRequested += (_, _) =>
+        {
+            _imageLoadCts?.Cancel();
+            Close();
+        };
         Closed += (_, _) =>
         {
+            _imageLoadCts?.Cancel();
             Loaded.TrySetResult(false);
             PostQuitMessage(0);
         };
@@ -200,61 +210,162 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     public async Task LoadRemoteImagesAsync()
     {
         if (_allowRemoteImages || string.IsNullOrEmpty(_rawHtml)) return;
-        _allowRemoteImages = true;
-        _loadImagesButton.IsEnabled = false;
-        _loadImagesButton.Text = "Remote images loaded";
-        _status.Text = "Remote images loaded. Scripts and active content remain blocked.";
 
-        // Download bounded remote images safely into inlined data URIs
+        _imageLoadCts?.Cancel();
+        _imageLoadCts?.Dispose();
+        var cts = new CancellationTokenSource();
+        _imageLoadCts = cts;
+        var token = cts.Token;
+
+        _loadImagesButton.IsEnabled = false;
+        _loadImagesButton.Text = "Loading images…";
+        _status.Text = "Loading remote images… Scripts and active content remain blocked.";
+        Invalidate();
+
         var downloadedImages = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase);
         if (_embeddedImages is not null)
         {
             foreach (var kvp in _embeddedImages) downloadedImages[kvp.Key] = kvp.Value;
         }
 
-        foreach (string url in _document.RemoteImageUrls)
+        const int maxImageBytes = 5_000_000; // 5 MB per image limit
+        const int maxTotalImageBytes = 20_000_000; // 20 MB total message budget
+        long totalDownloadedBytes = 0;
+        int totalRemote = _document.RemoteImageUrls.Count;
+        int succeeded = 0;
+        int failed = 0;
+
+        try
         {
-            if (HtmlPreviewPolicy.TryExternalLink(url, out var uri))
+            foreach (string url in _document.RemoteImageUrls)
             {
+                token.ThrowIfCancellationRequested();
+
+                if (downloadedImages.ContainsKey(url))
+                {
+                    succeeded++;
+                    continue;
+                }
+
+                if (!HtmlPreviewPolicy.TryExternalLink(url, out var uri) || uri is null)
+                {
+                    failed++;
+                    continue;
+                }
+
                 try
                 {
-                    using var response = await ImageHttpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false);
-                    if (response.IsSuccessStatusCode)
+                    using var response = await ImageHttpClient.GetAsync(uri, HttpCompletionOption.ResponseHeadersRead, token).ConfigureAwait(false);
+                    if (!response.IsSuccessStatusCode)
                     {
-                        var mediaType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
-                        if (mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) &&
-                            !mediaType.Contains("svg", StringComparison.OrdinalIgnoreCase))
-                        {
-                            var bytes = await response.Content.ReadAsByteArrayAsync().ConfigureAwait(false);
-                            if (bytes.Length <= 5_000_000)
-                            {
-                                downloadedImages[url] = new MailEmbeddedImage(url, mediaType, bytes);
-                            }
-                        }
+                        failed++;
+                        continue;
                     }
+
+                    var mediaType = response.Content.Headers.ContentType?.MediaType ?? "image/jpeg";
+                    if (!mediaType.StartsWith("image/", StringComparison.OrdinalIgnoreCase) ||
+                        mediaType.Contains("svg", StringComparison.OrdinalIgnoreCase))
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    if (response.Content.Headers.ContentLength is { } declaredLength && (declaredLength > maxImageBytes || totalDownloadedBytes + declaredLength > maxTotalImageBytes))
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    using var stream = await response.Content.ReadAsStreamAsync(token).ConfigureAwait(false);
+                    using var buffer = new MemoryStream();
+                    byte[] chunk = new byte[8192];
+                    int bytesRead;
+                    bool exceeded = false;
+                    while ((bytesRead = await stream.ReadAsync(chunk, 0, chunk.Length, token).ConfigureAwait(false)) > 0)
+                    {
+                        if (buffer.Length + bytesRead > maxImageBytes || totalDownloadedBytes + buffer.Length + bytesRead > maxTotalImageBytes)
+                        {
+                            exceeded = true;
+                            break;
+                        }
+                        buffer.Write(chunk, 0, bytesRead);
+                    }
+
+                    if (exceeded || buffer.Length == 0)
+                    {
+                        failed++;
+                        continue;
+                    }
+
+                    byte[] imageBytes = buffer.ToArray();
+                    totalDownloadedBytes += imageBytes.Length;
+                    downloadedImages[url] = new MailEmbeddedImage(url, mediaType, imageBytes);
+                    succeeded++;
                 }
-                catch { }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch
+                {
+                    failed++;
+                }
             }
-        }
 
-        // Recreate document with remote images allowed and inline data URIs substituted
-        string updatedHtml = _rawHtml;
-        foreach (var (url, img) in downloadedImages)
-        {
-            if (!url.StartsWith("cid:", StringComparison.OrdinalIgnoreCase))
+            token.ThrowIfCancellationRequested();
+
+            string updatedHtml = _rawHtml;
+            foreach (var (url, img) in downloadedImages)
             {
-                string dataUri = $"data:{img.ContentType};base64,{Convert.ToBase64String(img.Data)}";
-                updatedHtml = updatedHtml.Replace(url, dataUri, StringComparison.OrdinalIgnoreCase);
+                if (!url.StartsWith("cid:", StringComparison.OrdinalIgnoreCase))
+                {
+                    string dataUri = $"data:{img.ContentType};base64,{Convert.ToBase64String(img.Data)}";
+                    updatedHtml = updatedHtml.Replace(url, dataUri, StringComparison.OrdinalIgnoreCase);
+                }
             }
+
+            _document = HtmlPreviewPolicy.Create(updatedHtml, downloadedImages, allowRemoteImages: true);
+
+            PostToUiThread(() =>
+            {
+                if (IsDisposed || token.IsCancellationRequested) return;
+
+                if (succeeded > 0 && failed == 0)
+                {
+                    _allowRemoteImages = true;
+                    _loadImagesButton.IsEnabled = false;
+                    _loadImagesButton.Text = "Remote images loaded";
+                    _status.Text = "Remote images loaded. Scripts and active content remain blocked.";
+                }
+                else if (succeeded > 0)
+                {
+                    _allowRemoteImages = true;
+                    _loadImagesButton.IsEnabled = true;
+                    _loadImagesButton.Text = "Retry failed images";
+                    _status.Text = $"Loaded {succeeded} of {totalRemote} remote images. Some images failed to load.";
+                }
+                else
+                {
+                    _loadImagesButton.IsEnabled = true;
+                    _loadImagesButton.Text = "Retry remote images";
+                    _status.Text = "Failed to load remote images. Check your network connection and retry.";
+                }
+
+                _htmlView.UpdateHtml(_document.Html);
+                Invalidate();
+            });
         }
-
-        _document = HtmlPreviewPolicy.Create(updatedHtml, downloadedImages, allowRemoteImages: true);
-
-        PostToUiThread(() =>
+        catch (OperationCanceledException)
         {
-            _htmlView.UpdateHtml(_document.Html);
-            Invalidate();
-        });
+            PostToUiThread(() =>
+            {
+                if (IsDisposed) return;
+                _loadImagesButton.IsEnabled = true;
+                _loadImagesButton.Text = "Load remote images";
+                _status.Text = "Remote image loading canceled.";
+                Invalidate();
+            });
+        }
     }
 
     public void OpenLink(string target, bool userInitiated)
@@ -331,6 +442,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     {
         if (disposing)
         {
+            _imageLoadCts?.Cancel();
+            _imageLoadCts?.Dispose();
             _session.Dispose();
             _htmlView.Dispose();
         }

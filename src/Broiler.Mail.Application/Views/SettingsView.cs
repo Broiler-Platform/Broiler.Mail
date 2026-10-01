@@ -1,3 +1,4 @@
+using Broiler.UI.Forms.Standard;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Settings;
 using Broiler.UI;
@@ -12,18 +13,18 @@ public sealed class SettingsView(SettingsViewModel model)
 {
     public UiElement CreateContent()
     {
-        var panel = new StandardPanel { Spacing = 8 };
-        ConfigurationForm.AddText(panel, "Settings");
-        ConfigurationForm.AddText(panel, "Theme and initial window size apply on the next start.");
+        var panel = new StandardPanel { Spacing = 20 };
+        var appearance = ConfigurationForm.AddSection(panel, "Appearance", "Theme changes apply on the next start.");
         var theme = new StandardComboBox();
-        theme.SetItems([new UiComboBoxItem("System", "Use Windows theme"), new UiComboBoxItem("Light", "Light"), new UiComboBoxItem("Dark", "Dark")]);
+        theme.SetItems([new UiComboBoxItem("System", "Use system theme"), new UiComboBoxItem("Light", "Light"), new UiComboBoxItem("Dark", "Dark")]);
         theme.SelectedIndex = (int)model.Theme;
-        ConfigurationForm.AddLabeledControl(panel, "Theme", theme);
-        var width = ConfigurationForm.AddField(panel, "Initial window width (640–7680)", model.WindowWidth);
-        var height = ConfigurationForm.AddField(panel, "Initial window height (480–4320)", model.WindowHeight);
-        var save = new StandardButton { Text = "Save settings" };
-        panel.AddChild(save);
-        var status = ConfigurationForm.AddText(panel, model.Status);
+        ConfigurationForm.AddLabeledControl(appearance, "Theme", theme);
+        var window = ConfigurationForm.AddSection(panel, "Initial window size", "These dimensions apply when the application next starts.");
+        var width = ConfigurationForm.AddField(window, "Initial window width (640–7680)", model.WindowWidth);
+        var height = ConfigurationForm.AddField(window, "Initial window height (480–4320)", model.WindowHeight);
+        var save = new StandardButton { Text = "Save settings", IsDefault = true };
+        var status = new InlineFeedback();
+        var surface = new FormSurface(panel, FormSurface.ActionBar(save), status);
 
         void RefreshState()
         {
@@ -31,9 +32,10 @@ public sealed class SettingsView(SettingsViewModel model)
                 return;
             theme.IsEnabled = model.CanSave;
             width.IsEnabled = height.IsEnabled = save.IsEnabled = model.CanSave;
-            status.Text = model.Status;
         }
         model.Changed += (_, _) => RefreshState();
+        ConfigurationForm.BindFeedback(model, surface, status, new Dictionary<string, Broiler.UI.Edit.Standard.StandardEdit>
+        { ["WindowWidth"] = width, ["WindowHeight"] = height });
         save.Clicked += async (_, _) =>
         {
             model.Theme = (AppTheme)theme.SelectedIndex;
@@ -42,6 +44,6 @@ public sealed class SettingsView(SettingsViewModel model)
             await model.SaveAsync();
         };
         RefreshState();
-        return ConfigurationForm.Wrap(panel);
+        return surface;
     }
 }

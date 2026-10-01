@@ -3,19 +3,23 @@
 Version 2 turns Broiler.Mail into a two-way mail client with sending and HTML preview.
 It adds optional SMTP account configuration, a plain-text composer with reply and forward
 threading, local draft recovery, secure SMTP submission, configurable Sent-copy handling,
-and isolated HTML preview with a plain-text toggle and bounded inline images.
+and HTML preview with a plain-text toggle and bounded inline images.
+
+The current Broiler.HTML preview runs in the mail process. It is not sandboxed;
+the [renderer security gate](html-renderer-security.md) remains pending. Phase 0
+packages are unsigned validation artifacts, not security-approved releases.
 
 ## Run
 
 Build the current source or extract the published release package:
-- Package: `artifacts/Broiler.Mail-1.0.0-win-x64.zip`
+- Package: `artifacts/Broiler.Mail-2.0.0-win-x64.zip` (or the matching ARM64 package)
 - Application executable: `Broiler.Mail.Windows.exe`
 - Demo preview: `Broiler.Mail.Windows.exe --demo`
 
 In demo mode:
 1. Open the **Inbox** tab and select **Receive mail**.
 2. Select message 54 ("HTML-only mail — text preview").
-3. Select **Open HTML preview** to view the sandboxed HTML snapshot with the inline demo logo.
+3. Select **Open HTML preview** to view the synthetic HTML fixture with the inline demo logo.
 4. Toggle between **Show plain text** and **Show HTML** in the preview window.
 5. Select **Compose** (Ctrl+4) to write a test message or reply to message 54.
 
@@ -38,15 +42,16 @@ In demo mode:
 
 ## HTML Preview features
 
-- **Isolated preview:** Click **Open HTML preview** in the reading pane to render in a private
-  sandboxed WebView2 window.
+- **Preview:** Click **Open HTML preview** in the reading pane to render with Broiler.HTML
+  in a separate window. The window shares the mail process and its privileges.
 - **Embedded `cid:` images:** Inline images from MIME `multipart/related` messages are resolved
   exclusively within the current message and displayed inline with bounded sizing (max 1 MiB per image).
 - **Remote images:** Remote images are blocked by default. Click **Load remote images** to load them
   through a controlled .NET HTTP channel enforcing non-SVG verification and 5 MB bounds.
 - **Plain-text toggle:** Click **Show plain text** / **Show HTML** to switch views.
 - **External links:** Clicking web links opens your default browser; internal navigation is blocked.
-- **Resilience:** Renderer crashes fall back to the plain-text body without crashing the client.
+- **Fallback:** Handled rendering failures can show plain text. Containment of process crashes
+  and hangs remains part of the pending renderer security gate.
 
 ## Keyboard shortcuts
 

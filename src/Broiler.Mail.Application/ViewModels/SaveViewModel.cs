@@ -1,5 +1,7 @@
+using Broiler.UI.Forms.Standard;
 using Broiler.UI;
 using Broiler.Mail.Core.Services;
+using Broiler.Mail.Core.Validation;
 
 namespace Broiler.Mail.Application.ViewModels;
 
@@ -10,6 +12,9 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
     public bool IsBusy { get; private set; }
     public bool CanSave => !IsBusy && loadError is null;
     public string Status { get; private set; } = loadError ?? string.Empty;
+    public FeedbackKind StatusKind { get; private set; } = loadError is null ? FeedbackKind.Information : FeedbackKind.Error;
+    public string? ValidationField { get; private set; }
+    public string? ValidationMessage { get; private set; }
 
     protected Task SaveAsync(Func<Task> save, Action commit, string successMessage) =>
         RunAsync(save, commit, "Saving…", successMessage, "Not saved", "Save canceled.");
@@ -21,10 +26,14 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
             return;
         IsBusy = true;
         Status = busyMessage;
+        StatusKind = FeedbackKind.Progress;
+        ValidationField = ValidationMessage = null;
         Changed?.Invoke(this, EventArgs.Empty);
 
         string status;
         bool succeeded = false;
+        string? validationField = null, validationMessage = null;
+        var kind = FeedbackKind.Success;
         try
         {
             await operation().ConfigureAwait(false);
@@ -34,10 +43,14 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or MailConnectionException)
         {
             status = $"{failurePrefix}: {error.Message}";
+            kind = FeedbackKind.Error;
+            if (error is ConfigurationValidationException validation)
+            { validationField = validation.Field; validationMessage = validation.Message; }
         }
         catch (OperationCanceledException)
         {
             status = canceledMessage;
+            kind = FeedbackKind.Information;
         }
 
         try
@@ -49,6 +62,9 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
                 completed?.Invoke();
                 IsBusy = false;
                 Status = status;
+                StatusKind = kind;
+                ValidationField = validationField;
+                ValidationMessage = validationMessage;
                 Changed?.Invoke(this, EventArgs.Empty);
             });
         }

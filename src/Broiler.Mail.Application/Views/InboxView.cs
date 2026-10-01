@@ -10,7 +10,11 @@ using Broiler.UI.ListView;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
+using Broiler.UI.Splitter;
+using Broiler.UI.Splitter.Standard;
 using Broiler.UI.Standard;
+using Broiler.UI.Toolbar;
+using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
@@ -19,7 +23,13 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
     public UiElement CreateContent()
     {
         var panel = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
-        var toolbar = new StandardPanel { StackOrientation = UiStackOrientation.Horizontal, Spacing = 8 };
+        var toolbar = new StandardToolbar
+        {
+            Overflow = UiToolbarOverflow.Wrap,
+            Padding = 6,
+            Spacing = 8,
+            PreferredSize = new BSize(0, 36),
+        };
         var receive = new StandardButton { Text = "Receive mail" };
         var older = new StandardButton { Text = "Load older" };
         var read = new StandardButton { Text = "Read message" };
@@ -27,11 +37,30 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         foreach (var button in new[] { receive, older, read, cancel }) toolbar.AddChild(button);
         panel.AddChild(toolbar);
         panel.SetDock(toolbar, UiDock.Top);
-        var list = new StandardListView { PreferredSize = new BSize(320, 420) };
-        panel.AddChild(list);
-        panel.SetDock(list, UiDock.Left);
+        var list = new StandardListView
+        {
+            PreferredSize = new BSize(320, 420),
+            ItemPresenter = MailMessageItemPresenter.Instance,
+            Density = UiDensity.Comfortable,
+        };
         var reading = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
-        panel.AddChild(reading);
+        bool updating = false;
+        var split = new StandardSplitContainer
+        {
+            Orientation = UiSplitterOrientation.Vertical,
+            FirstPane = list,
+            SecondPane = reading,
+            FirstPaneMinimumSize = 180,
+            SecondPaneMinimumSize = 220,
+            SplitterFraction = model.SplitterFraction,
+        };
+        split.SplitterPositionChanged += (_, e) =>
+        {
+            if (!updating)
+                model.SplitterFraction = e.NewFraction;
+        };
+        panel.AddChild(split);
+        panel.SetDock(split, UiDock.Fill);
         var header = new StandardLabel { Wrapping = UiTextWrapping.Wrap, Foreground = StandardControlPaint.Text };
         reading.AddChild(header);
         reading.SetDock(header, UiDock.Top);
@@ -41,7 +70,6 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var text = new ScrollableMessageText();
         reading.AddChild(text);
         IReadOnlyList<MailMessageSummary>? shown = null;
-        bool updating = false;
         MailMessageBody? shownBody = null;
 
         void Update()
@@ -52,11 +80,18 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             older.IsEnabled = model.CanLoadOlder;
             read.IsEnabled = !model.IsBusy && model.SelectedMessage is not null;
             cancel.IsEnabled = model.IsBusy;
+            if (Math.Abs(split.SplitterFraction - model.SplitterFraction) > 0.001)
+                split.SplitterFraction = model.SplitterFraction;
             if (!ReferenceEquals(shown, model.Messages))
             {
                 shown = model.Messages;
-                list.SetItems(shown.Select(message => new UiListItem(Id(message),
-                    $"{(message.IsRead ? "Read" : "Unread")} · {message.Subject} — {message.Sender}")));
+                list.SetItems(shown.Select(message => new UiListItem(
+                    Id(message),
+                    $"{(message.IsRead ? "Read" : "Unread")} · {message.Subject} — {message.Sender}",
+                    message.Subject,
+                    message.ReceivedAt?.ToLocalTime().ToString("g") ?? string.Empty,
+                    message.IsRead,
+                    message)));
             }
             list.SelectedItemId = model.SelectedMessage is { } selected ? Id(selected) : null;
             header.Text = (model.SelectedMessage is { } item
@@ -65,7 +100,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             var body = model.Body;
             text.Text = body is null ? (model.SelectedMessage is null
                 ? (model.Messages.Count == 0 ? "Receive mail to load your inbox." : "Choose a message from the inbox list.")
-                : "Use Read message to retry if loading is canceled or fails.")
+                : (model.IsBusy ? "Loading message body…" : "Use Read message to retry if loading is canceled or fails."))
                 : (body.IsHtmlFallback ? "Text extracted from HTML (formatting omitted).\n\n" : "") + body.PlainText +
                   (body.IsTruncated ? "\n\n[Preview limited to 32,000 characters.]" : "");
             if (!ReferenceEquals(shownBody, body))
@@ -88,6 +123,11 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         {
             if (!updating && !model.CanSelect) { Update(); return; }
             if (!updating && model.Messages.FirstOrDefault(item => Id(item) == list.SelectedItemId) is { } item)
+                await model.SelectAsync(item.Key);
+        };
+        list.ItemActivated += async (_, e) =>
+        {
+            if (!updating && model.Messages.FirstOrDefault(item => Id(item) == e.Item.Id) is { } item)
                 await model.SelectAsync(item.Key);
         };
         model.Changed += (_, _) => Update();

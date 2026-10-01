@@ -16,6 +16,11 @@ acceptance criteria, and the first implementation steps.
 The [component reuse review](docs/component-reuse-review.md) identifies code that
 can move upstream and the recommended order for removing application workarounds.
 
+The [experience roadmap](docs/experience-roadmap.md) reviews visual polish,
+reading/composing flows, accessibility, and smoothness, with
+[native screenshot evidence](docs/ux-review-2026-09-30/README.md) and a
+[shared Broiler component roadmap](docs/broiler-experience-components-roadmap.md).
+
 The first three milestones are:
 
 1. **Read mail:** settings, one account profile, and receiving messages.
@@ -30,7 +35,16 @@ folder, or extract the matching ZIP. It includes its .NET runtime.
 See [Start here / provider checklist](docs/version-2-acceptance.md).
 
 Install the .NET 10 SDK. The native application currently targets Windows.
-Dependencies restore from NuGet.org; sibling Broiler repositories are not required.
+This C-04 development checkout consumes a local Broiler.UI forms preview. With the
+matching `Broiler.UI` checkout beside this repository, build its versioned packages
+once before restoring Mail (PowerShell 7):
+
+```powershell
+./scripts/Build-C04Preview.ps1
+```
+
+Other dependencies restore from NuGet.org. See the [C-04 implementation notes](docs/c04-forms/README.md)
+for package publication and accessibility follow-ups.
 
 ```powershell
 dotnet restore Broiler.Mail.slnx
@@ -225,6 +239,7 @@ blocks; they never enumerate or access existing user credentials. The headless
 | `Broiler.Mail.Application` | Broiler.UI views, configuration workflows, application composition, and preview boundary. |
 | `Broiler.Mail.Infrastructure` | Versioned JSON persistence, IMAP reading and Sent-copy append, SMTP sending, MIME handling, and text extraction. |
 | `Broiler.Mail.Windows` | Entry point, dependency wiring, Direct2D host, and Windows Credential Manager adapter. |
+| `Broiler.Mail.Linux` | X11/EGL project foundation and prerequisite diagnostics; interactive hosting is pending. See [Linux build notes](docs/linux-host.md). |
 | `Broiler.Mail.Tests` | Persistence, configuration/credential/inbox workflows, MIME fixtures, and controlled IMAP/TLS tests. |
 | `Broiler.Mail.Windows.Tests` | Native credential storage and window-close draft-save tests. |
 
@@ -257,13 +272,20 @@ in Windows Credential Manager afterward.
 
 Version 2 adds SMTP outgoing mail configuration, the plain-text composer with
 reply and forward threading, durable draft recovery, secure SMTP submission with
-configurable Sent-copy handling, and isolated HTML preview with a plain-text toggle
+configurable Sent-copy handling, and HTML preview with a plain-text toggle
 and bounded inline images. OAuth enum values describe future configuration only.
-Automated tests and native demo inspection are complete. Live-provider testing
+The current HTML preview runs inside the mail process; OS process isolation remains
+an open [security gate](docs/html-renderer-security.md). Passing preview fixtures
+does not establish containment of a compromised renderer. Live-provider testing
 remains with the user using the [SMTP checklist](docs/version-2-smtp-checklist.md).
 Full screen-reader/UI Automation integration remains a later milestone.
 
 See [architecture and implementation notes](docs/architecture.md) for dependency
 boundaries, security policies, and roadmap progress.
+
+The [cross-platform roadmap](docs/cross-platform-roadmap.md) starts with the
+[Phase 0 foundation](docs/phase-0-foundation.md): pinned package/API verification,
+shared Linux/Windows CI, Windows host tests, and unsigned validation packages.
+Hosted Linux and ARM64 results remain pending until that workflow runs.
 
 Licensed under [Apache License 2.0](LICENSE).

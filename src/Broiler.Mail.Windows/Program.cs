@@ -36,7 +36,7 @@ internal static class Program
                 using var shell = smokeApplication.CreateShell();
                 ShellSmokeCheck.Run(shell);
                 Console.WriteLine("Broiler.Mail: composition and all four UI tabs rendered successfully.");
-                Console.WriteLine("Account settings, protected passwords, IMAP reading, recoverable drafts, SMTP sending, and isolated HTML preview are available.");
+                Console.WriteLine("This checks composition and UI rendering only; credentials, mail servers, and HTML process isolation are not validated.");
                 return 0;
             }
 

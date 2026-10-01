@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
+    <PackageReference Include="Broiler.Graphics.Linux.OpenGL" />
+    <PackageReference Include="Broiler.Graphics.Android" />
+    <PackageReference Include="Broiler.Native.Linux" />
+    <PackageReference Include="Broiler.Native.Android" />
+    <PackageReference Include="Broiler.Input.Touch.Android" />
+    <PackageReference Include="Broiler.Input.Text.Android" />
+    <PackageReference Include="Broiler.Input.Keyboard.Android" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,12 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Broiler.Mail.Linux.Tests" />
+    <ProjectReference Include="../Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
+    <ProjectReference Include="../Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
+    <PackageReference Include="Broiler.Graphics.Linux.OpenGL" />
+  </ItemGroup>
+</Project>

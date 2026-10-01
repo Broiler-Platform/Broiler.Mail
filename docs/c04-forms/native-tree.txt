@@ -1,0 +1,11 @@
+Window: "Broiler.Mail — Demo (no network or saved data)", App: Broiler.Mail.Windows.exe.
+	0 Fenster Broiler.Mail — Demo (no network or saved data) Secondary Actions: Raise
+		1 Bereich
+		2 Titelleiste (settable, string) Value: Broiler.Mail — Demo (no network or saved data)
+			3 Menüleiste Systemmenü ID: MenuBar
+				4 Menüelement Systemmenü
+			5 Schaltfläche Minimieren
+			6 Schaltfläche Maximieren
+			7 Schaltfläche Schließen
+
+The focused UI element is 1 Bereich.

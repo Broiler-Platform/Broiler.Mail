@@ -78,7 +78,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
         {
             var account = RequireSavedProfile(protocol);
             return _credentials.WriteAsync(CredentialKey.For(account, protocol), password, cancellationToken);
-        }, () => { }, "Saving password…", "Password saved in Windows Credential Manager.", "Password not saved", "Password save canceled.");
+        }, () => { }, "Saving password…", "Password saved.", "Password not saved", "Password save canceled.");
 
     public Task ForgetPasswordAsync(CancellationToken cancellationToken = default) =>
         ForgetPasswordAsync(MailProtocol.Imap, cancellationToken);
@@ -116,12 +116,12 @@ public sealed class AccountProfileViewModel : SaveViewModel
     private AccountProfile BuildProfile()
     {
         if (!int.TryParse(Port, out int port))
-            throw new ArgumentException("IMAP port must be a number between 1 and 65535.");
+            throw new ConfigurationValidationException("IncomingServer.Port", "IMAP port must be a number between 1 and 65535.");
         MailServerSettings? outgoingServer = null;
         if (ConfigureSmtp)
         {
             if (!int.TryParse(SmtpPort, out int smtpPort))
-                throw new ArgumentException("SMTP port must be a number between 1 and 65535.");
+                throw new ConfigurationValidationException("OutgoingServer.Port", "SMTP port must be a number between 1 and 65535.");
             outgoingServer = new MailServerSettings
             {
                 Host = SmtpHost.Trim(), Port = smtpPort, UserName = SmtpUserName.Trim(),

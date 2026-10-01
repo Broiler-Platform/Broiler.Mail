@@ -5,7 +5,8 @@ IMAP connection testing, manual receiving, and plain-text reading. Version 1
 implementation is complete; live-provider acceptance was deferred by the user.
 Version 2 includes optional SMTP account configuration, a plain-text composer,
 durable recovery of the active draft, secure SMTP submission, configurable
-Sent-copy handling, and isolated HTML preview.
+Sent-copy handling, and HTML preview. The current renderer runs in the mail process;
+the [process-isolation specification](html-renderer-security.md) remains to implement.
 
 ## Project boundaries
 
@@ -51,8 +52,9 @@ Broiler.Graphics dependency; upgrades should be deliberate and validated togethe
 | Composition | `MailCompositionSource`, `MailComposition`, `ComposerViewModel`, `ComposerView` | New/reply/reply-all/forward, independent recipient fields, pinned sender, plain-text body, and reply-thread metadata. |
 | HTML | `HtmlMessagePreview`, `WindowsHtmlPreviewHost`, `HtmlPreviewWindow` | Native Broiler.HTML (`HtmlContainer` / `BBitmap`) host in `Direct2DWindow` with passive HTML reduction, bounded cid images, plain-text toggle, remote image blocking, and external link handling. |
 
-Sent-folder copying reports its outcome independently of SMTP acceptance. Isolated
-HTML preview enforces renderer isolation, passive markup reduction, and bounded resources.
+Sent-folder copying reports its outcome independently of SMTP acceptance. HTML preview
+applies passive markup reduction and resource policy, but these do not establish OS
+renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
 
 ## Data and threading decisions
 
@@ -349,5 +351,6 @@ The [initial decision](decisions/0001-version-1-foundation.md) records the found
 The [connection decision](decisions/0002-credentials-and-imap-test.md) records credentials/testing.
 The [receiving decision](decisions/0003-read-only-receiving.md) records the current reader.
 The [sending and sent-copy decision](decisions/0004-smtp-and-sent-copies.md) records SMTP submission and Sent copies.
-The [isolated HTML preview decision](decisions/0005-isolated-html-preview.md) records renderer isolation and content policy.
-Version 2 implementation is complete; proceed with version 3 (multiple accounts).
+The [HTML preview decision](decisions/0005-isolated-html-preview.md) records content policy;
+its former isolation claim is superseded by the [renderer security gate](html-renderer-security.md).
+Version 2 renderer containment remains open before an HTML-enabled release can be approved.
