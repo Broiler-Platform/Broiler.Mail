@@ -3,7 +3,7 @@ using Broiler.Graphics.Imaging;
 using Broiler.Graphics.Rendering;
 using Broiler.Graphics.RenderList;
 using Broiler.Graphics.Resources;
-using Broiler.Mail.Linux.Hosting;
+using Broiler.Hosting.Linux;
 
 namespace Broiler.Mail.Linux.Tests;
 

@@ -7,6 +7,7 @@
     <InternalsVisibleTo Include="Broiler.Mail.Linux.Tests" />
     <ProjectReference Include="../Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
     <ProjectReference Include="../Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
+    <ProjectReference Include="../../../Broiler.Hosting/src/Broiler.Hosting.Linux/Broiler.Hosting.Linux.csproj" />
     <PackageReference Include="Broiler.Graphics.Linux.OpenGL" />
   </ItemGroup>
 </Project>

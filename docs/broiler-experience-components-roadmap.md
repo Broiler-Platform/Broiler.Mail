@@ -330,15 +330,19 @@ Do not label the tool session's unsuccessful shortcut attempts a confirmed Input
 - **Dedicated Broiler.Hosting Repository Extraction (`D:\Broiler.Hosting`):**
   - Established standalone repository `D:\Broiler.Hosting` with `Broiler.Hosting.slnx`, `Directory.Build.props`, `Directory.Packages.props`, `NuGet.config`, and `README.md`.
   - Implemented `Broiler.Hosting.Windows` library encapsulating `WindowsClipboard` (1 MB bounded UTF-16, direct & lazy owner resolution, safe memory ownership), `WindowsWindowSizing` (`WM_GETMINMAXINFO` DPI scaling & `WM_DPICHANGED` rect positioning), `WindowsTheme` (dark mode registry, `SPI_GETHIGHCONTRAST`, `SPI_GETCLIENTAREAANIMATION`), `WindowsInputBridge` (decoupled `Func<UiInputEvent, bool>?` input filter, top-level focus handoff, surrogate pairs, IME lifecycle & duplicate suppression, chord isolation, precision wheel), and `WindowsAutomationBridge` (UIA COM provider with element peers, pattern mapping, password protection, and hit testing).
-  - Built comprehensive headless test suite in `tests/Broiler.Hosting.Windows.Tests` (30/30 tests passing).
-  - Enabled NuGet package generation (`dotnet pack`) yielding `Broiler.Hosting.Windows.0.1.0-preview.1.nupkg`.
+  - Implemented `Broiler.Hosting.Linux` library encapsulating `LinuxUiHost` (reusable `IUiHost` over `IBroilerRenderer` and `IBroilerSurface`), `LinuxX11Clipboard` (hardened X11 `CLIPBOARD` & `PRIMARY` selection provider, 1 MB bounds cap, `INCR` chunking, atom caching, timeout safety, UTF-8/Latin-1 conversion, non-Linux guard), `LinuxBackendDiagnostics` (X11/EGL/OpenGL native preflight probe), and `LinuxInputCoordinator` with `LinuxInputSnapshot` (evdev keyboard/mouse coordination, cross-device modifier tracking, pointer clamping, non-blocking queue draining).
+  - Built comprehensive headless test suite in `tests/Broiler.Hosting.Windows.Tests` (30/30 tests passing) and `tests/Broiler.Hosting.Linux.Tests` (6/6 tests passing).
+  - Enabled NuGet package generation (`dotnet pack`) yielding `Broiler.Hosting.Windows.0.1.0-preview.1.nupkg` and `Broiler.Hosting.Linux.0.1.0-preview.1.nupkg`.
   - Wired `Broiler.Mail.Windows` and `Broiler.Mail.Windows.Tests` to consume `Broiler.Hosting.Windows`, removing local duplicated hosting files from `Broiler.Mail`.
+  - Wired `Broiler.Mail.Linux` and `Broiler.Mail.Linux.Tests` to consume `Broiler.Hosting.Linux`, removing local duplicated hosting files from `Broiler.Mail`.
 - **Verification:**
   - Built `WindowsHostingIntegrationTests.cs` covering clipboard 1 MB bounds, lazy owner evaluation, `WM_GETMINMAXINFO` minimum dimensions, DPI scaling, and system settings.
-  - 30/30 tests pass in `Broiler.Hosting.Windows.Tests` (`Broiler.Hosting.slnx`).
+  - Built `LinuxHostingTests.cs` covering `LinuxUiHost` viewport scaling, invalidation propagation, `LinuxX11Clipboard` cross-OS safe degradation, `LinuxBackendDiagnostics`, and `LinuxInputCoordinator` snapshot/clamping behavior.
+  - 36/36 tests pass in `Broiler.Hosting.slnx` (30 Windows + 6 Linux).
   - 51/51 tests pass in `Broiler.Mail.Windows.Tests`.
+  - 3/3 tests pass in `Broiler.Mail.Linux.Tests`.
   - 256/256 tests pass across `Broiler.Mail.slnx`.
-  - `Broiler.Windows.Code.slnx`, `Broiler.Windows.Writer.slnx`, and `Broiler.Windows.Browser.slnx` build with 0 warnings and 0 errors.
+  - `Broiler.Windows.Code.slnx`, `Broiler.Windows.Writer.slnx`, `Broiler.Linux.Writer.slnx`, `Broiler.Windows.Browser.slnx`, and `Broiler.Linux.Browser.slnx` build with 0 warnings and 0 errors.
   - 416/416 tests pass in `Broiler.Browser.Tests.slnx`.
   - 809/809 tests pass across `Broiler.UI.slnx`.
 

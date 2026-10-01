@@ -1,4 +1,4 @@
-using Broiler.Mail.Linux.Hosting;
+using Broiler.Hosting.Linux;
 
 namespace Broiler.Mail.Linux;
 
