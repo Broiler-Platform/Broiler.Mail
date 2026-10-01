@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   2
+// Annotated:        2/2
+// Exempt:           0
+// Human-reviewed:   0/2
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         2/2
+// Resource impact:  7/10 max
+// Unverified:       2
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.UI.Forms.Standard;
 using Broiler.Graphics.Geometry;
 using Broiler.Mail.Application.ViewModels;
@@ -13,8 +30,14 @@ using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
+// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=3F7FB2
+// Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
+// Broiler-Human:        PENDING
 public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
 {
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=31C5F3
+    // Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
+    // Broiler-Human:        PENDING
     public UiElement CreateContent()
     {
         var panel = new StandardPanel { Spacing = 8 };

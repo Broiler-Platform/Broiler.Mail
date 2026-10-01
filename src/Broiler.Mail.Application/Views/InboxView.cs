@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   3
+// Annotated:        3/3
+// Exempt:           0
+// Human-reviewed:   0/3
+// IP risk:          Low
+// Security risk:    Medium
+// Criteria:         3/0
+// Resource impact:  7/10 max
+// Unverified:       3
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Graphics.Geometry;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.ViewModels;
@@ -18,8 +35,14 @@ using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
+// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=721087
+// Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
+// Broiler-Human:        PENDING
 public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPreview = null)
 {
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=A38929
+    // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
+    // Broiler-Human:        PENDING
     public UiElement CreateContent()
     {
         var panel = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
@@ -135,5 +158,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         return panel;
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=C55E43
+    // Broiler-Falsified-If: two loaded messages with different keys get the same Id, so choosing one row opens the other
+    // Broiler-Human:        PENDING
     private static string Id(MailMessageSummary message) => $"{message.Key.UidValidity}:{message.Key.Uid}";
 }

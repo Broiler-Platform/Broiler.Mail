@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   9
+// Annotated:        9/9
+// Exempt:           0
+// Human-reviewed:   0/9
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         9/9
+// Resource impact:  7/10 max
+// Unverified:       9
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using System.Text;
 using Broiler.Mail.Core.Messages;
 using MimeKit;
@@ -8,10 +25,19 @@ using Broiler.Mail.Infrastructure.Preview;
 namespace Broiler.Mail.Infrastructure.Mail;
 
 /// <summary>Decodes bounded text and untrusted HTML; no renderer or resource loader is involved.</summary>
+// Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=B447E4
+// Broiler-Falsified-If: a decoded body exceeds one of its caps: more than 32,000 text characters, more than 16 images, an image over 1 MiB or more than 2 MiB of images in total
+// Broiler-Human:        PENDING
 internal static class MessageTextDecoder
 {
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=0ECAA8
+    // Broiler-Falsified-If: a text body longer than 32,000 characters reaches the reading pane in full instead of being cut at this limit and marked truncated
+    // Broiler-Human:        PENDING
     internal const int MaximumTextCharacters = 32_000;
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=5A61BB
+    // Broiler-Falsified-If: a message whose multiparts nest more than 32 levels deep is parsed into entities below that depth instead of stopping at the parser's depth limit
+    // Broiler-Human:        PENDING
     public static async Task<MailMessageBody> DecodeAsync(MailMessageKey key, Stream stream, CancellationToken token)
     {
         using var message = await MimeMessage.LoadAsync(new ParserOptions { MaxMimeDepth = 32 }, stream, token).ConfigureAwait(false);
@@ -47,11 +73,17 @@ internal static class MessageTextDecoder
         };
     }
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=64E094
+    // Broiler-Falsified-If: a part declared as image/svg+xml, or as any type other than PNG, JPEG, GIF or WebP, is extracted as an embedded image
+    // Broiler-Human:        PENDING
     private static readonly HashSet<string> SupportedImageTypes = new(StringComparer.OrdinalIgnoreCase)
     {
         "image/png", "image/jpeg", "image/gif", "image/webp"
     };
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=7DD7B4
+    // Broiler-Falsified-If: the returned dictionary holds more than 16 images, an image larger than 1 MiB, or more than 2 MiB of image data in total
+    // Broiler-Human:        PENDING
     private static Dictionary<string, MailEmbeddedImage> ExtractEmbeddedImages(MimeMessage message)
     {
         var result = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase);
@@ -82,6 +114,9 @@ internal static class MessageTextDecoder
         return result;
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=5BC1DA
+    // Broiler-Falsified-If: a received Message-ID, References or In-Reply-To value containing CR or LF is copied into the reply composition source
+    // Broiler-Human:        PENDING
     private static MailCompositionSource CompositionHeaders(MimeMessage message)
     {
         static string Safe(string value, int maximum)
@@ -117,12 +152,18 @@ internal static class MessageTextDecoder
         };
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=666D03
+    // Broiler-Falsified-If: an envelope subject or sender whose 512-character cut falls inside a surrogate pair is returned ending in a lone high surrogate
+    // Broiler-Human:        PENDING
     internal static string Header(string? value, string missing)
     {
         string result = Clean(value ?? "", 512, multiline: false).Trim();
         return result.Length == 0 ? missing : result;
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=50B579
+    // Broiler-Falsified-If: in single-line mode a CR, LF, TAB or NUL from the input survives into the returned string
+    // Broiler-Human:        PENDING
     private static string Clean(string text, int limit, bool multiline)
     {
         var result = new StringBuilder(Math.Min(text.Length, limit));
@@ -141,6 +182,9 @@ internal static class MessageTextDecoder
         return result.ToString();
     }
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=4; Fingerprint=6153AD
+    // Broiler-Falsified-If: an HTML-only message that omits the optional </head> end tag yields no readable text because everything after <head> stays suppressed
+    // Broiler-Human:        PENDING
     private static string ExtractHtmlText(string html, CancellationToken token)
     {
         using var reader = new StringReader(html);

@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   9
+// Annotated:        9/9
+// Exempt:           0
+// Human-reviewed:   0/9
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         8/7
+// Resource impact:  8/10 max
+// Unverified:       9
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using System.Net;
 using System.Text;
 using Broiler.Mail.Core.Messages;
@@ -6,17 +23,35 @@ using MimeKit.Text;
 namespace Broiler.Mail.Infrastructure.Preview;
 
 /// <summary>Reduces mail to passive markup. The native sandbox and deny-all resource policy remain required.</summary>
+// Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=824183
+// Broiler-Falsified-If: an attribute taken from the message other than a validated http or https link or image source, such as style, background or an on* handler, appears in the preview markup
+// Broiler-Human:        PENDING
 public static class HtmlPreviewPolicy
 {
+    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=0; Fingerprint=F7A59A
+    // Broiler-Falsified-If: HTML between 128,001 and 1,280,000 characters is previewed although the component tells the user its preview limit is 128,000 characters
+    // Broiler-Human:        PENDING
     public const int MaximumHtmlCharacters = 128_000 * 10;
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=88BD38
+    // Broiler-Falsified-If: the set contains a tag that loads a resource, submits a form or embeds active content, such as form, input, link, base, meta, video or object
+    // Broiler-Human:        PENDING
     private static readonly HashSet<string> AllowedTags = new(StringComparer.Ordinal)
     { "p", "div", "span", "br", "hr", "h1", "h2", "h3", "h4", "h5", "h6", "strong", "b", "em", "i", "u", "s", "small", "sub", "sup", "blockquote", "pre", "code", "ul", "ol", "li", "dl", "dt", "dd", "table", "thead", "tbody", "tfoot", "tr", "td", "th", "caption", "a" };
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=5B8650
+    // Broiler-Falsified-If: an <embed> element, which HTML never closes, suppresses every later token so the rest of the message is missing from the preview
+    // Broiler-Human:        PENDING
     private static readonly HashSet<string> SuppressedTags = new(StringComparer.Ordinal)
     { "head", "script", "style", "iframe", "object", "embed", "svg", "math", "template", "noscript", "textarea", "xmp", "plaintext" };
 
+    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=8; Fingerprint=B34788
+    // Broiler-Falsified-If: the one-argument overload emits an http or https img element instead of the blocked-image placeholder
+    // Broiler-Human:        PENDING
     public static HtmlPreviewDocument Create(string html) =>
         Create(html, embeddedImages: null, allowRemoteImages: false);
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=39183E
+    // Broiler-Falsified-If: one cid: image referenced by many img tags is inlined as a full base64 copy each time, so a message within the 2 MiB and 20,000-token limits produces gigabytes of markup
+    // Broiler-Human:        PENDING
     public static HtmlPreviewDocument Create(
         string html,
         IReadOnlyDictionary<string, MailEmbeddedImage>? embeddedImages,
@@ -104,6 +139,9 @@ public static class HtmlPreviewPolicy
         return new(output.ToString(), links, remoteImages, hasEmbeddedImages);
     }
 
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=2; Fingerprint=6D2504
+    // Broiler-Falsified-If: a value whose scheme is not http or https, or that carries userinfo or a control character, returns true
+    // Broiler-Human:        PENDING
     public static bool TryExternalLink(string? value, out Uri? uri)
     {
         uri = null;
@@ -113,12 +151,17 @@ public static class HtmlPreviewPolicy
     }
 }
 
+// Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=30D8CA
+// Broiler-Human:        PENDING
 public sealed record HtmlPreviewDocument(
     string Html,
     IReadOnlySet<string> ExternalLinks,
     IReadOnlySet<string> RemoteImageUrls,
     bool HasEmbeddedImages = false)
 {
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=7F3689
+    // Broiler-Falsified-If: a document built with the two-argument constructor reports remote image URLs or embedded images
+    // Broiler-Human:        PENDING
     public HtmlPreviewDocument(string html, IReadOnlySet<string> externalLinks)
         : this(html, externalLinks, new HashSet<string>(StringComparer.Ordinal), false) { }
 }

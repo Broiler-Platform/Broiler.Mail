@@ -1,11 +1,34 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   5
+// Annotated:        5/5
+// Exempt:           0
+// Human-reviewed:   0/5
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         5/4
+// Resource impact:  2/10 max
+// Unverified:       5
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using System.Net.Mail;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Settings;
 
 namespace Broiler.Mail.Core.Validation;
 
+// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=DCF2A3
+// Broiler-Falsified-If: an undefined TransportSecurity or AuthenticationMethod value in a saved profile passes validation
+// Broiler-Human:        PENDING
 public static class ConfigurationValidator
 {
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=8FB9B1
+    // Broiler-Falsified-If: a profile whose EmailAddress carries a display name, such as Eve <eve@example.com>, passes Validate
+    // Broiler-Human:        PENDING
     public static void Validate(AccountProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
@@ -25,6 +48,9 @@ public static class ConfigurationValidator
             throw new ArgumentException("A Sent folder path is only used when appending a copy.");
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=959F38
+    // Broiler-Falsified-If: a settings file with a window width above 7680 or a height above 4320 passes Validate
+    // Broiler-Human:        PENDING
     public static void Validate(ApplicationSettings settings)
     {
         ArgumentNullException.ThrowIfNull(settings);
@@ -38,6 +64,9 @@ public static class ConfigurationValidator
             throw new ArgumentException("Inbox splitter position must be between 5% and 95%.");
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=6884FA
+    // Broiler-Falsified-If: a host written with a port or scheme, such as mail.example.com:993 or imap://mail.example.com, passes ValidateServer
+    // Broiler-Human:        PENDING
     private static void ValidateServer(MailServerSettings server, string field)
     {
         ArgumentNullException.ThrowIfNull(server);
@@ -51,6 +80,9 @@ public static class ConfigurationValidator
             throw new ArgumentException("Unsupported connection security or authentication method.");
     }
 
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=194725
+    // Broiler-Falsified-If: a value containing CR or LF within the length limit is accepted without an ArgumentException
+    // Broiler-Human:        PENDING
     private static void RequireText(string? value, string name, int maximumLength, string field)
     {
         if (string.IsNullOrWhiteSpace(value) || value.Length > maximumLength || value.Any(char.IsControl))
