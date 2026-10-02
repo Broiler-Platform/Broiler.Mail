@@ -29,11 +29,13 @@ using Broiler.Graphics.Resources;
 using Broiler.Graphics.Text;
 using Broiler.Graphics.Windowing;
 using Broiler.Graphics.Windows;
+using Broiler.Hosting.Windows.Accessibility;
 using Broiler.HTML.Image;
 using Broiler.Net.Http;
 using Broiler.Input.Keyboard;
 using Broiler.Input.Mouse;
 using Broiler.Mail.Application.Preview;
+using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Preview;
 using Broiler.Mail.Windows.Hosting;
@@ -94,6 +96,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private readonly StandardButton _loadImagesButton;
     private readonly ScrollableMessageText _plainTextView;
     private readonly ScrollableHtmlView _htmlView;
+    private readonly StandardPanel _root;
+    private WindowsAutomationBridge? _automationBridge;
 
     private bool _isShowingPlainText;
     private bool _allowRemoteImages;
@@ -161,6 +165,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
 
         // The shell's theme surface behind the header; without it, dark-theme text sat on the white window.
         var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock, Background = StandardControlPaint.Surface };
+        _root = root;
 
         var header = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock, Spacing = 6 };
         _status = new StandardLabel
@@ -196,8 +201,10 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         header.AddChild(toolbar);
         header.SetDock(toolbar, UiDock.Bottom);
 
-        root.AddChild(header);
-        root.SetDock(header, UiDock.Top);
+        // The same margins and line length as the reader header in the main window.
+        var headerColumn = new ReadingColumn(header, verticalMargin: 8);
+        root.AddChild(headerColumn);
+        root.SetDock(headerColumn, UiDock.Top);
 
         var content = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
 
@@ -208,11 +215,15 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         };
         content.AddChild(_plainTextView);
 
-        _htmlView = new ScrollableHtmlView(_document.Html, () => Renderer, target => OpenLink(target, userInitiated: true), () => DpiScale);
+        // Only links the policy would open get a keyboard target; the others do nothing when clicked either.
+        _htmlView = new ScrollableHtmlView(_document.Html, () => Renderer, target => OpenLink(target, userInitiated: true), () => DpiScale,
+            target => HtmlPreviewPolicy.TryExternalLink(target, out var uri) && _document.ExternalLinks.Contains(uri!.AbsoluteUri));
         content.AddChild(_htmlView);
 
         root.AddChild(content);
         _session.AddRoot(root);
+        // The document starts focused, so the keyboard scrolls it at once; Tab reaches the buttons and links.
+        _session.SetFocus(_htmlView.Content);
 
         CloseRequested += (_, _) =>
         {
@@ -253,6 +264,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             _htmlView.Visibility = UiVisibility.Visible;
             _isShowingPlainText = false;
             _toggleButton.Text = "Show plain text";
+            KeepFocusOutOf(_plainTextView, _htmlView.Content);
             _status.Text = _allowRemoteImages
                 ? "Showing HTML preview. Remote images loaded; scripts and active content remain blocked."
                 : "Simplified HTML. Images and active content are blocked. Selected HTTP(S) links open in your browser.";
@@ -263,6 +275,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             _plainTextView.Visibility = UiVisibility.Visible;
             _isShowingPlainText = true;
             _toggleButton.Text = "Show HTML";
+            KeepFocusOutOf(_htmlView, _plainTextView.Editor);
             _status.Text = "Showing plain text view.";
         }
         Invalidate();
@@ -393,9 +406,44 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _isShowingPlainText = true;
         _toggleButton.IsEnabled = false;
         _loadImagesButton.IsEnabled = false;
+        KeepFocusOutOf(_htmlView, _plainTextView.Editor);
+        if (_session.FocusedElement is { CanFocus: false }) _session.SetFocus(_plainTextView.Editor);
         _status.Text = "HTML preview unavailable. Showing text. Close this window to continue reading.";
         Invalidate();
     }
+
+    /// <summary>Focus inside a view that was just hidden moves to its replacement; focus elsewhere stays.</summary>
+    private void KeepFocusOutOf(UiElement hidden, UiElement replacement)
+    {
+        if (_session.FocusedElement is { } focused && (focused == hidden || focused.IsDescendantOf(hidden)))
+            _session.SetFocus(replacement);
+    }
+
+    /// <summary>
+    /// Tab and Shift+Tab cycle through the header buttons, the document, and its links (or the plain
+    /// text), in the same order the shell uses for its own controls.
+    /// </summary>
+    internal void MoveFocus(int direction)
+    {
+        _session.RenderFrame();
+        var stops = MailKeyboardNavigation.TabStops(_root);
+        if (stops.Count == 0) return;
+        int current = _session.FocusedElement is { } focused ? IndexOf(stops, focused) : -1;
+        int next = current < 0 ? (direction > 0 ? 0 : stops.Count - 1) : (current + direction + stops.Count) % stops.Count;
+        _session.SetFocus(stops[next]);
+        _htmlView.Reveal(stops[next]);
+    }
+
+    private static int IndexOf(IReadOnlyList<UiElement> stops, UiElement element)
+    {
+        for (int index = 0; index < stops.Count; index++)
+            if (stops[index] == element) return index;
+        return -1;
+    }
+
+    internal UiSession Session => _session;
+    internal ScrollableHtmlView HtmlView => _htmlView;
+    internal StandardButton ToggleButton => _toggleButton;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=A4CEFC
     // Broiler-Falsified-If: an exception thrown by a queued UI callback escapes DrainDispatcher and aborts the frame being built or the posted-callback handler
@@ -413,6 +461,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         base.OnCreated();
         // Match the caption to the shell's theme; the handle exists only from here on.
         WindowsTitleBar.Apply(NativeHandle, _dark);
+        // Screen readers see the buttons, the document, and each link, as in the main window.
+        _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _root, () => DpiScale);
     }
 
     protected override BRenderList? BuildRenderList(BSize clientSize)
@@ -471,6 +521,13 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-Human:        PENDING
     private void Dispatch(UiInputEvent input)
     {
+        if (input.Kind == UiInputEventKind.KeyboardKey && input.KeyTransition == KeyboardKeyTransition.Down
+            && input.NativeKeyCode == 0x09 && !PreviewModifiers.ControlOrAlt(input.KeyModifiers))
+        {
+            MoveFocus(PreviewModifiers.Shift(input.KeyModifiers) ? -1 : 1);
+            Invalidate();
+            return;
+        }
         if (_session.DispatchInput(input))
             Invalidate();
         // Escape closes the preview unless a control used it first, for example to dismiss a menu.
@@ -509,6 +566,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         {
             _imageLoadCts?.Cancel();
             _imageLoadCts?.Dispose();
+            _automationBridge?.Dispose();
             _session.Dispose();
             _htmlView.Dispose();
         }
@@ -555,11 +613,13 @@ internal sealed class ScrollableHtmlView : UiElement
         string html,
         Func<IBroilerRenderer?> rendererProvider,
         Action<string> onLinkClicked,
-        Func<double>? dpiScaleProvider = null)
+        Func<double>? dpiScaleProvider = null,
+        Func<string, bool>? canOpenLink = null)
     {
-        _content = new HtmlViewElement(html, rendererProvider, onLinkClicked, dpiScaleProvider);
+        _content = new HtmlViewElement(html, rendererProvider, onLinkClicked, dpiScaleProvider, canOpenLink);
         _scroll.AddChild(_content);
         AddChild(_scroll);
+        _scroll.OffsetChanged += (_, _) => _readFraction = ReadFraction();
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=2D6686
@@ -569,12 +629,46 @@ internal sealed class ScrollableHtmlView : UiElement
     {
         _content.UpdateHtml(html);
         _scroll.ScrollToStart();
+        // A new document starts at its top; that is the one deliberate reset of the reading position.
+        _newDocument = true;
     }
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=AB27B5
     // Broiler-Human:        PENDING
     public void ScrollToStart() => _scroll.ScrollToStart();
     internal HtmlViewElement Content => _content;
+    internal StandardScrollView Scroll => _scroll;
+
+    private double _readFraction;
+    private double _arrangedExtent;
+    private bool _newDocument = true;
+
+    /// <summary>Scrolls a focused link (or other element) inside the document into view.</summary>
+    public void Reveal(UiElement element)
+    {
+        if (element != _content && element.IsDescendantOf(_content)) _scroll.MakeVisible(element.Bounds);
+    }
+
+    private double ReadFraction()
+    {
+        double range = _scroll.ExtentSize.Height - _scroll.ViewportSize.Height;
+        return range > 0 ? _scroll.VerticalOffset / range : 0;
+    }
+
+    protected override void ArrangeCore(BRect finalRect)
+    {
+        base.ArrangeCore(finalRect);
+        // Reflowing at another width (a resize, or the header growing) changes the document's height.
+        // Keep the reader at the same relative place rather than at the same, now unrelated, offset.
+        double extent = _scroll.ExtentSize.Height;
+        if (_newDocument) { _newDocument = false; _readFraction = 0; }
+        else if (Math.Abs(extent - _arrangedExtent) > 0.5 && _arrangedExtent > 0)
+        {
+            double range = extent - _scroll.ViewportSize.Height;
+            if (range > 0) _scroll.SetOffset(new BPoint(_scroll.HorizontalOffset, Math.Round(_readFraction * range)));
+        }
+        _arrangedExtent = extent;
+    }
     public HtmlLayoutSnapshot? Snapshot => _content.Snapshot;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=588444
@@ -625,6 +719,8 @@ internal sealed class HtmlViewElement : UiElement
     private readonly Func<IBroilerRenderer?> _rendererProvider;
     private readonly Action<string> _onLinkClicked;
     private readonly Func<double>? _dpiScaleProvider;
+    private readonly Func<string, bool>? _canOpenLink;
+    private readonly List<HtmlLinkTarget> _linkTargets = new();
     private readonly Dictionary<int, (BImageHandle Handle, int PixelWidth, int PixelHeight, double HeightDip)> _tiles = new();
     private readonly LinkedList<int> _lruTiles = new();
     private long _cachedTileBytes;
@@ -634,9 +730,27 @@ internal sealed class HtmlViewElement : UiElement
     private double _cachedDpiScale = 1.0;
     private string _html;
 
-    public double ContentWidth { get; set; } = 800;
+    private double _contentWidth = 800;
+
+    /// <summary>
+    /// The width the document is laid out at when its parent measures without a width limit. A new
+    /// value invalidates the measurement; otherwise the cached layout kept the old width after a
+    /// resize, and a narrower window showed a horizontal scrollbar instead of reflowing the text.
+    /// </summary>
+    public double ContentWidth
+    {
+        get => _contentWidth;
+        set
+        {
+            if (Math.Abs(_contentWidth - value) <= 0.5) return;
+            _contentWidth = value;
+            Invalidate(UiInvalidationKind.Measure);
+        }
+    }
 
     public HtmlLayoutSnapshot? Snapshot => _layoutSnapshot;
+    /// <summary>One focusable target per link the preview would open, in document order.</summary>
+    internal IReadOnlyList<HtmlLinkTarget> LinkTargets => _linkTargets;
     public int CachedTileCount => _tiles.Count;
     public long CachedTileBytes => _cachedTileBytes;
     internal IEnumerable<(int PixelWidth, int PixelHeight)> CachedTileSizes => _tiles.Values.Select(tile => (tile.PixelWidth, tile.PixelHeight)).ToArray();
@@ -670,13 +784,17 @@ internal sealed class HtmlViewElement : UiElement
         string html,
         Func<IBroilerRenderer?> rendererProvider,
         Action<string> onLinkClicked,
-        Func<double>? dpiScaleProvider = null)
+        Func<double>? dpiScaleProvider = null,
+        Func<string, bool>? canOpenLink = null)
     {
         _html = html;
         _rendererProvider = rendererProvider;
         _onLinkClicked = onLinkClicked;
         _dpiScaleProvider = dpiScaleProvider;
+        _canOpenLink = canOpenLink;
         _container = CreateContainer(_html);
+        // The document takes focus so the keyboard can scroll it; its links follow in Tab order.
+        Focusable = true;
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=591A3A
@@ -684,13 +802,86 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-Human:        PENDING
     public void UpdateHtml(string html)
     {
+        bool focusInside = _linkTargets.Any(target => target.IsFocused);
         _html = html;
         _container.Dispose();
         _container = CreateContainer(_html);
         _layoutSnapshot = null;
+        ClearLinkTargets();
+        if (focusInside) Session?.SetFocus(this);
         InvalidateTiles();
         Invalidate(UiInvalidationKind.Measure);
     }
+
+    private void EnsureLayout(float width)
+    {
+        if (_layoutSnapshot is not null && Math.Abs(_layoutSnapshot.Width - width) <= 0.5f) return;
+        InvalidateTiles();
+        _layoutSnapshot = CalculateLayout(width);
+        RebuildLinkTargets();
+    }
+
+    /// <summary>
+    /// Replaces the link targets after a layout. Only links the preview would open get one, and a link
+    /// broken across lines is one target. Focus on a link stays on the link at the same position.
+    /// </summary>
+    private void RebuildLinkTargets()
+    {
+        int focused = _linkTargets.FindIndex(target => target.IsFocused);
+        ClearLinkTargets();
+        var snapshot = _layoutSnapshot!;
+        var merged = new List<(string Href, string? Id, BRect Bounds)>();
+        foreach (var link in snapshot.Links)
+        {
+            if (link.Bounds.Width <= 0 || link.Bounds.Height <= 0 || link.Bounds.Bottom > snapshot.ContentHeight) continue;
+            if (_canOpenLink is not null && !_canOpenLink(link.Href)) continue;
+            if (merged.Count > 0 && merged[^1].Href == link.Href && merged[^1].Id == link.Id)
+                merged[^1] = merged[^1] with { Bounds = Union(merged[^1].Bounds, link.Bounds) };
+            else merged.Add((link.Href, link.Id, link.Bounds));
+        }
+        var names = HtmlLinkNames.From(_html);
+        var used = new HashSet<int>();
+        foreach (var (href, _, bounds) in merged)
+        {
+            var target = new HtmlLinkTarget(href, HtmlLinkNames.NameFor(href, names, used), bounds);
+            target.Clicked += (_, _) => _onLinkClicked(target.Href);
+            AddChild(target);
+            target.Measure(target.PreferredSize);
+            _linkTargets.Add(target);
+        }
+        ArrangeLinkTargets(Bounds);
+        if (focused >= 0) Session?.SetFocus(focused < _linkTargets.Count ? _linkTargets[focused] : this);
+    }
+
+    private void ClearLinkTargets()
+    {
+        foreach (var target in _linkTargets)
+        {
+            RemoveChild(target);
+            target.Dispose();
+        }
+        _linkTargets.Clear();
+    }
+
+    private void ArrangeLinkTargets(BRect origin)
+    {
+        foreach (var target in _linkTargets)
+        {
+            var b = target.DocumentBounds;
+            target.Arrange(new BRect(origin.X + b.X, origin.Y + b.Y, b.Width, b.Height));
+        }
+    }
+
+    private static BRect Union(BRect a, BRect b)
+    {
+        double left = Math.Min(a.X, b.X), top = Math.Min(a.Y, b.Y);
+        return new BRect(left, top, Math.Max(a.Right, b.Right) - left, Math.Max(a.Bottom, b.Bottom) - top);
+    }
+
+    protected override void ArrangeCore(BRect finalRect) => ArrangeLinkTargets(finalRect);
+
+    protected override UiSemanticNode GetSemanticNodeCore() =>
+        base.GetSemanticNodeCore() with { Role = UiSemanticRole.Group, Name = "HTML message" };
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6565FC
     // Broiler-Falsified-If: an allocated tile texture handle is leaked or passed to ReleaseImage after invalidation
@@ -777,13 +968,26 @@ internal sealed class HtmlViewElement : UiElement
             ? availableSize.Width
             : ContentWidth);
 
-        if (_layoutSnapshot is null || Math.Abs(_layoutSnapshot.Width - targetWidth) > 0.5f)
-        {
-            InvalidateTiles();
-            _layoutSnapshot = CalculateLayout(targetWidth);
-        }
+        EnsureLayout(targetWidth);
+        return new BSize(targetWidth, _layoutSnapshot!.ContentHeight);
+    }
 
-        return new BSize(targetWidth, _layoutSnapshot.ContentHeight);
+    /// <summary>
+    /// Paints the document from <paramref name="topDip"/> down at <paramref name="scale"/>, the tile's own
+    /// scale (the display scale unless the pixel cap lowered it). Broiler.HTML takes the scroll offset in
+    /// layout units and applies the zoom itself; multiplying it by the scale, as before, drew every tile
+    /// after the first from too far down at any display scale other than 100 %, so at 150 % the text ran
+    /// out two-thirds of the way through a long message and the rest of the preview was blank.
+    /// </summary>
+    internal HtmlBitmap PaintTile(double topDip, double scale, int pixelWidth, int pixelHeight)
+    {
+        var bitmap = new HtmlBitmap(pixelWidth, pixelHeight);
+        _container.ViewportZoom = (float)scale;
+        _container.ScrollOffset = new PointF(0, -(float)topDip);
+        _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelWidth, pixelHeight));
+        _container.ScrollOffset = PointF.Empty;
+        _container.ViewportZoom = 1.0f;
+        return bitmap;
     }
 
     private void EnsureTile(int tileIndex, float targetWidth, double dpiScale, IBroilerRenderer renderer)
@@ -812,13 +1016,7 @@ internal sealed class HtmlViewElement : UiElement
             }
         }
 
-        // Rendered at the tile's own scale, which is the display scale unless the pixel cap lowered it.
-        using var bitmap = new HtmlBitmap(pixelW, pixelH);
-        _container.ViewportZoom = (float)tileScale;
-        _container.ScrollOffset = new PointF(0, -(float)(tileTop * tileScale));
-        _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelW, pixelH));
-        _container.ScrollOffset = PointF.Empty;
-        _container.ViewportZoom = 1.0f;
+        using var bitmap = PaintTile(tileTop, tileScale, pixelW, pixelH);
 
         // The renderer keeps RGBA pixels. Encoding a PNG for it to decode straight back cost far more
         // than painting the tile; the pixels are identical either way.
@@ -835,11 +1033,8 @@ internal sealed class HtmlViewElement : UiElement
     protected override void RenderCore(UiRenderContext context)
     {
         float w = (float)Math.Max(1, Bounds.Width);
-        if (_layoutSnapshot is null || Math.Abs(_layoutSnapshot.Width - w) > 0.5f)
-        {
-            InvalidateTiles();
-            _layoutSnapshot = CalculateLayout(w);
-        }
+        EnsureLayout(w);
+        if (_layoutSnapshot is null) return;
 
         double dpiScale = _dpiScaleProvider?.Invoke() ?? context.Host?.Scale ?? 1.0;
         if (dpiScale <= 0.1 || double.IsNaN(dpiScale)) dpiScale = 1.0;
@@ -907,6 +1102,12 @@ internal sealed class HtmlViewElement : UiElement
                     new BPoint(bannerRect.Left + 12, bannerRect.Top + 14));
             }
         }
+
+        foreach (var target in _linkTargets) target.Render(context);
+        // The document's own focus ring frames the viewport, even below a short document's end.
+        if (Session is { IsFocusVisible: true } session && session.FocusedElement == this)
+            StandardControlPaint.DrawFocusRing(context.RenderList,
+                new BRect(Bounds.X + 2, Bounds.Y + visibleTop + 2, Math.Max(0, Bounds.Width - 4), Math.Max(0, parentViewportHeight - 4)), 4);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=2248F9
@@ -914,6 +1115,14 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-Human:        PENDING
     protected override bool OnInput(UiInputEvent e)
     {
+        // Space and Shift+Space page through the document, as in a browser; other keys reach the scroll view.
+        if (e.Kind == UiInputEventKind.KeyboardKey && e.KeyTransition == KeyboardKeyTransition.Down && e.NativeKeyCode == 0x20
+            && Parent is StandardScrollView pager)
+        {
+            double page = pager.ViewportSize.Height * pager.PageScrollFraction;
+            pager.ScrollBy(0, PreviewModifiers.Shift(e.KeyModifiers) ? -page : page);
+            return true;
+        }
         if (e.Kind == UiInputEventKind.PointerButton && e.MouseButton == MouseButton.Left && e.MouseButtonTransition == MouseButtonTransition.Up)
         {
             float relX = (float)(e.Position.X - Bounds.X);
