@@ -4,7 +4,8 @@ using Broiler.Mail.Windows.Measurement;
 
 namespace Broiler.Mail.Windows;
 
-internal enum DemoScenario { Inbox, Empty, LongMessage, LargeInbox, LargeDraft, ReceiveError, SaveError, SendUnknown, HtmlOnly, BodyError }
+internal enum DemoScenario { Inbox, Empty, LongMessage, LargeInbox, LargeDraft, ReceiveError, SaveError, SendUnknown, HtmlOnly, BodyError,
+    InvalidSetup, TestCanceled, DraftConflict, SendRejected, SentCopyFailed, LongHtml }
 
 /// <summary>Interactive: plain <c>--demo</c>, where the user drives the synthetic inbox. Otherwise the named fixture is prepared on start.</summary>
 internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTheme.System, int Width = 1100, int Height = 720, bool Interactive = false,
@@ -22,6 +23,12 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("send-unknown", DemoScenario.SendUnknown, "Recovered uncertain-send state; sending disabled"),
         ("html-only", DemoScenario.HtmlOnly, "Selected HTML-only message with embedded image and text fallback"),
         ("body-error", DemoScenario.BodyError, "Selected message whose body fails to load, with Retry beside it"),
+        ("invalid-setup", DemoScenario.InvalidSetup, "Account save rejected for an email address with a display name"),
+        ("test-canceled", DemoScenario.TestCanceled, "Connection test canceled before the server answered"),
+        ("draft-conflict", DemoScenario.DraftConflict, "Autosave refused because another instance changed the saved draft"),
+        ("send-rejected", DemoScenario.SendRejected, "Send rejected by the server with its reason; the draft is kept"),
+        ("sent-copy-failed", DemoScenario.SentCopyFailed, "Message accepted but its Sent copy was not saved"),
+        ("long-html", DemoScenario.LongHtml, "Selected HTML message longer than the preview's render budget, with links; the next message is HTML too"),
     });
 
     internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--measure <workload> [--report <file.json>]]";
@@ -38,8 +45,13 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
     });
 
     internal string Name => Gallery.Single(item => item.Scenario == Scenario).Name;
-    internal string InitialTab => Scenario is DemoScenario.LargeDraft or DemoScenario.SendUnknown ? "compose"
-        : Scenario == DemoScenario.SaveError ? "settings" : "inbox";
+    internal string InitialTab => Scenario switch
+    {
+        DemoScenario.LargeDraft or DemoScenario.SendUnknown or DemoScenario.DraftConflict or DemoScenario.SendRejected or DemoScenario.SentCopyFailed => "compose",
+        DemoScenario.InvalidSetup or DemoScenario.TestCanceled => "account",
+        DemoScenario.SaveError => "settings",
+        _ => "inbox",
+    };
 
     internal static bool TryParse(string[] args, out DemoOptions? options)
     {

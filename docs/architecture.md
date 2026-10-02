@@ -190,6 +190,8 @@ accepts arm64 for future testing; arm64 is not advertised as validated.
 
 `--demo` uses only an in-memory account and synthetic mail. It does not construct
 the Windows credential adapter or read the default configuration directory.
+Its `send-rejected` fixture offers Send to a synthetic sender that refuses the recipient;
+no demo sender contacts a server or reports acceptance.
 `--data-directory` supports isolated real configuration tests. The user will run
 live-provider acceptance later using the [included checklist](version-1-acceptance.md).
 Physical multi-monitor and IME language coverage are also recorded as user checks.

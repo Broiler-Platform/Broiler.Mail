@@ -1,5 +1,6 @@
 using Broiler.UI;
 using Broiler.UI.ScrollView.Standard;
+using Broiler.UI.TabView;
 
 namespace Broiler.Mail.Application.Views;
 
@@ -10,6 +11,23 @@ internal static class FocusNavigation
     {
         session.SetFocus(element);
         Reveal(session, element);
+    }
+
+    /// <summary>
+    /// Whether an asynchronous result may move focus into <paramref name="area"/>: only while the area
+    /// is on screen and focus is inside it, on a container that holds it (such as the tab strip of the
+    /// tab showing it), or nowhere. A result that arrives after the user moved on
+    /// must not pull them back to another tab or away from what they are typing.
+    /// </summary>
+    public static bool MayTakeFocus(UiSession session, UiElement area)
+    {
+        for (UiElement child = area; child.Parent is { } parent; child = parent)
+        {
+            if (child.Visibility != UiVisibility.Visible || child.IsHiddenFromAccessibility) return false;
+            // A tab view keeps every tab's content attached and visible, but shows only the selected one.
+            if (parent is UiTabView tabs && tabs.SelectedTab?.Content != child) return false;
+        }
+        return session.FocusedElement is not { } focused || focused == area || focused.IsDescendantOf(area) || area.IsDescendantOf(focused);
     }
 
     public static void Reveal(UiSession session, UiElement element)
