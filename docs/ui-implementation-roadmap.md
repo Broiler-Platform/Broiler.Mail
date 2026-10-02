@@ -630,6 +630,12 @@ navigation/disclosure/resize transition.
   minimum. In a 640×480 window Tab cycles only the visible controls, all with non-zero bounds.
   Posted `WM_CHAR` into the To field: a, é, ², @, a surrogate pair (😀), Ctrl+R and Ctrl+A control
   characters, b → exactly "aé²@😀b".
+- **Broiler.UI 0.1.0-preview.13 consumed:** the splitter is focusable while enabled, split
+  containers keep their children in visual order, collapsed panes are hidden from accessibility, and
+  `StandardFocusScope` skips hidden content with a stable order (Broiler.UI#71). Mail's splitter,
+  visual-order, and empty-bounds workarounds are gone; only the read-only scroll view stays a Mail
+  policy. Native checks repeated with the same results, and a narrow window now also hides the
+  collapsed reader and splitter from UI Automation clients.
 - Open: IME composition with a real IME, precision and horizontal wheel, caret position across a
   DPI change, and dead keys typed on a real layout (posted messages cannot carry modifier state,
   so Ctrl and AltGr chords were checked headlessly only). `WindowsInputBridgeTests.EndToEnd_RichEdit_HandlesImeCompositionAndCommit`

@@ -20,7 +20,6 @@ using Broiler.Mail.Core.Messages;
 using Broiler.UI;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.ScrollView.Standard;
-using Broiler.UI.Splitter;
 
 namespace Broiler.Mail.Application.Views;
 
@@ -88,7 +87,7 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     // Broiler-Human:        PENDING
     public void MoveFocus(int direction)
     {
-        // Layout first: a pane collapsed by the adaptive inbox only loses its bounds when arranged.
+        // Layout first: the adaptive inbox decides during layout which pane is collapsed (and hidden).
         session.RenderFrame();
         var controls = new List<UiElement> { shell.Navigation };
         if (shell.Navigation.SelectedTab?.Content is { } content)
@@ -101,8 +100,8 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
 
     /// <summary>
     /// Tab stops in document order, then by <see cref="UiElement.TabIndex"/> (a stable sort). Any control
-    /// that reports <see cref="UiElement.CanFocus"/> and <see cref="UiElement.IsTabStop"/> takes part, so
-    /// new controls need no registration here.
+    /// that reports <see cref="UiElement.CanFocus"/> and <see cref="UiElement.IsTabStop"/> takes part,
+    /// including the splitter, so new controls need no registration here.
     /// </summary>
     public static IReadOnlyList<UiElement> TabStops(UiElement content) =>
         Descendants(content).Where(IsTabStop).OrderBy(element => element.TabIndex).ToList();
@@ -118,10 +117,8 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     private static bool IsTabStop(UiElement element) => element switch
     {
         _ when element.CanFocus && element.IsTabStop => true,
-        // The splitter resizes with the arrow keys but does not report itself focusable.
-        UiSplitter splitter => splitter.IsEnabled,
         // A scroll view of read-only content, such as the reader, is a stop so the keyboard can scroll it.
-        StandardScrollView scroll => !Descendants(scroll).Skip(1).Any(item => item.CanFocus || item is UiSplitter),
+        StandardScrollView scroll => !Descendants(scroll).Skip(1).Any(item => item.CanFocus),
         _ => false,
     };
 
@@ -130,16 +127,10 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     // Broiler-Human:        PENDING
     private static IEnumerable<UiElement> Descendants(UiElement element)
     {
-        // Collapsed, hidden by a container (inactive tab content), or arranged away (a collapsed split pane).
-        if (element.Visibility != UiVisibility.Visible || element.IsHiddenFromAccessibility || element.Bounds.IsEmpty) yield break;
+        // Collapsed, or hidden by a container: inactive tab content and collapsed split panes.
+        if (element.Visibility != UiVisibility.Visible || element.IsHiddenFromAccessibility) yield break;
         yield return element;
-        foreach (var child in VisualOrder(element))
+        foreach (var child in element.Children)
             foreach (var descendant in Descendants(child)) yield return descendant;
     }
-
-    // A split container adds its splitter first; Tab should meet it between the panes, as it appears.
-    private static IEnumerable<UiElement> VisualOrder(UiElement element) => element is UiSplitContainer split
-        ? new[] { split.FirstPane, split.Splitter, split.SecondPane }.OfType<UiElement>()
-            .Concat(split.Children.Where(child => child != split.FirstPane && child != split.Splitter && child != split.SecondPane))
-        : element.Children;
 }
