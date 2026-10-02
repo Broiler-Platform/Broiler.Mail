@@ -63,6 +63,10 @@ them in its property switches; review this along with the native HWND attachment
 This is an investigation lead, not a confirmed cause. Keep H-01 native UIA and
 screen-reader acceptance open until the packaged provider exposes the controls.
 
+The [2 October follow-up audit](remaining-improvements-2026-10-02.md) prioritizes
+the remaining work. Microsoft documents both view-inclusion flags as defaulting
+to true, so their omission alone does not establish the cause of the native failure.
+
 Linux native display/input, Android device execution, Windows ARM64, and full
 screen-reader acceptance are separate platform checks; the headless tests and
 API probe do not establish those results.

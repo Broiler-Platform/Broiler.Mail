@@ -38,7 +38,7 @@ public sealed class MailShellView : IDisposable
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=D556FF
     // Broiler-Falsified-If: with a recovered draft or a draft load error the window opens on a tab other than Compose
     // Broiler-Human:        PENDING
-    public MailShellView(MailShellViewModel model, IHtmlPreviewHost? htmlPreview = null)
+    public MailShellView(MailShellViewModel model, IHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null)
     {
         _model = model;
         Window = new StandardWindow { Title = model.Title };
@@ -49,7 +49,7 @@ public sealed class MailShellView : IDisposable
         layout.SetDock(status, UiDock.Bottom);
 
         Navigation = new StandardTabView();
-        Navigation.AddTab("inbox", "Inbox", new TabContent(new InboxView(model.Inbox, htmlPreview).CreateContent()));
+        Navigation.AddTab("inbox", "Inbox", new TabContent(new InboxView(model.Inbox, htmlPreview, dates).CreateContent()));
         Navigation.AddTab("account", "Account", new TabContent(new AccountProfileView(model.Account).CreateContent()));
         Navigation.AddTab("settings", "Settings", new TabContent(new SettingsView(model.Settings).CreateContent()));
         Navigation.AddTab("compose", "Compose", new TabContent(new ComposerView(model.Composer, model.Inbox).CreateContent()));

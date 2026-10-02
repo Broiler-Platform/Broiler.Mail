@@ -2,6 +2,13 @@
 
 Investigation: **30 September 2026**. Status: proposed work, not an implementation commitment.
 
+For the current implementation/remaining-work split, see the
+[2 October follow-up audit](remaining-improvements-2026-10-02.md). In particular,
+two-line rows, adjustable panes, selectable body text, and C-04 form surfaces have
+since been delivered; the findings below preserve the original investigation.
+Use the [UI implementation roadmap](ui-implementation-roadmap.md) for the current
+task sequence and acceptance criteria.
+
 Broiler.Mail can feel substantially better without replacing its architecture. The highest-return changes are to correct rendering defaults, give messages a readable hierarchy, keep composition actions visible, and make state changes predictable. Then improve the shared controls that make every Broiler application smoother.
 
 This review used a fresh Release build of the working tree, the native `--demo` app, source inspection, a probe against the actual consumed assemblies, and the existing automated suite. The checkout already contained uncommitted platform work. The baseline is therefore **HEAD `08e2bc6` plus that working tree**, not the commit alone. No application implementation was changed by this investigation.

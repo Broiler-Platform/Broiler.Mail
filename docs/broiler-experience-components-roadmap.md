@@ -1,5 +1,10 @@
 # Shared Broiler components: experience roadmap
 
+Current follow-up: [remaining improvements after Hosting adoption, 2 October 2026](remaining-improvements-2026-10-02.md).
+Implementation checkmarks below do not replace the native acceptance criteria.
+The [UI implementation roadmap](ui-implementation-roadmap.md) assigns the remaining
+Mail and shared-component UI work and defines published-app acceptance.
+
 Date: **30 September 2026**. Proposed extensions driven by the native Broiler.Mail review.
 
 The strongest shared investment is in text, layout, native input/accessibility, and reusable presentation controls. Mail should supply realistic acceptance scenarios; components should own the generic mechanics. This extends the [earlier component reuse review](component-reuse-review.md), rather than replacing its ownership analysis.
@@ -241,7 +246,12 @@ Recipient chips are a later specialized control built on generic tokenized input
 
 ## 5. Input, Native, and shared hosting
 
-### [x] H-01: native accessibility bridge (Completed)
+### [ ] H-01: native accessibility bridge (implemented; native acceptance failing)
+
+**Acceptance update (2026-10-02):** Hosting preview.1 supplies the generated COM
+provider, but the published Mail demo's external UIA tree still omits Broiler
+controls. Managed peer tests pass; native discovery and screen-reader acceptance
+remain open. See [A1 in the current audit](remaining-improvements-2026-10-02.md).
 
 **Implementation (2026-10-01):** Implemented Windows UI Automation bridge at the host boundary in `Broiler.Mail.Windows.Hosting.Accessibility` (`WindowsAutomationBridge`, `WindowsElementAutomationPeer`, and `UiaNative`).
 - Subclasses native window handle to intercept `WM_GETOBJECT` (0x003D with `UiaRootObjectId = -25`) and return root provider via `UiaReturnRawElementProvider`.

@@ -38,13 +38,14 @@ namespace Broiler.Mail.Application.Views;
 // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=721087
 // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
 // Broiler-Human:        PENDING
-public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPreview = null)
+public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null)
 {
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=A38929
     // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
     {
+        var dateFormat = dates ?? MessageDateFormatter.Default;
         var panel = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
         var toolbar = new StandardToolbar
         {
@@ -63,7 +64,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var list = new StandardListView
         {
             PreferredSize = new BSize(320, 420),
-            ItemPresenter = MailMessageItemPresenter.Instance,
+            ItemPresenter = dates is null ? MailMessageItemPresenter.Instance : new MailMessageItemPresenter(dateFormat),
             Density = UiDensity.Comfortable,
         };
         var reading = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
@@ -112,13 +113,13 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
                     Id(message),
                     $"{(message.IsRead ? "Read" : "Unread")} · {message.Subject} — {message.Sender}",
                     message.Subject,
-                    message.ReceivedAt?.ToLocalTime().ToString("g") ?? string.Empty,
+                    dateFormat.Detail(message.ReceivedAt),
                     message.IsRead,
                     message)));
             }
             list.SelectedItemId = model.SelectedMessage is { } selected ? Id(selected) : null;
             header.Text = (model.SelectedMessage is { } item
-                ? $"{item.Subject}\nFrom: {item.Sender}\nReceived: {item.ReceivedAt?.ToLocalTime().ToString("g") ?? "Unknown"} · {(item.IsRead ? "Read" : "Unread")} on server"
+                ? $"{item.Subject}\nFrom: {item.Sender}\nReceived: {dateFormat.Detail(item.ReceivedAt)} · {(item.IsRead ? "Read" : "Unread")} on server"
                 : "Select a message to read.").Replace("&", "&&", StringComparison.Ordinal);
             var body = model.Body;
             text.Text = body is null ? (model.SelectedMessage is null

@@ -132,12 +132,13 @@ connection is recoverable without restarting the app.
 - [x] Add an HTML reading mode with a plain-text toggle and bounded inline images.
   Resolve embedded `cid:` resources only within the current message; keep remote
   images blocked until the user chooses to load them.
-  HTML reading mode opens through an isolated WebView2 window with a plain-text
+  HTML reading mode opens through an in-process Broiler.HTML preview window with a plain-text
   toggle button and bounded embedded `cid:` resolution (up to 1 MiB per image,
   16 images maximum, raster types only). Remote images are blocked by default and
   can be explicitly loaded via a controlled HTTP channel that enforces non-SVG image
   verification and 5 MB size bounds.
-- [x] Isolate untrusted rendering; disable scripts, forms, frames, plugins, local
+- [ ] Complete process isolation for untrusted rendering; retain the implemented
+  blocking of scripts, forms, frames, plugins, local
   file access, and automatic navigation. Control all resource-loading paths,
   including stylesheets, fonts, and CSS images. Open user-selected links externally.
   HTML markup is reduced to passive formatting with strict CSP (`default-src 'none'`).
@@ -145,8 +146,11 @@ connection is recoverable without restarting the app.
   with zero script evaluation. All subresource requests are intercepted by a strict
   `DenyingRequestTransport` returning 403 Forbidden without network dispatch, plus
   `StylesheetLoad` and `ImageLoad` blocking handlers. External HTTP/HTTPS links open
-  exclusively in the system browser. Render failures gracefully fall back to plain-text
-  display without affecting the shell.
+  exclusively in the system browser. Handled render failures fall back to plain-text
+  display. Renderer process isolation and containment of crashes,
+  hangs, and memory exhaustion remain unimplemented; see the
+  [renderer security gate](html-renderer-security.md) and the
+  [current improvement audit](remaining-improvements-2026-10-02.md).
 
 **Scope boundary:** HTML is for received-message preview. A rich HTML composer,
 attachment sending, scheduled sending, and automatic send retries are deferred.

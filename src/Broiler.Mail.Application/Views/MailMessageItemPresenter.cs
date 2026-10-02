@@ -10,8 +10,9 @@ namespace Broiler.Mail.Application.Views;
 /// <summary>
 /// Specialized list item presenter for Mail messages displaying sender, subject, received time, and read/unread status.
 /// </summary>
-public sealed class MailMessageItemPresenter : IUiListItemPresenter
+public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null) : IUiListItemPresenter
 {
+    private readonly MessageDateFormatter _dates = dates ?? MessageDateFormatter.Default;
     public static readonly MailMessageItemPresenter Instance = new();
     private readonly StandardTwoLineListItemPresenter _twoLinePresenter = StandardTwoLineListItemPresenter.Instance;
 
@@ -28,7 +29,7 @@ public sealed class MailMessageItemPresenter : IUiListItemPresenter
                 context.Item.Id,
                 message.Sender,
                 message.Subject,
-                FormatTimestamp(message.ReceivedAt),
+                _dates.List(message.ReceivedAt),
                 message.IsRead,
                 message);
 
@@ -68,7 +69,7 @@ public sealed class MailMessageItemPresenter : IUiListItemPresenter
                 state |= UiSemanticState.Focused;
 
             string unread = message.IsRead ? string.Empty : "Unread, ";
-            string label = $"{unread}From: {message.Sender}, Subject: {message.Subject}, Received: {FormatTimestamp(message.ReceivedAt)}";
+            string label = $"{unread}From: {message.Sender}, Subject: {message.Subject}, Received: {_dates.List(message.ReceivedAt)}";
 
             return new UiSemanticNode(
                 UiSemanticRole.ListItem,
@@ -81,17 +82,5 @@ public sealed class MailMessageItemPresenter : IUiListItemPresenter
         return _twoLinePresenter.CreateSemanticNode(context);
     }
 
-    public static string FormatTimestamp(DateTimeOffset? timestamp)
-    {
-        if (timestamp is null)
-            return string.Empty;
-
-        DateTimeOffset local = timestamp.Value.ToLocalTime();
-        DateTimeOffset now = DateTimeOffset.Now;
-        if (local.Date == now.Date)
-            return local.ToString("t");
-        if (local.Year == now.Year)
-            return local.ToString("M");
-        return local.ToString("d");
-    }
+    public static string FormatTimestamp(DateTimeOffset? timestamp) => MessageDateFormatter.Default.List(timestamp);
 }

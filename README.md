@@ -7,8 +7,8 @@ acceptance test. Version 2 development is underway.
 Version 2 development includes secure SMTP sending, separate SMTP credentials, and a plain-text
 composer with Reply, Reply all, and Forward. The active draft is saved locally and
 recovered after restart. Sent copies can be provider-managed or appended via IMAP.
-HTML preview is not implemented yet; the
-packaged version 1 build remains the earlier reader release.
+HTML preview is implemented with Broiler.HTML. Renderer process isolation remains
+a release gate; current generated packages are unsigned validation builds.
 
 See the [roadmap](docs/roadmap.md) for release scope, Broiler component reuse,
 acceptance criteria, and the first implementation steps.
@@ -20,6 +20,11 @@ The [experience roadmap](docs/experience-roadmap.md) reviews visual polish,
 reading/composing flows, accessibility, and smoothness, with
 [native screenshot evidence](docs/ux-review-2026-09-30/README.md) and a
 [shared Broiler component roadmap](docs/broiler-experience-components-roadmap.md).
+
+See the [remaining-improvements audit](docs/remaining-improvements-2026-10-02.md)
+for the current priorities after Hosting and NativeAOT integration.
+The [detailed UI implementation roadmap](docs/ui-implementation-roadmap.md) splits
+the remaining interface work into tracked packages, delivery slices, and native acceptance checks.
 
 The first three milestones are:
 

@@ -92,12 +92,16 @@ public sealed class MailApplication(
     // Broiler-Falsified-If: a draft or account load error recorded by InitializeAsync is not passed to its view model, so saving is enabled over the unreadable file
     // Broiler-Human:        PENDING
     public MailShellView CreateShell(IUiDispatcher? dispatcher = null, IHtmlPreviewHost? htmlPreview = null)
+        => new(CreateViewModel(dispatcher), htmlPreview);
+
+    /// <summary>Create state independently of views, allowing deterministic in-memory fixtures to be prepared before layout.</summary>
+    public MailShellViewModel CreateViewModel(IUiDispatcher? dispatcher = null)
     {
         dispatcher ??= new ImmediateUiDispatcher();
-        return new(new MailShellViewModel(
+        return new MailShellViewModel(
             new AccountProfileViewModel(Accounts, Credentials, Receiver, dispatcher, LoadedAccount, AccountLoadError),
             new SettingsViewModel(Settings, dispatcher, LoadedSettings, SettingsLoadError),
             new InboxViewModel(Receiver, dispatcher),
-            new ComposerViewModel(Drafts, LoadedDraft, dispatcher, Sender, DraftLoadError, SentCopies)), htmlPreview);
+            new ComposerViewModel(Drafts, LoadedDraft, dispatcher, Sender, DraftLoadError, SentCopies));
     }
 }
