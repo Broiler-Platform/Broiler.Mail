@@ -31,12 +31,13 @@ The first three milestones are:
 
 The portable Windows x64 build is generated under
 `artifacts/Broiler.Mail-2.0.0-win-x64/`. Open `Broiler.Mail.Windows.exe` from that
-folder, or extract the matching ZIP. It includes its .NET runtime.
+folder, or extract the matching ZIP. The NativeAOT executable needs no installed .NET runtime.
 See [Start here / provider checklist](docs/version-2-acceptance.md).
 
 Install the .NET 10 SDK. The native application currently targets Windows.
 Dependencies restore from NuGet.org, including Broiler.UI **0.1.0-preview.11** and
-its shared forms package. Sibling Broiler checkouts and a local package feed are
+its shared forms package, plus Broiler.Hosting **0.1.0-preview.1** for Windows,
+Linux, and the Android API probe. Sibling Broiler checkouts and a local package feed are
 not required. See the [C-04 implementation notes](docs/c04-forms/README.md)
 for validation evidence and remaining accessibility checks.
 
@@ -52,13 +53,15 @@ Preview the complete UI with synthetic messages, without saved accounts or netwo
 dotnet run --project src/Broiler.Mail.Windows --no-build -c Release -- --demo
 ```
 
-Create a self-contained ZIP and SHA-256 checksum with PowerShell 7:
+Create a NativeAOT ZIP and SHA-256 checksum with PowerShell 7 and the Visual Studio
+C++ desktop build tools (including the Windows SDK), on the matching Windows architecture:
 
 ```powershell
 ./scripts/Publish-Windows.ps1
 ```
 
 The publisher includes dependency notices and smoke-tests the resulting executable.
+See [hosting package integration](docs/hosting-packages.md) for package scope and validation.
 `--data-directory <path>` selects an explicit configuration directory when running
 the app for a separate test profile. Credentials still use their account-specific
 Windows Credential Manager slots. `--help` lists startup options.

@@ -4,6 +4,10 @@ using System.Text.Json;
 using Broiler.Graphics.Android;
 using Broiler.Graphics.Linux.OpenGL;
 using Broiler.Hosting.Android;
+using Broiler.Hosting.Linux;
+using Broiler.Hosting.Windows;
+using Broiler.Hosting.Windows.Accessibility;
+using Broiler.Hosting.Windows.Input;
 using Broiler.Input.Keyboard.Android;
 using Broiler.Input.Text.Android;
 using Broiler.Input.Touch.Android;
@@ -17,7 +21,9 @@ Type[] contracts = [typeof(IUiHost), typeof(IUiClipboardHost), typeof(IUiTextInp
     typeof(ICredentialStore), typeof(IHtmlPreviewHost), typeof(LinuxOpenGlRenderer),
     typeof(AndroidOpenGlEsRenderer), typeof(AndroidTouchProvider), typeof(AndroidTextInputProvider),
     typeof(IAndroidEditorTextSource), typeof(AndroidKeyboardProvider),
-    typeof(AndroidUiHost), typeof(AndroidBackendDiagnostics)];
+    typeof(AndroidUiHost), typeof(AndroidBackendDiagnostics),
+    typeof(LinuxUiHost), typeof(LinuxX11Clipboard), typeof(LinuxInputCoordinator),
+    typeof(WindowsClipboard), typeof(WindowsInputBridge), typeof(WindowsAutomationBridge)];
 
 Console.WriteLine(JsonSerializer.Serialize(new
 {

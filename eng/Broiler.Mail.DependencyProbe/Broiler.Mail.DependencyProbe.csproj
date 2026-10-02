@@ -4,7 +4,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
-    <ProjectReference Include="../../../Broiler.Hosting/src/Broiler.Hosting.Android/Broiler.Hosting.Android.csproj" />
+    <PackageReference Include="Broiler.Hosting.Android" />
+    <PackageReference Include="Broiler.Hosting.Linux" />
+    <PackageReference Include="Broiler.Hosting.Windows" />
     <PackageReference Include="Broiler.Graphics.Linux.OpenGL" />
     <PackageReference Include="Broiler.Graphics.Android" />
     <PackageReference Include="Broiler.Native.Linux" />

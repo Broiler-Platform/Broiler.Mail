@@ -17,7 +17,7 @@
     <InternalsVisibleTo Include="Broiler.Mail.Windows.Tests" />
     <ProjectReference Include="../Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
     <ProjectReference Include="../Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
-    <ProjectReference Include="../../../Broiler.Hosting/src/Broiler.Hosting.Windows/Broiler.Hosting.Windows.csproj" />
+    <PackageReference Include="Broiler.Hosting.Windows" />
     <PackageReference Include="Broiler.Graphics.Windows" />
     <PackageReference Include="Broiler.Native.Windows" />
   </ItemGroup>

@@ -24,7 +24,7 @@ try {
         throw 'Publish directory must be inside the repository artifacts directory.'
     }
     if (Test-Path -LiteralPath $resolvedOutput) { Remove-Item -LiteralPath $resolvedOutput -Recurse -Force }
-    dotnet publish src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj -c Release -r $Runtime --self-contained true -p:PublishTrimmed=false -o $output
+    dotnet publish src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj -c Release -r $Runtime --self-contained true -p:PublishAot=true -p:PublishTrimmed=true -o $output
     if ($LASTEXITCODE -ne 0) { throw "Publishing failed (exit $LASTEXITCODE)." }
     Copy-Item -LiteralPath (Join-Path $repository 'LICENSE') -Destination (Join-Path $output 'LICENSE')
     Copy-Item -LiteralPath (Join-Path $repository 'docs/version-2-acceptance.md') -Destination (Join-Path $output 'START-HERE.md')
@@ -32,13 +32,17 @@ try {
 
     # Include package identity/license metadata and license files from the actual restored graph.
     $assets = Get-Content -LiteralPath 'src/Broiler.Mail.Windows/obj/project.assets.json' -Raw | ConvertFrom-Json
-    $dependencies = Get-Content -LiteralPath (Join-Path $output 'Broiler.Mail.Windows.deps.json') -Raw | ConvertFrom-Json
-    $runtimeKey = $dependencies.libraries.psobject.Properties | Where-Object { $_.Name -like "runtimepack.Microsoft.NETCore.App.Runtime.$Runtime/*" } | Select-Object -First 1 -ExpandProperty Name
-    if (!$runtimeKey) { throw 'The self-contained runtime is missing from the dependency manifest.' }
-    $runtimeVersion = ($runtimeKey -split '/')[-1]
+    # NativeAOT emits no .deps.json. Resolve its runtime license from the restored SDK pack.
+    $runtimePackage = "Microsoft.NETCore.App.Runtime.NativeAOT.$Runtime"
+    $runtimeDownload = $assets.project.frameworks.psobject.Properties.Value.downloadDependencies |
+        Where-Object { $_.name -eq $runtimePackage } | Select-Object -First 1
+    if (!$runtimeDownload -or $runtimeDownload.version -notmatch '^\[([^,]+),\s*\1\]$') {
+        throw 'The exact NativeAOT runtime version is missing from the restore graph.'
+    }
+    $runtimeVersion = $Matches[1]
     $runtimeDirectory = $null
     foreach ($root in ($assets.packageFolders.psobject.Properties | ForEach-Object { $_.Name })) {
-        $candidate = Join-Path $root "microsoft.netcore.app.runtime.$Runtime/$runtimeVersion"
+        $candidate = Join-Path $root "$($runtimePackage.ToLowerInvariant())/$runtimeVersion"
         if (Test-Path -LiteralPath $candidate) { $runtimeDirectory = $candidate; break }
     }
     if (!$runtimeDirectory) { throw 'The runtime license files could not be located.' }
@@ -78,6 +82,8 @@ try {
         schemaVersion = 1
         applicationVersion = [string]$version
         runtime = $Runtime
+        compilation = 'NativeAOT'
+        runtimeVersion = $runtimeVersion
         processArchitecture = $hostArchitecture
         sdkVersion = [string]$sdkVersion
         sourceRevision = [string]$revision
