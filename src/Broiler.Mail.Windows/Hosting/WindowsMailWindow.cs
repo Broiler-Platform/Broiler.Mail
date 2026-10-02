@@ -54,7 +54,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private WindowPlacement? _normal;
     private bool _maximized;
     private bool _closePending;
-    private readonly WindowsHtmlPreviewHost _htmlPreview = new();
+    private readonly WindowsHtmlPreviewHost _htmlPreview;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
     // Broiler-Falsified-If: IME positioning calls receive the top-level frame handle instead of the render child window that holds keyboard focus, so the composition window is placed against the wrong client origin
     // Broiler-Human:        PENDING
@@ -109,6 +109,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _restore = restore;
         _normal = restore.Normal;
         _maximized = restore.Maximized;
+        // A preview opens with the shell's current theme, so its caption matches.
+        _htmlPreview = new WindowsHtmlPreviewHost(() => _appearance?.Current?.IsDark == true);
         _shell = new MailShellView(model, _htmlPreview, demo is null ? null : DemoApplication.CreateDateFormatter());
         _session.AddRoot(_shell.Window);
         _keyboard = _shell.CreateKeyboardNavigation(_session);

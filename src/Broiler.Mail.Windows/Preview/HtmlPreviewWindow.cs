@@ -87,6 +87,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private readonly IReadOnlyDictionary<string, MailEmbeddedImage>? _embeddedImages;
 
     private readonly StandardLabel _status;
+    private readonly StandardLabel _truncationNotice;
+    private readonly bool _dark;
+    private bool _truncationShown;
     private readonly StandardButton _toggleButton;
     private readonly StandardButton _loadImagesButton;
     private readonly ScrollableMessageText _plainTextView;
@@ -129,10 +132,13 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         string plainText,
         Action<Uri> openExternal,
         string? rawHtml = null,
-        IReadOnlyDictionary<string, MailEmbeddedImage>? embeddedImages = null)
+        IReadOnlyDictionary<string, MailEmbeddedImage>? embeddedImages = null,
+        bool dark = false,
+        string? title = null)
         : base(new BWindowOptions
         {
-            Title = "Broiler.Mail — HTML preview",
+            // The title names the message; it must be set here because the native window does not exist yet.
+            Title = title ?? "Broiler.Mail — HTML preview",
             ClientWidth = 900,
             ClientHeight = 700,
             OwnsMessageLoop = false,
@@ -148,11 +154,13 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _rawHtml = rawHtml;
         _embeddedImages = embeddedImages;
 
+        _dark = dark;
         _host = new WindowsUiHost(this, () => InputHandle);
         _dispatcher = new StandardQueuedUiDispatcher(() => PostToUiThread(DrainDispatcher));
         _session = new StandardUiSessionBuilder().WithDispatcher(_dispatcher).Build(_host);
 
-        var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
+        // The shell's theme surface behind the header; without it, dark-theme text sat on the white window.
+        var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock, Background = StandardControlPaint.Surface };
 
         var header = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock, Spacing = 6 };
         _status = new StandardLabel
@@ -163,6 +171,15 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         };
         header.AddChild(_status);
         header.SetDock(_status, UiDock.Top);
+        // Shown once layout finds the document longer than the render budget; the banner at the cut is far below.
+        _truncationNotice = new StandardLabel
+        {
+            Text = "This long message is shortened in the HTML preview. Show plain text has all of it.",
+            Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Role = StandardLabelRole.Muted,
+            Visibility = UiVisibility.Collapsed,
+        };
+        header.AddChild(_truncationNotice);
+        header.SetDock(_truncationNotice, UiDock.Top);
 
         var toolbar = new StandardPanel { StackOrientation = UiStackOrientation.Horizontal, Spacing = 8 };
         _toggleButton = new StandardButton { Text = "Show plain text" };
@@ -391,11 +408,25 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=A6A9C3
     // Broiler-Falsified-If: a frame is rendered before the host has taken the new client size, so the HTML snapshot is laid out at the previous width
     // Broiler-Human:        PENDING
+    protected override void OnCreated()
+    {
+        base.OnCreated();
+        // Match the caption to the shell's theme; the handle exists only from here on.
+        WindowsTitleBar.Apply(NativeHandle, _dark);
+    }
+
     protected override BRenderList? BuildRenderList(BSize clientSize)
     {
         _host.Update(clientSize, DpiScale);
         DrainDispatcher();
-        return _session.RenderFrame();
+        BRenderList? frame = _session.RenderFrame();
+        if (!_truncationShown && _htmlView.Snapshot is { IsTruncated: true })
+        {
+            _truncationShown = true;
+            _truncationNotice.Visibility = UiVisibility.Visible;
+            Invalidate();
+        }
+        return frame;
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=3E34D4
@@ -442,6 +473,10 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     {
         if (_session.DispatchInput(input))
             Invalidate();
+        // Escape closes the preview unless a control used it first, for example to dismiss a menu.
+        else if (input.Kind == UiInputEventKind.KeyboardKey && input.KeyTransition == KeyboardKeyTransition.Down
+            && input.NativeKeyCode == 0x1B)
+            Close();
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=EDEB0C
@@ -549,6 +584,14 @@ internal sealed class ScrollableHtmlView : UiElement
     {
         _content.ContentWidth = double.IsFinite(availableSize.Width) ? Math.Max(1, availableSize.Width - 12) : 800;
         return _scroll.Measure(availableSize);
+    }
+
+    // Mail HTML is authored for a white page, and the renderer paints the document white; the canvas
+    // stays white below a short document instead of showing the shell's (possibly dark) surface.
+    protected override void RenderCore(UiRenderContext context)
+    {
+        context.RenderList.FillRect(Bounds, new BColor(255, 255, 255));
+        base.RenderCore(context);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=00F201

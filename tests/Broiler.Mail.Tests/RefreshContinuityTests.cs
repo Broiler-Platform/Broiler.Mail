@@ -210,6 +210,8 @@ public sealed class RefreshContinuityTests
     private sealed class CountingPreviewHost : IHtmlPreviewHost
     {
         public int Closes { get; private set; }
+        public event EventHandler<HtmlPreviewChange>? Changed { add { } remove { } }
+        public MailMessageKey? Current => null;
         public Task<string> ShowAsync(MailMessageBody message) => Task.FromResult("Shown.");
         public void Close() => Closes++;
         public void Dispose() { }

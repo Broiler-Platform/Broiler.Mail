@@ -82,7 +82,7 @@ P1 improves the current app; P2 depends on larger product/platform work.
 | UI-08 | P1 | Consistent state, feedback, and recovery UX | Inbox and composer states done; announcements and transient success open | Apply to UI-02 through UI-07 |
 | UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Shortcut table, reply shortcuts, and traversal done; IME, wheel, and DPI caret checks open | Coordinate with UI-04, UI-05, UI-09 |
-| UI-11 | P1 | HTML preview ergonomics | Partial | UI-01, UI-08; inline embedding also needs sandbox |
+| UI-11 | P1 | HTML preview ergonomics | Window lifecycle, identity, and theme done; zoom/scroll and inline view open | UI-01, UI-08; inline embedding also needs sandbox |
 | UI-12 | P1 | Measured rendering and memory performance | Partial | Capture baseline first; repeat after affected changes |
 | UI-13 | P1 | Native visual and interaction acceptance | Open | Continuous; final gate for UI-01 through UI-12 |
 | UI-14 | P2 | Platform and later-feature UI adaptations | Planned | Product/platform services and UI-13 foundation |
@@ -646,9 +646,9 @@ navigation/disclosure/resize transition.
 
 **Owner:** Mail preview UX; shared HTML rendering APIs when required.
 
-- [ ] Keep a clear message identity, Back to text/Close action, and remote-image state.
+- [x] Keep a clear message identity, Back to text/Close action, and remote-image state.
   Preserve useful error information without exposing internal implementation details in the UI.
-- [ ] Distinguish initial load, canceled load, partial/resource-limited content, blocked
+- [x] Distinguish initial load, canceled load, partial/resource-limited content, blocked
   remote resources, failure, and ready. Keep retry explicit and prevent automatic crash loops.
 - [ ] Preserve zoom/scroll during harmless status updates; invalidate them deliberately
   when the message, document geometry, or DPI changes.
@@ -664,6 +664,38 @@ navigation/disclosure/resize transition.
 **Accept:** selection change/cancel/close cannot reopen an obsolete preview; large or
 failed documents leave text usable; resource approval belongs to the current document.
 Inline embedding remains blocked by the separate renderer containment gate.
+
+**Progress (2 October 2026):**
+
+- `IHtmlPreviewHost` reports each message's preview phase (`Open`, `Closed`, `Unavailable`,
+  `Canceled`) through `Changed`, keyed by message, and exposes `Current`. The reader's action
+  follows it: Opening… while the window starts, **Close HTML preview** while it is open, and the
+  outcome as status ("HTML preview closed. The text preview remains here."). Changes for another
+  message are ignored, a rebuilt reader whose preview is open offers Close, and a replaced reader
+  unsubscribes. Before, the status kept saying "opened" after the window closed, and the
+  re-enabled button answered "Close the existing HTML preview before opening another."
+- `WindowsHtmlPreviewHost` keeps one window at a time: a request for another message closes the
+  open window and waits for its thread before opening the next; closing or replacing a preview that
+  is still opening cancels it before its window appears.
+- **Bug fixed:** the window title never named the message. The host called `SetTitle` before the
+  native window existed (handles are 0 until it is shown), so every preview was titled
+  "Broiler.Mail — HTML preview". The title ("Broiler.Mail — HTML snapshot — subject") is now
+  passed at construction.
+- The preview window follows the shell theme: dark caption (DWM immersive dark mode) and the theme
+  surface behind its header, where dark-theme text had been drawn on the white window. The HTML
+  document keeps a white page canvas, as mail is authored for one. Escape closes the window unless a
+  control used the key. A document longer than the render budget shows a header notice that the
+  preview is shortened and Show plain text has all of it.
+- Tests: `HtmlPreviewActionTests` (phase following, stale opening results, failures before a
+  window, other-message changes, rebuilt reader, unsubscribe, messages without HTML).
+- **Native, demo build, dark theme:** open → title names the message, caption dark, reader offers
+  Close with the open status; Escape in the preview and Close HTML preview each close it and the
+  reader reports closed; selecting another message closes the preview; returning shows a fresh
+  Open action. Header and plain-text view readable in the dark theme.
+- Open: zoom and scroll preservation (the preview has no zoom yet), keyboard scrolling and a
+  Tab path inside the preview, UI Automation for the preview window, the truncation notice checked
+  on a real long document, and replacing an open preview with another message's (the demo has one
+  HTML message; covered by the host's generation logic only).
 
 ### UI-12 — performance with measured budgets
 
