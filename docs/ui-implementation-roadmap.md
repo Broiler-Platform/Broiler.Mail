@@ -79,12 +79,12 @@ P1 improves the current app; P2 depends on larger product/platform work.
 | UI-05 | P1 | Writing-focused composer | Layout implemented; IME/undo check pending | UI-01; integrate with UI-03 commands |
 | UI-06 | P1 | Guided account setup and concise settings | Setup checklist implemented; SMTP test waits for a service | UI-01 |
 | UI-07 | P1 | Live appearance and geometry persistence | Live theme and geometry implemented; preview windows, text scale, RTL open | UI-01 |
-| UI-08 | P1 | Consistent state, feedback, and recovery UX | Inbox and composer states done; announcements and transient success open | Apply to UI-02 through UI-07 |
+| UI-08 | P1 | Consistent state, feedback, and recovery UX | Done; native announcements wait for a Hosting release, screen-reader check with UI-09 | Apply to UI-02 through UI-07 |
 | UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Shortcut table, reply shortcuts, and traversal done; IME, wheel, and DPI caret checks open | Coordinate with UI-04, UI-05, UI-09 |
-| UI-11 | P1 | HTML preview ergonomics | Window lifecycle, identity, and theme done; zoom/scroll and inline view open | UI-01, UI-08; inline embedding also needs sandbox |
+| UI-11 | P1 | HTML preview ergonomics | Lifecycle, identity, theme, keyboard, UIA, scroll, and scaling done; inline view open | UI-01, UI-08; inline embedding also needs sandbox |
 | UI-12 | P1 | Measured rendering and memory performance | Baseline recorded; rich-edit allocations and preview tiles optimized; resize CPU, GPU time, DPI matrix open | Capture baseline first; repeat after affected changes |
-| UI-13 | P1 | Native visual and interaction acceptance | Open | Continuous; final gate for UI-01 through UI-12 |
+| UI-13 | P1 | Native visual and interaction acceptance | First pass recorded (96/96 automated runs clean); settings- and hardware-dependent rows pending | Continuous; final gate for UI-01 through UI-12 |
 | UI-14 | P2 | Platform and later-feature UI adaptations | Planned | Product/platform services and UI-13 foundation |
 
 ### UI-01 — presentation tokens and a deterministic UI gallery
@@ -475,15 +475,15 @@ cannot strand the app off-screen. Settings errors must not interrupt typing.
 
 **Owner:** Mail view-state presentation. Reuse `InlineFeedback`; retain domain outcomes.
 
-- [ ] Define each surface's idle/empty/loading/ready/canceled/failed state and its
+- [x] Define each surface's idle/empty/loading/ready/canceled/failed state and its
   valid actions. Keep usable content visible during non-destructive background work.
 - [x] Put the explanation and retry/cancel action beside the affected pane. Keep the
   shell footer concise rather than repeating every section's full feedback text.
-- [ ] Deduplicate announcements: background autosave must not continually interrupt
+- [x] Deduplicate announcements: background autosave must not continually interrupt
   a screen reader. Errors and submission outcome changes still need announcements.
-- [ ] Separate transient success from persistent warnings. Critical unsaved/unknown
+- [x] Separate transient success from persistent warnings. Critical unsaved/unknown
   states stay visible until resolved; decorative success may disappear without losing context.
-- [ ] Specify focus after validation, cancel, retry, disclosure collapse, and recovery.
+- [x] Specify focus after validation, cancel, retry, disclosure collapse, and recovery.
   Async completion must not steal focus from typing or move the active tab unexpectedly.
 
 **Accept:** fixture coverage includes empty inbox, refresh failure with old data,
@@ -510,10 +510,95 @@ unknown send, and failed Sent copy. Every state has accurate text and valid acti
   rows, Retry and focus, failed message and Retry, cancel as information with focus repair, and a
   new selection replacing a message problem), the `body-error` gallery test, and native captures of
   `receive-error` and `body-error`.
-- Open: screen-reader announcement deduplication can only be verified with UI-09's native
-  accessibility; transient success messages (for example "Settings saved.") still stay until the
-  next action; focus after validation and disclosure collapse was handled in UI-03 to UI-06 but has
-  no single cross-surface test yet.
+- Open: focus after validation and disclosure collapse was handled in UI-03 to UI-06 but has no
+  single cross-surface test yet.
+
+**Progress (2 October 2026, announcements and transient success):**
+
+What a screen reader is told, per surface. Every announcement comes from `InlineFeedback` (when its
+text or kind changes) or, for a finished receive, from the inbox view.
+
+| Surface | Announced | Silent |
+| --- | --- | --- |
+| Inbox list | Receiving progress; "N messages loaded." when it finishes; a failure or cancellation | Moving through messages and loading their bodies; refreshes that change nothing visible |
+| Composer | Sending progress; the submission outcome; the Sent copy outcome; the server's reason for a rejection; validation and storage errors | Typing, autosave (the sender line and footer), and the routine "result saved" line |
+| Account, Settings | Saving or testing progress; the result | The confirmation going away |
+
+- Fixed duplicates found by the new tests: while sending, the composer announced "Submitting
+  message…" as well as the submission line's "Sending…"; after a failed send it announced
+  "Updating draft…" and a second error, "Submission result saved. The draft is retained." The busy
+  line now appears only for an unsubmitted draft (discarding), and the closing line is a problem only
+  when the result was not stored or the server gave a reason; otherwise it is footer information.
+- Transient success: an Account or Settings confirmation (for example "Settings saved.") clears after
+  `SaveViewModel.SuccessDisplayTime` (6 s), restarting if another result arrives. What was saved
+  stays visible elsewhere: the applied settings, or the account checklist. Failures, cancellations,
+  progress, and every composer outcome (submission, unknown send, Sent copy) stay until resolved. The
+  footer then returns to its hint; a ready account now says "This account is ready to receive mail."
+  instead of asking for details again.
+- Native: the Hosting provider raised a live-region event without a `LiveSetting`, which Narrator
+  ignores, and a client reading the event got the source element's name, not the announced text.
+  Broiler.Hosting branch `claude/status-notifications` raises a UIA notification that carries the
+  text, one activity per source element (a newer status replaces a queued one; errors are
+  `ImportantMostRecent`), and reports `LiveSetting` Polite or Assertive on status elements. Checked
+  with that branch packed locally (`0.1.0-preview.4-local.1`): an external UIA client received
+  "Progress: Receiving newest messages…" and "50 messages loaded." in the `inbox` demo, and the
+  error on the same activity, as `ImportantMostRecent`, in `receive-error`. Mail consumes this once
+  it is published.
+- Evidence: `FeedbackPolicyTests` (typing with autosave announces nothing; receiving announces
+  progress and the result, and moving through messages is silent; a failure is announced; each send
+  outcome once, including a server reason; confirmations go away, restart, and are not announced
+  when they do; failures stay; the ready-account footer).
+- Open: a real screen-reader pass (H-01) after Mail consumes the Hosting release; the composer's
+  "Draft fields are valid." check result still stays until the next edit.
+
+**Progress (2 October 2026, states, focus, and fixtures):**
+
+Each surface's states and the actions valid in them:
+
+| Surface | State | Shown | Valid actions |
+| --- | --- | --- | --- |
+| Inbox list | Idle (never received) | "Receive mail to load your inbox." | Receive mail |
+| | Loading | Progress above the list; earlier rows stay | Cancel |
+| | Ready / empty | Rows / "The inbox is empty." | Receive mail, Load older, select |
+| | Failed / canceled | Reason (error) or "canceled" (information) beside the kept rows | Retry receiving, Receive mail |
+| Message | Loading / ready | "Loading message body…" / the text | Read message; Reply, Reply all, Forward when ready |
+| | Failed / canceled | Reason under the header | Retry loading, choose another message |
+| Composer | No draft | Start actions | New message; reply actions with a loaded message |
+| | Editing | The draft; autosave on the sender line | Send (when available), Check draft, Save draft, Discard draft |
+| | Sending | Submission progress | None |
+| | Failed (rejected) | Outcome plus the server's reason | Edit, Send again, Discard |
+| | Unknown / accepted | Outcome; a Sent copy outcome if requested | Save draft, Discard draft (no Send, no edit, no Check) |
+| | Storage failed or conflicting | The storage error; the edits stay open | Save draft (retry), keep editing |
+| Account | Unsaved / invalid | Checklist step; the field error beside the field | Save account |
+| | Testing / canceled / failed / passed | Progress; "canceled" as information; the reason beside the step; Ready | Cancel while testing; Test connection otherwise |
+| Settings | Saving / failed / saved | Progress; the field error; a confirmation that goes away | Save settings |
+
+Focus, for every surface (results that arrive later never take focus or the tab):
+
+| Event | Focus |
+| --- | --- |
+| Validation failure | Moves to the field, scrolled into view, only while the form is on screen and focus is in it, on a container holding it, or nowhere (`FocusNavigation.MayTakeFocus`); otherwise the field is only marked |
+| Cancel becomes unavailable | From Cancel to Receive mail or the list (inbox), or to Test connection (account) |
+| Retry disappears after success | To the list or the message text |
+| Section collapses with focus inside | To the section's toggle (Broiler.UI `FormSection`) |
+| Recovered draft at start | The Compose tab opens on it |
+| Background completion (receive, autosave, save, test) | Unchanged; the active tab is unchanged |
+
+- Found and fixed: a settings or account save that failed validation after the user had switched
+  tabs moved focus to the hidden field. Now `ConfigurationForm.BindFeedback` asks `MayTakeFocus` first.
+- Footers no longer repeat an Account, Settings, or composer storage problem: they name it ("Not
+  saved.", "Connection test failed.", "The draft is not saved.") and add "Details are below the
+  buttons." (`SaveViewModel.StatusSummary`). **Check draft** is offered only while the draft can change.
+- Fixtures for the acceptance list: the existing `empty`, `receive-error`, `body-error`, and
+  `send-unknown`, plus five new ones driven through user commands: `invalid-setup` (email address with
+  a display name, typed into the field), `test-canceled`, `draft-conflict` (autosave refused by another
+  instance), `send-rejected` (synthetic server reason; the demo sender still never reports
+  acceptance), and `sent-copy-failed` (a recovered accepted record, like `send-unknown`). Native
+  captures (light 1100×720, dark 900×600) show no clipping. `draft-conflict` refuses to close, as
+  intended, because its draft cannot be saved.
+- Evidence: `DemoGalleryTests` (5 new cases checking text and valid actions) and `FeedbackPolicyTests`
+  (a result after moving on keeps focus and tab; validation takes focus from the Save button or the
+  tab strip; collapsing copies moves focus to the toggle; footer pointer; no Check on an accepted draft).
 
 ### UI-09 — native accessibility, from discovery to text editing
 
@@ -650,9 +735,9 @@ navigation/disclosure/resize transition.
   Preserve useful error information without exposing internal implementation details in the UI.
 - [x] Distinguish initial load, canceled load, partial/resource-limited content, blocked
   remote resources, failure, and ready. Keep retry explicit and prevent automatic crash loops.
-- [ ] Preserve zoom/scroll during harmless status updates; invalidate them deliberately
+- [x] Preserve zoom/scroll during harmless status updates; invalidate them deliberately
   when the message, document geometry, or DPI changes.
-- [ ] Align typography, theme, focus, shortcuts, and scaling with the shell. Keep
+- [x] Align typography, theme, focus, shortcuts, and scaling with the shell. Keep
   external navigation user-initiated and subject to the existing URL policy.
 - [ ] After the renderer process boundary passes its acceptance gate, design an inline
   text/HTML toggle in the reader with stable message identity and plain-text fallback.
@@ -692,10 +777,52 @@ Inline embedding remains blocked by the separate renderer containment gate.
   Close with the open status; Escape in the preview and Close HTML preview each close it and the
   reader reports closed; selecting another message closes the preview; returning shows a fresh
   Open action. Header and plain-text view readable in the dark theme.
-- Open: zoom and scroll preservation (the preview has no zoom yet), keyboard scrolling and a
-  Tab path inside the preview, UI Automation for the preview window, the truncation notice checked
-  on a real long document, and replacing an open preview with another message's (the demo has one
-  HTML message; covered by the host's generation logic only).
+- Open (at the time): zoom and scroll preservation, keyboard scrolling and a Tab path inside the
+  preview, UI Automation for the preview window, the truncation notice on a real long document, and
+  replacing an open preview with another message's.
+
+**Progress (2 October 2026, keyboard, screen readers, and scaling):**
+
+- **Bug fixed, display scaling:** every preview tile after the first was painted from the wrong place
+  at any display scale other than 100 %. Broiler.HTML takes the scroll offset in layout units and
+  applies the zoom itself; the preview multiplied the offset by the scale as well, so at 150 % a long
+  message's text ran out two-thirds of the way down and the rest of the preview was blank (at 200 %
+  it ran out halfway). Messages shorter than one 1,024-DIP tile, like the old demo, were unaffected.
+- **Bug fixed, reflow:** making the preview narrower did not reflow the document. The width the view
+  set on the document did not invalidate its cached layout, so the old width stayed and a horizontal
+  scrollbar appeared.
+- **Keyboard:** the document is focused when the window opens, so arrows, Page Up/Down, Home/End,
+  Space and Shift+Space scroll it at once. Tab and Shift+Tab cycle through the header buttons, the
+  document, and each link (or the plain text), using the shell's own tab-stop order
+  (`MailKeyboardNavigation.TabStops`). A focused link scrolls into view and opens with Enter; links
+  still open only on a user action and through the existing URL policy. Hiding the HTML or the text
+  moves focus from the hidden view to its replacement; a failure moves it to the text. Escape still
+  closes the window. Focus rings frame the focused link and, for the document, the viewport.
+- **Screen readers:** the preview window now has the UI Automation bridge. Its tree is the status
+  text, the buttons, an "HTML message" group, and one Hyperlink per link the policy would open, named
+  by the link's text (taken from the sanitized HTML; the address if it has none) and invokable.
+  Broiler.HTML reports only the first line of a link that wraps, so its target covers that line;
+  clicks on later lines still open it.
+- **Reading position:** a status change (for example the remote-image result) keeps the scroll
+  offset; a reflow at another width keeps the reader at the same relative place; a new document
+  starts at the top. The preview has no zoom of its own; it follows the display scale.
+- **Shell alignment:** the header uses the reader's `ReadingColumn` margins and line length.
+- **Fixture:** `long-html` selects a newsletter taller than the 32,768-DIP render budget with a link
+  per section, followed by a short HTML message.
+- Tests: `HtmlPreviewKeyboardTests` (named hyperlink targets for openable links only, Enter opens,
+  a wrapped link is one target, keyboard scrolling, Tab stops and reveal, reading position across a
+  status change, reflow and a new document, the window's start focus, Tab cycle, and view switching,
+  and tile content at 100, 150, and 200 %, which fails with the old offset), and the `long-html`
+  gallery case.
+- **Native, 150 %, light and dark (Debug; the UIA and Tab checks also on a NativeAOT publish, which
+  has no trimming or AOT warnings):** UIA shows the group and the `example.test` hyperlink with Invoke;
+  focus starts on the document and Tab goes document → link → Show plain text → document; narrowing the
+  window to 520 pixels reflows without a horizontal scrollbar. In `long-html` the shortened-preview
+  notice is in the header, 272 hyperlinks are exposed (those within the budget), End shows section
+  272 directly above the cut banner (before the fix it showed the document's last section over
+  blank space), selecting the next message closes the preview, and opening that one is titled
+  "Short HTML note".
+- Open: an inline reader view (blocked by renderer containment, as before); a preview zoom control.
 
 ### UI-12 — performance with measured budgets
 
@@ -751,15 +878,15 @@ Do not substitute screenshot inspection or unit-test counts for latency/memory e
 
 **Owner:** Mail integration/CI. This closes the UI release milestone, not just a build.
 
-- [ ] Maintain the matrix below as results tied to a revision, package versions,
+- [x] Maintain the matrix below as results tied to a revision, package versions,
   architecture, SDK, monitor/DPI, and test method.
-- [ ] Keep focused behavior tests for state transitions, data preservation, and native
+- [x] Keep focused behavior tests for state transitions, data preservation, and native
   regressions. Use visual review for spacing/hierarchy rather than brittle tests of every pixel.
-- [ ] Exercise the packaged NativeAOT executable with an isolated demo/test profile;
+- [x] Exercise the packaged NativeAOT executable with an isolated demo/test profile;
   headless `--smoke-test` remains a useful but limited composition check.
-- [ ] Check screenshots for clipping/overlap and native interaction for focus/input.
+- [x] Check screenshots for clipping/overlap and native interaction for focus/input.
   Synthetic examples must cover long strings, Unicode, errors, and populated forms.
-- [ ] Record unmet platform checks explicitly. A test in a sibling source checkout
+- [x] Record unmet platform checks explicitly. A test in a sibling source checkout
   does not prove the published package works in Mail.
 
 | Dimension | Required cases |
@@ -777,6 +904,23 @@ Do not substitute screenshot inspection or unit-test counts for latency/memory e
 **Accept:** all applicable cases pass or have a specifically documented blocker.
 Complete includes native behavior, screenshots, and data/state preservation—not only
 compilation or a new checked roadmap heading.
+
+**Progress (2 October 2026):** the first pass is recorded in
+[ui-acceptance-2026-10-02.md](ui-acceptance-2026-10-02.md).
+
+- `scripts/Accept-UI.ps1` publishes NativeAOT and runs every gallery fixture at 640×480, 1100×720,
+  and 1920×1080 in both themes (96 runs): screenshot, UI Automation checks (unnamed controls,
+  clipping, overlap), a Tab walk, exit code, and stderr, tied to the revision, packages, SDK, OS, and
+  display scale.
+- Result: 96 of 96 runs without automated findings after the fixes; screenshots reviewed.
+- Found and fixed in Mail: an invisible, unannounced tab stop on every form's feedback area (now a stop
+  only while it scrolls, and named), and misaligned `--help` columns.
+- Found and fixed in Broiler.UI (branch `claude/measure-invalidation`, verified with a local package,
+  waiting for release): a stale-layout band above the compact inbox list, caused by measure
+  invalidation stopping early, and field errors left under the action bar by `FormSurface.Reveal`.
+- Pending with documented blockers: 100 % and 200 % scale and monitor moves, text scale, high
+  contrast, reduced motion, physical mouse/touchpad, AltGr and IME, screen-reader speech, ARM64
+  hardware, and right-to-left layout (UI-14).
 
 ### UI-14 — later platform and product UI
 
