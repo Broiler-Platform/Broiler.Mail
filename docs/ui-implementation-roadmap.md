@@ -571,6 +571,15 @@ come from a native client as well as managed tests. Track any upstream package w
 | Layout containers appear as control elements named after their class (StandardPanel, TabContent, AdaptiveInboxLayout) | Hosting provider: Generic/Panel nodes without a name should not be control elements |
 | Focus, selection, and live-region announcements, and a real screen reader | Verify after the above; H-01 stays open |
 
+- **Broiler.UI 0.1.0-preview.12 consumed (2 October 2026):** it adds `AccessibleName`, `LabeledBy`
+  (set by `UiLabel.Target`), and `IsHiddenFromAccessibility` for inactive tab content (Broiler.UI
+  ADR 0027). Mail names the read-only reader editors ("Message text", "Sender and recipients").
+  With the published Hosting 0.1.0-preview.2 an external client now reads every form edit by its
+  label ("Email address", "To", "Subject", "Message") and the value separately. Still waiting for
+  the next Hosting release, whose provider (branch `claude/uia-provider-mapping`) already consumes
+  preview.12: layout containers named after their class, contents of unselected tabs, and the
+  Text pattern. Raise `BroilerHostingVersion` and repeat the external-client check after it ships.
+
 ### UI-10 — keyboard, native text input, and scroll behavior
 
 **Owner:** Mail commands/focus policy; Hosting/Input native event fidelity.

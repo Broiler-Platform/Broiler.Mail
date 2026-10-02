@@ -36,6 +36,8 @@ public sealed class ScrollableMessageText : UiElement
     private readonly StandardRichEdit _editor = new()
     {
         IsReadOnly = true,
+        // Without a name a read-only editor would be announced by its placeholder, or not at all.
+        AccessibleName = "Message text",
         VerticalScrollPolicy = RichEditScrollPolicy.Never,
         HorizontalScrollPolicy = RichEditScrollPolicy.Never,
         Wrapping = RichEditWrapping.Wrap,
