@@ -22,6 +22,9 @@ using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
+using Broiler.UI.Label;
+using Broiler.UI.Label.Standard;
+using Broiler.UI.Standard;
 using Broiler.UI.Panel.Standard;
 
 namespace Broiler.Mail.Application.Views;
@@ -45,6 +48,15 @@ public sealed class SettingsView(SettingsViewModel model)
         var window = ConfigurationForm.AddSection(panel, "Window size", "Broiler.Mail reopens at its last size and position. A size saved here is used at the next start instead.");
         var width = ConfigurationForm.AddField(window, "Initial window width (640–7680)", model.WindowWidth);
         var height = ConfigurationForm.AddField(window, "Initial window height (480–4320)", model.WindowHeight);
+        // Listed from the same table the key handling uses; collapsed so the settings stay short.
+        var shortcuts = new FormSection("Keyboard shortcuts", "", collapsible: true, expanded: false);
+        panel.AddChild(shortcuts);
+        foreach (var shortcut in MailShortcuts.All)
+            shortcuts.Content.AddChild(new StandardLabel
+            {
+                Text = $"{shortcut.Gesture}: {shortcut.Description}", UseMnemonic = false,
+                Wrapping = UiTextWrapping.Wrap, Foreground = StandardControlPaint.Text,
+            });
         var save = new StandardButton { Text = "Save settings", IsDefault = true };
         var status = new InlineFeedback();
         var surface = new FormSurface(panel, FormSurface.ActionBar(save), status);

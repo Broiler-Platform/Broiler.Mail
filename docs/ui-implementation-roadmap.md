@@ -81,7 +81,7 @@ P1 improves the current app; P2 depends on larger product/platform work.
 | UI-07 | P1 | Live appearance and geometry persistence | Live theme and geometry implemented; preview windows, text scale, RTL open | UI-01 |
 | UI-08 | P1 | Consistent state, feedback, and recovery UX | Inbox and composer states done; announcements and transient success open | Apply to UI-02 through UI-07 |
 | UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
-| UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Partial | Coordinate with UI-04, UI-05, UI-09 |
+| UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Shortcut table, reply shortcuts, and traversal done; IME, wheel, and DPI caret checks open | Coordinate with UI-04, UI-05, UI-09 |
 | UI-11 | P1 | HTML preview ergonomics | Partial | UI-01, UI-08; inline embedding also needs sandbox |
 | UI-12 | P1 | Measured rendering and memory performance | Partial | Capture baseline first; repeat after affected changes |
 | UI-13 | P1 | Native visual and interaction acceptance | Open | Continuous; final gate for UI-01 through UI-12 |
@@ -588,11 +588,11 @@ come from a native client as well as managed tests. Track any upstream package w
 
 **Owner:** Mail commands/focus policy; Hosting/Input native event fidelity.
 
-- [ ] Review the hard-coded focusable-control list and use semantic/control traversal
+- [x] Review the hard-coded focusable-control list and use semantic/control traversal
   where supported. New controls should not silently fall out of Tab navigation.
-- [ ] Preserve Ctrl+1–4, Ctrl+Tab, F5, Escape, Enter-on-message, and standard edit keys.
+- [x] Preserve Ctrl+1–4, Ctrl+Tab, F5, Escape, Enter-on-message, and standard edit keys.
   Define new reply/back shortcuts once at the shell command layer and display them consistently.
-- [ ] Keep splitter/overflow/disclosure actions reachable by keyboard. Reveal focused
+- [x] Keep splitter/overflow/disclosure actions reachable by keyboard. Reveal focused
   controls without scrolling unrelated panes or rebuilding the editor.
 - [ ] Verify AltGr, dead keys, surrogate pairs, IME composition/commit/cancel, paste,
   caret positioning at DPI changes, precision wheel, and horizontal scrolling where relevant.
@@ -605,6 +605,36 @@ come from a native client as well as managed tests. Track any upstream package w
 **Accept:** keyboard-only completion of reading/setup/composition, exactly-once text
 input, no shortcut characters inserted into editors, and visible focus after every
 navigation/disclosure/resize transition.
+
+**Progress (2 October 2026):**
+
+- `MailShortcuts` is the single shortcut table. `MailKeyboardNavigation` matches key presses
+  against it, the Settings tab lists it in a collapsed "Keyboard shortcuts" section, and the README
+  and demo text follow it. New: Ctrl+N (new message), Ctrl+R / Ctrl+Shift+R / Ctrl+F (reply, reply
+  all, forward; consumed even when unavailable, so the chord never reaches an editor), and
+  Alt+Left (back from the narrow-window reader; passes through otherwise).
+- **Bug fixed:** shortcuts only checked that Ctrl was held. AltGr arrives as Ctrl+Alt, so AltGr+2
+  and AltGr+3 (² and ³ on a German layout) switched tabs instead of typing. Modifiers must now
+  match exactly, side-specific flags count, and Windows-key chords are left to the system.
+- **Bug fixed:** the adaptive inbox collapses a pane by arranging it to an empty rectangle while it
+  stays `Visible`, so Tab could focus invisible list or reader controls in a narrow window.
+- Tab traversal now uses `CanFocus` and `IsTabStop` instead of a list of control types, skips
+  collapsed, hidden-by-container, and arranged-away subtrees, orders by `TabIndex` with a stable
+  sort, and includes the splitter (keyboard-resizable, but it does not report itself focusable)
+  between its panes. A scroll view of read-only content stays a stop so the keyboard can scroll it.
+- Tests: `KeyboardShortcutTests` (table uniqueness, AltGr and Windows-key chords, the reply
+  shortcuts and their focus targets, consumed unavailable replies, Tab stops in wide and narrow
+  layouts, Alt+Left, Settings list).
+- **Native, demo build:** Tab order list → splitter → reader details → Reply → Reply all → Forward
+  → message text → tabs → toolbar; on the splitter Right×3 moves it 35 % → 41 % and Home to its
+  minimum. In a 640×480 window Tab cycles only the visible controls, all with non-zero bounds.
+  Posted `WM_CHAR` into the To field: a, é, ², @, a surrogate pair (😀), Ctrl+R and Ctrl+A control
+  characters, b → exactly "aé²@😀b".
+- Open: IME composition with a real IME, precision and horizontal wheel, caret position across a
+  DPI change, and dead keys typed on a real layout (posted messages cannot carry modifier state,
+  so Ctrl and AltGr chords were checked headlessly only). `WindowsInputBridgeTests.EndToEnd_RichEdit_HandlesImeCompositionAndCommit`
+  failed once in 13 full runs: Hosting suppresses the duplicate `WM_CHAR` after an IME commit only
+  within 500 ms of wall time, which a loaded test run can exceed.
 
 ### UI-11 — predictable HTML preview presentation
 

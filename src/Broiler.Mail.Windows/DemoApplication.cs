@@ -224,7 +224,7 @@ internal static class DemoApplication
                     string.Join("\n\n", Enumerable.Range(1, 20).Select(index => $"Paragraph {index}: {LongSubject}.")))
                 { Composition = composition };
             }
-            return new(message, "Welcome to Broiler.Mail version 1.\n\nThis is a synthetic message. Demo mode never accesses your account, saved password, or network.\n\nUse Receive mail, Load older, and select a message.\n\nKeyboard: Tab / Shift+Tab moves focus, Ctrl+1/2/3 switches tabs, F5 receives, and Escape cancels.\n\n" +
+            return new(message, "Welcome to Broiler.Mail version 1.\n\nThis is a synthetic message. Demo mode never accesses your account, saved password, or network.\n\nUse Receive mail, Load older, and select a message.\n\nKeyboard: Tab / Shift+Tab moves focus, Ctrl+1 to Ctrl+4 switch tabs, F5 receives, Ctrl+R replies, and Escape goes back or cancels. Settings lists every shortcut.\n\n" +
                 string.Join("\n\n", Enumerable.Range(1, 35).Select(index => $"Paragraph {index}: The reading pane wraps and scrolls. Grüße, café, and literal ampersands & remain readable."))) { Composition = composition };
         }
     }
