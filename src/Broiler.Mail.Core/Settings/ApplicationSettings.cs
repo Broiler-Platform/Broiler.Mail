@@ -26,6 +26,24 @@ public sealed record ApplicationSettings
     public int WindowWidth { get; init; } = 1100;
     public int WindowHeight { get; init; } = 720;
     public double InboxSplitterFraction { get; init; } = 0.35;
+    /// <summary>The last normal (not maximized) window bounds; null in files written before it existed.</summary>
+    public WindowPlacement? Window { get; init; }
+}
+
+/// <summary>
+/// Remembered main-window geometry. The outer rectangle is in physical screen pixels, which is what
+/// monitor work areas are compared against; the client size is in device-independent pixels, which
+/// is what a new window is created with. Bounds are those of the normal window, also while maximized.
+/// </summary>
+public sealed record WindowPlacement
+{
+    public int Left { get; init; }
+    public int Top { get; init; }
+    public int Width { get; init; }
+    public int Height { get; init; }
+    public int ClientWidth { get; init; }
+    public int ClientHeight { get; init; }
+    public bool Maximized { get; init; }
 }
 
 // Broiler-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=6E41ED

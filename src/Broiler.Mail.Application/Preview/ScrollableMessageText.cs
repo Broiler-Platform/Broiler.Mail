@@ -23,6 +23,7 @@ using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.ScrollView;
 using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
+using Broiler.Mail.Application.Views;
 
 namespace Broiler.Mail.Application.Preview;
 
@@ -40,6 +41,8 @@ public sealed class ScrollableMessageText : UiElement
         Wrapping = RichEditWrapping.Wrap,
         BorderThickness = 0,
         FocusRingThickness = 0,
+        PaddingX = 0,
+        PaddingY = 0,
         Background = StandardControlPaint.Surface,
         Foreground = StandardControlPaint.Text,
     };
@@ -52,7 +55,8 @@ public sealed class ScrollableMessageText : UiElement
     // Broiler-Human:        PENDING
     public ScrollableMessageText()
     {
-        _scroll.AddChild(_editor);
+        // Margins and a bounded line length come from the column; the scroll view still spans the pane.
+        _scroll.AddChild(new ReadingColumn(_editor, verticalMargin: 8));
         AddChild(_scroll);
     }
 

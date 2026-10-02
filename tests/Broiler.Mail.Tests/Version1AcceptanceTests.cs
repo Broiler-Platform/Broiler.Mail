@@ -6,6 +6,7 @@ using Broiler.Mail.Application;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
+using Broiler.UI.ListView.Standard;
 using Broiler.UI.Forms.Standard;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
@@ -115,17 +116,33 @@ public sealed class Version1AcceptanceTests
         var text = Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
         text.Text = string.Join("\n", Enumerable.Repeat("A readable message with words & symbols.", 40));
         session.RenderFrame();
-        var label = Descendants(text).OfType<StandardRichEdit>().Single();
-        Assert.True(label.Bounds.Width > 250, $"Reader collapsed to {label.Bounds.Width} DIP.");
-        Assert.True(label.Bounds.Height < 3000, "Text was wrapped into a narrow column.");
+        var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
+        if (AdaptiveInboxLayout.NeedsCompact(layout.Bounds.Width))
+        {
+            // Too narrow for two readable panes: with no message open, the list uses the whole width.
+            Assert.True(layout.IsCompact);
+            Assert.True(Descendants(layout).OfType<StandardListView>().Single().Bounds.Width > width - 40);
+        }
+        else
+        {
+            var label = Descendants(text).OfType<StandardRichEdit>().Single();
+            Assert.True(label.Bounds.Width > 250, $"Reader collapsed to {label.Bounds.Width} DIP.");
+            Assert.True(label.Bounds.Height < 3000, "Text was wrapped into a narrow column.");
+        }
 
         shell.Navigation.SelectTab("account");
         session.RenderFrame();
         var edits = Descendants(shell.Navigation.SelectedTab!.Content!).OfType<StandardEdit>().ToArray();
         Assert.True(edits[0].Bounds.Width > width - 40);
         session.SetFocus(shell.Navigation);
+        // The setup checklist's next action is the first stop, then the first field.
+        Assert.True(keyboard.Handle(Key(9)));
+        var nextStep = Assert.IsType<StandardButton>(session.FocusedElement);
+        Assert.True(nextStep.Text.StartsWith("Next:", StringComparison.Ordinal) || nextStep.Text == "Open Inbox");
         Assert.True(keyboard.Handle(Key(9)));
         Assert.Same(edits[0], session.FocusedElement);
+        Assert.True(keyboard.Handle(Key(9, shift: true)));
+        Assert.Same(nextStep, session.FocusedElement);
         Assert.True(keyboard.Handle(Key(9, shift: true)));
         Assert.Same(shell.Navigation, session.FocusedElement);
         if (smtp)
@@ -173,7 +190,7 @@ public sealed class Version1AcceptanceTests
         using var configured = app.CreateShell();
         session.AddRoot(configured.Window);
         configured.Navigation.SelectTab("account");
-        var password = Descendants(configured.Window).OfType<StandardEdit>().Last(edit => edit.IsPassword);
+        var password = (StandardEdit)Descendants(configured.Window).OfType<StandardLabel>().Single(label => label.Text == "Password / app password").Target!;
         Assert.True(password.IsEnabled);
         password.Text = "synthetic-secret";
         password.SelectAll();

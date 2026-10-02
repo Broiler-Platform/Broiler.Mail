@@ -25,6 +25,12 @@ namespace Broiler.Mail.Application.ViewModels;
 // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=0E66E7
 // Broiler-Falsified-If: a password is written under a credential key for connection details that differ from the saved profile
 // Broiler-Human:        PENDING
+/// <summary>The next action that brings an account closer to receiving mail.</summary>
+public enum AccountSetupStep { SaveDetails, SavePassword, TestConnection, Ready }
+
+/// <summary>The result of the most recent connection test for the saved profile and password.</summary>
+public enum ConnectionCheck { NotRun, Running, Passed, Failed }
+
 public sealed class AccountProfileViewModel : SaveViewModel
 {
     private readonly IAccountStore _store;
@@ -32,6 +38,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     private readonly ICredentialStore _credentials;
     private readonly IMailReceiver _receiver;
     private CancellationTokenSource? _connectionCancellation;
+    private int _credentialCheck;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=4B52C5
     // Broiler-Falsified-If: a profile without an outgoing server opens with SMTP configuration switched on
@@ -60,6 +67,75 @@ public sealed class AccountProfileViewModel : SaveViewModel
         SmtpAuthentication = profile?.OutgoingServer?.Authentication ?? AuthenticationMethod.Password;
         SentCopyMode = profile?.SentCopyMode ?? SentCopyMode.NotConfigured;
         SentFolder = profile?.SentFolder ?? string.Empty;
+        if (loadError is null) RefreshCredentialState();
+    }
+
+    /// <summary>Whether an IMAP password is stored for the saved profile; null while still checking.</summary>
+    public bool? HasPassword { get; private set; }
+    /// <summary>Whether an SMTP password is stored for the saved outgoing server; null while checking or without SMTP.</summary>
+    public bool? HasSmtpPassword { get; private set; }
+    public ConnectionCheck ConnectionCheck { get; private set; }
+    /// <summary>Why the last connection test failed, shown beside the setup step.</summary>
+    public string? ConnectionFailure { get; private set; }
+
+    /// <summary>The form differs from the saved profile, including a profile that was never saved.</summary>
+    public bool HasUnsavedChanges
+    {
+        get
+        {
+            if (Profile is null) return true;
+            try { return BuildProfile() != Profile; }
+            catch (ConfigurationValidationException) { return true; }
+        }
+    }
+
+    public AccountSetupStep NextStep =>
+        HasUnsavedChanges ? AccountSetupStep.SaveDetails
+        : HasPassword != true ? AccountSetupStep.SavePassword
+        : ConnectionCheck != ConnectionCheck.Passed ? AccountSetupStep.TestConnection
+        : AccountSetupStep.Ready;
+
+    /// <summary>The view calls this after copying edited fields, so unsaved-change state stays current.</summary>
+    public void NotifyEdited() => NotifyChanged();
+
+    /// <summary>
+    /// Checks which passwords are stored for the saved profile. Only the presence is kept; the secret
+    /// itself is dropped immediately and never reaches the view, status text, or diagnostics.
+    /// </summary>
+    private void RefreshCredentialState()
+    {
+        int check = ++_credentialCheck;
+        var profile = Profile;
+        if (profile is null)
+        {
+            HasPassword = false;
+            HasSmtpPassword = null;
+            return;
+        }
+        HasPassword = null;
+        HasSmtpPassword = null;
+        _ = Task.Run(async () =>
+        {
+            bool? imap = await IsStoredAsync(CredentialKey.For(profile, MailProtocol.Imap)).ConfigureAwait(false);
+            bool? smtp = profile.OutgoingServer is null ? null : await IsStoredAsync(CredentialKey.For(profile, MailProtocol.Smtp)).ConfigureAwait(false);
+            Post(() =>
+            {
+                if (check != _credentialCheck) return;
+                HasPassword = imap;
+                HasSmtpPassword = smtp;
+                NotifyChanged();
+            });
+        });
+    }
+
+    private async Task<bool?> IsStoredAsync(CredentialKey key)
+    {
+        try { return await _credentials.ReadAsync(key).ConfigureAwait(false) is not null; }
+        catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException)
+        {
+            // Unknown rather than missing: the store may be locked or unavailable.
+            return null;
+        }
     }
 
     public AccountProfile? Profile { get; private set; }
@@ -102,7 +178,13 @@ public sealed class AccountProfileViewModel : SaveViewModel
         {
             candidate = BuildProfile();
             await _store.SaveAsync(candidate, cancellationToken).ConfigureAwait(false);
-        }, () => Profile = candidate!, "Account profile saved. Save each protocol's password separately; connection testing applies to IMAP.");
+        }, () =>
+        {
+            bool changed = candidate != Profile;
+            Profile = candidate!;
+            // Connection settings are part of the credential binding, so presence and test results start over.
+            if (changed) { ConnectionCheck = ConnectionCheck.NotRun; ConnectionFailure = null; RefreshCredentialState(); }
+        }, "Account profile saved.");
     }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=2; Fingerprint=5E5C0D
@@ -119,7 +201,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
         {
             var account = RequireSavedProfile(protocol);
             return _credentials.WriteAsync(CredentialKey.For(account, protocol), password, cancellationToken);
-        }, () => { }, "Saving password…", "Password saved.", "Password not saved", "Password save canceled.");
+        }, () => RecordPassword(protocol, stored: true), "Saving password…", "Password saved.", "Password not saved", "Password save canceled.");
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=2; Fingerprint=D33B47
     // Broiler-Falsified-If: the one-argument ForgetPasswordAsync deletes the SMTP credential slot instead of the IMAP one
@@ -132,7 +214,16 @@ public sealed class AccountProfileViewModel : SaveViewModel
     // Broiler-Human:        PENDING
     public Task ForgetPasswordAsync(MailProtocol protocol, CancellationToken cancellationToken = default) =>
         RunAsync(() => _credentials.DeleteAsync(CredentialKey.For(RequireSavedProfile(protocol), protocol), cancellationToken),
-            () => { }, "Removing password…", "Saved password removed.", "Password not removed", "Password removal canceled.");
+            () => RecordPassword(protocol, stored: false), "Removing password…", "Saved password removed.", "Password not removed", "Password removal canceled.");
+
+    private void RecordPassword(MailProtocol protocol, bool stored)
+    {
+        if (protocol == MailProtocol.Smtp) { HasSmtpPassword = stored; return; }
+        HasPassword = stored;
+        // A different password needs a new test.
+        ConnectionCheck = ConnectionCheck.NotRun;
+        ConnectionFailure = null;
+    }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=FDC9C0
     // Broiler-Falsified-If: a connection test runs while the form holds unsaved connection edits instead of being refused with the save-your-changes message
@@ -142,10 +233,18 @@ public sealed class AccountProfileViewModel : SaveViewModel
         if (!CanSave) return Task.CompletedTask;
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _connectionCancellation = cancellation;
-        return RunAsync(() => _receiver.TestConnectionAsync(RequireSavedProfile(), cancellation.Token), () => { },
+        ConnectionCheck = ConnectionCheck.Running;
+        return RunAsync(() => _receiver.TestConnectionAsync(RequireSavedProfile(), cancellation.Token), () => ConnectionCheck = ConnectionCheck.Passed,
             "Connecting and authenticating…", "Connected securely and authenticated. No messages were fetched.",
-            "Connection test failed", "Connection test canceled.", () =>
+            "Connection test failed", "Connection test canceled.", failure =>
             {
+                if (failure is not null)
+                {
+                    // A canceled test proves nothing either way; a real failure is kept beside the step.
+                    bool canceled = cancellation.IsCancellationRequested;
+                    ConnectionCheck = canceled ? ConnectionCheck.NotRun : ConnectionCheck.Failed;
+                    ConnectionFailure = canceled ? null : failure;
+                }
                 _connectionCancellation = null;
                 cancellation.Dispose();
             });

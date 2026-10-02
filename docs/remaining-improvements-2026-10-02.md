@@ -33,8 +33,11 @@ strength of its verification. P2 adds larger product/platform capabilities.
 
 ### P0 — A1: make native UI Automation expose the controls
 
-**Owner:** Broiler.Hosting.Windows, with a Mail consumer test. **Status:** native
-failure observed; root cause not yet established.
+**Owner:** Broiler.Hosting.Windows, with a Mail consumer test. **Status:** root cause found and
+fixed in Mail (bridges were constructed before the native windows existed, with zero handles); the
+tree is now exposed natively, including the published NativeAOT build. Naming, Text pattern, and
+hidden-tab problems remain upstream; see UI-09 in the [UI roadmap](ui-implementation-roadmap.md).
+The investigation below records the earlier state.
 
 The external inspection of the published NativeAOT demo saw the window and render
 pane but no Inbox, recipient, or Send controls. Managed peer tests cannot establish
@@ -82,7 +85,8 @@ forced renderer termination. Ordinary fixture rendering alone is insufficient.
 
 ### P1 — A3: preserve reading context during Receive
 
-**Owner:** Mail. **Status:** confirmed behavior in current source; EX-07 remains open.
+**Owner:** Mail. **Status:** implemented as UI-02 (see the [UI roadmap](ui-implementation-roadmap.md));
+native new-mail anchoring check pending. The description below records the earlier behavior.
 
 [`InboxViewModel.LoadPageAsync`](../src/Broiler.Mail.Application/ViewModels/InboxViewModel.cs)
 sets `SelectedMessage` and `Body` to null after every successful newest-page fetch.
@@ -99,7 +103,8 @@ refresh, reordered/new messages, removal, empty results, failure, and stale comp
 
 ### P1 — A4: finish the reader and reply flow
 
-**Owner:** Mail, using the existing UI controls. **Status:** partial; EX-03/EX-05.
+**Owner:** Mail, using the existing UI controls. **Status:** reader header and local reply
+actions implemented as UI-03; compact single-pane mode remains (UI-04). The text below records the earlier state.
 
 [`InboxView`](../src/Broiler.Mail.Application/Views/InboxView.cs) still puts subject,
 sender, date, and server flags into one label. Reply actions exist only in Compose.

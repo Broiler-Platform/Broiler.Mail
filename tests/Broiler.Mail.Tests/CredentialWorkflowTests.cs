@@ -91,7 +91,7 @@ public sealed class CredentialWorkflowTests
         var credentials = new TestCredentialStore();
         var model = Model(directory, credentials, new TestMailReceiver(), TestDirectory.Profile());
         using var form = new AccountProfileView(model).CreateContent();
-        var password = Descendants(form).OfType<StandardEdit>().Last(edit => edit.IsPassword);
+        var password = ImapPassword(form);
         var test = Descendants(form).OfType<StandardButton>().Single(button => button.Text == "Test connection");
         password.Text = LocalImapServer.Password;
         Assert.False(test.IsEnabled); // Never silently test a different, previously saved password.
@@ -132,4 +132,8 @@ public sealed class CredentialWorkflowTests
         foreach (var child in root.Children)
             foreach (var element in Descendants(child)) yield return element;
     }
+
+    // The IMAP password is found by its label; its section precedes the optional SMTP section.
+    private static StandardEdit ImapPassword(UiElement form) => (StandardEdit)Descendants(form).OfType<Broiler.UI.Label.Standard.StandardLabel>()
+        .Single(label => label.Text == "Password / app password").Target!;
 }

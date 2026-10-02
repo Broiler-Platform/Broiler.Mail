@@ -67,15 +67,14 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         }
         if (input.NativeKeyCode == 0x1B)
         {
+            // Escape first leaves a compact reader; with nothing to go back from, it cancels work.
+            if (!model.Inbox.IsBusy && shell.Navigation.SelectedTab?.Id == "inbox" && shell.Inbox.GoBackToList()) return true;
             model.Inbox.Cancel();
             model.Account.CancelConnectionTest();
             return true;
         }
-        if (input.NativeKeyCode == 13 && session.FocusedElement is StandardListView && model.Inbox.SelectedMessage is { } message)
-        {
-            _ = model.Inbox.SelectAsync(message.Key);
-            return true;
-        }
+        if (input.NativeKeyCode == 13 && session.FocusedElement is StandardListView && model.Inbox.SelectedMessage is not null)
+            return shell.Inbox.OpenSelected();
         return false;
     }
 
@@ -86,7 +85,7 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     {
         var controls = new List<UiElement> { shell.Navigation };
         if (shell.Navigation.SelectedTab?.Content is { } content)
-            controls.AddRange(Descendants(content).Where(IsFocusable));
+            controls.AddRange(Descendants(content).Where(element => IsFocusable(element) && IsShown(element, content)));
         int current = controls.IndexOf(session.FocusedElement!);
         int next = current < 0 ? (direction > 0 ? 0 : controls.Count - 1) : (current + direction + controls.Count) % controls.Count;
         session.SetFocus(controls[next]);
@@ -96,17 +95,14 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=36A581
     // Broiler-Falsified-If: a focused field below the visible area of its scroll view stays out of view after Tab
     // Broiler-Human:        PENDING
-    private void Reveal(UiElement element)
+    private void Reveal(UiElement element) => FocusNavigation.Reveal(session, element);
+
+    // Collapsed controls, such as the reader details without an open message, are not Tab stops.
+    private static bool IsShown(UiElement element, UiElement root)
     {
-        // Layout first so newly selected tabs have useful bounds. Then reveal off-screen form fields.
-        session.RenderFrame();
-        for (var parent = element.Parent; parent is not null; parent = parent.Parent)
-        {
-            if (parent is not StandardScrollView scroll) continue;
-            double delta = element.Bounds.Top < scroll.ContentBounds.Top ? element.Bounds.Top - scroll.ContentBounds.Top
-                : element.Bounds.Bottom > scroll.ContentBounds.Bottom ? element.Bounds.Bottom - scroll.ContentBounds.Bottom : 0;
-            if (delta != 0) { scroll.ScrollBy(0, delta); session.RenderFrame(); }
-        }
+        for (var current = element; current is not null && current != root; current = current.Parent)
+            if (current.Visibility != UiVisibility.Visible) return false;
+        return true;
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=A40427

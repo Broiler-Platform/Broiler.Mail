@@ -22,6 +22,9 @@ using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
+using Broiler.UI.Edit.Standard;
+using Broiler.UI.Label;
+using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.RichEdit.Standard;
@@ -34,16 +37,22 @@ namespace Broiler.Mail.Application.Views;
 // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=3F7FB2
 // Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
 // Broiler-Human:        PENDING
-public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
+public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, CompositionCommands? commands = null)
 {
+    private readonly CompositionCommands _commands = commands ?? new CompositionCommands(model, inbox);
+
+    /// <summary>The To field, available after <see cref="CreateContent"/>; focused for new messages and forwards.</summary>
+    public UiElement? Recipients { get; private set; }
+    /// <summary>The body editor, available after <see cref="CreateContent"/>; focused for replies.</summary>
+    public UiElement? Body { get; private set; }
+
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=31C5F3
     // Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
     {
-        var panel = new StandardPanel { Spacing = 8 };
-        ConfigurationForm.AddText(panel, "Write a plain-text message. Configure outgoing mail in Account before sending.");
-        var source = ConfigurationForm.AddText(panel, "");
+        // Writing comes first: a compact header, then a body that takes the rest of the window.
+        var panel = new FillLastStack { Spacing = 8, MinimumFillHeight = 160 };
         var actions = new StandardToolbar
         {
             Overflow = UiToolbarOverflow.Wrap,
@@ -56,31 +65,44 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
         var replyAll = new StandardButton { Text = "Reply all" };
         var forward = new StandardButton { Text = "Forward" };
         foreach (var button in new[] { create, reply, replyAll, forward }) actions.AddChild(button);
-        panel.AddChild(actions);
-        var sender = ConfigurationForm.AddText(panel, "");
-        ConfigurationForm.AddText(panel, "Recipients: separate email addresses with commas. Only plain text is retained from the body editor.");
-        var to = ConfigurationForm.AddField(panel, "To", "");
-        var copies = new FormSection("Cc and Bcc", "Additional recipients remain part of the draft when this group is collapsed.", collapsible: true, expanded: false);
-        panel.AddChild(copies);
-        var cc = ConfigurationForm.AddField(copies.Content, "Cc", "");
-        var bcc = ConfigurationForm.AddField(copies.Content, "Bcc", "");
+        panel.Add(actions);
+        // Shown only without a draft: why Reply is unavailable, or how to enable it.
+        var hint = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Role = StandardLabelRole.Muted };
+        panel.Add(hint);
+        // Sender identity and the routine autosave state share one quiet line; save failures use feedback below.
+        var sender = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Foreground = StandardControlPaint.Text };
+        panel.Add(sender);
         // Validate rather than truncate: imported recipients and prefixed subjects must remain intact.
-        foreach (var field in new[] { to, cc, bcc }) field.MaxLength = int.MaxValue;
-        var subject = ConfigurationForm.AddField(panel, "Subject", "");
-        subject.MaxLength = int.MaxValue;
-        var body = new StandardRichEdit { AcceptsReturn = true, PreferredSize = new BSize(520, 300) };
+        StandardEdit Field(string placeholder) => new() { MaxLength = int.MaxValue, PlaceholderText = placeholder };
+        var to = Field("name@example.com, another@example.com");
+        panel.Add(new FormField("To", to));
+        var copies = new FormSection("Cc and Bcc", "", collapsible: true, expanded: false);
+        panel.Add(copies);
+        var cc = Field("Visible to all recipients");
+        var bcc = Field("Hidden from other recipients");
+        copies.Content.AddChild(new FormField("Cc", cc));
+        copies.Content.AddChild(new FormField("Bcc", bcc));
+        var subject = Field("");
+        panel.Add(new FormField("Subject", subject));
+        var body = new StandardRichEdit { AcceptsReturn = true, PreferredSize = new BSize(520, 120), PlaceholderText = "Write your message. Only plain text is kept." };
         body.ApplyTheme(StandardControlPaint.Theme);
-        ConfigurationForm.AddLabeledControl(panel, "Body (plain text)", body);
+        var bodyArea = new FillLastStack { Spacing = 4, MinimumFillHeight = 120 };
+        bodyArea.Add(new StandardLabel { Text = "Message", Target = body, Foreground = StandardControlPaint.Text });
+        bodyArea.Add(body);
+        panel.Add(bodyArea);
+        Recipients = to;
+        Body = body;
         var check = new StandardButton { Text = "Check draft" };
         var discard = new StandardButton { Text = "Discard draft" };
         var save = new StandardButton { Text = "Save draft" };
         var send = new StandardButton { Text = "Send", IsDefault = true };
         var submission = new InlineFeedback();
+        var sendHint = new InlineFeedback();
         var sentCopy = new InlineFeedback();
         var storage = new InlineFeedback();
         var status = new InlineFeedback();
         var feedback = new StandardPanel { Spacing = 4 };
-        feedback.AddChild(submission); feedback.AddChild(sentCopy);
+        feedback.AddChild(submission); feedback.AddChild(sendHint); feedback.AddChild(sentCopy);
         feedback.AddChild(storage); feedback.AddChild(status);
         var surface = new FormSurface(panel, FormSurface.ActionBar(send, check, save, discard), feedback);
         Guid? shown = null;
@@ -97,6 +119,8 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
                 copies.IsExpanded = model.Cc.Length > 0 || model.Bcc.Length > 0;
             }
             create.IsEnabled = model.CanStart;
+            // Starting another message is impossible while a draft exists, so the row gives way to writing.
+            actions.Visibility = model.HasDraft ? UiVisibility.Collapsed : UiVisibility.Visible;
             reply.IsEnabled = replyAll.IsEnabled = forward.IsEnabled = model.CanStart && !inbox.IsBusy && inbox.Body?.Composition is not null;
             foreach (var field in new[] { to, cc, bcc, subject }) { field.IsEnabled = model.HasDraft; field.IsReadOnly = !model.CanEdit; }
             body.IsEnabled = model.HasDraft;
@@ -105,33 +129,44 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox)
             discard.IsEnabled = model.CanDiscard;
             save.IsEnabled = model.HasDraft && !model.IsBusy;
             send.IsEnabled = model.CanSend;
-            copies.Summary = string.Join(" · ", new[] { model.Cc.Length > 0 ? "Cc recipients included" : "", model.Bcc.Length > 0 ? "Bcc recipients included" : "" }.Where(text => text.Length > 0));
+            ShowCopiesSummary();
             submission.Set(model.HasDraft && model.SubmissionState != DraftSubmissionState.Editing ? model.SubmissionText : "",
                 model.SubmissionState switch { DraftSubmissionState.Failed => FeedbackKind.Error, DraftSubmissionState.Unknown => FeedbackKind.Warning,
                     DraftSubmissionState.Sending => FeedbackKind.Progress, DraftSubmissionState.Accepted => FeedbackKind.Success, _ => FeedbackKind.Information });
             sentCopy.Set(model.SentCopy != SentCopyState.NotRequested || model.SubmissionState == DraftSubmissionState.Accepted ? model.SentCopyText : "",
                 model.SentCopy switch { SentCopyState.Failed => FeedbackKind.Error, SentCopyState.Unknown => FeedbackKind.Warning,
                     SentCopyState.Pending => FeedbackKind.Progress, SentCopyState.Saved => FeedbackKind.Success, _ => FeedbackKind.Information });
-            storage.Set(model.HasDraft || model.HasLoadError ? model.StorageStatus : "", model.StorageKind);
-            sender.Text = ("From: " + model.FromAddress).Replace("&", "&&", StringComparison.Ordinal);
-            source.Text = (inbox.Body is { } loaded
-                ? loaded.CompositionUnavailableReason ?? $"Selected message: {loaded.Composition?.Subject ?? "Read the message again to load reply headers."}"
-                : "Select and read a message in Inbox before replying or forwarding.").Replace("&", "&&", StringComparison.Ordinal);
+            bool storageProblem = model.StorageKind == FeedbackKind.Error;
+            storage.Set(storageProblem && (model.HasDraft || model.HasLoadError) ? model.StorageStatus : "", model.StorageKind);
+            sender.Text = model.HasDraft && !storageProblem ? $"From: {model.FromAddress} · {model.StorageStatus}" : $"From: {model.FromAddress}";
+            sendHint.Set(model.SendUnavailableReason ?? "", FeedbackKind.Information);
+            hint.Text = model.HasDraft ? "" : inbox.Body is { } loaded
+                ? loaded.CompositionUnavailableReason ?? (loaded.Composition is null ? "Read the message again to load its reply headers." : "")
+                : "To reply or forward, open a message in Inbox.";
+            hint.Visibility = hint.Text.Length > 0 ? UiVisibility.Visible : UiVisibility.Collapsed;
+            // Routine information goes to the shell footer; results, warnings, and errors stay beside the draft.
             status.Set(model.IsBusy ? model.SubmissionState == DraftSubmissionState.Sending ? "Submitting message…"
-                : model.SentCopy == SentCopyState.Pending ? "Saving Sent copy…" : "Updating draft…" : model.Status,
+                : model.SentCopy == SentCopyState.Pending ? "Saving Sent copy…" : "Updating draft…"
+                : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
             updating = false;
         }
+        void ShowCopiesSummary()
+        {
+            // The summary stands in for collapsed fields; expanded, the fields show the same thing.
+            copies.Summary = copies.IsExpanded ? "" : string.Join(" · ", new[] { model.Cc.Length > 0 ? "Cc recipients included" : "", model.Bcc.Length > 0 ? "Bcc recipients included" : "" }.Where(text => text.Length > 0));
+        }
+        if (copies.Toggle is { } toggle) toggle.Clicked += (_, _) => ShowCopiesSummary();
         void Capture()
         {
             if (!updating) model.Edit(to.Text, cc.Text, bcc.Text, subject.Text, body.GetPlainText());
         }
         foreach (var field in new[] { to, cc, bcc, subject }) field.TextChanged += (_, _) => Capture();
         body.DocumentChanged += (_, _) => Capture();
-        create.Clicked += (_, _) => model.StartNew();
-        reply.Clicked += (_, _) => { if (inbox.Body is { } message) model.StartFromMessage(message, CompositionKind.Reply); };
-        replyAll.Clicked += (_, _) => { if (inbox.Body is { } message) model.StartFromMessage(message, CompositionKind.ReplyAll); };
-        forward.Clicked += (_, _) => { if (inbox.Body is { } message) model.StartFromMessage(message, CompositionKind.Forward); };
+        create.Clicked += (_, _) => _commands.StartNew();
+        reply.Clicked += (_, _) => _commands.Respond(CompositionKind.Reply);
+        replyAll.Clicked += (_, _) => _commands.Respond(CompositionKind.ReplyAll);
+        forward.Clicked += (_, _) => _commands.Respond(CompositionKind.Forward);
         check.Clicked += (_, _) => model.CheckDraft();
         discard.Clicked += async (_, _) => await model.DiscardAsync();
         save.Clicked += async (_, _) => await model.SaveAsync();

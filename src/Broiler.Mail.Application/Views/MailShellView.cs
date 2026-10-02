@@ -16,6 +16,7 @@
 // GENERATED - DO NOT EDIT MANUALLY
 
 using Broiler.Mail.Application.ViewModels;
+using Broiler.UI.Forms;
 using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel;
@@ -49,10 +50,16 @@ public sealed class MailShellView : IDisposable
         layout.SetDock(status, UiDock.Bottom);
 
         Navigation = new StandardTabView();
-        Navigation.AddTab("inbox", "Inbox", new TabContent(new InboxView(model.Inbox, htmlPreview, dates).CreateContent()));
-        Navigation.AddTab("account", "Account", new TabContent(new AccountProfileView(model.Account).CreateContent()));
+        Inbox = new InboxView(model.Inbox, htmlPreview, dates, model.Compose);
+        var inboxContent = new TabContent(Inbox.CreateContent());
+        Navigation.AddTab("inbox", "Inbox", inboxContent);
+        var account = new AccountProfileView(model.Account);
+        Navigation.AddTab("account", "Account", new TabContent(account.CreateContent()));
+        // The setup checklist ends in the inbox, receiving for the first time.
+        account.InboxRequested += (_, _) => { Navigation.SelectTab("inbox"); _ = model.Inbox.ReceiveAsync(); };
         Navigation.AddTab("settings", "Settings", new TabContent(new SettingsView(model.Settings).CreateContent()));
-        Navigation.AddTab("compose", "Compose", new TabContent(new ComposerView(model.Composer, model.Inbox).CreateContent()));
+        var composer = new ComposerView(model.Composer, model.Inbox, model.Compose);
+        Navigation.AddTab("compose", "Compose", new TabContent(composer.CreateContent()));
         if (model.Account.Profile is null) Navigation.SelectTab("account");
         if (model.Composer.HasDraft || model.Composer.HasLoadError) Navigation.SelectTab("compose");
         void RefreshStatus()
@@ -61,13 +68,38 @@ public sealed class MailShellView : IDisposable
             string text = Navigation.SelectedTab?.Id switch
             {
                 "account" => string.IsNullOrEmpty(model.Account.Status) ? "Save your account details, then save a password and test the connection." : model.Account.Status,
-                "settings" => string.IsNullOrEmpty(model.Settings.Status) ? "Theme and initial window size apply on restart." : model.Settings.Status,
-                "compose" => model.Composer.Status,
-                _ => model.Inbox.Status,
+                "settings" => string.IsNullOrEmpty(model.Settings.Status) ? "A saved theme applies immediately. The window reopens at its last size and position." : model.Settings.Status,
+                // Informational composer messages appear only here; the composer shows the others inline.
+                "compose" => !string.IsNullOrEmpty(model.Composer.Status) && model.Composer.StatusKind == FeedbackKind.Information && !model.Composer.IsBusy
+                    ? model.Composer.Status : model.Composer.StorageStatus,
+                // The explanation and Retry sit beside the affected pane; the footer only points there.
+                _ => model.Inbox.ProblemScope switch
+                {
+                    InboxProblemScope.List when !model.Inbox.ProblemIsCancellation => "Mail could not be received. Details and Retry are beside the list.",
+                    InboxProblemScope.Message when !model.Inbox.ProblemIsCancellation => "The message could not be loaded. Details and Retry are beside it.",
+                    InboxProblemScope.None => model.Inbox.Status,
+                    _ => "Canceled. Retry is available.",
+                },
             };
             status.Text = text.Replace("&", "&&", StringComparison.Ordinal);
         }
-        Navigation.SelectionChanged += (_, _) => { Window.Session?.SetFocus(Navigation); RefreshStatus(); };
+        Navigation.SelectionChanged += (_, _) =>
+        {
+            // Returning to the inbox after composing resumes where the reader was, not at the tabs.
+            var resume = Navigation.SelectedTab?.Id == "inbox" ? _readerFocus : null;
+            _readerFocus = null;
+            Window.Session?.SetFocus(resume is { IsAttached: true, CanFocus: true } ? resume : Navigation);
+            RefreshStatus();
+        };
+        model.Compose.Requested += (_, e) =>
+        {
+            var session = Window.Session;
+            var focused = session?.FocusedElement;
+            Navigation.SelectTab("compose");
+            if (focused is not null && focused.IsDescendantOf(inboxContent)) _readerFocus = focused;
+            var target = e.Focus == CompositionFocus.Recipients ? composer.Recipients : composer.Body;
+            if (session is not null && target is not null) FocusNavigation.FocusAndReveal(session, target);
+        };
         model.Inbox.Changed += (_, _) => RefreshStatus();
         model.Account.Changed += (_, _) => RefreshStatus();
         model.Settings.Changed += (_, _) => RefreshStatus();
@@ -77,8 +109,11 @@ public sealed class MailShellView : IDisposable
         Window.AddChild(layout);
     }
 
+    private UiElement? _readerFocus;
+
     public StandardWindow Window { get; }
     public StandardTabView Navigation { get; }
+    public InboxView Inbox { get; }
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=A9E9EB
     // Broiler-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
     // Broiler-Human:        PENDING

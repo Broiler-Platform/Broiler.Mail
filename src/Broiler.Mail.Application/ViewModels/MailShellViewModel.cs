@@ -33,6 +33,9 @@ public sealed class MailShellViewModel
         Settings = settings;
         Inbox = inbox;
         Composer = composer ?? new ComposerViewModel();
+        // The remembered split applies to this session; the host saves it again with the window layout.
+        Inbox.SplitterFraction = settings.Settings.InboxSplitterFraction;
+        Compose = new CompositionCommands(Composer, Inbox);
         Composer.SetAccount(account.Profile);
         Inbox.SetAccount(account.Profile);
         Account.Changed += (_, _) => { Inbox.SetAccount(Account.Profile); Composer.SetAccount(Account.Profile); };
@@ -46,4 +49,6 @@ public sealed class MailShellViewModel
     public AccountProfileViewModel Account { get; }
     public InboxViewModel Inbox { get; }
     public ComposerViewModel Composer { get; }
+    /// <summary>New, Reply, Reply all, and Forward, shared by the reader and the composer.</summary>
+    public CompositionCommands Compose { get; }
 }

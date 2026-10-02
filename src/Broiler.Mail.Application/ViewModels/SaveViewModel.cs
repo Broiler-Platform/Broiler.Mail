@@ -36,6 +36,18 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
     // Broiler-Falsified-If: CanSave is true while loadError is set
     // Broiler-Human:        PENDING
     public bool CanSave => !IsBusy && loadError is null;
+    /// <summary>A file that failed to load is never overwritten, not even by background saves.</summary>
+    protected bool HasLoadError => loadError is not null;
+
+    /// <summary>Publishes a state change that did not come from a save operation.</summary>
+    protected void NotifyChanged() => Changed?.Invoke(this, EventArgs.Empty);
+
+    /// <summary>Runs <paramref name="action"/> on the UI dispatcher; ignored once the window has closed.</summary>
+    protected void Post(Action action)
+    {
+        try { dispatcher.Post(action); }
+        catch (ObjectDisposedException) { }
+    }
     public string Status { get; private set; } = loadError ?? string.Empty;
     public FeedbackKind StatusKind { get; private set; } = loadError is null ? FeedbackKind.Information : FeedbackKind.Error;
     public string? ValidationField { get; private set; }
@@ -51,7 +63,7 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
     // Broiler-Falsified-If: a second call made while the first operation is still running starts its operation instead of returning
     // Broiler-Human:        PENDING
     protected async Task RunAsync(Func<Task> operation, Action commit, string busyMessage,
-        string successMessage, string failurePrefix, string canceledMessage, Action? completed = null)
+        string successMessage, string failurePrefix, string canceledMessage, Action<string?>? completed = null)
     {
         if (!CanSave)
             return;
@@ -90,7 +102,8 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
             {
                 if (succeeded)
                     commit();
-                completed?.Invoke();
+                // The failure text, or null after success, lets callers record what went wrong.
+                completed?.Invoke(succeeded ? null : status);
                 IsBusy = false;
                 Status = status;
                 StatusKind = kind;
@@ -99,6 +112,6 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
                 Changed?.Invoke(this, EventArgs.Empty);
             });
         }
-        catch (ObjectDisposedException) { completed?.Invoke(); }
+        catch (ObjectDisposedException) { completed?.Invoke(succeeded ? null : status); }
     }
 }

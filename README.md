@@ -58,6 +58,9 @@ Preview the complete UI with synthetic messages, without saved accounts or netwo
 dotnet run --project src/Broiler.Mail.Windows --no-build -c Release -- --demo
 ```
 
+For reproducible UI review, name a prepared scenario, for example
+`--demo send-unknown --theme dark --size 640x480`. `--help` lists the scenarios.
+
 Create a NativeAOT ZIP and SHA-256 checksum with PowerShell 7 and the Visual Studio
 C++ desktop build tools (including the Windows SDK), on the matching Windows architecture:
 

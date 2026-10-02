@@ -72,15 +72,15 @@ P1 improves the current app; P2 depends on larger product/platform work.
 
 | ID | Priority | Work | Starting state | Dependencies |
 | --- | --- | --- | --- | --- |
-| UI-01 | P1 | Shared presentation tokens and fixture gallery | Partial | None |
-| UI-02 | P1 | Refresh continuity and stable selection | Open | None |
-| UI-03 | P1 | Reader hierarchy and local reply commands | Partial | UI-01, UI-02 |
-| UI-04 | P1 | Responsive inbox and shell navigation | Partial | UI-01, UI-02, UI-03 |
-| UI-05 | P1 | Writing-focused composer | Partial | UI-01; integrate with UI-03 commands |
-| UI-06 | P1 | Guided account setup and concise settings | Partial | UI-01 |
-| UI-07 | P1 | Live appearance and geometry persistence | Partial | UI-01 |
-| UI-08 | P1 | Consistent state, feedback, and recovery UX | Partial | Apply to UI-02 through UI-07 |
-| UI-09 | P0 | Native accessibility and semantic integration | Native acceptance failing | Start immediately; verify every delivered surface |
+| UI-01 | P1 | Shared presentation tokens and fixture gallery | Partial — fixture gallery delivered | None |
+| UI-02 | P1 | Refresh continuity and stable selection | Implemented; native new-mail check pending | None |
+| UI-03 | P1 | Reader hierarchy and local reply commands | Implemented; screen-reader check pending (UI-09) | UI-01, UI-02 |
+| UI-04 | P1 | Responsive inbox and shell navigation | Compact mode implemented; row metadata and 200% text pending | UI-01, UI-02, UI-03 |
+| UI-05 | P1 | Writing-focused composer | Layout implemented; IME/undo check pending | UI-01; integrate with UI-03 commands |
+| UI-06 | P1 | Guided account setup and concise settings | Setup checklist implemented; SMTP test waits for a service | UI-01 |
+| UI-07 | P1 | Live appearance and geometry persistence | Live theme and geometry implemented; preview windows, text scale, RTL open | UI-01 |
+| UI-08 | P1 | Consistent state, feedback, and recovery UX | Inbox and composer states done; announcements and transient success open | Apply to UI-02 through UI-07 |
+| UI-09 | P0 | Native accessibility and semantic integration | Empty tree fixed; names, Text pattern, hidden tabs need Broiler.UI/Hosting | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Partial | Coordinate with UI-04, UI-05, UI-09 |
 | UI-11 | P1 | HTML preview ergonomics | Partial | UI-01, UI-08; inline embedding also needs sandbox |
 | UI-12 | P1 | Measured rendering and memory performance | Partial | Capture baseline first; repeat after affected changes |
@@ -109,20 +109,51 @@ P1 improves the current app; P2 depends on larger product/platform work.
 spacing; enlarged labels fit; focus remains distinct from selection. Record the
 token choices once rather than maintaining screenshots as competing specifications.
 
+**Progress (2 October 2026):** the deterministic fixture harness exists; token
+inventory and the spacing/type hierarchy are still open.
+
+- `Broiler.Mail.Windows.exe --demo <scenario> [--theme light|dark|system] [--size WxH]`
+  opens one of nine prepared fixtures (`--help` lists them): `inbox`, `empty`,
+  `long-message`, `large-inbox`, `large-draft`, `receive-error`, `save-error`,
+  `send-unknown`, `html-only`. Plain `--demo` keeps the original interactive demo.
+- [`DemoScenarioDriver`](../src/Broiler.Mail.Windows/DemoScenarioDriver.cs) reaches each
+  state through the ordinary view-model commands (receive, load older, select, save),
+  not injected state. Drafts are recovered from a seeded in-memory store.
+- Dates use [`MessageDateFormatter`](../src/Broiler.Mail.Application/Views/MessageDateFormatter.cs)
+  with a fixed clock, UTC+2 zone, and en-US culture; account and draft IDs are fixed.
+- [`DemoGalleryTests`](../tests/Broiler.Mail.Windows.Tests/DemoGalleryTests.cs) drive every
+  scenario through a queued dispatcher, assert the resulting state, and render a frame
+  at 640×480. Argument parsing is covered, including a fixed scenario-name parsing bug.
+- Not yet covered: actual high contrast, enlarged text scale, long translated labels,
+  and a separate fixture for a canceled operation or conflicting draft.
+
+Baseline observations from native captures of the Debug build (100% DPI, light 1100×720
+and dark 640×480). They feed the packages named; they are not acceptance results:
+
+| Fixture | Observation | Package |
+| --- | --- | --- |
+| `long-message`, all reading | Subject, sender, and received date share one label with equal weight (resolved by UI-03) | UI-03 |
+| `large-inbox` at 640×480 | The sender truncates to a few characters, while the date keeps its full width (resolved at this size by UI-04 compact mode) | UI-04 |
+| `large-draft` at 1100×720 | Instruction rows and Cc/Bcc push Subject and the body editor below the fold (resolved by UI-05) | UI-05 |
+| `send-unknown` at 640×480 | Feedback has its own scrollbar; To is clipped; the footer reports draft retention instead of the unknown send | UI-05, UI-08 |
+| Composer fixtures | The same status appears in both inline feedback and the shell footer (resolved for the composer by UI-05) | UI-08 |
+| Dark fixtures | The native title bar stays light (resolved by UI-07) | UI-07 |
+| `long-message` | Mixed RTL lines and wrapping of unbroken URLs render; emoji are monochrome, and the ZWJ sequence is not a single glyph | UI-13 (record only) |
+
 ### UI-02 — refresh without losing the reader's place
 
 **Owner:** Mail view model and view state. Maps to A3 / EX-07.
 
-- [ ] Reconcile refreshed summaries by full message key, including account/mailbox
+- [x] Reconcile refreshed summaries by full message key, including account/mailbox
   identity and UIDVALIDITY. Update metadata without treating a retained body as a new body.
-- [ ] Preserve selected identity, list anchor plus within-row offset, body scroll,
+- [x] Preserve selected identity, list anchor plus within-row offset, body scroll,
   and text selection when the underlying content remains unchanged.
-- [ ] Preserve an open HTML preview for the same valid body; close it for an actual
+- [x] Preserve an open HTML preview for the same valid body; close it for an actual
   account/message change or invalidation.
-- [ ] Distinguish a message missing from the fetched page from confirmed deletion.
+- [x] Distinguish a message missing from the fetched page from confirmed deletion.
   Keep already loaded context within existing bounds or explain that it is outside
   the refreshed page; do not invent a server deletion from page absence.
-- [ ] Define empty inbox, changed UIDVALIDITY, account switch, canceled refresh,
+- [x] Define empty inbox, changed UIDVALIDITY, account switch, canceled refresh,
   failed refresh, and late completion transitions. Retain the existing generation guard.
 
 **Files:** [InboxViewModel](../src/Broiler.Mail.Application/ViewModels/InboxViewModel.cs),
@@ -134,20 +165,41 @@ rows do not cause a jump; identity changes cannot display another account's cont
 Use state-transition tests plus a native scroll/selection check. Add upstream anchor
 support if the published ListView cannot express stable restoration.
 
+**Progress (2 October 2026):** implemented in Mail without upstream changes.
+
+- `InboxViewModel.KeepReading` reconciles the open message with a refreshed newest page by
+  its full key (account, mailbox, UIDVALIDITY, UID). If the message is on the page, its summary
+  is updated (for example its read flag) while the `Body` instance is kept, so the view does not
+  close the HTML preview or scroll the reader back to the top.
+- If it is missing, the outcome depends on what the page proves. The newest page is contiguous,
+  so a UID at or above the oldest fetched UID, a page that covers the whole mailbox, or an empty
+  inbox means it is no longer in the inbox: the reader closes and says so. A lower UID is only
+  outside the page: the message stays open, can be read again, and the status suggests Load older.
+  A different UIDVALIDITY closes the message as renumbered. None of these claims a deletion.
+- The view enables the published `ListView.EnableScrollAnchoring`: when scrolled, the first
+  visible row and its offset stay in place as rows arrive; at the top, new mail is visible. The
+  reader text is only rewritten when it changes, which keeps the text selection.
+- Unchanged: account switch clears the reader; cancel and failed refresh keep everything; the
+  generation guard rejects late completions.
+- Evidence: `RefreshContinuityTests` (eight cases; the view test fails if either anchoring or
+  the unchanged-text guard is removed) and the updated `InboxWorkflowTests`. A native check of
+  `--demo inbox` scrolled the reader, refreshed with F5, and kept the message and scroll offset.
+  New-row anchoring under real input and DPI has only been tested headlessly so far.
+
 ### UI-03 — a readable message surface with nearby reply actions
 
 **Owner:** Mail. Maps to A4 / EX-03 / EX-05.
 
-- [ ] Replace the single combined header label with a wrapping subject heading,
+- [x] Replace the single combined header label with a wrapping subject heading,
   sender/address details, quieter timestamp, and optional expandable metadata.
-- [ ] Make addresses and header values selectable/copyable without converting `&`
+- [x] Make addresses and header values selectable/copyable without converting `&`
   into mnemonics. Preserve a usable narrow layout for long unbroken addresses.
-- [ ] Apply reading margins and a bounded text column using existing layout controls.
-- [ ] Put Reply, Reply all, and Forward near the message. Route both reader and
+- [x] Apply reading margins and a bounded text column using existing layout controls.
+- [x] Put Reply, Reply all, and Forward near the message. Route both reader and
   composer buttons through the same application command behavior.
-- [ ] If a draft already exists, preserve it and reveal the existing composition with
+- [x] If a draft already exists, preserve it and reveal the existing composition with
   an explanation. Do not replace it or create a discard/send side effect from navigation.
-- [ ] On successful New/Forward, focus To; on Reply/Reply all, focus the body.
+- [x] On successful New/Forward, focus To; on Reply/Reply all, focus the body.
   Return navigation restores the prior reader selection and focus target.
 
 **Files:** `InboxView`, [MailShellView](../src/Broiler.Mail.Application/Views/MailShellView.cs),
@@ -159,19 +211,41 @@ an implementation choice, not a required new shared control.
 **Accept:** read → reply takes one action, reply recipients/threading stay unchanged,
 an existing draft survives, and keyboard/screen-reader focus lands in the intended field.
 
+**Progress (2 October 2026):**
+
+- The reader header is now a subject heading (theme title font, wrapping, literal `&`), a
+  read-only, selectable details editor (From, then To and Cc once the body's headers have
+  loaded), and a muted "Received … · Read/Unread on server" line. Collapsed details are
+  skipped by Tab. Expandable full metadata was not added; nothing currently needs it.
+- [`ReadingColumn`](../src/Broiler.Mail.Application/Views/ReadingColumn.cs) gives the header
+  and the message text the same left edge: 24-DIP margins, or 12 DIP when the pane is narrower
+  than 480 DIP, and a 720-DIP (about 80-character) line limit. The scroll view still spans the pane.
+- [`CompositionCommands`](../src/Broiler.Mail.Application/ViewModels/CompositionCommands.cs) is
+  the single path for New, Reply, Reply all, and Forward, used by the reader and the composer.
+  The reader's actions stay enabled while a draft exists. Choosing one keeps that draft, opens
+  Compose, and the composer's status explains that the draft was retained.
+- The shell opens Compose and focuses To (new message or forward) or the body (reply, or a retained
+  draft), revealing it in the form's scroll view. Returning to Inbox restores focus to the reader
+  control used before composing. The selection is unchanged.
+- Evidence: `ReaderReplyTests` (9 cases) and the existing composer reply/threading tests. Native
+  Debug captures of `long-message` at 1600×900 and `inbox`/`html-only` at 640×480 dark. The reply
+  click itself has only been checked headlessly; screen-reader focus belongs to UI-09.
+- Moved to other packages: at 640×480 the header takes much of the reading pane (UI-04 compact
+  mode). Reply keyboard shortcuts belong to UI-10.
+
 ### UI-04 — responsive inbox and shell
 
 **Owner:** Mail; generic responsive layout/anchor APIs in Broiler.UI when needed.
 
-- [ ] Preserve the wide split view and user's splitter choice. Switch to one pane
+- [x] Preserve the wide split view and user's splitter choice. Switch to one pane
   when both minimum readable widths cannot fit; retain the wide split ratio separately.
-- [ ] Provide a labeled Back to inbox action in compact reader mode and restore the
+- [x] Provide a labeled Back to inbox action in compact reader mode and restore the
   list anchor and selected row. Browser-style back behavior must not discard a draft.
 - [ ] Keep two-line rows readable: ellipsize the less important field first, avoid
   date/sender overlap, and expose full information through selection and semantics.
 - [ ] Wrap/overflow toolbars predictably. Keep existing tabs and shortcuts initially;
   avoid a navigation redesign unrelated to the reader improvement.
-- [ ] Preserve tab, focus, and view state across resize and DPI transitions. Do not
+- [x] Preserve tab, focus, and view state across resize and DPI transitions. Do not
   destroy and recreate editors merely because a breakpoint changed.
 
 **Files:** `InboxView`, `MailMessageItemPresenter`, `MailShellView`,
@@ -180,23 +254,52 @@ an existing draft survives, and keyboard/screen-reader focus lands in the intend
 **Accept:** minimum-size, wide, and 200% text-scale views have reachable actions,
 no overlapping rows, and no lost draft/selection on repeated resize.
 
+**Progress (2 October 2026):**
+
+- [`AdaptiveInboxLayout`](../src/Broiler.Mail.Application/Views/AdaptiveInboxLayout.cs) shows
+  one pane when the inbox is narrower than a readable list (280 DIP) plus a readable reader (400
+  DIP: heading, three reply actions, and margins). The decision uses the inbox's own width, not
+  a window or device breakpoint. It collapses and restores panes of the existing split container,
+  so no control is recreated, and splitter events during the switch never overwrite the saved ratio.
+- Compact list mode: arrow keys only move the selection (the body still loads); a click, Enter,
+  or Read message opens the reader. A click is recognized because the list leaves the pointer
+  release unhandled, while keyboard selection never reaches the layout; `ListView` offers no
+  selection-source information, so this needed no upstream change.
+- Compact reader mode: a labeled Back to inbox action above the subject; Escape also goes back
+  when nothing is loading (otherwise it still cancels first). Back returns focus to the list with
+  its scroll offset and selection unchanged and never touches the composer.
+- A message read side by side stays open when the window narrows. If focus would be left in a
+  hidden pane, it moves to the visible one (message text or list). If the open message disappears
+  on refresh, the compact layout returns to the list.
+- Evidence: `ResponsiveInboxTests` (6 cases) cover each of these, including three wide/compact
+  resize round trips. Native Debug run at 640×480 (150% DPI): the list uses the full width, a row
+  click opens the reader, and Escape restores the list with the row selected.
+- Changed tests: the version-1 acceptance shell check now expects the full-width list in compact
+  mode. New view tests that start drafts use a queued `TestQueueDispatcher`: with
+  `ImmediateUiDispatcher`, draft autosave refreshed the composer from a pool thread during the
+  test's own refresh and could clear the subject. The app itself uses the queued window dispatcher.
+- Open: between 680 and about 800 DIP the side-by-side list is still narrow (35% split), so senders
+  truncate; the remaining row item (shorter metadata before sender/subject) is unchanged. Not yet
+  checked: 200% text scale, real DPI changes while compact, and the toolbar's framed background
+  around the Back and reply actions (a UI-01 token question).
+
 ### UI-05 — make writing occupy the composer
 
 **Owner:** Mail; reusable sizing/focus behavior in Broiler.UI.Forms/RichEdit.
 
-- [ ] Let the body consume the remaining viewport height rather than always requesting
+- [x] Let the body consume the remaining viewport height rather than always requesting
   a 300-DIP editor under an instruction-heavy stack.
-- [ ] Use a compact sender line and concise recipient/subject fields. Move secondary
+- [x] Use a compact sender line and concise recipient/subject fields. Move secondary
   instructions into contextual help without hiding the sender or send outcome.
-- [ ] Retain collapsed Cc/Bcc summaries and automatically reveal populated/recovered
+- [x] Retain collapsed Cc/Bcc summaries and automatically reveal populated/recovered
   fields. Collapsing a section must preserve its values and move focus safely.
-- [ ] Keep Send, Check draft, Save draft, and Discard reachable at every supported
+- [x] Keep Send, Check draft, Save draft, and Discard reachable at every supported
   size. Keep submission, Sent-copy, and draft-storage feedback distinct.
-- [ ] Make the body own normal editing scroll; allow outer scrolling when enlarged
+- [x] Make the body own normal editing scroll; allow outer scrolling when enlarged
   header fields genuinely exceed the viewport. Avoid two scrollbars moving the same area.
 - [ ] Preserve caret/selection/undo and IME composition while status messages update.
   Ordinary refresh must not reload the entire draft into the editor.
-- [ ] Show durable autosave state unobtrusively; keep failed/conflicting saves visible
+- [x] Show durable autosave state unobtrusively; keep failed/conflicting saves visible
   and actionable. Navigation/closing must retain the current save guard.
 
 **Files:** `ComposerView`, `ComposerViewModel`, `ConfigurationForm`; reuse the
@@ -207,21 +310,47 @@ resize, and tab changes preserve text and caret. Unknown SMTP acceptance never t
 into an ordinary retry or an automatic resend. No network test is needed for layout;
 use injected outcome states plus existing submission regression tests.
 
+**Progress (2 October 2026):**
+
+- [`FillLastStack`](../src/Broiler.Mail.Application/Views/FillLastStack.cs) gives the body
+  everything below the header fields, with a 160-DIP minimum. The form viewport already arranges
+  content at least as tall as itself, so the outer scrollbar appears only when the header fields plus
+  that minimum do not fit; otherwise the body's own scrollbar is the only one.
+- Removed the two permanent instruction rows and the "Selected message" line. Address format and
+  "plain text only" moved into field placeholders. A muted hint appears only without a draft
+  (how to reply, or why a message cannot be replied to). The New/Reply/Reply all/Forward row
+  is hidden while a draft exists, because none of them can apply, and returns after Discard.
+- The sender line now also carries the routine autosave state ("Saving draft…", "Draft saved
+  locally."); only a storage failure uses inline feedback. "Configure outgoing mail" became
+  `ComposerViewModel.SendUnavailableReason`, shown only when it actually prevents sending.
+- Duplicate status removed: informational composer messages go to the shell footer only; check
+  results, warnings, and errors stay inline beside the draft. Editing clears a stale result instead
+  of repeating "Draft edited." on every keystroke. The first account assignment no longer replaces
+  "Recovered your saved draft." with the retention notice, which now appears only when the
+  account actually changes. Expanded Cc/Bcc no longer repeats its summary.
+- Evidence: `ComposerLayoutTests` (8 cases: fill at 1100×720, all actions visible at 640×480,
+  selection kept through status/account/autosave updates, inline vs footer status, the starting row,
+  Cc/Bcc summary, the send hint, and the recovery message). Native Debug captures of `large-draft`
+  at 1100×720 (body fills, no outer scrollbar with Cc/Bcc expanded) and `send-unknown` at 640×480
+  dark (the warning is the only inline message).
+- Open: IME composition and undo across status updates have not been exercised (UI-10). At
+  640×480 the header plus minimum body still needs outer scrolling.
+
 ### UI-06 — account setup and settings that explain the next step
 
 **Owner:** Mail; C-04 controls already supply the structure. Maps to A6 / EX-08.
 
-- [ ] Add a first-account flow with explicit stages: identity/server details,
+- [x] Add a first-account flow with explicit stages: identity/server details,
   save profile, credentials, connection test, optional outgoing setup, ready to receive.
-- [ ] Keep a direct advanced-edit mode for existing accounts. Do not automatically
+- [x] Keep a direct advanced-edit mode for existing accounts. Do not automatically
   guess provider settings or silently alter transport/security choices.
-- [ ] Make unsaved profile changes, credential binding, and test readiness clear.
+- [x] Make unsaved profile changes, credential binding, and test readiness clear.
   Keep password values out of summaries, notifications, screenshots, and diagnostics.
-- [ ] Keep per-field validation and focus/reveal behavior. Show actionable failure
+- [x] Keep per-field validation and focus/reveal behavior. Show actionable failure
   text at the relevant section instead of duplicating the same paragraph everywhere.
 - [ ] Add SMTP-test UI only once a non-sending connection/authentication service exists.
   Separate receiving success from sending configuration; never send a trial message implicitly.
-- [ ] Simplify appearance/geometry wording when UI-07 removes the restart requirement.
+- [x] Simplify appearance/geometry wording when UI-07 removes the restart requirement.
 
 **Files:** [AccountProfileView](../src/Broiler.Mail.Application/Views/AccountProfileView.cs),
 [AccountProfileViewModel](../src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs),
@@ -231,11 +360,38 @@ use injected outcome states plus existing submission regression tests.
 nonsecret edits, failed validation reveals the field, and existing accounts keep their
 saved configuration and credential-binding behavior.
 
+**Progress (2 October 2026):**
+
+- The Account tab starts with a setup checklist rather than separate wizard pages, so existing
+  accounts keep the same direct form. Each line states one step's result: account details
+  (including unsaved changes), the IMAP password, the connection test, and optional outgoing mail.
+  One button performs or reveals the next step: save the details, move focus to the password field
+  (it never types a secret), run the test, or, when everything is done, open the Inbox and receive.
+  When ready, the checklist shrinks to a single line. It is not collapsible, so its button is the
+  first Tab stop.
+- `AccountProfileViewModel` gained `NextStep`, `HasUnsavedChanges` (the form compared with the saved
+  profile, kept current as fields change), `HasPassword`/`HasSmtpPassword`, and
+  `ConnectionCheck`/`ConnectionFailure`. Password presence is read from the credential store as a
+  yes/no only; the secret is dropped at once and never reaches labels, status, or diagnostics. An
+  unavailable store reads as unknown, not missing. Saving changed server details resets the test
+  and re-checks the password binding; saving or forgetting a password resets the test; a canceled
+  test is recorded as not run, a failure keeps its reason beside the step.
+- The IMAP password section now follows the incoming server, before optional outgoing mail.
+  Repeated instruction paragraphs were shortened. No provider settings are guessed and no
+  transport or security choice changes silently.
+- Evidence: `AccountSetupTests` (6 cases: the complete first-account path, detection of a stored
+  password without exposing it, unsaved changes, a failed and a canceled test, new server details
+  invalidating the password, and Open Inbox receiving). Native first-run capture with an empty data
+  directory. Changed tests: two now find the IMAP password by its label instead of its position;
+  the shell keyboard test expects the next-step button before the first field; two tests that
+  treated any `Changed` without busy as "save finished" now wait for the save itself.
+- Open: an SMTP connection test still needs a non-sending connection/authentication service.
+
 ### UI-07 — live appearance, accessible scaling, and window restoration
 
 **Owner:** Mail application preferences; Hosting system settings; UI token propagation.
 
-- [ ] Subscribe once to saved preferences and OS appearance changes. Apply the theme
+- [x] Subscribe once to saved preferences and OS appearance changes. Apply the theme
   to existing controls; follow OS color mode only when System is selected.
 - [ ] Give high contrast and system text scaling an explicit precedence policy,
   including when a user chose Light/Dark. Verify actual system colors and readable focus.
@@ -243,9 +399,9 @@ saved configuration and credential-binding behavior.
   If paint tokens are process-global, coordinate updates across window threads.
 - [ ] Respect reduced motion and verify RTL layout separately from simply translating
   labels. Keep message content direction independent from shell direction.
-- [ ] Persist window size/placement with debounced writes; preserve restored bounds
+- [x] Persist window size/placement with debounced writes; preserve restored bounds
   while maximized. Clamp restoration to an available monitor after monitor/DPI changes.
-- [ ] Migrate settings compatibly; preserve splitter state and tolerate old files.
+- [x] Migrate settings compatibly; preserve splitter state and tolerate old files.
 
 **Files:** [SettingsViewModel](../src/Broiler.Mail.Application/ViewModels/SettingsViewModel.cs),
 [WindowsMailWindow](../src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs),
@@ -257,13 +413,71 @@ saved configuration and credential-binding behavior.
 changes, enlarged text is usable, focus/caret survive restyling, and a removed monitor
 cannot strand the app off-screen. Settings errors must not interrupt typing.
 
+**Progress (2 October 2026), live theme:**
+
+- [`AppearancePolicy`](../src/Broiler.Mail.Application/Views/AppearancePolicy.cs) is the single
+  precedence rule, used at startup and while running: an active system high-contrast mode wins
+  (it is an accessibility setting); otherwise an explicit Light or Dark choice wins over the OS
+  scheme; System follows the OS. Reduced motion and density always come from the system.
+- [`AppearanceController`](../src/Broiler.Mail.Application/Views/AppearanceController.cs) applies it
+  through the published `StandardThemeController`, which re-themes existing controls in place, so
+  text, caret, selection, and scroll survive. It reacts to the host's system-settings changes and
+  to saved settings only; choosing a theme without saving changes nothing.
+- Muted labels (reader date line, composer hint) now use the muted label role instead of a color
+  captured at construction, so they follow theme changes. The settings and footer text no longer
+  promise a restart for the theme; the initial window size still applies on the next start.
+- The native caption follows the palette (`DWMWA_USE_IMMERSIVE_DARK_MODE`, applied after `Show`
+  because the handle does not exist earlier). This is a Mail-local helper,
+  [`WindowsTitleBar`](../src/Broiler.Mail.Windows/Hosting/WindowsTitleBar.cs), marked to move into
+  Broiler.Hosting.Windows.
+- Evidence: `AppearanceTests` (8 cases: precedence for each preference, high contrast and reduced
+  motion, and a live shell where an OS change, an unsaved selection, a saved choice, and a later OS
+  change produce exactly three re-themes while the composer text and selection survive). Native
+  Debug run: started dark, chose Light in Settings with the keyboard, saved; the whole window, the
+  open message, and the caption switched to light without a restart.
+- Upstream limits found in Broiler.Hosting.Windows `WindowsTheme`: `TextScale` is always reported
+  as 1.0, and high contrast maps to the preset palette rather than the user's actual system colors.
+  Both are fixed, with `WindowsTitleBar`, on the unreleased Broiler.Hosting branch
+  `claude/windows-theme-system-settings`. Until a package containing it is consumed, Mail keeps
+  its local caption helper and the preset high-contrast palette.
+- Open: existing HTML preview windows run their own session and are not re-themed yet; RTL layout.
+
+**Progress (2 October 2026), window geometry:**
+
+- `ApplicationSettings.Window` (a `WindowPlacement`) stores the normal outer bounds in physical
+  screen pixels, for comparing with monitor work areas, the client size in DIPs, for creating the
+  window, and whether it was maximized. The property is optional, so files written before it
+  existed load unchanged with the same schema version; validation bounds it to the virtual-screen
+  range and the existing size limits. The unused `InboxSplitterFraction` now actually restores the
+  inbox split and is saved with the window.
+- `SettingsViewModel.RememberLayoutAsync` saves quietly: no status, validation, or busy change, so
+  resizing never interrupts typing; writes are serialized and store the newest settings; failures
+  are kept in `LayoutSaveError`; an unreadable settings file is never overwritten. An explicit save
+  keeps the remembered layout, but saving a new initial size clears it so that size is used.
+- The window saves once per move or resize (`WM_EXITSIZEMOVE`), on maximize or restore, and on close
+  (awaited before the window closes). While maximized or minimized the last normal bounds are kept.
+- On start, [`WindowGeometry`](../src/Broiler.Mail.Windows/Hosting/WindowGeometry.cs) keeps the
+  position only if at least 120×16 pixels of the title bar lie in a monitor work area (a caption
+  under the top edge is pulled down); otherwise the window moves onto the work area it overlaps
+  most, or is centered on the primary one. Upstream note: Broiler.Graphics clamps option
+  coordinates to at least one pixel, so positions on monitors left of or above the primary one are
+  applied with `SetWindowPos` after `Show`.
+- Evidence: `WindowGeometryTests` (8 cases, including negative coordinates, a removed monitor, and
+  oversize windows) and `WindowLayoutPersistenceTests` (5 cases: quiet round trip, explicit-save
+  interaction, an old file without the property, an unreadable file, an invalid layout, and the
+  restored split). Native run with an isolated data directory at 150% DPI: moved to 200,150
+  1400×900 and closed; reopened exactly there; maximized, closed, reopened maximized with the
+  normal bounds kept; a placement edited to −9000,−9000 reopened centered on the primary monitor.
+- Not yet checked: a real second monitor being disconnected, and moving between monitors with
+  different DPI before closing.
+
 ### UI-08 — coherent loading, empty, error, and recovery states
 
 **Owner:** Mail view-state presentation. Reuse `InlineFeedback`; retain domain outcomes.
 
 - [ ] Define each surface's idle/empty/loading/ready/canceled/failed state and its
   valid actions. Keep usable content visible during non-destructive background work.
-- [ ] Put the explanation and retry/cancel action beside the affected pane. Keep the
+- [x] Put the explanation and retry/cancel action beside the affected pane. Keep the
   shell footer concise rather than repeating every section's full feedback text.
 - [ ] Deduplicate announcements: background autosave must not continually interrupt
   a screen reader. Errors and submission outcome changes still need announcements.
@@ -276,12 +490,37 @@ cannot strand the app off-screen. Settings errors must not interrupt typing.
 body failure, invalid setup, canceled test, failed/conflicting autosave, rejected send,
 unknown send, and failed Sent copy. Every state has accurate text and valid actions.
 
+**Progress (2 October 2026):**
+
+| Surface | States and placement after this work |
+| --- | --- |
+| Inbox list | Before the first receive: "Receive mail to load your inbox." Loaded and empty: "The inbox is empty." While receiving: progress above the still-visible list. Failed: the reason plus a note that the rows are from the last successful receive, with **Retry receiving** beside it. Canceled: information, not an error, with Retry. |
+| Message | Loading: "Loading message body…". Failed or canceled: the reason under the header with **Retry loading**; the earlier "Use Read message to retry" instruction is gone. Choosing another message replaces the earlier problem. |
+| Composer | Done in UI-05: results, warnings, and errors inline; routine information only in the footer; autosave quiet on the sender line. |
+| Account | Done in UI-06: each step states its result; a failed connection test keeps its reason beside the step. |
+| Footer | Points to the pane when an inline problem exists ("Details and Retry are beside the list"), instead of repeating the full explanation. |
+
+- `InboxViewModel` reports `Problem`, `ProblemScope` (list or message), `ProblemIsCancellation`,
+  `CanRetry`/`RetryAsync` (repeating the same page or the selected message), `HasLoaded`,
+  `IsLoadingList`, and `IsLoadingMessage`. The existing `Status` text is unchanged for compatibility.
+- Focus: a Retry that disappears after success moves focus to the list or message text; a Cancel
+  button that becomes disabled moves focus to Receive mail (or the list).
+- A new `body-error` gallery fixture shows a failed message with its Retry.
+- Evidence: `InboxStateTests` (5 cases: empty before and after receiving, failed refresh with kept
+  rows, Retry and focus, failed message and Retry, cancel as information with focus repair, and a
+  new selection replacing a message problem), the `body-error` gallery test, and native captures of
+  `receive-error` and `body-error`.
+- Open: screen-reader announcement deduplication can only be verified with UI-09's native
+  accessibility; transient success messages (for example "Settings saved.") still stay until the
+  next action; focus after validation and disclosure collapse was handled in UI-03 to UI-06 but has
+  no single cross-surface test yet.
+
 ### UI-09 — native accessibility, from discovery to text editing
 
 **Owner:** Broiler.Hosting.Windows provider; Broiler.UI semantics; Mail integration.
 Maps to A1 / EX-10 / H-01. This is a release acceptance blocker.
 
-- [ ] First reproduce the published app's empty control tree using an external client.
+- [x] First reproduce the published app's empty control tree using an external client.
   Trace subclass attachment, render-HWND `WM_GETOBJECT`, host provider, and return codes.
 - [ ] Verify native COM interface discovery, vtables, marshalling ownership, fragment
   navigation, UI-thread dispatch, disposal, and runtime IDs. Compare Raw/Control/Content
@@ -302,6 +541,35 @@ provider implementation belongs in the Hosting repository/package.
 **Accept:** find Inbox/To/Send by name/role, operate without coordinates, read/select
 text, receive relevant announcements, and never expose password values. Evidence must
 come from a native client as well as managed tests. Track any upstream package wait explicitly.
+
+**Progress (2 October 2026):**
+
+- Reproduced with an external System.Windows.Automation client (`--demo`, Debug and NativeAOT
+  builds alike): the window exposed one empty render pane.
+- **Root cause, in Mail:** `WindowsMailWindow` constructed `WindowsAutomationBridge` and
+  `WindowsInputBridge` in its constructor, before Broiler.Graphics creates the native windows at
+  `Show`. Both received zero handles, so neither subclassed anything: `WM_GETOBJECT` reached
+  `DefWindowProc`, and the input bridge's IME, surrogate, and precision-wheel handling never ran
+  (text still arrived through the window's own `WM_CHAR` path). Earlier theories (COM view flags,
+  marshalling) were not the cause. The bridges and the dark caption are now created in
+  `OnCreated`, which runs during `WM_CREATE` once both windows exist.
+- **After the fix, external client, Debug and published NativeAOT (win-x64, no AOT warnings):**
+  220 elements; tabs with Invoke/SelectionItem; Receive mail invoked without coordinates; the
+  message list with 50 named rows ("Unread · subject — sender") selected through SelectionItem; the
+  reader text readable through Value; the password field reports `IsPassword` and an empty value.
+- Regression test: `NativeBridgeAttachmentTests` shows a hidden real window, checks that the
+  automation bridge is attached to the render window, that a cross-thread `WM_GETOBJECT` returns a
+  provider, and that one posted character reaches the focused To field exactly once. It fails
+  when the bridges receive zero handles.
+- **Still failing acceptance, and upstream (Broiler.UI semantics and the Broiler.Hosting provider):**
+
+| Problem seen by the external client | Where it must be fixed |
+| --- | --- |
+| Edits are named by their value or placeholder ("Demo inbox", "reader@example.test") instead of their label; `UiSemanticNode` has one `Name` and no label relation or separate value | Broiler.UI: label association (for example from `FormField`/`UiLabel.Target`) and name/value separation; Hosting: map them to Name, LabeledBy, and Value |
+| The message text is an Edit whose name is the whole message, with Value only; no Text pattern for reading or selecting ranges | Broiler.UI RichEdit semantics plus a Hosting `ITextProvider` |
+| Contents of unselected tabs are exposed and reported on screen | Broiler.UI TabView semantics (omit or mark offscreen) |
+| Layout containers appear as control elements named after their class (StandardPanel, TabContent, AdaptiveInboxLayout) | Hosting provider: Generic/Panel nodes without a name should not be control elements |
+| Focus, selection, and live-region announcements, and a real screen reader | Verify after the above; H-01 stays open |
 
 ### UI-10 — keyboard, native text input, and scroll behavior
 

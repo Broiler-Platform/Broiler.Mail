@@ -51,10 +51,12 @@ public sealed class InboxWorkflowTests
         Assert.Equal("Body", model.Body!.PlainText);
         Assert.Equal(1, bodyCalls);
         Assert.False(model.SelectedMessage!.IsRead);
+        // Refresh returns to the newest page; the open message is on it, so reading continues.
         await model.ReceiveAsync();
         Assert.Single(model.Messages);
-        Assert.Null(model.Body);
-        Assert.Null(model.SelectedMessage);
+        Assert.Equal("Body", model.Body!.PlainText);
+        Assert.Equal(newest.Key, model.SelectedMessage!.Key);
+        Assert.Equal(1, bodyCalls);
     }
 
     [Fact]
@@ -326,7 +328,8 @@ public sealed class InboxWorkflowTests
         session.AddRoot(content);
         _ = session.RenderFrame();
 
-        var toolbar = Descendants(content).OfType<StandardToolbar>().Single();
+        // The first toolbar holds the mailbox commands; the reader's reply actions follow later.
+        var toolbar = Descendants(content).OfType<StandardToolbar>().First();
         Assert.Equal(UiToolbarOverflow.Wrap, toolbar.Overflow);
         Assert.Empty(toolbar.OverflowItems);
 

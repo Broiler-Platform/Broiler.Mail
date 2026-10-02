@@ -60,6 +60,15 @@ public static class ConfigurationValidator
             throw new ConfigurationValidationException("WindowWidth", "Window width must be between 640 and 7680 pixels.");
         if (settings.WindowHeight is < 480 or > 4320)
             throw new ConfigurationValidationException("WindowHeight", "Window height must be between 480 and 4320 pixels.");
+        if (settings.Window is { } window)
+        {
+            // Screen coordinates stay within the Win32 virtual-screen range; sizes match the initial-size limits.
+            if (window.Left is < -32768 or > 32767 || window.Top is < -32768 or > 32767
+                || window.Width is < 1 or > 32767 || window.Height is < 1 or > 32767)
+                throw new ConfigurationValidationException("Window", "The remembered window position is outside the supported screen range.");
+            if (window.ClientWidth is < 640 or > 7680 || window.ClientHeight is < 480 or > 4320)
+                throw new ConfigurationValidationException("Window", "The remembered window size is outside the supported range.");
+        }
         if (!double.IsFinite(settings.InboxSplitterFraction) || settings.InboxSplitterFraction is < 0.05 or > 0.95)
             throw new ArgumentException("Inbox splitter position must be between 5% and 95%.");
     }
