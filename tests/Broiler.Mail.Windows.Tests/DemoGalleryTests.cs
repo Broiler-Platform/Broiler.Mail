@@ -41,6 +41,36 @@ public sealed class DemoGalleryTests
     public void Options_Reject_Invalid_Arguments(string args) =>
         Assert.False(DemoOptions.TryParse(args.Split(' ', StringSplitOptions.RemoveEmptyEntries), out _));
 
+    [Theory]
+    [InlineData("--demo --measure scroll")]
+    [InlineData("--demo inbox --report out.json")]
+    [InlineData("--demo inbox --measure fly")]
+    [InlineData("--demo inbox --measure idle --measure type")]
+    public void Measurement_Needs_A_Fixture_A_Known_Workload_And_A_Measure_For_A_Report(string args) =>
+        Assert.False(DemoOptions.TryParse(args.Split(' '), out _));
+
+    [Fact]
+    public void Measurement_Options_Parse_Every_Workload()
+    {
+        foreach (var (name, workload, _) in DemoOptions.Workloads)
+        {
+            Assert.True(DemoOptions.TryParse(["--demo", "large-inbox", "--measure", name, "--report", "out.json"], out var options));
+            Assert.Equal(workload, options!.Measure);
+            Assert.True(System.IO.Path.IsPathFullyQualified(options.Report!));
+        }
+        Assert.Equal(Enum.GetValues<Measurement.MeasureWorkload>().Order(), DemoOptions.Workloads.Select(item => item.Workload).Order());
+    }
+
+    [Fact]
+    public void Percentiles_Use_The_Nearest_Rank()
+    {
+        double[] values = [5, 1, 4, 2, 3, 10, 9, 8, 7, 6];
+        Assert.Equal(5, Measurement.FrameSamples.Percentile(values, 50));
+        Assert.Equal(10, Measurement.FrameSamples.Percentile(values, 95));
+        Assert.Equal(1, Measurement.FrameSamples.Percentile(values, 1));
+        Assert.True(double.IsNaN(Measurement.FrameSamples.Percentile([], 50)));
+    }
+
     [Fact]
     public void Every_Gallery_Scenario_Has_One_Unique_Name()
     {

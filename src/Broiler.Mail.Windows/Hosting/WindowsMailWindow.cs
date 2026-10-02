@@ -30,6 +30,7 @@ using Broiler.UI.Standard;
 using Broiler.Hosting.Windows;
 using Broiler.Hosting.Windows.Accessibility;
 using Broiler.Hosting.Windows.Input;
+using Broiler.Mail.Windows.Measurement;
 using Broiler.Mail.Windows.Preview;
 using System.ComponentModel;
 using System.Runtime.InteropServices;
@@ -55,6 +56,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private bool _maximized;
     private bool _closePending;
     private readonly WindowsHtmlPreviewHost _htmlPreview;
+    private readonly FrameRecorder? _recorder;
+    private int _exitCode;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
     // Broiler-Falsified-If: IME positioning calls receive the top-level frame handle instead of the render child window that holds keyboard focus, so the composition window is placed against the wrong client origin
     // Broiler-Human:        PENDING
@@ -64,6 +67,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     internal WindowsAutomationBridge? AutomationBridge => _automationBridge;
     internal WindowsInputBridge? InputBridge => _inputBridge;
     internal MailShellView Shell => _shell;
+    internal MailShellViewModel Model => _model;
+    internal UiSession Session => _session;
     internal nint RenderNativeHandleForTests => RenderNativeHandle;
     internal nint InputHandle => RenderNativeHandle;
 
@@ -118,10 +123,18 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         // Saved theme and OS appearance changes re-theme the live controls; no restart is needed.
         _appearance = new AppearanceController(_session, model.Settings, _host);
         _appearance.Applied += (_, _) => { WindowsTitleBar.Apply(NativeHandle, _appearance.Current!.IsDark); Invalidate(); };
-        if (demo is { Interactive: false }) DemoScenarioDriver.Start(demo, model, _shell, _dispatcher);
+        if (demo is { Interactive: false })
+        {
+            var driver = DemoScenarioDriver.Start(demo, model, _shell, _dispatcher);
+            if (demo.Measure is not null)
+            {
+                _recorder = new FrameRecorder();
+                MeasurementRun.Start(this, _recorder, demo, driver.Completion);
+            }
+        }
         StateChanged += (_, _) => _ = RememberLayout();
         CloseRequested += (_, _) => RequestClose();
-        Closed += (_, _) => PostQuitMessage(0);
+        Closed += (_, _) => PostQuitMessage(_exitCode);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=7386EC
@@ -192,9 +205,46 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Broiler-Human:        PENDING
     protected override BRenderList? BuildRenderList(BSize clientSize)
     {
+        var frame = _recorder?.BeginFrame();
         _host.Update(clientSize, DpiScale);
         DrainDispatcher();
-        return _session.RenderFrame();
+        var renderList = _session.RenderFrame();
+        if (frame is { } begin) _recorder!.EndFrame(begin);
+        return renderList;
+    }
+
+    // UI-12 measurement hooks; only a --measure demo run uses them.
+    internal bool RunOnUiThread(Action action) => PostToUiThread(action);
+
+    internal void DispatchMeasured(UiInputEvent input)
+    {
+        _recorder?.MarkInput();
+        Dispatch(input);
+    }
+
+    internal void DispatchUnmeasured(UiInputEvent input) => Dispatch(input);
+
+    internal void ApplyThemeForMeasurement(StandardThemeTokens tokens)
+    {
+        _recorder?.MarkInput();
+        StandardThemeController.Apply(_session, tokens);
+        WindowsTitleBar.Apply(NativeHandle, tokens.IsDark);
+        Invalidate();
+    }
+
+    internal (int Width, int Height) OuterSize() => WindowsScreen.OuterSize(NativeHandle);
+
+    internal void ResizeForMeasurement(int width, int height)
+    {
+        // The resize draws its frame before SetWindowPos returns, so the mark comes first.
+        _recorder?.MarkInput();
+        WindowsScreen.Resize(NativeHandle, width, height);
+    }
+
+    internal void CloseAfterMeasurement(int exitCode)
+    {
+        _exitCode = exitCode;
+        Close();
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=C533CD

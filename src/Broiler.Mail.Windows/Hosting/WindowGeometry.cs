@@ -77,7 +77,7 @@ internal sealed record WindowRestorePlan(int ClientWidth, int ClientHeight, doub
 internal static unsafe class WindowsScreen
 {
     private const uint MonitorPrimary = 1;
-    private const uint SwpNoSize = 0x0001, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010;
+    private const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010;
 
     /// <summary>Work areas of all monitors, primary first.</summary>
     public static IReadOnlyList<PixelRect> WorkAreas()
@@ -104,6 +104,14 @@ internal static unsafe class WindowsScreen
 
     public static void MoveTo(nint window, int left, int top) =>
         SetWindowPos(window, 0, left, top, 0, 0, SwpNoSize | SwpNoZOrder | SwpNoActivate);
+
+    /// <summary>Outer size in pixels; (0, 0) without a window.</summary>
+    public static (int Width, int Height) OuterSize(nint window) =>
+        OuterBounds(window) is { } bounds ? (bounds.Right - bounds.Left, bounds.Bottom - bounds.Top) : (0, 0);
+
+    /// <summary>Changes the outer size in pixels and keeps the position; used by the UI-12 resize workload.</summary>
+    public static void Resize(nint window, int width, int height) =>
+        SetWindowPos(window, 0, 0, 0, width, height, SwpNoMove | SwpNoZOrder | SwpNoActivate);
 
     /// <summary>The scale a new window is created at, which converts remembered pixels to option DIPs.</summary>
     public static double SystemScale()

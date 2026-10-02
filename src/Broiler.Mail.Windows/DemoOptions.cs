@@ -1,12 +1,14 @@
 using System.Globalization;
 using Broiler.Mail.Core.Settings;
+using Broiler.Mail.Windows.Measurement;
 
 namespace Broiler.Mail.Windows;
 
 internal enum DemoScenario { Inbox, Empty, LongMessage, LargeInbox, LargeDraft, ReceiveError, SaveError, SendUnknown, HtmlOnly, BodyError }
 
 /// <summary>Interactive: plain <c>--demo</c>, where the user drives the synthetic inbox. Otherwise the named fixture is prepared on start.</summary>
-internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTheme.System, int Width = 1100, int Height = 720, bool Interactive = false)
+internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTheme.System, int Width = 1100, int Height = 720, bool Interactive = false,
+    MeasureWorkload? Measure = null, string? Report = null)
 {
     internal static IReadOnlyList<(string Name, DemoScenario Scenario, string Description)> Gallery { get; } = Array.AsReadOnly(new[]
     {
@@ -22,7 +24,18 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("body-error", DemoScenario.BodyError, "Selected message whose body fails to load, with Retry beside it"),
     });
 
-    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>]";
+    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--measure <workload> [--report <file.json>]]";
+
+    internal static IReadOnlyList<(string Name, MeasureWorkload Workload, string Description)> Workloads { get; } = Array.AsReadOnly(new[]
+    {
+        ("idle", MeasureWorkload.Idle, "Three seconds without input; frames drawn should be zero"),
+        ("scroll", MeasureWorkload.Scroll, "150 wheel notches down and up over the message list"),
+        ("select", MeasureWorkload.Select, "Down arrow through 40 messages, loading each body"),
+        ("type", MeasureWorkload.Type, "600 characters typed into the composer body, with autosave"),
+        ("theme", MeasureWorkload.Theme, "20 live switches between the dark and light themes"),
+        ("resize", MeasureWorkload.Resize, "30 window size changes"),
+        ("splitter", MeasureWorkload.Splitter, "60 keyboard moves of the inbox splitter"),
+    });
 
     internal string Name => Gallery.Single(item => item.Scenario == Scenario).Name;
     internal string InitialTab => Scenario is DemoScenario.LargeDraft or DemoScenario.SendUnknown ? "compose"
@@ -45,6 +58,8 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         }
         var theme = AppTheme.System;
         int width = 1100, height = 720;
+        MeasureWorkload? measure = null;
+        string? report = null;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         while (index < args.Length)
         {
@@ -63,9 +78,18 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
                     || !int.TryParse(size[1], NumberStyles.None, CultureInfo.InvariantCulture, out height)
                     || width is < 640 or > 7680 || height is < 480 or > 4320) return false;
             }
+            else if (flag == "--measure")
+            {
+                var match = Workloads.FirstOrDefault(item => item.Name == value);
+                if (match.Name is null) return false;
+                measure = match.Workload;
+            }
+            else if (flag == "--report" && value.Length > 0) report = Path.GetFullPath(value);
             else return false;
         }
-        options = new(scenario, theme, width, height, interactive);
+        // A measurement runs on a prepared fixture, and a report without a measurement is meaningless.
+        if ((measure is not null && interactive) || (report is not null && measure is null)) return false;
+        options = new(scenario, theme, width, height, interactive, measure, report);
         return true;
     }
 }

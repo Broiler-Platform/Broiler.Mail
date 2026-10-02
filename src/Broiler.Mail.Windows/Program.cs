@@ -44,6 +44,9 @@ internal static class Program
             Console.WriteLine("Plain --demo starts the interactive demo. A named scenario opens prepared synthetic state with a fixed clock:");
             foreach (var (name, _, description) in DemoOptions.Gallery)
                 Console.WriteLine($"  {name,-14} {description}");
+            Console.WriteLine("--measure runs a fixed workload on the scenario, prints UI frame statistics, writes them to --report, and exits:");
+            foreach (var (name, _, description) in DemoOptions.Workloads)
+                Console.WriteLine($"  {name,-14} {description}");
             return 0;
         }
         if (args.Length != 0 && !smoke && !demo && !customDirectory)

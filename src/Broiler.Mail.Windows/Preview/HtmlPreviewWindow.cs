@@ -615,12 +615,19 @@ internal sealed class HtmlViewElement : UiElement
     public const int DefaultTileHeight = 1024;
     public const float MaxBudgetHeight = 32768f;
     public const int MaxCachedTiles = 16;
+    // The count limit alone let memory grow with width and DPI: at 7680 DIPs and 300 % one tile is
+    // about 280 MB, sixteen about 4.5 GB. A tile larger than this is rendered at a lower scale and
+    // drawn stretched; the cache as a whole stays within the byte budget.
+    public const long MaxTilePixels = 8L * 1024 * 1024;
+    public const long MaxCachedTileBytes = 256L * 1024 * 1024;
+    private const int BytesPerPixel = 4;
 
     private readonly Func<IBroilerRenderer?> _rendererProvider;
     private readonly Action<string> _onLinkClicked;
     private readonly Func<double>? _dpiScaleProvider;
     private readonly Dictionary<int, (BImageHandle Handle, int PixelWidth, int PixelHeight, double HeightDip)> _tiles = new();
     private readonly LinkedList<int> _lruTiles = new();
+    private long _cachedTileBytes;
 
     private HtmlContainer _container;
     private HtmlLayoutSnapshot? _layoutSnapshot;
@@ -631,6 +638,8 @@ internal sealed class HtmlViewElement : UiElement
 
     public HtmlLayoutSnapshot? Snapshot => _layoutSnapshot;
     public int CachedTileCount => _tiles.Count;
+    public long CachedTileBytes => _cachedTileBytes;
+    internal IEnumerable<(int PixelWidth, int PixelHeight)> CachedTileSizes => _tiles.Values.Select(tile => (tile.PixelWidth, tile.PixelHeight)).ToArray();
     public bool IsTileCached(int tileIndex) => _tiles.ContainsKey(tileIndex);
     internal IReadOnlyCollection<int> CachedTileIndices => _tiles.Keys.ToArray();
 
@@ -698,6 +707,19 @@ internal sealed class HtmlViewElement : UiElement
         }
         _tiles.Clear();
         _lruTiles.Clear();
+        _cachedTileBytes = 0;
+    }
+
+    /// <summary>
+    /// The scale and pixel size a tile is rendered at: the display scale, lowered only when that would
+    /// exceed <see cref="MaxTilePixels"/>. A capped size rounds down so it never passes the cap.
+    /// </summary>
+    internal static (double Scale, int Width, int Height) TilePixelSize(double widthDip, double heightDip, double dpiScale)
+    {
+        bool capped = widthDip * heightDip * dpiScale * dpiScale > MaxTilePixels;
+        double scale = capped ? Math.Sqrt(MaxTilePixels / (widthDip * heightDip)) : dpiScale;
+        Func<double, double> round = capped ? Math.Floor : Math.Ceiling;
+        return (scale, (int)Math.Max(1, round(widthDip * scale)), (int)Math.Max(1, round(heightDip * scale)));
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=8C1F1D
@@ -773,35 +795,38 @@ internal sealed class HtmlViewElement : UiElement
             return;
         }
 
-        while (_tiles.Count >= MaxCachedTiles && _lruTiles.Count > 0)
-        {
-            int lru = _lruTiles.Last!.Value;
-            _lruTiles.RemoveLast();
-            if (_tiles.Remove(lru, out var evicted) && evicted.Handle.IsValid)
-            {
-                renderer.ReleaseImage(evicted.Handle);
-            }
-        }
-
         double tileTop = tileIndex * DefaultTileHeight;
         double tileH = Math.Min(DefaultTileHeight, _layoutSnapshot!.ContentHeight - tileTop);
         if (tileH <= 0) return;
 
-        int pixelW = (int)Math.Max(1, Math.Ceiling(targetWidth * dpiScale));
-        int pixelH = (int)Math.Max(1, Math.Ceiling(tileH * dpiScale));
+        (double tileScale, int pixelW, int pixelH) = TilePixelSize(targetWidth, tileH, dpiScale);
+        long tileBytes = (long)pixelW * pixelH * BytesPerPixel;
+        while ((_tiles.Count >= MaxCachedTiles || _cachedTileBytes + tileBytes > MaxCachedTileBytes) && _lruTiles.Count > 0)
+        {
+            int lru = _lruTiles.Last!.Value;
+            _lruTiles.RemoveLast();
+            if (_tiles.Remove(lru, out var evicted))
+            {
+                _cachedTileBytes -= (long)evicted.PixelWidth * evicted.PixelHeight * BytesPerPixel;
+                if (evicted.Handle.IsValid) renderer.ReleaseImage(evicted.Handle);
+            }
+        }
 
+        // Rendered at the tile's own scale, which is the display scale unless the pixel cap lowered it.
         using var bitmap = new HtmlBitmap(pixelW, pixelH);
-        _container.ViewportZoom = (float)dpiScale;
-        _container.ScrollOffset = new PointF(0, -(float)(tileTop * dpiScale));
+        _container.ViewportZoom = (float)tileScale;
+        _container.ScrollOffset = new PointF(0, -(float)(tileTop * tileScale));
         _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelW, pixelH));
         _container.ScrollOffset = PointF.Empty;
         _container.ViewportZoom = 1.0f;
 
-        byte[] png = bitmap.Encode(Broiler.Media.Image.ImageEncodeFormat.Png);
-        BImageHandle handle = renderer.CreateImage(png);
+        // The renderer keeps RGBA pixels. Encoding a PNG for it to decode straight back cost far more
+        // than painting the tile; the pixels are identical either way.
+        BImageHandle handle = renderer.CreateImage(bitmap.ToPixelBuffer());
 
         _tiles[tileIndex] = (handle, pixelW, pixelH, tileH);
         _lruTiles.AddFirst(tileIndex);
+        _cachedTileBytes += tileBytes;
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=98C950

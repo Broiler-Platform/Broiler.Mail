@@ -83,7 +83,7 @@ P1 improves the current app; P2 depends on larger product/platform work.
 | UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Shortcut table, reply shortcuts, and traversal done; IME, wheel, and DPI caret checks open | Coordinate with UI-04, UI-05, UI-09 |
 | UI-11 | P1 | HTML preview ergonomics | Window lifecycle, identity, and theme done; zoom/scroll and inline view open | UI-01, UI-08; inline embedding also needs sandbox |
-| UI-12 | P1 | Measured rendering and memory performance | Partial | Capture baseline first; repeat after affected changes |
+| UI-12 | P1 | Measured rendering and memory performance | Baseline recorded; rich-edit allocations and preview tiles optimized; resize CPU, GPU time, DPI matrix open | Capture baseline first; repeat after affected changes |
 | UI-13 | P1 | Native visual and interaction acceptance | Open | Continuous; final gate for UI-01 through UI-12 |
 | UI-14 | P2 | Platform and later-feature UI adaptations | Planned | Product/platform services and UI-13 foundation |
 
@@ -709,13 +709,43 @@ Inline embedding remains blocked by the separate renderer containment gate.
   is a starting target, not a claim that current hardware/builds meet it.
 - [ ] Optimize only demonstrated costs: repeated text/layout, redundant invalidation,
   editor resets, cache misses, or bitmap/PNG upload conversion.
-- [ ] Add tile pixel/byte bounds in addition to the existing count limit; higher DPI
+- [x] Add tile pixel/byte bounds in addition to the existing count limit; higher DPI
   and width must not create an effectively unbounded memory allowance.
 - [ ] Verify idle rendering stops, active input remains responsive, and performance
   changes preserve invalidations, selection, text accuracy, and resource disposal.
 
 **Accept:** retain comparable before/after measurements and reproducible scenarios.
 Do not substitute screenshot inspection or unit-test counts for latency/memory evidence.
+
+**Progress (2 October 2026):**
+
+- Harness: `--demo <scenario> --measure <workload> [--report <file>]` runs a fixed workload on a
+  prepared fixture and records, per frame, the UI-thread build time (layout and render list),
+  managed allocation, and input-to-frame latency, plus startup to first frame and to interactive,
+  working set, and GC counts. Workloads: idle, scroll (500-row list, wheel), select, type (with
+  autosave), theme, resize, splitter. `scripts/Measure-UI.ps1` publishes NativeAOT, runs each
+  workload three times, and summarizes.
+- First baseline, with method, reference machine, and proposed targets:
+  [ui-performance-baseline-2026-10-02.md](ui-performance-baseline-2026-10-02.md). Idle draws no
+  frames. Resize is the expensive case (UI side 14–16 ms per step, 1.7 MB per frame); select and
+  splitter allocate 1.6 MB and 0.9 MB per frame while building in 5–9 ms.
+- Not measured yet: GPU rendering and presentation (Broiler.Graphics `FrameRendered` arrives only in
+  its next release), native input delivery, text-layout calls, HTML tile misses, long HTML, and other
+  DPI scales.
+- Optimization 1 (Broiler.UI 0.1.0-preview.14, Broiler.UI#73; Mail consumes it, and a run against the
+  published package reproduced the local-pack numbers):
+  allocation sampling (`AllocationSampler`, `BROILER_MAIL_SAMPLE_ALLOCATIONS=1`) traced most frame
+  allocation to the rich-text editor rebuilding fonts per run, boxing run enumerators per character,
+  and re-shaping visible lines every frame. With fonts resolved once per style, index loops, and line
+  segments kept across frames: allocation per frame drops 64–80 % (select 1,620 → 310 KB, resize
+  1,718 → 408 KB, scroll 285 → 102 KB), scroll and theme frames build 33–69 % faster, and resize and
+  select are now compute-bound (text re-wrapping).
+- Optimization 2 (Mail, HTML preview): tiles went to the renderer as PNG, encoded and decoded again
+  at 314 ms per typical tile (557 ms at 2896×2896) against 1–2 ms for a pixel copy; they now go as
+  pixel buffers, so a new tile no longer stalls the preview. Tiles are capped at 8 M pixels (lower
+  scale only above the cap) and the cache at 256 MB by bytes as well as count; before, 7680 DIPs at
+  300 % allowed about 4.5 GB. Tests: tile sizing at four width/scale pairs and a 4000-DIP, 250 %
+  document scrolled end to end within the byte budget.
 
 ### UI-13 — published-app acceptance and evidence
 
