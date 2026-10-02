@@ -79,7 +79,7 @@ P1 improves the current app; P2 depends on larger product/platform work.
 | UI-05 | P1 | Writing-focused composer | Layout implemented; IME/undo check pending | UI-01; integrate with UI-03 commands |
 | UI-06 | P1 | Guided account setup and concise settings | Setup checklist implemented; SMTP test waits for a service | UI-01 |
 | UI-07 | P1 | Live appearance and geometry persistence | Live theme and geometry implemented; preview windows, text scale, RTL open | UI-01 |
-| UI-08 | P1 | Consistent state, feedback, and recovery UX | Done; native announcements wait for a Hosting release, screen-reader check with UI-09 | Apply to UI-02 through UI-07 |
+| UI-08 | P1 | Consistent state, feedback, and recovery UX | Done, including native announcements (Hosting preview.4); screen-reader check with UI-09 | Apply to UI-02 through UI-07 |
 | UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Shortcut table, reply shortcuts, and traversal done; IME, wheel, and DPI caret checks open | Coordinate with UI-04, UI-05, UI-09 |
 | UI-11 | P1 | HTML preview ergonomics | Lifecycle, identity, theme, keyboard, UIA, scroll, and scaling done; inline view open | UI-01, UI-08; inline embedding also needs sandbox |
@@ -542,13 +542,14 @@ text or kind changes) or, for a finished receive, from the inbox view.
   `ImportantMostRecent`), and reports `LiveSetting` Polite or Assertive on status elements. Checked
   with that branch packed locally (`0.1.0-preview.4-local.1`): an external UIA client received
   "Progress: Receiving newest messages…" and "50 messages loaded." in the `inbox` demo, and the
-  error on the same activity, as `ImportantMostRecent`, in `receive-error`. Mail consumes this once
-  it is published.
+  error on the same activity, as `ImportantMostRecent`, in `receive-error`. Published as
+  Broiler.Hosting 0.1.0-preview.4 (Broiler.Hosting#3); Mail consumes it, and the same check against
+  the published package gives the same notifications.
 - Evidence: `FeedbackPolicyTests` (typing with autosave announces nothing; receiving announces
   progress and the result, and moving through messages is silent; a failure is announced; each send
   outcome once, including a server reason; confirmations go away, restart, and are not announced
   when they do; failures stay; the ready-account footer).
-- Open: a real screen-reader pass (H-01) after Mail consumes the Hosting release; the composer's
+- Open: a real screen-reader pass (H-01), now that Mail consumes the Hosting release; the composer's
   "Draft fields are valid." check result still stays until the next edit.
 
 **Progress (2 October 2026, states, focus, and fixtures):**
@@ -915,9 +916,11 @@ compilation or a new checked roadmap heading.
 - Result: 96 of 96 runs without automated findings after the fixes; screenshots reviewed.
 - Found and fixed in Mail: an invisible, unannounced tab stop on every form's feedback area (now a stop
   only while it scrolls, and named), and misaligned `--help` columns.
-- Found and fixed in Broiler.UI (branch `claude/measure-invalidation`, verified with a local package,
-  waiting for release): a stale-layout band above the compact inbox list, caused by measure
-  invalidation stopping early, and field errors left under the action bar by `FormSurface.Reveal`.
+- Found and fixed in Broiler.UI (Broiler.UI#74, published as 0.1.0-preview.15): a stale-layout band
+  above the compact inbox list, caused by measure invalidation stopping early, and field errors left
+  under the action bar by `FormSurface.Reveal`.
+- Second pass after Mail moved to Broiler.UI preview.15 and Broiler.Hosting preview.4: again 96 of 96
+  runs without automated findings, and the screenshots no longer show either Broiler.UI defect.
 - Pending with documented blockers: 100 % and 200 % scale and monitor moves, text scale, high
   contrast, reduced motion, physical mouse/touchpad, AltGr and IME, screen-reader speech, ARM64
   hardware, and right-to-left layout (UI-14).
