@@ -87,6 +87,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private readonly IReadOnlyDictionary<string, MailEmbeddedImage>? _embeddedImages;
 
     private readonly StandardLabel _status;
+    private readonly StandardLabel _truncationNotice;
+    private readonly bool _dark;
+    private bool _truncationShown;
     private readonly StandardButton _toggleButton;
     private readonly StandardButton _loadImagesButton;
     private readonly ScrollableMessageText _plainTextView;
@@ -129,10 +132,13 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         string plainText,
         Action<Uri> openExternal,
         string? rawHtml = null,
-        IReadOnlyDictionary<string, MailEmbeddedImage>? embeddedImages = null)
+        IReadOnlyDictionary<string, MailEmbeddedImage>? embeddedImages = null,
+        bool dark = false,
+        string? title = null)
         : base(new BWindowOptions
         {
-            Title = "Broiler.Mail — HTML preview",
+            // The title names the message; it must be set here because the native window does not exist yet.
+            Title = title ?? "Broiler.Mail — HTML preview",
             ClientWidth = 900,
             ClientHeight = 700,
             OwnsMessageLoop = false,
@@ -148,11 +154,13 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _rawHtml = rawHtml;
         _embeddedImages = embeddedImages;
 
+        _dark = dark;
         _host = new WindowsUiHost(this, () => InputHandle);
         _dispatcher = new StandardQueuedUiDispatcher(() => PostToUiThread(DrainDispatcher));
         _session = new StandardUiSessionBuilder().WithDispatcher(_dispatcher).Build(_host);
 
-        var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
+        // The shell's theme surface behind the header; without it, dark-theme text sat on the white window.
+        var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock, Background = StandardControlPaint.Surface };
 
         var header = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock, Spacing = 6 };
         _status = new StandardLabel
@@ -163,6 +171,15 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         };
         header.AddChild(_status);
         header.SetDock(_status, UiDock.Top);
+        // Shown once layout finds the document longer than the render budget; the banner at the cut is far below.
+        _truncationNotice = new StandardLabel
+        {
+            Text = "This long message is shortened in the HTML preview. Show plain text has all of it.",
+            Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Role = StandardLabelRole.Muted,
+            Visibility = UiVisibility.Collapsed,
+        };
+        header.AddChild(_truncationNotice);
+        header.SetDock(_truncationNotice, UiDock.Top);
 
         var toolbar = new StandardPanel { StackOrientation = UiStackOrientation.Horizontal, Spacing = 8 };
         _toggleButton = new StandardButton { Text = "Show plain text" };
@@ -391,11 +408,25 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=A6A9C3
     // Broiler-Falsified-If: a frame is rendered before the host has taken the new client size, so the HTML snapshot is laid out at the previous width
     // Broiler-Human:        PENDING
+    protected override void OnCreated()
+    {
+        base.OnCreated();
+        // Match the caption to the shell's theme; the handle exists only from here on.
+        WindowsTitleBar.Apply(NativeHandle, _dark);
+    }
+
     protected override BRenderList? BuildRenderList(BSize clientSize)
     {
         _host.Update(clientSize, DpiScale);
         DrainDispatcher();
-        return _session.RenderFrame();
+        BRenderList? frame = _session.RenderFrame();
+        if (!_truncationShown && _htmlView.Snapshot is { IsTruncated: true })
+        {
+            _truncationShown = true;
+            _truncationNotice.Visibility = UiVisibility.Visible;
+            Invalidate();
+        }
+        return frame;
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=3E34D4
@@ -442,6 +473,10 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     {
         if (_session.DispatchInput(input))
             Invalidate();
+        // Escape closes the preview unless a control used it first, for example to dismiss a menu.
+        else if (input.Kind == UiInputEventKind.KeyboardKey && input.KeyTransition == KeyboardKeyTransition.Down
+            && input.NativeKeyCode == 0x1B)
+            Close();
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=EDEB0C
@@ -551,6 +586,14 @@ internal sealed class ScrollableHtmlView : UiElement
         return _scroll.Measure(availableSize);
     }
 
+    // Mail HTML is authored for a white page, and the renderer paints the document white; the canvas
+    // stays white below a short document instead of showing the shell's (possibly dark) surface.
+    protected override void RenderCore(UiRenderContext context)
+    {
+        context.RenderList.FillRect(Bounds, new BColor(255, 255, 255));
+        base.RenderCore(context);
+    }
+
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=00F201
     // Broiler-Human:        PENDING
     protected override void Dispose(bool disposing)
@@ -572,12 +615,19 @@ internal sealed class HtmlViewElement : UiElement
     public const int DefaultTileHeight = 1024;
     public const float MaxBudgetHeight = 32768f;
     public const int MaxCachedTiles = 16;
+    // The count limit alone let memory grow with width and DPI: at 7680 DIPs and 300 % one tile is
+    // about 280 MB, sixteen about 4.5 GB. A tile larger than this is rendered at a lower scale and
+    // drawn stretched; the cache as a whole stays within the byte budget.
+    public const long MaxTilePixels = 8L * 1024 * 1024;
+    public const long MaxCachedTileBytes = 256L * 1024 * 1024;
+    private const int BytesPerPixel = 4;
 
     private readonly Func<IBroilerRenderer?> _rendererProvider;
     private readonly Action<string> _onLinkClicked;
     private readonly Func<double>? _dpiScaleProvider;
     private readonly Dictionary<int, (BImageHandle Handle, int PixelWidth, int PixelHeight, double HeightDip)> _tiles = new();
     private readonly LinkedList<int> _lruTiles = new();
+    private long _cachedTileBytes;
 
     private HtmlContainer _container;
     private HtmlLayoutSnapshot? _layoutSnapshot;
@@ -588,6 +638,8 @@ internal sealed class HtmlViewElement : UiElement
 
     public HtmlLayoutSnapshot? Snapshot => _layoutSnapshot;
     public int CachedTileCount => _tiles.Count;
+    public long CachedTileBytes => _cachedTileBytes;
+    internal IEnumerable<(int PixelWidth, int PixelHeight)> CachedTileSizes => _tiles.Values.Select(tile => (tile.PixelWidth, tile.PixelHeight)).ToArray();
     public bool IsTileCached(int tileIndex) => _tiles.ContainsKey(tileIndex);
     internal IReadOnlyCollection<int> CachedTileIndices => _tiles.Keys.ToArray();
 
@@ -655,6 +707,19 @@ internal sealed class HtmlViewElement : UiElement
         }
         _tiles.Clear();
         _lruTiles.Clear();
+        _cachedTileBytes = 0;
+    }
+
+    /// <summary>
+    /// The scale and pixel size a tile is rendered at: the display scale, lowered only when that would
+    /// exceed <see cref="MaxTilePixels"/>. A capped size rounds down so it never passes the cap.
+    /// </summary>
+    internal static (double Scale, int Width, int Height) TilePixelSize(double widthDip, double heightDip, double dpiScale)
+    {
+        bool capped = widthDip * heightDip * dpiScale * dpiScale > MaxTilePixels;
+        double scale = capped ? Math.Sqrt(MaxTilePixels / (widthDip * heightDip)) : dpiScale;
+        Func<double, double> round = capped ? Math.Floor : Math.Ceiling;
+        return (scale, (int)Math.Max(1, round(widthDip * scale)), (int)Math.Max(1, round(heightDip * scale)));
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=8C1F1D
@@ -730,35 +795,38 @@ internal sealed class HtmlViewElement : UiElement
             return;
         }
 
-        while (_tiles.Count >= MaxCachedTiles && _lruTiles.Count > 0)
-        {
-            int lru = _lruTiles.Last!.Value;
-            _lruTiles.RemoveLast();
-            if (_tiles.Remove(lru, out var evicted) && evicted.Handle.IsValid)
-            {
-                renderer.ReleaseImage(evicted.Handle);
-            }
-        }
-
         double tileTop = tileIndex * DefaultTileHeight;
         double tileH = Math.Min(DefaultTileHeight, _layoutSnapshot!.ContentHeight - tileTop);
         if (tileH <= 0) return;
 
-        int pixelW = (int)Math.Max(1, Math.Ceiling(targetWidth * dpiScale));
-        int pixelH = (int)Math.Max(1, Math.Ceiling(tileH * dpiScale));
+        (double tileScale, int pixelW, int pixelH) = TilePixelSize(targetWidth, tileH, dpiScale);
+        long tileBytes = (long)pixelW * pixelH * BytesPerPixel;
+        while ((_tiles.Count >= MaxCachedTiles || _cachedTileBytes + tileBytes > MaxCachedTileBytes) && _lruTiles.Count > 0)
+        {
+            int lru = _lruTiles.Last!.Value;
+            _lruTiles.RemoveLast();
+            if (_tiles.Remove(lru, out var evicted))
+            {
+                _cachedTileBytes -= (long)evicted.PixelWidth * evicted.PixelHeight * BytesPerPixel;
+                if (evicted.Handle.IsValid) renderer.ReleaseImage(evicted.Handle);
+            }
+        }
 
+        // Rendered at the tile's own scale, which is the display scale unless the pixel cap lowered it.
         using var bitmap = new HtmlBitmap(pixelW, pixelH);
-        _container.ViewportZoom = (float)dpiScale;
-        _container.ScrollOffset = new PointF(0, -(float)(tileTop * dpiScale));
+        _container.ViewportZoom = (float)tileScale;
+        _container.ScrollOffset = new PointF(0, -(float)(tileTop * tileScale));
         _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelW, pixelH));
         _container.ScrollOffset = PointF.Empty;
         _container.ViewportZoom = 1.0f;
 
-        byte[] png = bitmap.Encode(Broiler.Media.Image.ImageEncodeFormat.Png);
-        BImageHandle handle = renderer.CreateImage(png);
+        // The renderer keeps RGBA pixels. Encoding a PNG for it to decode straight back cost far more
+        // than painting the tile; the pixels are identical either way.
+        BImageHandle handle = renderer.CreateImage(bitmap.ToPixelBuffer());
 
         _tiles[tileIndex] = (handle, pixelW, pixelH, tileH);
         _lruTiles.AddFirst(tileIndex);
+        _cachedTileBytes += tileBytes;
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=98C950

@@ -129,6 +129,10 @@ public sealed class ComposerViewModel : IDisposable
         !_journal.IsSaved ? FeedbackKind.Progress : FeedbackKind.Information;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=376603
     // Broiler-Human:        PENDING
+    /// <summary>Why an editable draft cannot be sent, or null. Shown instead of a permanent instruction.</summary>
+    public string? SendUnavailableReason => !CanEdit ? null
+        : _sender?.IsAvailable != true ? "Sending is not available in this mode."
+        : _account?.OutgoingServer is null ? "Add outgoing mail (SMTP) settings in Account to send this draft." : null;
     public string FromAddress => _seed?.FromAddress ?? _account?.EmailAddress ?? "No saved account";
     public string To { get; private set; } = "";
     public string Cc { get; private set; } = "";
@@ -145,9 +149,11 @@ public sealed class ComposerViewModel : IDisposable
     public void SetAccount(AccountProfile? account)
     {
         if (_account == account) return;
+        // Only a change of account needs the retention notice; the first assignment keeps, for example, the recovery message.
+        bool changed = _account is not null;
         _account = account;
-        Status = HasDraft ? "Your draft and its original sender are retained."
-            : CanStart ? "Start a new message, or read a message in Inbox to reply or forward." : "Save and enable an account to compose mail.";
+        if (HasDraft) { if (changed) Status = "Your draft and its original sender are retained."; }
+        else Status = CanStart ? "Start a new message, or read a message in Inbox to reply or forward." : "Save and enable an account to compose mail.";
         Notify();
     }
 
@@ -192,7 +198,8 @@ public sealed class ComposerViewModel : IDisposable
         if (!CanEdit) return;
         To = to; Cc = cc; Bcc = bcc; Subject = subject; PlainText = body;
         SubmissionState = DraftSubmissionState.Editing;
-        Status = "Draft edited.";
+        // Clear an earlier result such as a draft check; routine edits need no announcement.
+        Status = "";
         Persist();
         Notify();
     }

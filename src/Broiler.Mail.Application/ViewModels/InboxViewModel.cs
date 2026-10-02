@@ -26,6 +26,9 @@ namespace Broiler.Mail.Application.ViewModels;
 // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=CAE5A8
 // Broiler-Falsified-If: a body fetched for an earlier selection is committed after SelectAsync has picked another message, so Body no longer belongs to SelectedMessage
 // Broiler-Human:        PENDING
+/// <summary>Which pane an inbox problem belongs to, so its explanation and Retry appear beside it.</summary>
+public enum InboxProblemScope { None, List, Message }
+
 public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatcher) : IDisposable
 {
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=Low; Resources=0; Fingerprint=75CF89
@@ -42,6 +45,8 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     private int _generation;
     private bool _disposed;
     private bool _loadingPage;
+    private InboxProblemScope _running;
+    private bool _lastPageWasOlder;
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=8C487F
     // Broiler-Human:        PENDING
@@ -51,6 +56,23 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     public MailMessageBody? Body { get; private set; }
     public string Status { get; private set; } = "Save an account in the Account tab to receive mail.";
     public bool IsBusy { get; private set; }
+    /// <summary>A page of summaries is loading; the list stays visible meanwhile.</summary>
+    public bool IsLoadingList => IsBusy && _running == InboxProblemScope.List;
+    /// <summary>The selected message's body is loading.</summary>
+    public bool IsLoadingMessage => IsBusy && _running == InboxProblemScope.Message;
+    /// <summary>At least one page loaded successfully for the current account, so an empty list means an empty inbox.</summary>
+    public bool HasLoaded { get; private set; }
+    /// <summary>The explanation of the last failed or canceled operation, or null. It stays until that pane's next operation.</summary>
+    public string? Problem { get; private set; }
+    public InboxProblemScope ProblemScope { get; private set; }
+    /// <summary>The problem is a cancellation the user asked for, not a failure.</summary>
+    public bool ProblemIsCancellation { get; private set; }
+    public bool CanRetry => !_disposed && !IsBusy && ProblemScope switch
+    {
+        InboxProblemScope.List => CanReceive,
+        InboxProblemScope.Message => SelectedMessage is not null && _account is not null,
+        _ => false,
+    };
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=A12292
     // Broiler-Falsified-If: CanReceive is true for a saved account whose IsEnabled is false
     // Broiler-Human:        PENDING
@@ -90,6 +112,8 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         SelectedMessage = null;
         Body = null;
         _older = null;
+        HasLoaded = false;
+        ClearProblem();
         Status = account is { IsEnabled: true }
             ? $"Ready to receive mail for {account.EmailAddress} using the saved profile."
             : "Save and enable an account in the Account tab to receive mail.";
@@ -112,21 +136,52 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     {
         var account = _account!;
         _loadingPage = true;
+        _lastPageWasOlder = cursor is not null;
         return RunAsync(token => receiver.GetInboxAsync(account, PageSize, cursor, token), page =>
         {
+            HasLoaded = true;
             Messages = (cursor is null ? page.Messages : Messages.Concat(page.Messages))
                 .DistinctBy(message => message.Key).ToArray();
             _older = page.Older;
-            if (cursor is null)
-            {
-                SelectedMessage = null;
-                Body = null;
-            }
-            Status = Messages.Count == 0 ? "The inbox is empty." :
-                $"{Messages.Count} messages loaded. Select one to read. Server read/unread flags are unchanged.";
+            string? reading = cursor is null ? KeepReading(page) : null;
+            Status = Messages.Count == 0 ? "The inbox is empty." : SelectedMessage is null
+                ? $"{Messages.Count} messages loaded. Select one to read. Server read/unread flags are unchanged."
+                : $"{Messages.Count} messages loaded. Server read/unread flags are unchanged.";
+            if (reading is not null) Status += " " + reading;
             if (Messages.Count >= MaximumLoadedMessages && _older is not null)
                 Status += " Session limit reached (500 messages). Receive mail again to return to the newest page.";
-        }, cursor is null ? "Receiving newest messages…" : "Loading older messages…");
+        }, cursor is null ? "Receiving newest messages…" : "Loading older messages…", InboxProblemScope.List);
+    }
+
+    /// <summary>
+    /// Reconciles the open message with a refreshed newest page, by full key. A retained body keeps
+    /// its identity, so the reader keeps its scroll position and preview. Absence from the page only
+    /// proves removal when the page covers the message's UID range; otherwise it may simply be older.
+    /// </summary>
+    /// <returns>An explanation when the open message changed state, otherwise null.</returns>
+    private string? KeepReading(MailInboxPage page)
+    {
+        if (SelectedMessage is not { } open) return null;
+        if (Messages.FirstOrDefault(message => message.Key == open.Key) is { } refreshed)
+        {
+            SelectedMessage = refreshed;
+            return null;
+        }
+        var fetched = page.Messages.Where(message => message.Key.AccountId == open.Key.AccountId && message.Key.MailboxId == open.Key.MailboxId).ToArray();
+        if (fetched.Length > 0 && fetched.Any(message => message.Key.UidValidity != open.Key.UidValidity))
+        {
+            SelectedMessage = null;
+            Body = null;
+            return "The server renumbered the inbox, so the open message was closed. Select it again to read it.";
+        }
+        // Newest pages are contiguous: every message from the oldest fetched UID upward was returned.
+        if (fetched.Length == 0 || page.Older is null || open.Key.Uid >= fetched.Min(message => message.Key.Uid))
+        {
+            SelectedMessage = null;
+            Body = null;
+            return "The open message is no longer in the inbox. It may have been moved or deleted on the server.";
+        }
+        return "The open message is older than the newest page and stays open. Use Load older to show it in the list.";
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=89C93F
@@ -135,7 +190,8 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     public Task SelectAsync(MailMessageKey key)
     {
         if (!CanSelect || _account is null) return Task.CompletedTask;
-        var message = Messages.FirstOrDefault(item => item.Key == key);
+        // The open message may be outside the refreshed page; it can still be read again.
+        var message = Messages.FirstOrDefault(item => item.Key == key) ?? (SelectedMessage?.Key == key ? SelectedMessage : null);
         if (message is null) return Task.CompletedTask;
         var account = _account;
         SelectedMessage = message;
@@ -150,7 +206,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
             Body = body;
             Status = body.IsHtmlFallback ? "Reading text extracted from HTML. External resources are not loaded." : "Reading plain text. Server flags are unchanged.";
             if (body.IsTruncated) Status += " Preview limited to 32,000 characters.";
-        }, "Loading message…");
+        }, "Loading message…", InboxProblemScope.Message);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=5ABAE9
@@ -159,15 +215,39 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     public void Cancel()
     {
         if (!IsBusy || _disposed) return;
+        var scope = _running;
         StopPending();
         Status = "Mail operation canceled. You can retry.";
+        SetProblem(scope, scope == InboxProblemScope.List ? "Receiving was canceled." : "Loading the message was canceled.", canceled: true);
         Notify();
+    }
+
+    /// <summary>Repeats the operation that failed or was canceled: the same page, or the selected message.</summary>
+    public Task RetryAsync()
+    {
+        if (!CanRetry) return Task.CompletedTask;
+        return ProblemScope == InboxProblemScope.Message ? SelectAsync(SelectedMessage!.Key)
+            : _lastPageWasOlder && CanLoadOlder ? LoadOlderAsync() : ReceiveAsync();
+    }
+
+    private void SetProblem(InboxProblemScope scope, string text, bool canceled)
+    {
+        Problem = text;
+        ProblemScope = scope;
+        ProblemIsCancellation = canceled;
+    }
+
+    private void ClearProblem()
+    {
+        Problem = null;
+        ProblemScope = InboxProblemScope.None;
+        ProblemIsCancellation = false;
     }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=687E68
     // Broiler-Falsified-If: a callback from an operation superseded by a later RunAsync or StopPending still commits its result on the dispatcher
     // Broiler-Human:        PENDING
-    private async Task RunAsync<T>(Func<CancellationToken, Task<T>> operation, Action<T> commit, string busy)
+    private async Task RunAsync<T>(Func<CancellationToken, Task<T>> operation, Action<T> commit, string busy, InboxProblemScope scope)
     {
         // A newer selection invalidates callbacks even if a receiver completes after cancellation.
         try { _operation?.Cancel(); } catch (ObjectDisposedException) { }
@@ -175,6 +255,9 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         _operation = cancellation;
         int generation = ++_generation;
         IsBusy = true;
+        _running = scope;
+        // A new attempt replaces an earlier explanation; its own outcome decides what is shown next.
+        ClearProblem();
         Status = busy;
         Notify();
         T? result = default;
@@ -196,7 +279,12 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
                 _operation = null;
                 IsBusy = _loadingPage = false;
                 if (failure is null) commit(result!);
-                else Status = failure + (Messages.Count > 0 ? " The previously loaded inbox is still shown." : "");
+                else
+                {
+                    Status = failure + (Messages.Count > 0 ? " The previously loaded inbox is still shown." : "");
+                    SetProblem(scope, scope == InboxProblemScope.List && Messages.Count > 0 ? failure + " The messages below are from the last successful receive." : failure,
+                        canceled: cancellation.IsCancellationRequested);
+                }
                 Notify();
             });
         }

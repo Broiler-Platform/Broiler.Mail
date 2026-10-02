@@ -308,6 +308,55 @@ public sealed class HtmlPreviewIsolationTests
         Assert.Equal(1, element.CachedTileCount);
     }
 
+    [Theory]
+    [InlineData(1100, 1.5, false)]
+    [InlineData(1100, 1.0, false)]
+    [InlineData(3840, 2.0, true)]
+    [InlineData(7680, 3.0, true)]
+    public void TileSizes_KeepTheDisplayScaleUntilThePixelCap(double width, double dpiScale, bool capped)
+    {
+        var (scale, pixelWidth, pixelHeight) = HtmlViewElement.TilePixelSize(width, HtmlViewElement.DefaultTileHeight, dpiScale);
+
+        Assert.True((long)pixelWidth * pixelHeight <= HtmlViewElement.MaxTilePixels || !capped);
+        if (capped)
+        {
+            Assert.True(scale < dpiScale);
+            Assert.True((long)pixelWidth * pixelHeight <= HtmlViewElement.MaxTilePixels);
+        }
+        else
+        {
+            Assert.Equal(dpiScale, scale);
+            Assert.Equal((int)Math.Ceiling(width * dpiScale), pixelWidth);
+        }
+    }
+
+    [Fact]
+    public void WideHighDpiDocuments_StayWithinTheTileByteBudget()
+    {
+        // 4,000 DIPs at 250 % would make 25.6 M-pixel tiles (about 100 MB each) without the cap.
+        string html = string.Concat(Enumerable.Repeat("<p style='height: 60px; margin: 0;'>Wide document line</p>", 220));
+        var renderer = new TestBroilerRenderer();
+        var element = new HtmlViewElement(html, () => renderer, _ => { }, () => 2.5);
+        element.Measure(new BSize(4000, 600));
+        double height = element.Snapshot!.ContentHeight;
+        var host = new TestUiHost { ViewportSize = new BSize(4000, 600), Scale = 2.5 };
+        var session = new StandardUiSessionBuilder().Build(host);
+
+        int tiles = (int)Math.Ceiling(height / HtmlViewElement.DefaultTileHeight);
+        for (int tileIndex = 0; tileIndex < tiles; tileIndex++)
+        {
+            element.Arrange(new BRect(0, -tileIndex * HtmlViewElement.DefaultTileHeight, 4000, height));
+            element.Render(new UiRenderContext(new BRenderList(), session, host));
+
+            Assert.All(element.CachedTileSizes, size => Assert.True((long)size.PixelWidth * size.PixelHeight <= HtmlViewElement.MaxTilePixels));
+            Assert.True(element.CachedTileBytes <= HtmlViewElement.MaxCachedTileBytes, $"{element.CachedTileBytes} bytes cached");
+            Assert.Equal(element.CachedTileSizes.Sum(size => (long)size.PixelWidth * size.PixelHeight * 4), element.CachedTileBytes);
+        }
+
+        Assert.True(tiles > HtmlViewElement.MaxCachedTileBytes / (HtmlViewElement.MaxTilePixels * 4), "The document must need more tiles than the budget holds.");
+        Assert.NotEmpty(renderer.ReleasedImages);
+    }
+
     [Fact]
     public void BoundedTilingAndBudgetTruncationFixture_TruncatesVisiblyAndCapsTileCache()
     {
@@ -711,18 +760,20 @@ public sealed class HtmlPreviewIsolationTests
     private sealed class TestBroilerRenderer : IBroilerRenderer
     {
         private int _nextId = 1;
-        public List<(int HandleId, byte[] PngData)> CreatedImages { get; } = new();
+        // Tiles arrive as pixel buffers; encoded images are recorded the same way for any other caller.
+        public List<(int HandleId, int Width, int Height)> CreatedImages { get; } = new();
         public List<BImageHandle> ReleasedImages { get; } = new();
 
-        public BImageHandle CreateImage(ReadOnlySpan<byte> encodedData)
+        public BImageHandle CreateImage(ReadOnlySpan<byte> encodedData) => Record(100, 100);
+
+        public BImageHandle CreateImage(BPixelBuffer pixelBuffer) => Record(pixelBuffer.Width, pixelBuffer.Height);
+
+        private BImageHandle Record(int width, int height)
         {
             int id = _nextId++;
-            CreatedImages.Add((id, encodedData.ToArray()));
-            return new BImageHandle(new BResourceHandle(BResourceKind.Image, (ulong)id), new BSize(100, 100));
+            CreatedImages.Add((id, width, height));
+            return new BImageHandle(new BResourceHandle(BResourceKind.Image, (ulong)id), new BSize(width, height));
         }
-
-        public BImageHandle CreateImage(BPixelBuffer pixelBuffer) =>
-            new BImageHandle(new BResourceHandle(BResourceKind.Image, (ulong)_nextId++), new BSize(100, 100));
 
         public void ReleaseImage(BImageHandle handle) => ReleasedImages.Add(handle);
         public IBroilerSurface CreateSurface(BSurfaceDescriptor descriptor) => throw new NotImplementedException();

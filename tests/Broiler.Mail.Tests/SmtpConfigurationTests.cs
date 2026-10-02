@@ -274,7 +274,9 @@ public sealed class SmtpConfigurationTests
     {
         // Capture through the user's button and wait for asynchronous persistence/UI completion.
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        void Changed(object? sender, EventArgs args) { if (!model.IsBusy) completion.TrySetResult(); }
+        // Other notifications (such as the saved-password check) also raise Changed; wait for this save to end.
+        bool saving = false;
+        void Changed(object? sender, EventArgs args) { if (model.IsBusy) saving = true; else if (saving) completion.TrySetResult(); }
         model.Changed += Changed;
         try
         {

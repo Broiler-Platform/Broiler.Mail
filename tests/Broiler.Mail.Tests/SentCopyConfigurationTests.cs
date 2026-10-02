@@ -35,7 +35,9 @@ public sealed class SentCopyConfigurationTests
         Assert.Equal(mode == SentCopyMode.AppendToFolder, folder.IsEnabled);
         folder.Text = " Sent & Archive/2026 ";
         var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        model.Changed += (_, _) => { if (!model.IsBusy) finished.TrySetResult(); };
+        // Other notifications (such as the saved-password check) also raise Changed; wait for this save to end.
+        bool saving = false;
+        model.Changed += (_, _) => { if (model.IsBusy) saving = true; else if (saving) finished.TrySetResult(); };
         Descendants(form).OfType<StandardButton>().Single(button => button.Text == "Save account").Click();
         await finished.Task.WaitAsync(TimeSpan.FromSeconds(5));
         var saved = Assert.Single(await store.LoadAsync());

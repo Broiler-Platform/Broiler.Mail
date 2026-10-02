@@ -16,6 +16,7 @@
 // GENERATED - DO NOT EDIT MANUALLY
 
 using Broiler.Hosting.Windows;
+using Broiler.Mail.Application.Views;
 using Broiler.Mail.Windows.Hosting;
 using Broiler.Mail.Windows.Services;
 using Broiler.UI.Standard;
@@ -28,22 +29,29 @@ namespace Broiler.Mail.Windows;
 internal static class Program
 {
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=366F93
-    // Broiler-Falsified-If: an argument list other than none, --help, --demo, --smoke-test or --data-directory with a non-blank path starts the application instead of returning exit code 2
+    // Broiler-Falsified-If: an argument list other than none, --help, a valid --demo option list, --smoke-test or --data-directory with a non-blank path starts the application instead of returning exit code 2
     // Broiler-Human:        PENDING
     [STAThread]
     private static int Main(string[] args)
     {
         bool smoke = args.SequenceEqual(["--smoke-test"]);
-        bool demo = args.SequenceEqual(["--demo"]);
+        bool demo = DemoOptions.TryParse(args, out var demoOptions);
         bool customDirectory = args.Length == 2 && args[0] == "--data-directory" && !string.IsNullOrWhiteSpace(args[1]);
+        const string usage = "Broiler.Mail.Windows [" + DemoOptions.Usage + " | --smoke-test | --data-directory <path>]";
         if (args.SequenceEqual(["--help"]))
         {
-            Console.WriteLine("Broiler.Mail.Windows [--demo | --smoke-test | --data-directory <path>]");
+            Console.WriteLine(usage);
+            Console.WriteLine("Plain --demo starts the interactive demo. A named scenario opens prepared synthetic state with a fixed clock:");
+            foreach (var (name, _, description) in DemoOptions.Gallery)
+                Console.WriteLine($"  {name,-14} {description}");
+            Console.WriteLine("--measure runs a fixed workload on the scenario, prints UI frame statistics, writes them to --report, and exits:");
+            foreach (var (name, _, description) in DemoOptions.Workloads)
+                Console.WriteLine($"  {name,-14} {description}");
             return 0;
         }
         if (args.Length != 0 && !smoke && !demo && !customDirectory)
         {
-            Console.Error.WriteLine("Usage: Broiler.Mail.Windows [--demo | --smoke-test | --data-directory <path>]");
+            Console.Error.WriteLine("Usage: " + usage);
             return 2;
         }
 
@@ -65,18 +73,13 @@ internal static class Program
             }
 
             string dataDirectory = customDirectory ? Path.GetFullPath(args[1]) : CompositionRoot.DefaultDataDirectory;
-            var application = demo ? DemoApplication.Create() : CompositionRoot.CreateApplication(dataDirectory);
+            var application = demo ? DemoApplication.Create(demoOptions) : CompositionRoot.CreateApplication(dataDirectory);
             // Before the window exists, complete initialization without changing the STA thread.
             application.InitializeAsync().GetAwaiter().GetResult();
-            bool isDark = application.LoadedSettings.Theme switch
-            {
-                Broiler.Mail.Core.Settings.AppTheme.Dark => true,
-                Broiler.Mail.Core.Settings.AppTheme.Light => false,
-                _ => WindowsTheme.IsDarkThemePreferred()
-            };
-            StandardControlPaint.ApplyTheme(WindowsTheme.ResolveTheme(isDark));
+            // The same policy the running window applies live: system high contrast first, then the saved choice.
+            StandardControlPaint.ApplyTheme(AppearancePolicy.Resolve(application.LoadedSettings.Theme, WindowsTheme.QuerySystemSettings()));
             Console.WriteLine(demo ? "Demo mode: synthetic mail; no files, saved credentials, or network access." : $"Configuration directory: {dataDirectory}");
-            using var window = new WindowsMailWindow(application, demo);
+            using var window = new WindowsMailWindow(application, demoOptions);
             return window.Run();
         }
         catch (Exception exception)

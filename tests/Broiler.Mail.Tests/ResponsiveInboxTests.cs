@@ -1,0 +1,279 @@
+using Broiler.Graphics.Geometry;
+using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Windowing;
+using Broiler.Input.Keyboard;
+using Broiler.Mail.Application.Preview;
+using Broiler.Mail.Application.ViewModels;
+using Broiler.Mail.Application.Views;
+using Broiler.Mail.Core.Accounts;
+using Broiler.Mail.Core.Messages;
+using Broiler.Mail.Infrastructure.Persistence;
+using Broiler.UI;
+using Broiler.UI.Button.Standard;
+using Broiler.UI.ListView.Standard;
+using Broiler.UI.Splitter.Standard;
+using Broiler.UI.Standard;
+
+namespace Broiler.Mail.Tests;
+
+/// <summary>UI-04: one pane at a time when two readable panes do not fit, without losing context.</summary>
+[Collection("UI theme")]
+public sealed class ResponsiveInboxTests
+{
+    [Fact]
+    public async Task WideLayoutShowsBothPanesAndCompactLayoutStartsWithTheList()
+    {
+        using var fixture = await Fixture.OpenAsync(1000);
+        Assert.False(fixture.Layout.IsCompact);
+        Assert.True(fixture.List.Bounds.Width > 0);
+        Assert.True(fixture.Reader.Bounds.Width > 0);
+
+        fixture.Resize(500);
+        Assert.True(fixture.Layout.IsCompact);
+        Assert.False(fixture.Layout.ShowsReaderOnly);
+        Assert.True(fixture.List.Bounds.Width >= 450);
+        Assert.Equal(BRect.Empty, fixture.Reader.Bounds);
+    }
+
+    [Fact]
+    public async Task ArrowKeysBrowseTheCompactListAndEnterOpensTheReader()
+    {
+        using var fixture = await Fixture.OpenAsync(500);
+        fixture.Session.SetFocus(fixture.List);
+        fixture.Key(0x28); // Down
+        fixture.Key(0x28);
+        fixture.Session.RenderFrame();
+        Assert.Equal(fixture.Messages[1].Key, fixture.Model.SelectedMessage?.Key);
+        Assert.False(fixture.Layout.ShowsReaderOnly);
+        Assert.Same(fixture.List, fixture.Session.FocusedElement);
+
+        fixture.Key(13); // Enter activates the row.
+        fixture.Session.RenderFrame();
+        Assert.True(fixture.Layout.ShowsReaderOnly);
+        Assert.Equal(BRect.Empty, fixture.List.Bounds);
+        Assert.True(fixture.BackButton.Bounds.Width > 0);
+        // Focus left the hidden list for the message text.
+        Assert.Same(fixture.ReaderText.Editor, fixture.Session.FocusedElement);
+    }
+
+    [Fact]
+    public async Task ClickingARowOpensTheReaderAndBackRestoresTheList()
+    {
+        using var fixture = await Fixture.OpenAsync(500, 400);
+        fixture.List.ScrollIntoView(20);
+        fixture.Session.RenderFrame();
+        int row = fixture.List.FirstVisibleIndex + 1;
+        var point = new BPoint(fixture.List.Bounds.X + 40, fixture.List.Bounds.Y + (row - fixture.List.FirstVisibleIndex + 0.5) * fixture.List.EffectiveItemHeight);
+        fixture.Click(point);
+        fixture.Session.RenderFrame();
+        Assert.True(fixture.Layout.ShowsReaderOnly);
+        var opened = fixture.Model.SelectedMessage!.Key;
+        Assert.Equal(fixture.Messages[row].Key, opened);
+
+        fixture.BackButton.Click();
+        fixture.Session.RenderFrame();
+        Assert.False(fixture.Layout.ShowsReaderOnly);
+        Assert.Equal(opened, fixture.Model.SelectedMessage?.Key);
+        Assert.Same(fixture.List, fixture.Session.FocusedElement);
+        int index = fixture.List.Items.ToList().FindIndex(item => item.Id == fixture.List.SelectedItemId);
+        Assert.InRange(index, fixture.List.FirstVisibleIndex, fixture.List.FirstVisibleIndex + fixture.List.VisibleItemCount);
+        Assert.Equal(BRect.Empty, fixture.Reader.Bounds);
+    }
+
+    [Fact]
+    public async Task ResizingKeepsTheOpenMessageFocusAndTheWideSplitRatio()
+    {
+        using var fixture = await Fixture.OpenAsync(1000);
+        fixture.Split.SplitterFraction = 0.42;
+        fixture.Session.RenderFrame();
+        double ratio = fixture.Model.SplitterFraction;
+        await fixture.Model.SelectAsync(fixture.Messages[3].Key);
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        fixture.Session.SetFocus(fixture.List);
+        fixture.Session.RenderFrame();
+
+        for (int round = 0; round < 3; round++)
+        {
+            fixture.Resize(500);
+            // A message being read side by side stays open in the compact reader.
+            Assert.True(fixture.Layout.ShowsReaderOnly);
+            Assert.Same(fixture.ReaderText.Editor, fixture.Session.FocusedElement);
+            fixture.Resize(1000);
+            Assert.False(fixture.Layout.IsCompact);
+            Assert.Equal(ratio, fixture.Model.SplitterFraction, 3);
+            Assert.Equal(ratio, fixture.Split.SplitterFraction, 3);
+        }
+        Assert.Equal(fixture.Messages[3].Key, fixture.Model.SelectedMessage?.Key);
+        Assert.NotNull(fixture.Model.Body);
+    }
+
+    [Fact]
+    public async Task MessageThatDisappearsReturnsTheCompactLayoutToTheList()
+    {
+        using var fixture = await Fixture.OpenAsync(500);
+        await fixture.Model.SelectAsync(fixture.Messages[0].Key);
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        Assert.True(fixture.View.OpenSelected());
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        fixture.Session.RenderFrame();
+        Assert.True(fixture.Layout.ShowsReaderOnly);
+
+        fixture.Receiver.Inbox = (_, _) => Task.FromResult(new MailInboxPage(fixture.Messages.Skip(1).ToArray(), null));
+        await fixture.Model.ReceiveAsync();
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        fixture.Session.RenderFrame();
+
+        Assert.Null(fixture.Model.SelectedMessage);
+        Assert.False(fixture.Layout.ShowsReaderOnly);
+    }
+
+    [Fact]
+    public async Task EscapeLeavesTheCompactReaderWithoutTouchingTheDraft()
+    {
+        using var directory = new TestDirectory();
+        var account = TestDirectory.Profile();
+        var messages = Fixture.CreateMessages(account, 5);
+        var receiver = Fixture.CreateReceiver(messages);
+        var dispatcher = new TestQueueDispatcher();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(500, 600));
+        session.AddRoot(shell.Window);
+        var keyboard = shell.CreateKeyboardNavigation(session);
+        shell.Navigation.SelectTab("inbox");
+        Assert.True(model.Composer.StartNew());
+        model.Composer.Edit("kept@example.test", "", "", "Draft", "Text");
+        shell.Navigation.SelectTab("inbox");
+        await model.Inbox.ReceiveAsync();
+        dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+        await model.Inbox.SelectAsync(messages[2].Key);
+        dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+        session.RenderFrame();
+        session.SetFocus(Descendants(shell.Window).OfType<StandardListView>().Single());
+        Assert.True(keyboard.Handle(Fixture.KeyEvent(13)));
+        // Enter reloads the body; Escape during that load would cancel it rather than go back.
+        dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+        session.RenderFrame();
+        var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
+        Assert.True(layout.ShowsReaderOnly);
+
+        Assert.True(keyboard.Handle(Fixture.KeyEvent(0x1B)));
+        session.RenderFrame();
+        Assert.False(layout.ShowsReaderOnly);
+        Assert.Equal(messages[2].Key, model.Inbox.SelectedMessage?.Key);
+        Assert.Equal("Draft", model.Composer.Subject);
+        Assert.False(shell.Inbox.GoBackToList());
+    }
+
+    private static IEnumerable<UiElement> Descendants(UiElement root)
+    {
+        yield return root;
+        foreach (var child in root.Children)
+            foreach (var item in Descendants(child)) yield return item;
+    }
+
+    private sealed class Fixture : IDisposable
+    {
+        private readonly Host _host;
+#pragma warning disable CS0618
+        private readonly StandardLegacyGraphicsInputAdapter _input = new("responsive-test");
+#pragma warning restore CS0618
+
+        private Fixture(Host host, TestQueueDispatcher dispatcher, UiSession session, InboxViewModel model, InboxView view, UiElement content, TestMailReceiver receiver, MailMessageSummary[] messages)
+        {
+            _host = host; Dispatcher = dispatcher; Session = session; Model = model; View = view; Content = content; Receiver = receiver; Messages = messages;
+        }
+
+        public TestQueueDispatcher Dispatcher { get; }
+        public UiSession Session { get; }
+        public InboxViewModel Model { get; }
+        public InboxView View { get; }
+        public UiElement Content { get; }
+        public TestMailReceiver Receiver { get; }
+        public MailMessageSummary[] Messages { get; }
+        public AdaptiveInboxLayout Layout => Descendants(Content).OfType<AdaptiveInboxLayout>().Single();
+        public StandardSplitContainer Split => Descendants(Content).OfType<StandardSplitContainer>().Single();
+        public StandardListView List => Descendants(Content).OfType<StandardListView>().Single();
+        public UiElement Reader => Split.SecondPane!;
+        public ScrollableMessageText ReaderText => Descendants(Content).OfType<ScrollableMessageText>().Single();
+        public StandardButton BackButton => Descendants(Content).OfType<StandardButton>().Single(button => button.Text == "Back to inbox");
+
+        public static MailMessageSummary[] CreateMessages(AccountProfile account, int count) => Enumerable.Range(1, count).Reverse()
+            .Select(uid => new MailMessageSummary { Key = new(account.Id, "INBOX", 7, (uint)uid), Sender = $"sender{uid}@example.test", Subject = $"Subject {uid}" }).ToArray();
+
+        public static TestMailReceiver CreateReceiver(MailMessageSummary[] messages) => new()
+        {
+            Inbox = (_, _) => Task.FromResult(new MailInboxPage(messages, null)),
+            Body = (key, _) => Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")),
+        };
+
+        public static async Task<Fixture> OpenAsync(int width, int height = 600)
+        {
+            var account = TestDirectory.Profile();
+            var messages = CreateMessages(account, 40);
+            var receiver = CreateReceiver(messages);
+            var dispatcher = new TestQueueDispatcher();
+            var model = new InboxViewModel(receiver, dispatcher);
+            model.SetAccount(account);
+            var view = new InboxView(model);
+            var content = view.CreateContent();
+            var host = new Host(width, height);
+            var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+            session.AddRoot(content);
+            await model.ReceiveAsync();
+            dispatcher.DrainUntil(() => !model.IsBusy);
+            session.RenderFrame();
+            return new(host, dispatcher, session, model, view, content, receiver, messages);
+        }
+
+        public void Resize(int width)
+        {
+            _host.Width = width;
+            Content.InvalidateMeasure();
+            Session.RenderFrame();
+        }
+
+        public void Key(int code)
+        {
+            Session.DispatchInput(KeyEvent(code));
+            Dispatcher.DrainUntil(() => !Model.IsBusy);
+        }
+
+        public void Click(BPoint point)
+        {
+#pragma warning disable CS0618
+            Session.DispatchInput(_input.FromPointerButton(new BPointerEventArgs(point, BMouseButtons.Left, BMouseButtons.Left)));
+            Session.DispatchInput(_input.FromPointerButton(new BPointerEventArgs(point, BMouseButtons.None, BMouseButtons.Left)));
+#pragma warning restore CS0618
+            Dispatcher.DrainUntil(() => !Model.IsBusy);
+        }
+
+        public static UiInputEvent KeyEvent(int code)
+        {
+#pragma warning disable CS0618
+            return new StandardLegacyGraphicsInputAdapter("responsive-test").FromKey(new BKeyEventArgs(code, false, false, false), KeyboardKeyTransition.Down);
+#pragma warning restore CS0618
+        }
+
+        public void Dispose()
+        {
+            Session.Dispose();
+            Content.Dispose();
+            Model.Dispose();
+        }
+    }
+
+    private sealed class Host(int width, int height) : IUiHost
+    {
+        public int Width { get; set; } = width;
+        public BSize ViewportSize => new(Width, height);
+        public double Scale => 1;
+        public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
+        public void Invalidate(UiInvalidation invalidation) { }
+        public void Present(BRenderList renderList) { }
+    }
+}

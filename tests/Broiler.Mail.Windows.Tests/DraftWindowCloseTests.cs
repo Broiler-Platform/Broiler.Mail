@@ -23,7 +23,7 @@ public sealed class DraftWindowCloseTests
                 var demo = DemoApplication.Create();
                 var app = new MailApplication(demo.Accounts, demo.Settings, demo.Receiver, demo.Sender, demo.Credentials, store);
                 app.InitializeAsync().GetAwaiter().GetResult();
-                using var window = new WindowsMailWindow(app, demo: true);
+                using var window = new WindowsMailWindow(app);
                 window.CloseRequested += (_, _) => requested.TrySetResult();
                 window.Show();
                 ShowWindow(window.NativeHandle, 0); // Keep the native integration fixture hidden.

@@ -58,6 +58,9 @@ Preview the complete UI with synthetic messages, without saved accounts or netwo
 dotnet run --project src/Broiler.Mail.Windows --no-build -c Release -- --demo
 ```
 
+For reproducible UI review, name a prepared scenario, for example
+`--demo send-unknown --theme dark --size 640x480`. `--help` lists the scenarios.
+
 Create a NativeAOT ZIP and SHA-256 checksum with PowerShell 7 and the Visual Studio
 C++ desktop build tools (including the Windows SDK), on the matching Windows architecture:
 
@@ -84,7 +87,10 @@ output for startup diagnostics.
 
 Tab / Shift+Tab traverses enabled controls and reveals fields below the fold.
 Ctrl+1/2/3/4 selects Inbox/Account/Settings/Compose; Ctrl+Tab cycles tabs. F5 receives mail,
-Escape cancels, and Enter on a selected inbox message retries reading. Text fields
+Ctrl+N starts a message, Ctrl+R / Ctrl+Shift+R / Ctrl+F reply, reply to all, and forward, Escape
+goes back from a narrow-window reader or cancels, Alt+Left goes back, and Enter on a selected inbox
+message opens it. Shortcuts need their exact modifiers, so AltGr characters type normally.
+Settings lists every shortcut. Text fields
 support the Windows clipboard; password fields cannot copy or cut their contents.
 The Windows host declares per-monitor DPI awareness and positions the default IME
 composition window at the caret. Minimum client size is 640×480 logical pixels.

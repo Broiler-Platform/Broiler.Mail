@@ -51,10 +51,12 @@ public sealed class InboxWorkflowTests
         Assert.Equal("Body", model.Body!.PlainText);
         Assert.Equal(1, bodyCalls);
         Assert.False(model.SelectedMessage!.IsRead);
+        // Refresh returns to the newest page; the open message is on it, so reading continues.
         await model.ReceiveAsync();
         Assert.Single(model.Messages);
-        Assert.Null(model.Body);
-        Assert.Null(model.SelectedMessage);
+        Assert.Equal("Body", model.Body!.PlainText);
+        Assert.Equal(newest.Key, model.SelectedMessage!.Key);
+        Assert.Equal(1, bodyCalls);
     }
 
     [Fact]
@@ -186,6 +188,9 @@ public sealed class InboxWorkflowTests
         ui.Dispatcher.Drain();
         var list = Descendants(content).OfType<StandardListView>().Single();
         Assert.Contains("Unread", Assert.Single(list.Items).Text);
+        // Assistive technology hears what the list and reader are, not the item count or placeholder.
+        Assert.Equal("Messages", list.GetSemanticNode().Name);
+        Assert.Contains(Descendants(content), element => element.GetSemanticNode().Name == "Message text");
         // Drive the selection event, then wait for the posted completion without touching controls off-thread.
         list.SelectIndex(0);
         ui.WaitForPost();
@@ -326,7 +331,8 @@ public sealed class InboxWorkflowTests
         session.AddRoot(content);
         _ = session.RenderFrame();
 
-        var toolbar = Descendants(content).OfType<StandardToolbar>().Single();
+        // The first toolbar holds the mailbox commands; the reader's reply actions follow later.
+        var toolbar = Descendants(content).OfType<StandardToolbar>().First();
         Assert.Equal(UiToolbarOverflow.Wrap, toolbar.Overflow);
         Assert.Empty(toolbar.OverflowItems);
 
