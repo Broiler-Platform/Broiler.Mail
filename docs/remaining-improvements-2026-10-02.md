@@ -35,8 +35,10 @@ strength of its verification. P2 adds larger product/platform capabilities.
 
 **Owner:** Broiler.Hosting.Windows, with a Mail consumer test. **Status:** root cause found and
 fixed in Mail (bridges were constructed before the native windows existed, with zero handles); the
-tree is now exposed natively, including the published NativeAOT build. Naming, Text pattern, and
-hidden-tab problems remain upstream; see UI-09 in the [UI roadmap](ui-implementation-roadmap.md).
+tree is now exposed natively, including the published NativeAOT build. With Broiler.UI
+0.1.0-preview.12 and Broiler.Hosting 0.1.0-preview.3, names, labels, the Text pattern, and hidden
+tab content pass the external-client check; a real screen-reader pass remains. See UI-09 in the
+[UI roadmap](ui-implementation-roadmap.md).
 The investigation below records the earlier state.
 
 The external inspection of the published NativeAOT demo saw the window and render

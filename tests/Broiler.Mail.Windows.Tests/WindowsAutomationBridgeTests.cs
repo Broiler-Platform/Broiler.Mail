@@ -149,17 +149,30 @@ public sealed class WindowsAutomationBridgeTests
             (string?)n.GetPropertyValue(UiaNative.UiaNamePropertyId) == "Inbox");
         Assert.NotNull(inboxTab);
 
-        // Locate "To" field
-        var toNode = allNodes.FirstOrDefault(n =>
-            (int?)n.GetPropertyValue(UiaNative.UiaControlTypePropertyId) == UiaNative.UiaEditControlTypeId &&
-            (string?)n.GetPropertyValue(UiaNative.UiaNamePropertyId) == "To");
-        Assert.NotNull(toNode);
-
-        // Locate "Send" button
-        var sendNode = allNodes.FirstOrDefault(n =>
+        var olderNode = allNodes.FirstOrDefault(n =>
             (int?)n.GetPropertyValue(UiaNative.UiaControlTypePropertyId) == UiaNative.UiaButtonControlTypeId &&
-            (string?)n.GetPropertyValue(UiaNative.UiaNamePropertyId) == "Send");
-        Assert.NotNull(sendNode);
+            (string?)n.GetPropertyValue(UiaNative.UiaNamePropertyId) == "Older");
+        Assert.NotNull(olderNode);
+
+        // Content of the unselected Compose tab is not exposed until that tab is selected.
+        Assert.Null(FindEdit(allNodes, "To"));
+        Assert.Null(FindButton(allNodes, "Send"));
+
+        tabView.SelectedIndex = 1;
+        allNodes = FlattenTree(bridge);
+        Assert.NotNull(FindEdit(allNodes, "To"));
+        Assert.NotNull(FindButton(allNodes, "Send"));
+        Assert.Null(FindButton(allNodes, "Older"));
+
+        static IRawElementProviderFragment? FindEdit(IEnumerable<IRawElementProviderFragment> nodes, string name) =>
+            nodes.FirstOrDefault(n =>
+                (int?)n.GetPropertyValue(UiaNative.UiaControlTypePropertyId) == UiaNative.UiaEditControlTypeId &&
+                (string?)n.GetPropertyValue(UiaNative.UiaNamePropertyId) == name);
+
+        static IRawElementProviderFragment? FindButton(IEnumerable<IRawElementProviderFragment> nodes, string name) =>
+            nodes.FirstOrDefault(n =>
+                (int?)n.GetPropertyValue(UiaNative.UiaControlTypePropertyId) == UiaNative.UiaButtonControlTypeId &&
+                (string?)n.GetPropertyValue(UiaNative.UiaNamePropertyId) == name);
     }
 
     [Fact]

@@ -188,6 +188,9 @@ public sealed class InboxWorkflowTests
         ui.Dispatcher.Drain();
         var list = Descendants(content).OfType<StandardListView>().Single();
         Assert.Contains("Unread", Assert.Single(list.Items).Text);
+        // Assistive technology hears what the list and reader are, not the item count or placeholder.
+        Assert.Equal("Messages", list.GetSemanticNode().Name);
+        Assert.Contains(Descendants(content), element => element.GetSemanticNode().Name == "Message text");
         // Drive the selection event, then wait for the posted completion without touching controls off-thread.
         list.SelectIndex(0);
         ui.WaitForPost();

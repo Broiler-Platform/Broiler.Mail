@@ -78,6 +78,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             PreferredSize = new BSize(320, 420),
             ItemPresenter = dates is null ? MailMessageItemPresenter.Instance : new MailMessageItemPresenter(dateFormat),
             Density = UiDensity.Comfortable,
+            // Otherwise the list is announced by its item count.
+            AccessibleName = "Messages",
             // Refreshes keep the first visible row in place; at the top, new mail stays visible.
             EnableScrollAnchoring = true,
         };

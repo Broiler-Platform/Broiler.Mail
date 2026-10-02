@@ -80,7 +80,7 @@ P1 improves the current app; P2 depends on larger product/platform work.
 | UI-06 | P1 | Guided account setup and concise settings | Setup checklist implemented; SMTP test waits for a service | UI-01 |
 | UI-07 | P1 | Live appearance and geometry persistence | Live theme and geometry implemented; preview windows, text scale, RTL open | UI-01 |
 | UI-08 | P1 | Consistent state, feedback, and recovery UX | Inbox and composer states done; announcements and transient success open | Apply to UI-02 through UI-07 |
-| UI-09 | P0 | Native accessibility and semantic integration | Empty tree fixed; names, Text pattern, hidden tabs need Broiler.UI/Hosting | Start immediately; verify every delivered surface |
+| UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Partial | Coordinate with UI-04, UI-05, UI-09 |
 | UI-11 | P1 | HTML preview ergonomics | Partial | UI-01, UI-08; inline embedding also needs sandbox |
 | UI-12 | P1 | Measured rendering and memory performance | Partial | Capture baseline first; repeat after affected changes |
@@ -525,9 +525,9 @@ Maps to A1 / EX-10 / H-01. This is a release acceptance blocker.
 - [ ] Verify native COM interface discovery, vtables, marshalling ownership, fragment
   navigation, UI-thread dispatch, disposal, and runtime IDs. Compare Raw/Control/Content
   views; missing view flags alone have not been established as the cause.
-- [ ] Expose stable names/roles/labels and correct supported patterns for the current
+- [x] Expose stable names/roles/labels and correct supported patterns for the current
   controls. Keep collapsed/removed controls out of navigation; retain virtual row identity.
-- [ ] Add the text/range and selection behavior needed to read and edit messages with
+- [x] Add the text/range and selection behavior needed to read and edit messages with
   assistive technology. A Value-only provider is not acceptance of rich text navigation.
 - [ ] Verify focus, selection, busy/error/status announcements and password masking.
   Map grouped validation to its field and expose expanded/collapsed state.
@@ -561,24 +561,28 @@ come from a native client as well as managed tests. Track any upstream package w
   automation bridge is attached to the render window, that a cross-thread `WM_GETOBJECT` returns a
   provider, and that one posted character reaches the focused To field exactly once. It fails
   when the bridges receive zero handles.
-- **Still failing acceptance, and upstream (Broiler.UI semantics and the Broiler.Hosting provider):**
-
-| Problem seen by the external client | Where it must be fixed |
-| --- | --- |
-| Edits are named by their value or placeholder ("Demo inbox", "reader@example.test") instead of their label; `UiSemanticNode` has one `Name` and no label relation or separate value | Broiler.UI: label association (for example from `FormField`/`UiLabel.Target`) and name/value separation; Hosting: map them to Name, LabeledBy, and Value |
-| The message text is an Edit whose name is the whole message, with Value only; no Text pattern for reading or selecting ranges | Broiler.UI RichEdit semantics plus a Hosting `ITextProvider` |
-| Contents of unselected tabs are exposed and reported on screen | Broiler.UI TabView semantics (omit or mark offscreen) |
-| Layout containers appear as control elements named after their class (StandardPanel, TabContent, AdaptiveInboxLayout) | Hosting provider: Generic/Panel nodes without a name should not be control elements |
-| Focus, selection, and live-region announcements, and a real screen reader | Verify after the above; H-01 stays open |
-
-- **Broiler.UI 0.1.0-preview.12 consumed (2 October 2026):** it adds `AccessibleName`, `LabeledBy`
-  (set by `UiLabel.Target`), and `IsHiddenFromAccessibility` for inactive tab content (Broiler.UI
-  ADR 0027). Mail names the read-only reader editors ("Message text", "Sender and recipients").
-  With the published Hosting 0.1.0-preview.2 an external client now reads every form edit by its
-  label ("Email address", "To", "Subject", "Message") and the value separately. Still waiting for
-  the next Hosting release, whose provider (branch `claude/uia-provider-mapping`) already consumes
-  preview.12: layout containers named after their class, contents of unselected tabs, and the
-  Text pattern. Raise `BroilerHostingVersion` and repeat the external-client check after it ships.
+- **Upstream fixes consumed (2 October 2026):** Broiler.UI 0.1.0-preview.12 (accessible names,
+  `LabeledBy` from `UiLabel.Target`, `IsHiddenFromAccessibility` for inactive tab content; Broiler.UI
+  ADR 0027) and Broiler.Hosting 0.1.0-preview.3 (name/LabeledBy/HelpText/Value mapping, layout
+  nodes outside the Control view, hidden-content filtering, Text pattern, change events). Mail
+  names the message list ("Messages") and the read-only reader editors ("Message text", "Sender
+  and recipients").
+- **External client, Debug and published NativeAOT (win-x64, no AOT warnings), identical results:**
+  - Control view has no layout panes or class names: 20 elements before receiving, 75 with a
+    message open, 28 on Compose, 58 on Account. Only the selected tab's content is exposed (Send
+    is absent on Inbox; the reader is absent on Compose).
+  - Receive mail invoked by name; the "Messages" list has 50 named rows; row selection through
+    SelectionItem opens the message.
+  - The reader supports Value and Text: document range, word and paragraph units, `FindText`, and
+    selecting a found range (the selection reads back "Hello").
+  - Edits are named by their labels with the text as Value and the placeholder as HelpText
+    (To: LabeledBy "To", HelpText "name@example.com, another@example.com"; Email address: Value
+    "reader@example.test"). The password field reports `IsPassword`, an empty Value, and no Text
+    pattern.
+- **Still open (H-01):** focus, selection, and busy/error/status announcements as heard by a real
+  screen reader (Narrator or NVDA); validation-to-field mapping and expanded/collapsed state of the
+  Cc/Bcc disclosure. A paragraph move from the first paragraph lands on the blank separator line,
+  which a screen reader reads as blank; acceptable, but worth confirming with a real reader.
 
 ### UI-10 — keyboard, native text input, and scroll behavior
 
