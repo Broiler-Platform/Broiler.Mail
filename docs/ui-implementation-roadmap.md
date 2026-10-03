@@ -820,6 +820,12 @@ navigation/disclosure/resize transition.
   so Ctrl and AltGr chords were checked headlessly only). `WindowsInputBridgeTests.EndToEnd_RichEdit_HandlesImeCompositionAndCommit`
   failed once in 13 full runs: Hosting suppresses the duplicate `WM_CHAR` after an IME commit only
   within 500 ms of wall time, which a loaded test run can exceed.
+- Broiler.UI 0.1.0-preview.17 consumed (3 October): Shift+wheel scrolls scroll views sideways, a
+  horizontal wheel scrolls rich text sideways, and a list that cannot scroll further leaves the wheel
+  to its container (Broiler.UI#76). Mail has no horizontally scrolling content today, so the change
+  matters for the reader at large text and future wide content. The UI-12 `scroll` workload on the
+  NativeAOT build: 300 of 300 wheel steps painted, no errors. A physical tilt wheel or precision
+  touchpad is still unchecked.
 
 ### UI-11 — predictable HTML preview presentation
 

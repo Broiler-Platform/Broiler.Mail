@@ -92,6 +92,7 @@ repeated them on the published Broiler.UI 0.1.0-preview.16.
 | Text 200 %, after the fixes | same | 32 of 32 clean; screenshots show none of those problems |
 | High-contrast palette | 16 fixtures at 640x480 and 1100x720, light and dark | 64 of 64 clean; hierarchy, selection outline, and focus distinct |
 | Published preview.16 | full pass (96), text 150 % and 200 % (32 each), high-contrast palette (64) | all clean; screenshots match the local-build runs |
+| Published preview.17 (wheel fixes) | full pass (96) | 96 of 96 clean |
 
 The high-contrast palette is the theme's own preset; the Windows contrast themes supply their own
 colors, so a run with an actual contrast theme remains a check for a machine where it can be turned on.
