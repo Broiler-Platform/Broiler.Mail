@@ -31,7 +31,7 @@ internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandl
 {
     private readonly WindowsClipboard _clipboard = new(() => window.NativeHandle);
     private readonly WindowsTextInput _textInput = new(inputHandle, () => window.DpiScale);
-    private UiSystemSettings _settings = WindowsTheme.QuerySystemSettings();
+    private UiSystemSettings _settings = MailSystemSettings.Query();
 
     public UiSystemSettings Settings => _settings;
 
@@ -39,7 +39,7 @@ internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandl
 
     public void RefreshSettings()
     {
-        var newSettings = WindowsTheme.QuerySystemSettings();
+        var newSettings = MailSystemSettings.Query();
         if (_settings != newSettings)
         {
             _settings = newSettings;

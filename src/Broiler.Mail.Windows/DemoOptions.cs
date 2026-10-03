@@ -9,7 +9,7 @@ internal enum DemoScenario { Inbox, Empty, LongMessage, LargeInbox, LargeDraft, 
 
 /// <summary>Interactive: plain <c>--demo</c>, where the user drives the synthetic inbox. Otherwise the named fixture is prepared on start.</summary>
 internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTheme.System, int Width = 1100, int Height = 720, bool Interactive = false,
-    MeasureWorkload? Measure = null, string? Report = null)
+    MeasureWorkload? Measure = null, string? Report = null, int? TextScalePercent = null, bool HighContrast = false)
 {
     internal static IReadOnlyList<(string Name, DemoScenario Scenario, string Description)> Gallery { get; } = Array.AsReadOnly(new[]
     {
@@ -31,7 +31,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("long-html", DemoScenario.LongHtml, "Selected HTML message longer than the preview's render budget, with links; the next message is HTML too"),
     });
 
-    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--measure <workload> [--report <file.json>]]";
+    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--text-scale <100-225>] [--contrast high] [--measure <workload> [--report <file.json>]]";
 
     internal static IReadOnlyList<(string Name, MeasureWorkload Workload, string Description)> Workloads { get; } = Array.AsReadOnly(new[]
     {
@@ -72,6 +72,8 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         int width = 1100, height = 720;
         MeasureWorkload? measure = null;
         string? report = null;
+        int? textScale = null;
+        bool highContrast = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         while (index < args.Length)
         {
@@ -97,11 +99,19 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
                 measure = match.Workload;
             }
             else if (flag == "--report" && value.Length > 0) report = Path.GetFullPath(value);
+            // The system text size in percent, as Windows offers it (100 to 225), without changing the setting.
+            else if (flag == "--text-scale")
+            {
+                if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int percent) || percent is < 100 or > 225) return false;
+                textScale = percent;
+            }
+            // The theme's high-contrast palette, as an active Windows contrast theme selects it.
+            else if (flag == "--contrast" && value == "high") highContrast = true;
             else return false;
         }
         // A measurement runs on a prepared fixture, and a report without a measurement is meaningless.
         if ((measure is not null && interactive) || (report is not null && measure is null)) return false;
-        options = new(scenario, theme, width, height, interactive, measure, report);
+        options = new(scenario, theme, width, height, interactive, measure, report, textScale, highContrast);
         return true;
     }
 }

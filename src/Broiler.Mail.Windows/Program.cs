@@ -79,7 +79,9 @@ internal static class Program
             // Before the window exists, complete initialization without changing the STA thread.
             application.InitializeAsync().GetAwaiter().GetResult();
             // The same policy the running window applies live: system high contrast first, then the saved choice.
-            StandardControlPaint.ApplyTheme(AppearancePolicy.Resolve(application.LoadedSettings.Theme, WindowsTheme.QuerySystemSettings()));
+            MailSystemSettings.TextScaleOverride = demoOptions?.TextScalePercent / 100.0;
+            MailSystemSettings.HighContrastOverride = demoOptions?.HighContrast == true;
+            StandardControlPaint.ApplyTheme(AppearancePolicy.Resolve(application.LoadedSettings.Theme, MailSystemSettings.Query()));
             Console.WriteLine(demo ? "Demo mode: synthetic mail; no files, saved credentials, or network access." : $"Configuration directory: {dataDirectory}");
             using var window = new WindowsMailWindow(application, demoOptions);
             return window.Run();

@@ -197,7 +197,8 @@ public sealed class InboxWorkflowTests
         ui.Dispatcher.Drain();
         Assert.NotNull(model.Body);
         _ = session.RenderFrame();
-        var scroll = Descendants(content).OfType<StandardScrollView>().Single();
+        // The message text's own scroll view; the header and the list notice have bounded ones of their own.
+        var scroll = Descendants(Descendants(content).OfType<Broiler.Mail.Application.Preview.ScrollableMessageText>().Single()).OfType<StandardScrollView>().Single();
         Assert.True(scroll.HasVerticalScrollbar);
         Assert.False(scroll.HasHorizontalScrollbar);
         Assert.True(scroll.ScrollToEnd());

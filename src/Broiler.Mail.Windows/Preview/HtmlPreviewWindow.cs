@@ -172,7 +172,6 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         {
             Text = "Simplified HTML. Images and active content are blocked. Selected HTTP(S) links open in your browser.",
             Wrapping = UiTextWrapping.Wrap,
-            Foreground = StandardControlPaint.Text,
         };
         header.AddChild(_status);
         header.SetDock(_status, UiDock.Top);
@@ -1097,7 +1096,7 @@ internal sealed class HtmlViewElement : UiElement
                 context.RenderList.StrokeRect(bannerRect, new BColor(255, 220, 150), 1);
                 context.RenderList.DrawText(
                     new BTextRun($"Content exceeds maximum render limit (truncated at {_layoutSnapshot.ContentHeight:N0}px).",
-                        new BFontStyle("Segoe UI", 11),
+                        StandardControlPaint.Theme.FontCaption,
                         new BColor(133, 100, 4)),
                     new BPoint(bannerRect.Left + 12, bannerRect.Top + 14));
             }

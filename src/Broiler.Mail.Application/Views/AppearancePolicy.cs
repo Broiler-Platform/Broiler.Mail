@@ -8,7 +8,7 @@ namespace Broiler.Mail.Application.Views;
 /// Chooses the palette from the saved theme preference and the operating system's appearance.
 /// Precedence: an active system high-contrast mode always wins, because it is an accessibility
 /// setting; otherwise an explicit Light or Dark choice wins; System follows the OS color scheme.
-/// Reduced motion and density always come from the system.
+/// Reduced motion, density, and the text size always come from the system.
 /// </summary>
 public static class AppearancePolicy
 {
@@ -22,6 +22,7 @@ public static class AppearancePolicy
             AppTheme.Light => false,
             _ => system.ColorScheme == UiColorScheme.Dark,
         };
-        return StandardThemeTokens.Select(system.ContrastPreference, dark, system.Density, system.ReducedMotion);
+        return StandardThemeTokens.Select(system.ContrastPreference, dark, system.Density, system.ReducedMotion)
+            .WithTextScale(double.IsFinite(system.TextScale) && system.TextScale > 0 ? system.TextScale : 1);
     }
 }

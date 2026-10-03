@@ -7,6 +7,7 @@ using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
+using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
@@ -202,6 +203,61 @@ public sealed class ResponsiveInboxTests
         Assert.Equal(list.Parent!.Bounds.Top, list.Bounds.Top, 1);
         content.Dispose();
         model.Dispose();
+    }
+
+    [Fact]
+    public async Task AtTwiceTheTextSizeTheHeaderAndNoticeScrollInsteadOfCrowdingOutTheContent()
+    {
+        var account = TestDirectory.Profile();
+        string subject = string.Join(" ", Enumerable.Repeat("Agenda, travel arrangements, and the revised budget", 6));
+        var message = new MailMessageSummary { Key = new(account.Id, "INBOX", 7, 1), Sender = "author@example.test", Subject = subject };
+        bool fail = false;
+        var receiver = new TestMailReceiver
+        {
+            Inbox = (_, _) => fail
+                ? throw new MailConnectionException(string.Join(" ", Enumerable.Repeat("The server did not respond in time.", 8)))
+                : Task.FromResult(new MailInboxPage([message], null)),
+            Body = (key, _) => Task.FromResult(new MailMessageBody(key, "Body text")),
+        };
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
+        var dispatcher = new TestQueueDispatcher();
+        var model = new InboxViewModel(receiver, dispatcher);
+        model.SetAccount(account);
+        var content = new InboxView(model).CreateContent();
+        try
+        {
+            var host = new Host(1100, 720);
+            using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+            session.AddRoot(content);
+            await model.ReceiveAsync();
+            dispatcher.DrainUntil(() => !model.IsBusy);
+            await model.SelectAsync(message.Key);
+            dispatcher.DrainUntil(() => !model.IsBusy);
+            session.RenderFrame();
+
+            var areas = Descendants(content).OfType<BoundedScrollArea>().ToArray();
+            var header = areas.Single(area => area.MaximumFraction == 0.45);
+            Assert.InRange(header.Bounds.Height, 1, (header.Parent!.Bounds.Height * 0.45) + 1);
+            Assert.True(header.Scroll.HasVerticalScrollbar, "The long subject must scroll within the header.");
+
+            // A long failure keeps most of the list pane for the list.
+            fail = true;
+            await model.ReceiveAsync();
+            dispatcher.DrainUntil(() => !model.IsBusy);
+            session.RenderFrame();
+            session.RenderFrame();
+            var notice = areas.Single(area => area.MaximumFraction == 0.4);
+            var list = Descendants(content).OfType<StandardListView>().Single();
+            Assert.InRange(notice.Bounds.Height, 1, (notice.Parent!.Bounds.Height * 0.4) + 1);
+            Assert.True(list.Bounds.Height > notice.Parent.Bounds.Height * 0.5);
+        }
+        finally
+        {
+            StandardControlPaint.ApplyTheme(previous);
+            content.Dispose();
+            model.Dispose();
+        }
     }
 
     private sealed class Fixture : IDisposable

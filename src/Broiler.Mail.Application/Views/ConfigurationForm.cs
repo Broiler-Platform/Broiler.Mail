@@ -53,7 +53,7 @@ internal static class ConfigurationForm
     // Broiler-Human:        PENDING
     public static StandardLabel AddText(StandardPanel panel, string text)
     {
-        var label = new StandardLabel { Text = text, Wrapping = UiTextWrapping.Wrap, Foreground = StandardControlPaint.Text };
+        var label = new StandardLabel { Text = text, Wrapping = UiTextWrapping.Wrap };
         panel.AddChild(label);
         return label;
     }

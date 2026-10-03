@@ -19,6 +19,10 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null)
     public double GetItemHeight(UiListItem? item, UiDensity density, double availableWidth) =>
         _twoLinePresenter.GetItemHeight(item, density, availableWidth);
 
+    // Rows grow with the list's font, for example at a larger system text size.
+    public double GetItemHeight(UiListItem? item, UiDensity density, double availableWidth, Broiler.Graphics.Text.BFontStyle font) =>
+        _twoLinePresenter.GetItemHeight(item, density, availableWidth, font);
+
     public void Render(UiListItemRenderContext context)
     {
         ArgumentNullException.ThrowIfNull(context);

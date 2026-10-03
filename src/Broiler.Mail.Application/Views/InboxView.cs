@@ -92,8 +92,10 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         listRetryRow.AddChild(listRetry);
         listNotice.AddChild(listFeedback);
         listNotice.AddChild(listRetryRow);
-        listPane.AddChild(listNotice);
-        listPane.SetDock(listNotice, UiDock.Top);
+        // A long notice at a large text size scrolls instead of leaving the list no room.
+        var noticeArea = new BoundedScrollArea(listNotice, 0.4, "Inbox notice");
+        listPane.AddChild(noticeArea);
+        listPane.SetDock(noticeArea, UiDock.Top);
         listPane.AddChild(list);
         listPane.SetDock(list, UiDock.Fill);
         var reading = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
@@ -121,8 +123,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         panel.AddChild(layout);
         panel.SetDock(layout, UiDock.Fill);
         // Reader header: subject heading, selectable sender/recipient details, then a quieter date line.
-        var theme = StandardControlPaint.Theme;
-        var subjectLine = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Font = theme.FontTitle, Foreground = StandardControlPaint.Text };
+        // The title style follows theme changes, including the system text size.
+        var subjectLine = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, TextStyle = StandardTextStyle.Title };
         var details = new StandardRichEdit
         {
             IsReadOnly = true, Wrapping = RichEditWrapping.Wrap, BorderThickness = 0, FocusRingThickness = 0, PaddingX = 0, PaddingY = 0,
@@ -147,7 +149,9 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         backRow.AddChild(back);
         var headerStack = new StandardPanel { Spacing = 4 };
         foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, replyActions, previewActions }) headerStack.AddChild(element);
-        var headerColumn = new ReadingColumn(headerStack, verticalMargin: 8);
+        // A long subject or many recipients at a large text size scroll within the header, so the
+        // message text keeps most of the pane.
+        var headerColumn = new BoundedScrollArea(new ReadingColumn(headerStack, verticalMargin: 8), 0.45, "Message header");
         reading.AddChild(headerColumn);
         reading.SetDock(headerColumn, UiDock.Top);
         var text = new ScrollableMessageText();
