@@ -53,8 +53,11 @@ public sealed class MessageRowTests
         Render(list, Message("A very long display name that keeps going <long@example.test>", read: false), 280, font);
 
         var texts = list.Commands.OfType<BRenderCommand.DrawText>().ToArray();
-        var date = texts.Single(text => text.Text.Text == "Sep 27");
-        var sender = texts.Single(text => text.Text.Text.StartsWith("A very", StringComparison.Ordinal));
+        // Drawing order: date, sender, subject. How much of the name fits depends on the platform's fonts.
+        var date = texts[0];
+        var sender = texts[1];
+        Assert.Equal("Sep 27", date.Text.Text);
+        Assert.StartsWith("A", sender.Text.Text, StringComparison.Ordinal);
         double senderRight = sender.Origin.X + BTextMeasurer.MeasureAdvance(sender.Text.Text, sender.Text.Font);
         Assert.True(senderRight <= date.Origin.X, $"Sender ends at {senderRight}, the date starts at {date.Origin.X}.");
         Assert.True(date.Origin.X + BTextMeasurer.MeasureAdvance(date.Text.Text, date.Text.Font) <= 280, "The date must stay inside the row.");
@@ -74,7 +77,9 @@ public sealed class MessageRowTests
             State = new UiListItemState(IsSelected: true, IsFocused: false, IsRead: false, Index: 0),
         });
 
-        Assert.Equal("Unread, From: Broiler team <hello@example.test>, Subject: Welcome, Received: 9/27/2026 9:30 AM", node.Name);
+        // The time's spacing comes from the platform's culture data (Linux ICU uses a narrow no-break space).
+        Assert.Equal($"Unread, From: Broiler team <hello@example.test>, Subject: Welcome, Received: {Dates.Detail(message.ReceivedAt)}", node.Name);
+        Assert.StartsWith("9/27/2026 9:30", Dates.Detail(message.ReceivedAt), StringComparison.Ordinal);
     }
 
     [Theory]
