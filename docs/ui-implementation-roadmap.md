@@ -820,6 +820,11 @@ navigation/disclosure/resize transition.
   so Ctrl and AltGr chords were checked headlessly only). `WindowsInputBridgeTests.EndToEnd_RichEdit_HandlesImeCompositionAndCommit`
   failed once in 13 full runs: Hosting suppresses the duplicate `WM_CHAR` after an IME commit only
   within 500 ms of wall time, which a loaded test run can exceed.
+- Broiler.Hosting 0.1.0-preview.5 consumed (3 October): the IME commit's `WM_CHAR` copies are
+  now dropped by order rather than by a wall-clock window that started before the commit was
+  dispatched (Broiler.Hosting#4), which fixes the intermittent `EndToEnd_RichEdit_HandlesImeCompositionAndCommit`
+  failure above (it also failed once on windows-2025 CI). Mail's warm-up workaround in that test is
+  removed; 20 consecutive runs pass.
 - Broiler.UI 0.1.0-preview.17 consumed (3 October): Shift+wheel scrolls scroll views sideways, a
   horizontal wheel scrolls rich text sideways, and a list that cannot scroll further leaves the wheel
   to its container (Broiler.UI#76). Mail has no horizontally scrolling content today, so the change
