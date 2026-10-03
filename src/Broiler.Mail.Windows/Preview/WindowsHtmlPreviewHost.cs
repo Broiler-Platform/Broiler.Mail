@@ -19,6 +19,7 @@ using System.Diagnostics;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Preview;
+using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Preview;
 
@@ -154,6 +155,16 @@ internal sealed class WindowsHtmlPreviewHost(Func<bool>? isDark = null) : IHtmlP
     // Broiler-Falsified-If: a ShowAsync call made after Dispose opens a preview window
     // Broiler-Human:        PENDING
     public void Dispose() { lock (_gate) _disposed = true; Close(); }
+
+    /// <summary>Passes a theme change to the open preview window, if any, which applies it on its own thread.</summary>
+    public void ApplyTheme(StandardThemeTokens theme)
+    {
+        lock (_gate)
+        {
+            if (_window is { IsDisposed: false } window)
+                try { window.ApplyTheme(theme); } catch (InvalidOperationException) { }
+        }
+    }
 
     private void CloseWindowLocked()
     {

@@ -75,10 +75,10 @@ P1 improves the current app; P2 depends on larger product/platform work.
 | UI-01 | P1 | Shared presentation tokens and fixture gallery | Tokens recorded; type scale and system text size done; long-label fixture waits for UI-14 | None |
 | UI-02 | P1 | Refresh continuity and stable selection | Implemented; native new-mail check pending | None |
 | UI-03 | P1 | Reader hierarchy and local reply commands | Implemented; screen-reader check pending (UI-09) | UI-01, UI-02 |
-| UI-04 | P1 | Responsive inbox and shell navigation | Compact mode implemented; 200 % text fits; row metadata pending | UI-01, UI-02, UI-03 |
+| UI-04 | P1 | Responsive inbox and shell navigation | Done: compact mode, 200 % text, readable rows, wrapping toolbars; real DPI change while compact pending | UI-01, UI-02, UI-03 |
 | UI-05 | P1 | Writing-focused composer | Layout implemented; IME/undo check pending | UI-01; integrate with UI-03 commands |
 | UI-06 | P1 | Guided account setup and concise settings | Setup checklist implemented; SMTP test waits for a service | UI-01 |
-| UI-07 | P1 | Live appearance and geometry persistence | Live theme, geometry, and system text size; RTL open | UI-01 |
+| UI-07 | P1 | Live appearance and geometry persistence | Live theme, geometry, and system text size, including open preview windows; real contrast colors and RTL open | UI-01 |
 | UI-08 | P1 | Consistent state, feedback, and recovery UX | Done, including native announcements (Hosting preview.4); screen-reader check with UI-09 | Apply to UI-02 through UI-07 |
 | UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Shortcut table, reply shortcuts, and traversal done; IME, wheel, and DPI caret checks open | Coordinate with UI-04, UI-05, UI-09 |
@@ -288,9 +288,9 @@ an existing draft survives, and keyboard/screen-reader focus lands in the intend
   when both minimum readable widths cannot fit; retain the wide split ratio separately.
 - [x] Provide a labeled Back to inbox action in compact reader mode and restore the
   list anchor and selected row. Browser-style back behavior must not discard a draft.
-- [ ] Keep two-line rows readable: ellipsize the less important field first, avoid
+- [x] Keep two-line rows readable: ellipsize the less important field first, avoid
   date/sender overlap, and expose full information through selection and semantics.
-- [ ] Wrap/overflow toolbars predictably. Keep existing tabs and shortcuts initially;
+- [x] Wrap/overflow toolbars predictably. Keep existing tabs and shortcuts initially;
   avoid a navigation redesign unrelated to the reader improvement.
 - [x] Preserve tab, focus, and view state across resize and DPI transitions. Do not
   destroy and recreate editors merely because a breakpoint changed.
@@ -329,6 +329,30 @@ no overlapping rows, and no lost draft/selection on repeated resize.
   truncate; the remaining row item (shorter metadata before sender/subject) is unchanged. Not yet
   checked: 200% text scale, real DPI changes while compact, and the toolbar's framed background
   around the Back and reply actions (a UI-01 token question).
+
+**Progress (3 October 2026, rows and toolbars):**
+
+- Rows drop the less important part first. The sender shows in full while it fits beside the date;
+  otherwise only its display name, which is then shortened if needed (`RowSender`, `SenderName`:
+  a single `Name <address>` or `"Quoted, Name" <address>`; a bare address, several addresses, or
+  a group stay as they are). At 200 % text the row shows "Broiler team" instead of "Broiler tea...".
+- Dates from this year use the culture's month-day pattern with the abbreviated month ("Sep 27",
+  "27. Sept."), so the date takes less of line 1; today's messages keep the time, older years the
+  short date.
+- Full information stays available: selecting a row shows the full sender in the reader, and the
+  row's accessible name carries the full sender and the full received date and time
+  ("Received: 9/27/2026 9:30 AM") instead of the shortened list date.
+- Toolbars already used `UiToolbarOverflow.Wrap`; it is now verified. In every tab at 640x480
+  (normal and 200 % text) and 1100x720 (200 % text), each toolbar stays inside the window, keeps its
+  actions in reading order (same row to the right, or the next row), and never cuts an action
+  below its desired width; at the minimum size with 200 % text at least one toolbar wraps.
+- Evidence: `MessageRowTests` (sender name parsing, full sender when wide, name only when narrow,
+  no sender/date overlap at 280 DIP and doubled text, accessible name, abbreviated month in two
+  cultures) and `ToolbarWrapTests`. Native NativeAOT runs of five inbox fixtures: 20 of 20 clean at
+  normal text and 10 of 10 at 200 %, screenshots reviewed.
+- Open: the date is never shortened, so in a row narrower than the list's 280 DIP minimum it could
+  run past the edge (Broiler.UI's two-line presenter clamps it right of the sender); real DPI
+  changes while compact remain a hardware check.
 
 ### UI-05 — make writing occupy the composer
 
@@ -442,7 +466,7 @@ saved configuration and credential-binding behavior.
   to existing controls; follow OS color mode only when System is selected.
 - [ ] Give high contrast and system text scaling an explicit precedence policy,
   including when a user chose Light/Dark. Verify actual system colors and readable focus.
-- [ ] Update reader, composer, popups, and existing preview windows consistently.
+- [x] Update reader, composer, popups, and existing preview windows consistently.
   If paint tokens are process-global, coordinate updates across window threads.
 - [ ] Respect reduced motion and verify RTL layout separately from simply translating
   labels. Keep message content direction independent from shell direction.
@@ -487,7 +511,7 @@ cannot strand the app off-screen. Settings errors must not interrupt typing.
   Both are fixed, with `WindowsTitleBar`, on the unreleased Broiler.Hosting branch
   `claude/windows-theme-system-settings`. Until a package containing it is consumed, Mail keeps
   its local caption helper and the preset high-contrast palette.
-- Open: existing HTML preview windows run their own session and are not re-themed yet; RTL layout.
+- Open: existing HTML preview windows run their own session and are not re-themed yet (done 3 October, below); RTL layout.
 
 **Progress (2 October 2026), window geometry:**
 
@@ -517,6 +541,28 @@ cannot strand the app off-screen. Settings errors must not interrupt typing.
   normal bounds kept; a placement edited to −9000,−9000 reopened centered on the primary monitor.
 - Not yet checked: a real second monitor being disconnected, and moving between monitors with
   different DPI before closing.
+
+**Progress (3 October 2026), preview windows and precedence:**
+
+- An open HTML preview follows theme and text-size changes. It runs its own session on its own
+  thread, so the main window passes each applied theme to `WindowsHtmlPreviewHost.ApplyTheme`,
+  which posts it to the preview's thread: the preview's session theme and controls (header, buttons,
+  plain text) change, its surface and caption follow, and the HTML page keeps its own white canvas.
+  The preview re-themes only its own session: the main window has already set the process-wide
+  palette, and an older theme still queued on the preview thread must not overwrite a newer one.
+- Reader, composer, and in-window popups were already consistent: they are controls of the main
+  session and re-themed by `AppearanceController`.
+- Precedence, as `AppearancePolicy` now states it: an active system high-contrast mode wins over
+  an explicit Light or Dark choice; the system text size applies under every choice and in high
+  contrast; reduced motion and density always come from the system.
+- Evidence: `HtmlPreviewKeyboardTests.AnOpenPreviewFollowsAThemeAndTextSizeChangeOnItsOwnThread`
+  (a real window: a dark, 150 % theme applied from another thread reaches the session, the button
+  and status fonts, and the surface; the process-wide palette is untouched). Native run of
+  `--demo html-only --theme light`: opened the preview, chose Dark in Settings and saved; the
+  open preview's caption, header, and button turned dark without reopening.
+- Open: the HTML document's own text does not follow the system text size (the snapshot renderer
+  uses the document's CSS sizes at the display scale, and the preview offers no zoom yet); actual
+  Windows contrast colors and RTL layout.
 
 ### UI-08 — coherent loading, empty, error, and recovery states
 

@@ -90,7 +90,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
 
     private readonly StandardLabel _status;
     private readonly StandardLabel _truncationNotice;
-    private readonly bool _dark;
+    private bool _dark;
     private bool _truncationShown;
     private readonly StandardButton _toggleButton;
     private readonly StandardButton _loadImagesButton;
@@ -127,6 +127,29 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-Falsified-If: a CloseWindow call from the preview host's thread runs Close on that thread instead of queuing it to the preview window's own thread
     // Broiler-Human:        PENDING
     internal void CloseWindow() => PostToUiThread(Close);
+
+    /// <summary>
+    /// Re-themes the open preview, from any thread: the header, buttons, plain text, and caption follow
+    /// the shell's new palette and text size, as the main window does. The HTML page keeps its own
+    /// white canvas.
+    /// </summary>
+    internal void ApplyTheme(StandardThemeTokens theme)
+    {
+        ArgumentNullException.ThrowIfNull(theme);
+        PostToUiThread(() =>
+        {
+            if (IsDisposed) return;
+            // The session and its controls only: the main window has already set the process-wide
+            // palette, and a theme queued here earlier must not overwrite a newer one there.
+            StandardControlPaint.SetSessionTheme(_session, theme);
+            StandardThemeController.ApplyToSubtree(_root, theme);
+            // The panel is not a themed control; its surface was taken from the theme at creation.
+            _root.Background = theme.Surface;
+            _dark = theme.IsDark;
+            if (NativeHandle != 0) WindowsTitleBar.Apply(NativeHandle, _dark);
+            Invalidate();
+        });
+    }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=12DA3F
     // Broiler-Falsified-If: an ArgumentException from HtmlPreviewPolicy.Create inside LoadRemoteImagesAsync escapes the async Clicked handler of the Load remote images button and terminates the process
@@ -443,6 +466,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     internal UiSession Session => _session;
     internal ScrollableHtmlView HtmlView => _htmlView;
     internal StandardButton ToggleButton => _toggleButton;
+    internal StandardPanel Root => _root;
+    internal StandardLabel Status => _status;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=A4CEFC
     // Broiler-Falsified-If: an exception thrown by a queued UI callback escapes DrainDispatcher and aborts the frame being built or the posted-callback handler
