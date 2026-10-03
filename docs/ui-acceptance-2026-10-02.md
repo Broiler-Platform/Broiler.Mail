@@ -55,8 +55,8 @@ overlapping content.
 | Dimension | Required cases | Status | Evidence or blocker |
 | --- | --- | --- | --- |
 | Layout | 640×480, normal, wide, repeated breakpoint transitions | Pass (one defect fixed upstream, released) | All fixtures at 640×480, 1100×720, 1920×1080. Transitions: `ResponsiveInboxTests` and the UI-12 `resize` workload (30 size changes, no errors). The compact inbox showed an empty band above the list (defect 2). |
-| Display | 100/150/200 % DPI; move between monitors; text scale | 150 % checked; others pending | One monitor at 150 %. Tile painting at 100, 150, and 200 % is covered by `HtmlPreviewKeyboardTests`, after UI-11 found it wrong above 100 %. Pending: running at 100 % and 200 %, moving between monitors with different scales, and system text scale; these need display settings or hardware this pass did not change. |
-| Appearance | Light, dark, System, high contrast, reduced motion | Light and dark pass; others pending | Light and dark in all 96 runs. System mode follows the OS setting (UI-07 tests). Pending: actual high contrast and reduced motion (system settings). |
+| Display | 100/150/200 % DPI; move between monitors; text scale | 150 % DPI checked; text scale 150 % and 200 % pass (see below); other DPI pending | One monitor at 150 %. Tile painting at 100, 150, and 200 % is covered by `HtmlPreviewKeyboardTests`, after UI-11 found it wrong above 100 %. Pending: running at 100 % and 200 %, moving between monitors with different scales, and system text scale; these need display settings or hardware this pass did not change. |
+| Appearance | Light, dark, System, high contrast, reduced motion | Light, dark, and the high-contrast palette pass; a real contrast theme and reduced motion pending | Light and dark in all 96 runs. System mode follows the OS setting (UI-07 tests). Pending: actual high contrast and reduced motion (system settings). |
 | Input | Mouse, precision wheel, keyboard only, AltGr/dead keys, IME, Unicode | Keyboard pass; others pending | Keyboard-only Tab walks in all runs; synthetic wheel in the UI-12 `scroll` workload; Unicode content in `long-message` and `large-draft`. Pending: physical mouse and precision touchpad, AltGr/dead keys, and IME composition (H checks). |
 | Content | Empty and 500-row inbox, long subject/address, large body/draft, HTML-only | Pass | `empty`, `large-inbox`, `long-message`, `large-draft`, `html-only`, and `long-html` (past the preview render budget). |
 | State | Busy/cancel/retry, failed save, conflicting draft, unknown send, failed Sent copy | Pass | `receive-error`, `body-error`, `save-error`, `invalid-setup`, `test-canceled`, `draft-conflict`, `send-rejected`, `send-unknown`, `sent-copy-failed`, with UI-08's `FeedbackPolicyTests` and `InboxStateTests`. |
@@ -76,6 +76,25 @@ overlapping content.
 Also recorded for later, not blocking: UI Automation bounding rectangles are not clipped to their
 scroll viewport (Broiler.Hosting), so a highlight can extend under an action bar; a focused scroll
 view draws no focus ring (Broiler.UI), which matters only while long feedback scrolls.
+
+## Text size and high contrast (3 October 2026)
+
+The two settings rows this machine could not change are now covered with demo options that override
+them for the app alone: `scripts/Accept-UI.ps1 -TextScale 150|200` passes `--text-scale`, and
+`-HighContrast` passes `--contrast high`. These runs used a NativeAOT build with the Broiler.UI
+typography branch packed locally (it is needed for text scaling to reach the controls).
+
+| Run | Fixtures, sizes, themes | Result |
+| --- | --- | --- |
+| Text 150 % | 16 fixtures at 640x480 and 1100x720, light | 32 of 32 clean |
+| Text 200 %, first | same | 30 of 32; screenshots also showed cut-off tab names, overlapping list rows, the reader header running over the footer, and an error notice leaving the list no room |
+| Text 200 %, after the fixes | same | 32 of 32 clean; screenshots show none of those problems |
+| High-contrast palette | 16 fixtures at 640x480 and 1100x720, light and dark | 64 of 64 clean; hierarchy, selection outline, and focus distinct |
+
+The high-contrast palette is the theme's own preset; the Windows contrast themes supply their own
+colors, so a run with an actual contrast theme remains a check for a machine where it can be turned on.
+With high contrast active, Mail follows the system's light or dark setting rather than the app theme,
+by design, so the "dark" runs show the light high-contrast palette here.
 
 ## Next pass
 
