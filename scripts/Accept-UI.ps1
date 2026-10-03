@@ -28,7 +28,12 @@ param(
     [ValidateRange(0, 60)]
     [int]$TabSteps = 24,
     [ValidateRange(500, 20000)]
-    [int]$SettleMilliseconds = 2500
+    [int]$SettleMilliseconds = 2500,
+    # The system text size in percent for every run (--text-scale); 0 uses the system's own setting.
+    [ValidateScript({ $_ -eq 0 -or ($_ -ge 100 -and $_ -le 225) })]
+    [int]$TextScale = 0,
+    # Render with the theme's high-contrast palette (--contrast high).
+    [switch]$HighContrast
 )
 
 $ErrorActionPreference = 'Stop'
@@ -231,8 +236,11 @@ function Invoke-Run([string]$scenario, [string]$size, [string]$theme) {
     $name = "$scenario-$size-$theme"
     $stdout = Join-Path $Output "$name.out.txt"; $stderr = Join-Path $Output "$name.err.txt"
     $result = [ordered]@{ scenario = $scenario; size = $size; theme = $theme; findings = @(); tab = @(); screenshot = "$name.png" }
+    $arguments = @('--demo', $scenario, '--theme', $theme, '--size', $size)
+    if ($TextScale -gt 0) { $arguments += @('--text-scale', "$TextScale") }
+    if ($HighContrast) { $arguments += @('--contrast', 'high') }
     $process = Start-Process -FilePath $Executable -PassThru -WindowStyle Normal -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
-        -ArgumentList @('--demo', $scenario, '--theme', $theme, '--size', $size)
+        -ArgumentList $arguments
     $null = $process.Handle
     for ($i = 0; $i -lt 150 -and $process.MainWindowHandle -eq 0 -and !$process.HasExited; $i++) { Start-Sleep -Milliseconds 100; $process.Refresh() }
     if ($process.MainWindowHandle -eq 0) {
@@ -314,6 +322,8 @@ $lines.Add("- Revision: $revision")
 $lines.Add("- Packages: $packages")
 $lines.Add("- Executable: $Executable")
 $lines.Add("- SDK: $(dotnet --version); OS: $($os.Caption) $($os.Version); architecture: $env:PROCESSOR_ARCHITECTURE")
+$textScaleNote = if ($TextScale -gt 0) { "$TextScale % (fixed with --text-scale)" } else { 'system setting' }
+$lines.Add("- Text scale: $textScaleNote; high-contrast palette forced: $([bool]$HighContrast)")
 $lines.Add("- Display scale: $scales; monitors: $([Acceptance]::GetSystemMetrics(80)); high contrast on: $([System.Windows.Forms.SystemInformation]::HighContrast)")
 $lines.Add("- Method: published executable, demo fixtures (fixed clock and data), posted keyboard input, UI Automation, PrintWindow screenshots")
 $lines.Add('')
@@ -339,7 +349,7 @@ foreach ($r in $results | Where-Object { $_.findings.Count -gt 0 }) {
 $lines.Add('## Not covered by this run')
 $lines.Add('')
 $lines.Add('- Other display scales and moving between monitors (this run used the scales listed above).')
-$lines.Add('- Text scale, actual high contrast, and reduced motion (system settings).')
+$lines.Add('- Actual high contrast and reduced motion (system settings); text scale other than this run''s.')
 $lines.Add('- Mouse, precision wheel, AltGr/dead keys, and IME (posted input covers keys only).')
 $lines.Add('- A screen reader reading and announcing (UI Automation structure is checked, speech is not).')
 $lines.Add('- Other architectures and machines.')

@@ -55,7 +55,7 @@ public sealed class SettingsView(SettingsViewModel model)
             shortcuts.Content.AddChild(new StandardLabel
             {
                 Text = $"{shortcut.Gesture}: {shortcut.Description}", UseMnemonic = false,
-                Wrapping = UiTextWrapping.Wrap, Foreground = StandardControlPaint.Text,
+                Wrapping = UiTextWrapping.Wrap,
             });
         var save = new StandardButton { Text = "Save settings", IsDefault = true };
         var status = new InlineFeedback();

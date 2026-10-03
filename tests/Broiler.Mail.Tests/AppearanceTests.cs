@@ -102,6 +102,53 @@ public sealed class AppearanceTests
         finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
     }
 
+    [Theory]
+    [InlineData(AppTheme.System)]
+    [InlineData(AppTheme.Light)]
+    [InlineData(AppTheme.Dark)]
+    public void TheSystemTextSizeAppliesWhateverTheThemeChoice(AppTheme preference)
+    {
+        var tokens = AppearancePolicy.Resolve(preference, LightSystem with { TextScale = 1.5 });
+        Assert.Equal(StandardThemeTokens.Light.FontBody.Size * 1.5, tokens.FontBody.Size, 2);
+        Assert.Equal(StandardThemeTokens.Light.FontTitle.Size * 1.5, tokens.FontTitle.Size, 2);
+        Assert.Equal(StandardThemeTokens.Light.FontBody.Size, AppearancePolicy.Resolve(preference, LightSystem with { TextScale = 0 }).FontBody.Size, 2);
+    }
+
+    [Fact]
+    public void AChangedSystemTextSizeEnlargesTheLiveShellIncludingTheReaderSubject()
+    {
+        using var directory = new TestDirectory();
+        var dispatcher = new TestQueueDispatcher();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        var host = new Host(LightSystem);
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+        session.AddRoot(shell.Window);
+        try
+        {
+            using var appearance = new AppearanceController(session, model.Settings, host);
+            session.RenderFrame();
+            var inbox = shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!;
+            var receive = Descendants(inbox).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Receive mail");
+            var subject = Descendants(inbox).OfType<StandardLabel>().Single(label => label.TextStyle == StandardTextStyle.Title);
+            double receiveWidth = receive.DesiredSize.Width;
+
+            host.Change(LightSystem with { TextScale = 1.5 });
+            session.RenderFrame();
+
+            Assert.Equal(StandardThemeTokens.Light.FontBody.Size * 1.5, receive.Font.Size, 2);
+            Assert.Equal(StandardThemeTokens.Light.FontTitle.Size * 1.5, subject.Font.Size, 2);
+            Assert.True(receive.DesiredSize.Width > receiveWidth, "Larger text must re-measure the controls.");
+        }
+        finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
+    }
+
     private static IEnumerable<UiElement> Descendants(UiElement root)
     {
         yield return root;

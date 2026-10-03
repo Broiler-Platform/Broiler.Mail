@@ -72,13 +72,13 @@ P1 improves the current app; P2 depends on larger product/platform work.
 
 | ID | Priority | Work | Starting state | Dependencies |
 | --- | --- | --- | --- | --- |
-| UI-01 | P1 | Shared presentation tokens and fixture gallery | Partial — fixture gallery delivered | None |
+| UI-01 | P1 | Shared presentation tokens and fixture gallery | Tokens recorded; type scale and system text size done; long-label fixture waits for UI-14 | None |
 | UI-02 | P1 | Refresh continuity and stable selection | Implemented; native new-mail check pending | None |
 | UI-03 | P1 | Reader hierarchy and local reply commands | Implemented; screen-reader check pending (UI-09) | UI-01, UI-02 |
-| UI-04 | P1 | Responsive inbox and shell navigation | Compact mode implemented; row metadata and 200% text pending | UI-01, UI-02, UI-03 |
+| UI-04 | P1 | Responsive inbox and shell navigation | Compact mode implemented; 200 % text fits; row metadata pending | UI-01, UI-02, UI-03 |
 | UI-05 | P1 | Writing-focused composer | Layout implemented; IME/undo check pending | UI-01; integrate with UI-03 commands |
 | UI-06 | P1 | Guided account setup and concise settings | Setup checklist implemented; SMTP test waits for a service | UI-01 |
-| UI-07 | P1 | Live appearance and geometry persistence | Live theme and geometry implemented; preview windows, text scale, RTL open | UI-01 |
+| UI-07 | P1 | Live appearance and geometry persistence | Live theme, geometry, and system text size; RTL open | UI-01 |
 | UI-08 | P1 | Consistent state, feedback, and recovery UX | Done, including native announcements (Hosting preview.4); screen-reader check with UI-09 | Apply to UI-02 through UI-07 |
 | UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Shortcut table, reply shortcuts, and traversal done; IME, wheel, and DPI caret checks open | Coordinate with UI-04, UI-05, UI-09 |
@@ -91,9 +91,9 @@ P1 improves the current app; P2 depends on larger product/platform work.
 
 **Owner:** Mail view composition; reusable roles in Broiler.UI.
 
-- [ ] Inventory current token usage and remove per-view color/font divergence through
+- [x] Inventory current token usage and remove per-view color/font divergence through
   shared roles: heading, body, secondary text, separator, focus, selection, and feedback.
-- [ ] Establish the spacing/type hierarchy above in the existing demo or an isolated
+- [x] Establish the spacing/type hierarchy above in the existing demo or an isolated
   fixture harness. Use synthetic messages only, with fixed dates for reproducible images.
 - [ ] Include long subject/address, empty inbox, 500 messages, plain/HTML-only mail,
   large draft, failed save, send outcome unknown, narrow window, and long translated labels.
@@ -126,6 +126,53 @@ inventory and the spacing/type hierarchy are still open.
   at 640×480. Argument parsing is covered, including a fixed scenario-name parsing bug.
 - Not yet covered: actual high contrast, enlarged text scale, long translated labels,
   and a separate fixture for a canceled operation or conflicting draft.
+
+**Progress (3 October 2026, tokens, type scale, and text size):**
+
+The token choices, recorded once. Mail sets no colors or fonts of its own; every role below is a
+Broiler.UI theme token, so light, dark, high contrast, and the system text size all follow from the
+theme:
+
+| Role | Theme token | Where Mail uses it |
+| --- | --- | --- |
+| Surface title | `FontTitle` (24 DIP, semibold) via `StandardTextStyle.Title` | Reader subject |
+| Section heading | `FontSubtitle` (20 DIP) via `StandardTextStyle.Subtitle` | `FormSection` headings in Account and Settings |
+| Body | `FontBody` (16 DIP, the size controls already drew) | All controls and labels |
+| Secondary text | Label role `Muted` (`TextMuted`) | Reader date line, composer hint, preview truncation notice |
+| Caption | `FontCaption` (13 DIP) | HTML preview cut-off banner |
+| Separator | `Border` / `BorderStrong` | Splitter, toolbars, list, and form frames (Broiler.UI controls) |
+| Focus | `FocusRing` via `StandardControlPaint.DrawFocusRing` | All controls; the HTML preview's links and document |
+| Selection | List `SelectedBackground` (`AccentSoft`; outlined in high contrast) | Message list |
+| Feedback | `InlineFeedback` kinds (`Info`, `Success`, `Warning`, `Danger`) | Every form and the inbox |
+| Spacing | 4/8/12/16/24/32 (`SpacingXs` to `SpacingXxl`); reading margins from `ReadingColumn` | Views and forms |
+
+- Inventory result: per-view divergence was small. Labels set `Foreground = StandardControlPaint.Text`
+  (redundant with their role, removed), the reader subject captured `FontTitle` at construction (now a
+  text style that follows theme changes), and the preview's cut-off banner used a fixed "Segoe UI 11"
+  (now the caption font). The banner's colors and the HTML page canvas stay fixed light colors on
+  purpose: they sit on the document's white page.
+- **Broiler.UI gap, fixed upstream (Broiler.UI#75, released in 0.1.0-preview.16):** the theme had a type scale
+  that no control used (body 13, while controls drew 16), and nothing applied the system text size,
+  although Broiler.Hosting reads it. Now: the type scale is ranked around the body size controls
+  draw; `StandardThemeTokens.WithTextScale` scales every font, and `Select(UiSystemSettings)` applies
+  the system's; text controls and labels start from and follow the theme's fonts until the app sets
+  its own (`StandardThemeFonts`, `StandardLabel.TextStyle`); list rows (font-aware
+  `GetItemHeight`) and tab headers (`EffectiveHeaderHeight`) grow with the font. Default sizes are
+  unchanged.
+- **Mail:** `AppearancePolicy` applies the system text size for every theme choice, so changing the
+  Windows text size reflows the running app. At large text the reader header and the list notice are
+  capped (45 % and 40 % of their pane, `BoundedScrollArea`) and scroll, so the message text and the
+  list keep their room. Demo options `--text-scale <100-225>` and `--contrast high` let the acceptance
+  pass check enlarged text and the high-contrast palette without changing system settings.
+- Evidence: Broiler.UI `ThemeTypographyTests` (7 cases); Mail `AppearanceTests` (text size for every
+  choice; a live change enlarges the shell, including the subject), `ResponsiveInboxTests` (200 %
+  text keeps the header and notice within their share), and the demo option tests. Acceptance runs on
+  a NativeAOT build with Broiler.UI packed locally: 150 % text 32/32 and 200 % text 32/32 clean (the
+  first 200 % run found cut-off tab names, overlapping rows, a header over the footer, and a notice
+  that left the list no room, all fixed above); high contrast 64/64 clean. Repeated on the published
+  preview.16: the full pass 96/96, text 150 % and 200 % 32/32 each, high contrast 64/64, all clean.
+- Open: long translated labels need a string layer first (UI-14); a density choice is not offered
+  (the list supports it, nothing else needs it yet).
 
 Baseline observations from native captures of the Debug build (100% DPI, light 1100×720
 and dark 640×480). They feed the packages named; they are not acceptance results:

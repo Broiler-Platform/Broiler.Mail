@@ -45,7 +45,7 @@ public sealed class MailShellView : IDisposable
         Window = new StandardWindow { Title = model.Title };
         Window.ApplyTheme(StandardControlPaint.Theme);
         var layout = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
-        var status = new StandardLabel { Text = model.Status.Replace("&", "&&", StringComparison.Ordinal), Foreground = StandardControlPaint.Text, Wrapping = UiTextWrapping.Wrap };
+        var status = new StandardLabel { Text = model.Status.Replace("&", "&&", StringComparison.Ordinal), Wrapping = UiTextWrapping.Wrap };
         layout.AddChild(status);
         layout.SetDock(status, UiDock.Bottom);
 

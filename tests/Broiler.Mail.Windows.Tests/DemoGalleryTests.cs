@@ -71,6 +71,20 @@ public sealed class DemoGalleryTests
         Assert.True(double.IsNaN(Measurement.FrameSamples.Percentile([], 50)));
     }
 
+    [Theory]
+    [InlineData("--demo inbox --text-scale 150", 150)]
+    [InlineData("--demo inbox", null)]
+    public void Text_Scale_Option_Fixes_The_System_Text_Size(string arguments, int? percent)
+    {
+        Assert.True(DemoOptions.TryParse(arguments.Split(' '), out var options));
+        Assert.Equal(percent, options!.TextScalePercent);
+        foreach (var invalid in new[] { "99", "226", "1.5", "big" })
+            Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--text-scale", invalid], out _));
+        Assert.True(DemoOptions.TryParse(["--demo", "inbox", "--contrast", "high"], out var contrast));
+        Assert.True(contrast!.HighContrast);
+        Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--contrast", "low"], out _));
+    }
+
     [Fact]
     public void Every_Gallery_Scenario_Has_One_Unique_Name()
     {

@@ -51,7 +51,7 @@ public sealed class HtmlMessagePreview(IHtmlPreviewHost host) : IMessagePreview
         var status = new StandardLabel
         {
             Text = message.HtmlUnavailableReason ?? "HTML preview blocks images and active content.",
-            UseMnemonic = false, Wrapping = UiTextWrapping.Wrap, Foreground = StandardControlPaint.Text,
+            UseMnemonic = false, Wrapping = UiTextWrapping.Wrap,
         };
         panel.AddChild(button); panel.AddChild(status);
         var root = new PreviewActions(host, panel);

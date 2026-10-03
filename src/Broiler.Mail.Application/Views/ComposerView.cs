@@ -70,7 +70,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var hint = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Role = StandardLabelRole.Muted };
         panel.Add(hint);
         // Sender identity and the routine autosave state share one quiet line; save failures use feedback below.
-        var sender = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Foreground = StandardControlPaint.Text };
+        var sender = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false };
         panel.Add(sender);
         // Validate rather than truncate: imported recipients and prefixed subjects must remain intact.
         StandardEdit Field(string placeholder) => new() { MaxLength = int.MaxValue, PlaceholderText = placeholder };
@@ -87,7 +87,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var body = new StandardRichEdit { AcceptsReturn = true, PreferredSize = new BSize(520, 120), PlaceholderText = "Write your message. Only plain text is kept." };
         body.ApplyTheme(StandardControlPaint.Theme);
         var bodyArea = new FillLastStack { Spacing = 4, MinimumFillHeight = 120 };
-        bodyArea.Add(new StandardLabel { Text = "Message", Target = body, Foreground = StandardControlPaint.Text });
+        bodyArea.Add(new StandardLabel { Text = "Message", Target = body });
         bodyArea.Add(body);
         panel.Add(bodyArea);
         Recipients = to;
