@@ -31,15 +31,15 @@ and the screenshots. `-Scenarios`, `-Sizes`, `-Themes`, and `-Executable` narrow
 
 | | |
 | --- | --- |
-| Revision | First pass: `3f5ae83` plus the UI-08, UI-11, and UI-13 changes of branch `claude/ui-08-announcements`. Second pass: `c625b8d` plus the package update |
-| Packages | First pass: Broiler.UI 0.1.0-preview.14 and Hosting preview.3. Second pass: Broiler.UI preview.15 and Hosting preview.4. Both: Graphics preview.7, Native preview.6, Input preview.5 |
+| Revision | First pass: `3f5ae83` plus the UI-08, UI-11, and UI-13 changes of branch `claude/ui-08-announcements`. Second pass: `c625b8d` plus the package update. Third pass: `cac1a7f` plus the package update |
+| Packages | First pass: Broiler.UI 0.1.0-preview.14 and Hosting preview.3. Second pass: Broiler.UI preview.15 and Hosting preview.4. Third pass: Broiler.UI preview.16 and Hosting preview.4. All: Graphics preview.7, Native preview.6, Input preview.5 |
 | Build | `dotnet publish -r win-x64 -p:PublishAot=true -p:PublishTrimmed=true` (no warnings), SDK 10.0.401 |
 | Machine | Windows 11 Enterprise 10.0.26200, x64 (AMD Zen 3), one monitor at 150 % |
 | Appearance | Light and dark app themes; system high contrast off |
 
 ## Result
 
-**96 of 96 runs have no automated findings** in both passes (the first, before the Mail fixes below,
+**96 of 96 runs have no automated findings** in the second and third passes (the first, before the Mail fixes below,
 had 48 runs with findings). The second pass ran on the published Broiler.UI and Broiler.Hosting
 releases that carry the upstream fixes. Every run started, settled, exposed a named UI Automation tree, cycled Tab through named,
 visible controls back to its starting point (3 to 15 stops depending on fixture and size), and closed
@@ -81,8 +81,9 @@ view draws no focus ring (Broiler.UI), which matters only while long feedback sc
 
 The two settings rows this machine could not change are now covered with demo options that override
 them for the app alone: `scripts/Accept-UI.ps1 -TextScale 150|200` passes `--text-scale`, and
-`-HighContrast` passes `--contrast high`. These runs used a NativeAOT build with the Broiler.UI
-typography branch packed locally (it is needed for text scaling to reach the controls).
+`-HighContrast` passes `--contrast high`. The first runs used a NativeAOT build with the Broiler.UI
+typography branch packed locally (it is needed for text scaling to reach the controls); the third pass
+repeated them on the published Broiler.UI 0.1.0-preview.16.
 
 | Run | Fixtures, sizes, themes | Result |
 | --- | --- | --- |
@@ -90,6 +91,7 @@ typography branch packed locally (it is needed for text scaling to reach the con
 | Text 200 %, first | same | 30 of 32; screenshots also showed cut-off tab names, overlapping list rows, the reader header running over the footer, and an error notice leaving the list no room |
 | Text 200 %, after the fixes | same | 32 of 32 clean; screenshots show none of those problems |
 | High-contrast palette | 16 fixtures at 640x480 and 1100x720, light and dark | 64 of 64 clean; hierarchy, selection outline, and focus distinct |
+| Published preview.16 | full pass (96), text 150 % and 200 % (32 each), high-contrast palette (64) | all clean; screenshots match the local-build runs |
 
 The high-contrast palette is the theme's own preset; the Windows contrast themes supply their own
 colors, so a run with an actual contrast theme remains a check for a machine where it can be turned on.

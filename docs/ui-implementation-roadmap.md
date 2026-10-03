@@ -72,13 +72,13 @@ P1 improves the current app; P2 depends on larger product/platform work.
 
 | ID | Priority | Work | Starting state | Dependencies |
 | --- | --- | --- | --- | --- |
-| UI-01 | P1 | Shared presentation tokens and fixture gallery | Tokens recorded; type scale and system text size done (Broiler.UI release pending); long-label fixture waits for UI-14 | None |
+| UI-01 | P1 | Shared presentation tokens and fixture gallery | Tokens recorded; type scale and system text size done; long-label fixture waits for UI-14 | None |
 | UI-02 | P1 | Refresh continuity and stable selection | Implemented; native new-mail check pending | None |
 | UI-03 | P1 | Reader hierarchy and local reply commands | Implemented; screen-reader check pending (UI-09) | UI-01, UI-02 |
-| UI-04 | P1 | Responsive inbox and shell navigation | Compact mode implemented; 200 % text fits (Broiler.UI release pending); row metadata pending | UI-01, UI-02, UI-03 |
+| UI-04 | P1 | Responsive inbox and shell navigation | Compact mode implemented; 200 % text fits; row metadata pending | UI-01, UI-02, UI-03 |
 | UI-05 | P1 | Writing-focused composer | Layout implemented; IME/undo check pending | UI-01; integrate with UI-03 commands |
 | UI-06 | P1 | Guided account setup and concise settings | Setup checklist implemented; SMTP test waits for a service | UI-01 |
-| UI-07 | P1 | Live appearance and geometry persistence | Live theme, geometry, and system text size (Broiler.UI release pending); RTL open | UI-01 |
+| UI-07 | P1 | Live appearance and geometry persistence | Live theme, geometry, and system text size; RTL open | UI-01 |
 | UI-08 | P1 | Consistent state, feedback, and recovery UX | Done, including native announcements (Hosting preview.4); screen-reader check with UI-09 | Apply to UI-02 through UI-07 |
 | UI-09 | P0 | Native accessibility and semantic integration | External-client acceptance passes (Debug and NativeAOT); real screen-reader check pending | Start immediately; verify every delivered surface |
 | UI-10 | P1 | Keyboard, IME, scrolling, and focus fidelity | Shortcut table, reply shortcuts, and traversal done; IME, wheel, and DPI caret checks open | Coordinate with UI-04, UI-05, UI-09 |
@@ -151,7 +151,7 @@ theme:
   text style that follows theme changes), and the preview's cut-off banner used a fixed "Segoe UI 11"
   (now the caption font). The banner's colors and the HTML page canvas stay fixed light colors on
   purpose: they sit on the document's white page.
-- **Broiler.UI gap, fixed upstream (branch `claude/theme-typography`):** the theme had a type scale
+- **Broiler.UI gap, fixed upstream (Broiler.UI#75, released in 0.1.0-preview.16):** the theme had a type scale
   that no control used (body 13, while controls drew 16), and nothing applied the system text size,
   although Broiler.Hosting reads it. Now: the type scale is ranked around the body size controls
   draw; `StandardThemeTokens.WithTextScale` scales every font, and `Select(UiSystemSettings)` applies
@@ -169,9 +169,10 @@ theme:
   text keeps the header and notice within their share), and the demo option tests. Acceptance runs on
   a NativeAOT build with Broiler.UI packed locally: 150 % text 32/32 and 200 % text 32/32 clean (the
   first 200 % run found cut-off tab names, overlapping rows, a header over the footer, and a notice
-  that left the list no room, all fixed above); high contrast 64/64 clean.
+  that left the list no room, all fixed above); high contrast 64/64 clean. Repeated on the published
+  preview.16: the full pass 96/96, text 150 % and 200 % 32/32 each, high contrast 64/64, all clean.
 - Open: long translated labels need a string layer first (UI-14); a density choice is not offered
-  (the list supports it, nothing else needs it yet). Waits for the Broiler.UI release.
+  (the list supports it, nothing else needs it yet).
 
 Baseline observations from native captures of the Debug build (100% DPI, light 1100×720
 and dark 640×480). They feed the packages named; they are not acceptance results:
