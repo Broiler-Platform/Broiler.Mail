@@ -122,7 +122,13 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _session.SetFocus(_shell.Navigation);
         // Saved theme and OS appearance changes re-theme the live controls; no restart is needed.
         _appearance = new AppearanceController(_session, model.Settings, _host);
-        _appearance.Applied += (_, _) => { WindowsTitleBar.Apply(NativeHandle, _appearance.Current!.IsDark); Invalidate(); };
+        _appearance.Applied += (_, _) =>
+        {
+            WindowsTitleBar.Apply(NativeHandle, _appearance.Current!.IsDark);
+            // An open HTML preview follows too; it runs its own session on its own thread.
+            _htmlPreview.ApplyTheme(_appearance.Current);
+            Invalidate();
+        };
         if (demo is { Interactive: false })
         {
             var driver = DemoScenarioDriver.Start(demo, model, _shell, _dispatcher);

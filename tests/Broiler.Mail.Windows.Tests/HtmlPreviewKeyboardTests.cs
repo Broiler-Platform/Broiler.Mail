@@ -183,6 +183,46 @@ public sealed class HtmlPreviewKeyboardTests
         await finished.Task.WaitAsync(TimeSpan.FromSeconds(30));
     }
 
+    [Fact]
+    public async Task AnOpenPreviewFollowsAThemeAndTextSizeChangeOnItsOwnThread()
+    {
+        StandardThemeTokens changed = StandardThemeTokens.Dark.WithTextScale(1.5);
+        var finished = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<p>Agenda</p>", new HashSet<string>()), "Agenda as text", _ => { })
+                { ShowInTaskbar = false, Opacity = 0 };
+                window.Shown += (_, _) =>
+                {
+                    // Applied from another thread, as the main window does; it runs on the preview's thread.
+                    Task.Run(() => window.ApplyTheme(changed)).Wait();
+                    window.Post(() =>
+                    {
+                        try
+                        {
+                            Assert.Same(changed, StandardControlPaint.GetTheme(window.Session));
+                            Assert.Equal(changed.FontBody, window.ToggleButton.Font);
+                            Assert.Equal(changed.FontBody, window.Status.Font);
+                            Assert.Equal(changed.Surface, window.Root.Background);
+                            window.Session.RenderFrame();
+                            finished.TrySetResult();
+                        }
+                        catch (Exception error) { finished.TrySetException(error); }
+                        finally { window.Close(); }
+                    });
+                };
+                window.Run();
+            }
+            catch (Exception error) { finished.TrySetException(error); }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        await finished.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.NotSame(changed, StandardControlPaint.Theme); // the process-wide palette is the main window's
+    }
+
     [Theory]
     [InlineData(1.0)]
     [InlineData(1.5)]

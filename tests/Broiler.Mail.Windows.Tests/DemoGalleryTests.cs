@@ -98,7 +98,7 @@ public sealed class DemoGalleryTests
         var dates = DemoApplication.CreateDateFormatter();
         var newest = new DateTimeOffset(2026, 9, 28, 10, 0, 0, TimeSpan.FromHours(2));
         Assert.Equal("10:00 AM", dates.List(newest));
-        Assert.Equal("September 27", dates.List(newest.AddDays(-1)));
+        Assert.Equal("Sep 27", dates.List(newest.AddDays(-1)));
         Assert.Equal("9/28/2025", dates.List(newest.AddYears(-1)));
         Assert.Equal("9/28/2026 10:00 AM", dates.Detail(newest));
     }

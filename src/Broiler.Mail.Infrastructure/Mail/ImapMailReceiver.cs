@@ -86,14 +86,16 @@ public sealed class ImapMailReceiver : IMailReceiver
             if (string.IsNullOrEmpty(secret))
                 throw new MailConnectionException("No password is saved for these connection details. Save a password in the Account tab.");
             using var client = _createClient(); // No protocol logger and no certificate-validation bypass.
-            client.Timeout = checked((int)_timeout.TotalMilliseconds);
+            // MailKit's own read timeout is only a backstop behind the deadline: when both fired together,
+            // its IOException could win and be reported as an unreadable connection instead of a timeout.
+            client.Timeout = checked((int)(_timeout + TimeSpan.FromSeconds(1)).TotalMilliseconds);
             var security = server.Security == TransportSecurity.Tls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
             await client.ConnectAsync(server.Host, server.Port, security, deadline.Token).ConfigureAwait(false);
             await client.AuthenticateAsync(server.UserName, secret, deadline.Token).ConfigureAwait(false);
             return await operation(client, deadline.Token).ConfigureAwait(false);
         }
         // TLS stream reads can surface deadline cancellation as an I/O error instead of OCE.
-        catch (Exception error) when (error is IOException or SocketException && deadline.IsCancellationRequested)
+        catch (Exception error) when (error is IOException or SocketException && (deadline.IsCancellationRequested || IsTimeout(error)))
         {
             cancellationToken.ThrowIfCancellationRequested();
             throw new MailConnectionException("The mail operation timed out. Check the server address, port, and network, then retry.");
@@ -123,6 +125,14 @@ public sealed class ImapMailReceiver : IMailReceiver
         { throw new MailConnectionException("The message could not be decoded. It may contain malformed mail data."); }
         catch (IOException)
         { throw new MailConnectionException("The connection or protected credential could not be read. Check the network and try saving the password again."); }
+    }
+
+    private static bool IsTimeout(Exception error)
+    {
+        for (Exception? current = error; current is not null; current = current.InnerException)
+            if (current is TimeoutException or SocketException { SocketErrorCode: SocketError.TimedOut })
+                return true;
+        return false;
     }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=53B5C5
