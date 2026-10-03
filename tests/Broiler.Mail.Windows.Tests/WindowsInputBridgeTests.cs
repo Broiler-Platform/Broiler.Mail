@@ -339,6 +339,11 @@ public sealed class WindowsInputBridgeTests
     [Fact]
     public void EndToEnd_RichEdit_HandlesImeCompositionAndCommit()
     {
+        // Hosting suppresses the WM_CHAR copies of a commit only within 500 ms of wall time, counted
+        // from before the commit is dispatched. The first commit into a rich edit (JIT, first layout)
+        // can take that long on a loaded CI runner, so warm the path up on a throwaway editor first.
+        Commit(CreateTestHarness(), "x");
+
         var (session, bridge, _) = CreateTestHarness();
         var richEdit = new StandardRichEdit();
         richEdit.Arrange(new BRect(0, 0, 400, 300));
@@ -362,5 +367,17 @@ public sealed class WindowsInputBridgeTests
 
         // Verify committed text in rich edit
         Assert.Equal("日本", richEdit.GetPlainText());
+    }
+
+    private static void Commit((UiSession Session, WindowsInputBridge Bridge, List<UiInputEvent> Events) harness, string text)
+    {
+        var richEdit = new StandardRichEdit();
+        richEdit.Arrange(new BRect(0, 0, 400, 300));
+        harness.Session.AddRoot(richEdit);
+        harness.Session.SetFocus(richEdit);
+        harness.Bridge.ProcessNativeMessage(0, InputNative.WM_IME_STARTCOMPOSITION, 0, 0);
+        harness.Bridge.CompositionStringProvider = (_, idx) => idx == InputNative.GCS_RESULTSTR ? text : "";
+        harness.Bridge.ProcessNativeMessage(0, InputNative.WM_IME_COMPOSITION, 0, (nint)InputNative.GCS_RESULTSTR);
+        foreach (char c in text) harness.Bridge.ProcessChar(c);
     }
 }
