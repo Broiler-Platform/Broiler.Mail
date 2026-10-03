@@ -176,6 +176,34 @@ public sealed class ResponsiveInboxTests
             foreach (var item in Descendants(child)) yield return item;
     }
 
+    [Theory]
+    [InlineData(640)]
+    [InlineData(1100)]
+    public async Task TheListNoticeTakesNoSpaceOnceMessagesArrive(int width)
+    {
+        // As in the app, the first frame shows the empty-inbox notice; receiving then hides it.
+        var account = TestDirectory.Profile();
+        var dispatcher = new TestQueueDispatcher();
+        var model = new InboxViewModel(Fixture.CreateReceiver(Fixture.CreateMessages(account, 10)), dispatcher);
+        model.SetAccount(account);
+        var content = new InboxView(model).CreateContent();
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(width, 480));
+        session.AddRoot(content);
+        session.RenderFrame();
+        await model.ReceiveAsync();
+        dispatcher.DrainUntil(() => !model.IsBusy);
+        session.RenderFrame();
+        // The demo also opens the newest message, as a returning user would find it.
+        await model.SelectAsync(model.Messages[0].Key);
+        dispatcher.DrainUntil(() => !model.IsBusy);
+        session.RenderFrame();
+
+        var list = Descendants(content).OfType<StandardListView>().Single();
+        Assert.Equal(list.Parent!.Bounds.Top, list.Bounds.Top, 1);
+        content.Dispose();
+        model.Dispose();
+    }
+
     private sealed class Fixture : IDisposable
     {
         private readonly Host _host;

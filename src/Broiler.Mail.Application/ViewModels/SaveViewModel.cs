@@ -52,6 +52,37 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
     public FeedbackKind StatusKind { get; private set; } = loadError is null ? FeedbackKind.Information : FeedbackKind.Error;
     public string? ValidationField { get; private set; }
     public string? ValidationMessage { get; private set; }
+    /// <summary>The status without its details, for places that point to them, such as the shell footer.</summary>
+    public string StatusSummary { get; private set; } = loadError is null ? string.Empty : "The saved data could not be loaded.";
+
+    /// <summary>
+    /// How long a success confirmation stays. What was saved stays visible elsewhere (the applied
+    /// settings, the setup checklist), so the confirmation may go; failures, cancellations, and
+    /// progress stay until the next operation replaces them.
+    /// </summary>
+    public static readonly TimeSpan SuccessDisplayTime = TimeSpan.FromSeconds(6);
+
+    /// <summary>The clock that times success confirmations.</summary>
+    public TimeProvider Clock { get; init; } = TimeProvider.System;
+
+    private ITimer? _successTimer;
+    private int _statusVersion;
+
+    private void SetStatus(string status, FeedbackKind kind, string? summary = null)
+    {
+        Status = status;
+        StatusKind = kind;
+        StatusSummary = summary ?? status;
+        int version = ++_statusVersion;
+        _successTimer?.Dispose();
+        _successTimer = kind != FeedbackKind.Success ? null : Clock.CreateTimer(_ => Post(() =>
+        {
+            // A newer status, even an identical one, has its own timer.
+            if (version != _statusVersion) return;
+            SetStatus("", FeedbackKind.Information);
+            Changed?.Invoke(this, EventArgs.Empty);
+        }), null, SuccessDisplayTime, Timeout.InfiniteTimeSpan);
+    }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=80FC04
     // Broiler-Falsified-If: a save whose operation throws still runs its commit action, so the view model shows values that never reached the store
@@ -68,31 +99,31 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
         if (!CanSave)
             return;
         IsBusy = true;
-        Status = busyMessage;
-        StatusKind = FeedbackKind.Progress;
+        SetStatus(busyMessage, FeedbackKind.Progress);
         ValidationField = ValidationMessage = null;
         Changed?.Invoke(this, EventArgs.Empty);
 
-        string status;
+        string status, summary;
         bool succeeded = false;
         string? validationField = null, validationMessage = null;
         var kind = FeedbackKind.Success;
         try
         {
             await operation().ConfigureAwait(false);
-            status = successMessage;
+            status = summary = successMessage;
             succeeded = true;
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException or ArgumentException or InvalidOperationException or MailConnectionException)
         {
             status = $"{failurePrefix}: {error.Message}";
+            summary = failurePrefix + ".";
             kind = FeedbackKind.Error;
             if (error is ConfigurationValidationException validation)
             { validationField = validation.Field; validationMessage = validation.Message; }
         }
         catch (OperationCanceledException)
         {
-            status = canceledMessage;
+            status = summary = canceledMessage;
             kind = FeedbackKind.Information;
         }
 
@@ -105,8 +136,7 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
                 // The failure text, or null after success, lets callers record what went wrong.
                 completed?.Invoke(succeeded ? null : status);
                 IsBusy = false;
-                Status = status;
-                StatusKind = kind;
+                SetStatus(status, kind, summary);
                 ValidationField = validationField;
                 ValidationMessage = validationMessage;
                 Changed?.Invoke(this, EventArgs.Empty);

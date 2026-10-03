@@ -1,6 +1,9 @@
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.UI;
+using Broiler.UI.Edit.Standard;
+using Broiler.UI.Label.Standard;
+using Broiler.UI.RichEdit.Standard;
 
 namespace Broiler.Mail.Windows;
 
@@ -29,13 +32,13 @@ internal sealed class DemoScenarioDriver
     public static DemoScenarioDriver Start(DemoOptions options, MailShellViewModel model, MailShellView shell, IUiDispatcher dispatcher)
     {
         shell.Navigation.SelectTab(options.InitialTab);
-        var driver = new DemoScenarioDriver(model, dispatcher, Steps(options.Scenario, model));
+        var driver = new DemoScenarioDriver(model, dispatcher, Steps(options.Scenario, model, shell));
         model.Inbox.Changed += driver.OnInboxChanged;
         dispatcher.Post(driver.RunNext);
         return driver;
     }
 
-    private static IEnumerable<Func<Task>> Steps(DemoScenario scenario, MailShellViewModel model)
+    private static IEnumerable<Func<Task>> Steps(DemoScenario scenario, MailShellViewModel model, MailShellView shell)
     {
         var inbox = model.Inbox;
         switch (scenario)
@@ -61,17 +64,58 @@ internal sealed class DemoScenarioDriver
                 yield return inbox.ReceiveAsync;
                 break;
             case DemoScenario.HtmlOnly:
+            case DemoScenario.LongHtml:
                 yield return inbox.ReceiveAsync;
                 yield return () => Select(inbox, 54);
                 break;
             case DemoScenario.SaveError:
                 yield return () => model.Settings.SaveAsync();
                 break;
+            case DemoScenario.InvalidSetup:
+                yield return () =>
+                {
+                    // Typed into the field, as a user would; the view copies fields to the model, not back.
+                    Field(shell, "account", "Email address").Text = "Demo Reader <reader@example.test>";
+                    return model.Account.SaveAsync();
+                };
+                break;
+            case DemoScenario.TestCanceled:
+                yield return () =>
+                {
+                    var test = model.Account.TestConnectionAsync();
+                    model.Account.CancelConnectionTest();
+                    return test;
+                };
+                break;
+            case DemoScenario.DraftConflict:
+                yield return () =>
+                {
+                    var body = Descendants(Tab(shell, "compose")).OfType<StandardRichEdit>().Single();
+                    body.SetPlainText(body.GetPlainText() + "\n\nOne more line typed after another window saved this draft.");
+                    return model.Composer.SaveAsync();
+                };
+                break;
+            case DemoScenario.SendRejected:
+                yield return () => model.Composer.SendAsync();
+                break;
             case DemoScenario.LargeDraft:
             case DemoScenario.SendUnknown:
+            case DemoScenario.SentCopyFailed:
                 // The recovered draft is the fixture; the composer opens on it without any command.
                 break;
         }
+    }
+
+    private static UiElement Tab(MailShellView shell, string id) => shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
+
+    private static StandardEdit Field(MailShellView shell, string tab, string label) =>
+        Descendants(Tab(shell, tab)).OfType<StandardLabel>().Where(item => item.Text == label).Select(item => item.Target).OfType<StandardEdit>().Single();
+
+    private static IEnumerable<UiElement> Descendants(UiElement root)
+    {
+        yield return root;
+        foreach (var child in root.Children)
+            foreach (var item in Descendants(child)) yield return item;
     }
 
     private static Task Select(InboxViewModel inbox, uint uid) =>

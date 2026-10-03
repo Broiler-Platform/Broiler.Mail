@@ -104,7 +104,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var feedback = new StandardPanel { Spacing = 4 };
         feedback.AddChild(submission); feedback.AddChild(sendHint); feedback.AddChild(sentCopy);
         feedback.AddChild(storage); feedback.AddChild(status);
-        var surface = new FormSurface(panel, FormSurface.ActionBar(send, check, save, discard), feedback);
+        var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(send, check, save, discard), feedback));
         Guid? shown = null;
         bool updating = false;
         void Refresh()
@@ -125,7 +125,8 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             foreach (var field in new[] { to, cc, bcc, subject }) { field.IsEnabled = model.HasDraft; field.IsReadOnly = !model.CanEdit; }
             body.IsEnabled = model.HasDraft;
             body.IsReadOnly = !model.CanEdit;
-            check.IsEnabled = model.HasDraft && !model.IsBusy;
+            // A submitted draft can no longer change, so there is nothing left to check.
+            check.IsEnabled = model.CanEdit;
             discard.IsEnabled = model.CanDiscard;
             save.IsEnabled = model.HasDraft && !model.IsBusy;
             send.IsEnabled = model.CanSend;
@@ -145,8 +146,9 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
                 : "To reply or forward, open a message in Inbox.";
             hint.Visibility = hint.Text.Length > 0 ? UiVisibility.Visible : UiVisibility.Collapsed;
             // Routine information goes to the shell footer; results, warnings, and errors stay beside the draft.
-            status.Set(model.IsBusy ? model.SubmissionState == DraftSubmissionState.Sending ? "Submitting message…"
-                : model.SentCopy == SentCopyState.Pending ? "Saving Sent copy…" : "Updating draft…"
+            // Once a draft has been submitted, the outcome lines above report the work in progress:
+            // repeating it here would be read twice.
+            status.Set(model.IsBusy ? model.SubmissionState == DraftSubmissionState.Editing ? "Updating draft…" : ""
                 : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
             updating = false;

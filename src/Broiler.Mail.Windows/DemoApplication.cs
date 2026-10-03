@@ -42,13 +42,13 @@ internal static class DemoApplication
     {
         options ??= new(DemoScenario.Inbox, Interactive: true);
         var store = new DemoStore(options);
-        return new(store, store, new DemoReceiver(options.Scenario, options.Interactive), new DemoSender(), store, CreateDrafts(options.Scenario, store.Profile));
+        return new(store, store, new DemoReceiver(options.Scenario, options.Interactive), new DemoSender(options.Scenario), store, CreateDrafts(options.Scenario, store.Profile));
     }
 
     /// <summary>Dates relative to a fixed moment, zone, and culture, so gallery captures are reproducible.</summary>
     public static MessageDateFormatter CreateDateFormatter() => new(FixedClock.Instance, CultureInfo.GetCultureInfo("en-US"));
 
-    private static MemoryDraftStore CreateDrafts(DemoScenario scenario, AccountProfile profile)
+    private static IDraftStore CreateDrafts(DemoScenario scenario, AccountProfile profile)
     {
         var drafts = new MemoryDraftStore();
         DraftSnapshot? snapshot = scenario switch
@@ -78,10 +78,44 @@ internal static class DemoApplication
                 ToText = "team@example.test", CcText = "", BccText = "",
                 State = DraftSubmissionState.Unknown,
             },
+            DemoScenario.DraftConflict or DemoScenario.SendRejected => new DraftSnapshot
+            {
+                Draft = new MailDraft
+                {
+                    Id = new Guid("8a3e6b1d-2c7f-4d9a-a5e2-7b1c9f3d6e40"), AccountId = profile.Id, FromAddress = profile.EmailAddress,
+                    Subject = "Workshop agenda",
+                    PlainText = "Hello team,\n\nthe agenda for Friday is below. Please reply with any changes.\n\nThanks",
+                },
+                ToText = scenario == DemoScenario.SendRejected ? "former.colleague@example.test" : "team@example.test",
+                CcText = "", BccText = "",
+                State = DraftSubmissionState.Editing,
+            },
+            // A recovered record, like send-unknown: the demo sender itself never reports acceptance.
+            DemoScenario.SentCopyFailed => new DraftSnapshot
+            {
+                Draft = new MailDraft
+                {
+                    Id = new Guid("3f7d9b2e-6a1c-4e8f-b2d5-8c4a1e6f9b30"), AccountId = profile.Id, FromAddress = profile.EmailAddress,
+                    To = ["team@example.test"], Subject = "Workshop agenda", SubmissionDate = Newest,
+                    PlainText = "Hello team,\n\nthe agenda for Friday is below.",
+                },
+                ToText = "team@example.test", CcText = "", BccText = "",
+                State = DraftSubmissionState.Accepted,
+                SentCopy = SentCopyState.Failed, SentCopyFolder = "Sent",
+            },
             _ => null,
         };
         if (snapshot is not null) drafts.SaveAsync(0, snapshot).GetAwaiter().GetResult();
-        return drafts;
+        return scenario == DemoScenario.DraftConflict ? new ConflictingDraftStore(drafts) : drafts;
+    }
+
+    /// <summary>Loads the recovered draft, then refuses every save as if another instance had written it.</summary>
+    private sealed class ConflictingDraftStore(MemoryDraftStore inner) : IDraftStore
+    {
+        public bool IsPersistent => true;
+        public Task<DraftStoreState> LoadAsync(CancellationToken cancellationToken = default) => inner.LoadAsync(cancellationToken);
+        public Task<DraftStoreState> SaveAsync(long expectedRevision, DraftSnapshot? draft, CancellationToken cancellationToken = default) =>
+            Task.FromException<DraftStoreState>(new DraftConflictException());
     }
 
     private sealed class FixedClock : TimeProvider
@@ -94,14 +128,17 @@ internal static class DemoApplication
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=C2528C
     // Broiler-Human:        PENDING
-    private sealed class DemoSender : IMailSender
+    private sealed class DemoSender(DemoScenario scenario) : IMailSender
     {
-        public bool IsAvailable => false;
+        // Only the rejected-send fixture offers Send; its synthetic server refuses the recipient.
+        public bool IsAvailable => scenario == DemoScenario.SendRejected;
         // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=1C0B22
         // Broiler-Falsified-If: a demo send returns Accepted or Unknown, so a draft is marked sent although nothing was submitted
         // Broiler-Human:        PENDING
         public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default) =>
-            Task.FromResult(new SendResult(SubmissionStatus.Rejected, "Demo mode never sends mail."));
+            Task.FromResult(new SendResult(SubmissionStatus.Rejected, scenario == DemoScenario.SendRejected
+                ? "The demo server refused the recipient: 550 5.1.1 former.colleague@example.test mailbox unavailable."
+                : "Demo mode never sends mail."));
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=23AE4F
@@ -112,6 +149,11 @@ internal static class DemoApplication
         {
             Id = DemoAccount, DisplayName = "Demo inbox", EmailAddress = "reader@example.test",
             IncomingServer = new() { Host = "imap.example.test", Port = 993, UserName = "reader" },
+            // The send fixtures need outgoing mail and a Sent folder to describe their outcomes.
+            OutgoingServer = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed
+                ? new() { Host = "smtp.example.test", Port = 465, UserName = "reader" } : null,
+            SentCopyMode = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed ? SentCopyMode.AppendToFolder : SentCopyMode.NotConfigured,
+            SentFolder = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed ? "Sent" : null,
         };
         private ApplicationSettings _settings = new() { Theme = options.Theme, WindowWidth = options.Width, WindowHeight = options.Height };
         public AccountProfile Profile => _profile;
@@ -153,9 +195,32 @@ internal static class DemoApplication
         // The interactive demo shows its busy states; gallery fixtures settle immediately.
         private TimeSpan Latency(int milliseconds) => interactive ? TimeSpan.FromMilliseconds(milliseconds) : TimeSpan.Zero;
         private string Subject(uint uid) => uid == 55 ? (scenario == DemoScenario.LongMessage ? LongSubject : "Welcome to Broiler.Mail")
-            : uid == 54 ? "HTML-only mail — text preview" : $"Sample message {uid}";
+            : uid == 54 ? (scenario == DemoScenario.LongHtml ? "Long HTML newsletter" : "HTML-only mail — text preview")
+            : uid == 53 && scenario == DemoScenario.LongHtml ? "Short HTML note" : $"Sample message {uid}";
 
-        public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default) => throw new MailConnectionException("Demo mode does not connect to a server. Restart without --demo to test an account.");
+        /// <summary>
+        /// Message 54 is taller than the preview's render budget, with a link in every section, so the
+        /// shortened-preview notice and long link lists can be checked; message 53 is a short HTML note.
+        /// </summary>
+        private static MailMessageBody LongHtmlBody(MailMessageKey message, MailCompositionSource composition)
+        {
+            if (message.Uid == 53)
+                return new(message, "A short HTML note.\n\nIts preview replaces the long newsletter's.",
+                    "<h1>Short note</h1><p>Its preview replaces the long newsletter's. See <a href=\"https://example.test/note\">the note page</a>.</p>")
+                { IsHtmlFallback = true, Composition = composition };
+            var sections = Enumerable.Range(1, 400).Select(index =>
+                $"<h2>Section {index}</h2><p>Section {index} of a newsletter long enough to pass the preview's render budget. " +
+                $"Grüße, café, and &amp; stay readable. <a href=\"https://example.test/section/{index}\">Read section {index}</a></p>");
+            string text = string.Join("\n\n", Enumerable.Range(1, 400).Select(index => $"Section {index}\n\nSection {index} of a newsletter long enough to pass the preview's render budget."));
+            return new(message, text, "<h1>Long newsletter</h1>" + string.Concat(sections)) { IsHtmlFallback = true, Composition = composition };
+        }
+
+        public async Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default)
+        {
+            // The canceled-test fixture waits for its cancellation, like a server that has not answered yet.
+            if (scenario == DemoScenario.TestCanceled) await Task.Delay(Timeout.Infinite, cancellationToken);
+            throw new MailConnectionException("Demo mode does not connect to a server. Restart without --demo to test an account.");
+        }
 
         // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=A77D43
         // Broiler-Falsified-If: following the returned cursor repeats or skips a synthetic message
@@ -195,6 +260,8 @@ internal static class DemoApplication
                 Subject = Subject(message.Uid),
                 MessageId = $"demo-{message.Uid}@example.test",
             };
+            if (scenario == DemoScenario.LongHtml && message.Uid is 53 or 54)
+                return LongHtmlBody(message, composition);
             if (message.Uid == 54)
             {
                 var embedded = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase)

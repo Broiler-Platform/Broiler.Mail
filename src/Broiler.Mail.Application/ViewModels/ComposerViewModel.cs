@@ -366,8 +366,11 @@ public sealed class ComposerViewModel : IDisposable
         {
             IsBusy = false;
             Status = durable ? outcomeMessage ?? "Submission result saved. The draft is retained." : "Submission or Sent-copy result could not be saved. Keep the app open and retry Save draft; do not resend or repeat the copy.";
-            StatusKind = !durable || outcome == DraftSubmissionState.Failed ? FeedbackKind.Error :
-                outcome == DraftSubmissionState.Unknown ? FeedbackKind.Warning : FeedbackKind.Information;
+            // The submission line already reports a failed or unknown outcome. This line adds a problem
+            // only when the result was not stored or the server explained it; otherwise it is routine.
+            StatusKind = !durable ? FeedbackKind.Error
+                : outcomeMessage is null || outcome == DraftSubmissionState.Accepted ? FeedbackKind.Information
+                : outcome == DraftSubmissionState.Failed ? FeedbackKind.Error : FeedbackKind.Warning;
             Notify();
         }).ConfigureAwait(false);
     }

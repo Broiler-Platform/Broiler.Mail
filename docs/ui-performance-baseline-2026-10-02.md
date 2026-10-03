@@ -145,4 +145,6 @@ and theme meet the allocation target as well; select and resize remain above it.
 
 1. CPU-sample the resize and select frames (re-wrapping at a new width) to find their remaining cost.
 2. Add GPU render time once Broiler.Graphics publishes `FrameRendered`.
-3. Cover long HTML in the preview window and 100 % / 200 % display scales.
+3. Cover long HTML in the preview window (the `long-html` fixture now provides the document) and
+   100 % / 200 % display scales. Tiles below the first were painted from the wrong offset at any scale
+   other than 100 % until UI-11 fixed it, so earlier preview observations at 150 % do not apply.

@@ -41,12 +41,14 @@ internal static class Program
         if (args.SequenceEqual(["--help"]))
         {
             Console.WriteLine(usage);
+            // One column wide enough for every name, so descriptions line up.
+            int column = DemoOptions.Gallery.Select(item => item.Name).Concat(DemoOptions.Workloads.Select(item => item.Name)).Max(name => name.Length);
             Console.WriteLine("Plain --demo starts the interactive demo. A named scenario opens prepared synthetic state with a fixed clock:");
             foreach (var (name, _, description) in DemoOptions.Gallery)
-                Console.WriteLine($"  {name,-14} {description}");
+                Console.WriteLine($"  {name.PadRight(column)} {description}");
             Console.WriteLine("--measure runs a fixed workload on the scenario, prints UI frame statistics, writes them to --report, and exits:");
             foreach (var (name, _, description) in DemoOptions.Workloads)
-                Console.WriteLine($"  {name,-14} {description}");
+                Console.WriteLine($"  {name.PadRight(column)} {description}");
             return 0;
         }
         if (args.Length != 0 && !smoke && !demo && !customDirectory)

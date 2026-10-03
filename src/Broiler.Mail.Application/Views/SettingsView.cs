@@ -59,7 +59,7 @@ public sealed class SettingsView(SettingsViewModel model)
             });
         var save = new StandardButton { Text = "Save settings", IsDefault = true };
         var status = new InlineFeedback();
-        var surface = new FormSurface(panel, FormSurface.ActionBar(save), status);
+        var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(save), status));
 
         void RefreshState()
         {

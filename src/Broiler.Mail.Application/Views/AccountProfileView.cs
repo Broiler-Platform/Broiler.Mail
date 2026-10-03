@@ -121,7 +121,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         var test = new StandardButton { Text = "Test connection" };
         var cancel = new StandardButton { Text = "Cancel test" };
         var status = new InlineFeedback();
-        var surface = new FormSurface(panel, FormSurface.ActionBar(save, test, cancel), status);
+        var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(save, test, cancel), status));
 
         void RefreshState()
         {

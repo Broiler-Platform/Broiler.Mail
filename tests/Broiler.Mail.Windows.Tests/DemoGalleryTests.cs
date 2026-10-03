@@ -185,6 +185,89 @@ public sealed class DemoGalleryTests
         });
     }
 
+    [Fact]
+    public void Invalid_Setup_Marks_The_Field_And_Keeps_The_Saved_Profile()
+    {
+        Run(DemoScenario.InvalidSetup, model =>
+        {
+            var account = model.Account;
+            Assert.Equal(FeedbackKind.Error, account.StatusKind);
+            Assert.Equal("EmailAddress", account.ValidationField);
+            Assert.Equal("Enter an email address without a display name.", account.ValidationMessage);
+            Assert.Equal("reader@example.test", account.Profile?.EmailAddress);
+            Assert.True(account.CanSave);
+        });
+    }
+
+    [Fact]
+    public void Canceled_Test_Is_Information_And_Can_Be_Repeated()
+    {
+        Run(DemoScenario.TestCanceled, model =>
+        {
+            var account = model.Account;
+            Assert.Equal("Connection test canceled.", account.Status);
+            Assert.Equal(FeedbackKind.Information, account.StatusKind);
+            Assert.Equal(ConnectionCheck.NotRun, account.ConnectionCheck);
+            Assert.False(account.IsBusy);
+            Assert.True(account.CanManagePassword);
+        });
+    }
+
+    [Fact]
+    public void Draft_Conflict_Keeps_The_Edits_Open_And_Explains_The_Other_Instance()
+    {
+        Run(DemoScenario.DraftConflict, model =>
+        {
+            var composer = model.Composer;
+            Assert.Equal(FeedbackKind.Error, composer.StorageKind);
+            Assert.Contains("Another app instance changed the saved draft", composer.StorageStatus);
+            Assert.EndsWith("One more line typed after another window saved this draft.", composer.PlainText);
+            Assert.True(composer.CanEdit);
+        });
+    }
+
+    [Fact]
+    public void Rejected_Send_Keeps_The_Draft_With_The_Server_Reason()
+    {
+        Run(DemoScenario.SendRejected, model =>
+        {
+            var composer = model.Composer;
+            Assert.Equal(DraftSubmissionState.Failed, composer.SubmissionState);
+            Assert.Equal(FeedbackKind.Error, composer.StatusKind);
+            Assert.Contains("550 5.1.1", composer.Status);
+            Assert.True(composer.CanEdit);
+            Assert.True(composer.CanSend);
+        });
+    }
+
+    [Fact]
+    public void Failed_Sent_Copy_Is_Recovered_Without_Offering_To_Send_Again()
+    {
+        Run(DemoScenario.SentCopyFailed, model =>
+        {
+            var composer = model.Composer;
+            Assert.Equal(DraftSubmissionState.Accepted, composer.SubmissionState);
+            Assert.Equal(SentCopyState.Failed, composer.SentCopy);
+            Assert.Contains("do not resend", composer.SentCopyText);
+            Assert.False(composer.CanSend);
+            Assert.False(composer.CanEdit);
+        });
+    }
+
+    [Fact]
+    public void Long_Html_Selects_A_Document_Past_The_Preview_Budget()
+    {
+        Run(DemoScenario.LongHtml, model =>
+        {
+            Assert.Equal(54u, model.Inbox.SelectedMessage?.Key.Uid);
+            Assert.Equal("Long HTML newsletter", model.Inbox.SelectedMessage!.Subject);
+            var body = model.Inbox.Body!;
+            Assert.True(body.IsHtmlFallback);
+            Assert.Contains("Read section 400", body.HtmlText);
+            Assert.Equal("Short HTML note", model.Inbox.Messages.Single(message => message.Key.Uid == 53).Subject);
+        });
+    }
+
     // Mirrors WindowsMailWindow: a queued dispatcher drained on the owning thread, then a rendered frame.
     // Verification runs before the shell is disposed, because disposal also disables the view models.
     private static void Run(DemoScenario scenario, Action<MailShellViewModel> verify)

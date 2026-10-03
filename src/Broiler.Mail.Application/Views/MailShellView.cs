@@ -67,11 +67,17 @@ public sealed class MailShellView : IDisposable
             if (status.IsDisposed) return;
             string text = Navigation.SelectedTab?.Id switch
             {
-                "account" => string.IsNullOrEmpty(model.Account.Status) ? "Save your account details, then save a password and test the connection." : model.Account.Status,
-                "settings" => string.IsNullOrEmpty(model.Settings.Status) ? "A saved theme applies immediately. The window reopens at its last size and position." : model.Settings.Status,
+                // A problem is explained below the form's buttons; the footer names it and points there.
+                "account" => IsProblem(model.Account.StatusKind) ? $"{model.Account.StatusSummary} {DetailsBelow}"
+                    : !string.IsNullOrEmpty(model.Account.Status) ? model.Account.Status
+                    : model.Account.NextStep == AccountSetupStep.Ready ? "This account is ready to receive mail."
+                    : "Save your account details, then save a password and test the connection.",
+                "settings" => IsProblem(model.Settings.StatusKind) ? $"{model.Settings.StatusSummary} {DetailsBelow}"
+                    : string.IsNullOrEmpty(model.Settings.Status) ? "A saved theme applies immediately. The window reopens at its last size and position." : model.Settings.Status,
                 // Informational composer messages appear only here; the composer shows the others inline.
                 "compose" => !string.IsNullOrEmpty(model.Composer.Status) && model.Composer.StatusKind == FeedbackKind.Information && !model.Composer.IsBusy
-                    ? model.Composer.Status : model.Composer.StorageStatus,
+                    ? model.Composer.Status
+                    : IsProblem(model.Composer.StorageKind) ? $"The draft is not saved. {DetailsBelow}" : model.Composer.StorageStatus,
                 // The explanation and Retry sit beside the affected pane; the footer only points there.
                 _ => model.Inbox.ProblemScope switch
                 {
@@ -110,6 +116,10 @@ public sealed class MailShellView : IDisposable
     }
 
     private UiElement? _readerFocus;
+
+    private const string DetailsBelow = "Details are below the buttons.";
+
+    private static bool IsProblem(FeedbackKind kind) => kind is FeedbackKind.Error or FeedbackKind.Warning;
 
     public StandardWindow Window { get; }
     public StandardTabView Navigation { get; }

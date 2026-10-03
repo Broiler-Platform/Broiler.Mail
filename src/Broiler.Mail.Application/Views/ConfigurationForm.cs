@@ -62,6 +62,17 @@ internal static class ConfigurationForm
     // Broiler-Human:        PENDING
     public static ViewportScrollView Wrap(StandardPanel panel) => new(panel);
 
+    /// <summary>
+    /// Names a form's feedback area. When long feedback scrolls, the area is a tab stop so the keyboard
+    /// can scroll it, and a screen reader then announces this name instead of nothing.
+    /// </summary>
+    public static FormSurface NameFeedback(FormSurface surface)
+    {
+        if (surface.Children.OfType<FormViewport>().LastOrDefault() is { } feedback && feedback != surface.Content)
+            feedback.Scroll.AccessibleName = "Status and errors";
+        return surface;
+    }
+
     public static StandardPanel AddSection(StandardPanel panel, string title, string description = "")
     {
         var section = new FormSection(title, description);
@@ -79,7 +90,9 @@ internal static class ConfigurationForm
             status.Set(model.Status, model.StatusKind);
             foreach (var pair in fields)
                 FieldFor(pair.Value).SetError(pair.Key == model.ValidationField ? model.ValidationMessage : null);
-            if (model.ValidationField is { } field && field != lastField && fields.TryGetValue(field, out var edit))
+            // The field is marked either way; focus moves to it only if the user is still on the form.
+            if (model.ValidationField is { } field && field != lastField && fields.TryGetValue(field, out var edit)
+                && surface.Session is { } session && FocusNavigation.MayTakeFocus(session, surface))
                 surface.Reveal(FieldFor(edit));
             lastField = model.ValidationField;
         }

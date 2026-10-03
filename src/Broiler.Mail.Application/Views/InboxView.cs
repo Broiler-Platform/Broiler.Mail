@@ -218,6 +218,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
 
         receive.Clicked += async (_, _) => await model.ReceiveAsync();
         older.Clicked += async (_, _) => await model.LoadOlderAsync();
+        bool listWasLoading = false;
         void ShowStates()
         {
             // List notice: a problem with Retry, progress while receiving, or why the list is empty.
@@ -228,6 +229,11 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
                 : model.Messages.Count == 0 ? (model.HasLoaded ? "The inbox is empty." : model.CanReceive ? "Receive mail to load your inbox." : "", FeedbackKind.Information)
                 : ("", FeedbackKind.Information);
             listFeedback.Set(notice.text, notice.kind);
+            // The notice announces progress and problems itself, then disappears once rows arrive;
+            // say that receiving finished, or a screen reader user hears nothing after the progress.
+            if (listWasLoading && !model.IsLoadingList && !listProblem && model.Messages.Count > 0)
+                panel.Session?.AnnounceStatus(list, model.Messages.Count == 1 ? "1 message loaded." : $"{model.Messages.Count} messages loaded.");
+            listWasLoading = model.IsLoadingList;
             listRetryRow.Visibility = listProblem ? UiVisibility.Visible : UiVisibility.Collapsed;
             listRetry.IsEnabled = model.CanRetry;
             bool messageProblem = model.ProblemScope == InboxProblemScope.Message && model.SelectedMessage is not null;
