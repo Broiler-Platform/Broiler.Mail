@@ -251,8 +251,8 @@ public sealed class DemoGalleryTests
             // Valid actions: test again; nothing to cancel.
             Assert.False(account.IsBusy);
             Assert.True(account.CanTestOutgoing);
-            Assert.True(Button(shell, "Test SMTP sign-in").IsEnabled);
-            Assert.Equal(UiVisibility.Collapsed, Button(shell, "Cancel test").Visibility);
+            Assert.True(Button(shell, "account", "Test SMTP sign-in").IsEnabled);
+            Assert.Equal(UiVisibility.Collapsed, Button(shell, "account", "Cancel test").Visibility);
         });
     }
 
@@ -268,8 +268,8 @@ public sealed class DemoGalleryTests
             Assert.Contains("Done — Outgoing sign-in tested; no message was sent.", StepLines(shell));
             Assert.Equal(ConnectionCheck.NotRun, account.ConnectionCheck);
             AssertNoSubmission(model);
-            Assert.True(Button(shell, "Test SMTP sign-in").IsEnabled);
-            Assert.Equal(UiVisibility.Collapsed, Button(shell, "Cancel test").Visibility);
+            Assert.True(Button(shell, "account", "Test SMTP sign-in").IsEnabled);
+            Assert.Equal(UiVisibility.Collapsed, Button(shell, "account", "Cancel test").Visibility);
         });
     }
 
@@ -419,12 +419,7 @@ public sealed class DemoGalleryTests
         Assert.Equal(SentCopyState.NotRequested, model.Composer.SentCopy);
     }
 
-    private static UiElement AccountTab(MailShellView shell) => Tab(shell, "account");
-
-    private static StandardButton Button(MailShellView shell, string text) =>
-        Descendants(AccountTab(shell)).OfType<StandardButton>().Single(button => button.Text == text);
-
-    private static string[] StepLines(MailShellView shell) => Descendants(AccountTab(shell)).OfType<FormSection>().First().Content.Children
+    private static string[] StepLines(MailShellView shell) => Descendants(Tab(shell, "account")).OfType<FormSection>().First().Content.Children
         .OfType<StandardLabel>().Where(label => label.Visibility == UiVisibility.Visible).Select(label => label.Text).ToArray();
 
     private static UiElement Tab(MailShellView shell, string id) => shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
