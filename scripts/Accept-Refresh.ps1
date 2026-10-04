@@ -19,9 +19,12 @@ demo server:
               than the newest page and suggests Load older.
   - renumber: the server changes UIDVALIDITY. The reader closes and the status says the inbox was renumbered.
 The kept run then clicks Reply with posted mouse input at the button's UI Automation bounds and checks
-that the composer's message body has focus. It returns to the inbox twice, once with a posted click on the
-Inbox tab and once by selecting the tab through UI Automation, and checks each time that focus returns to
-the reader control that had it when composing started.
+that the composer's message body has focus. It returns to the inbox twice, once with a posted click at the
+centre of the Inbox tab item's bounds (its header) and once by selecting the tab through UI Automation,
+and checks each time that focus returns to the reader control that had it when composing started.
+
+Rows are matched by AutomationId (item_<id>) and named by Mail's presenter: "Unread, From: <sender>,
+Subject: <subject>, Received: <full date>", without "Unread, " once read.
 
 Before F5 the run also checks that the posted wheel really scrolled the reader, so the scroll check
 cannot pass on an unscrolled reader. Every demo body has the same text, so the reader's subject heading
@@ -311,12 +314,16 @@ function Get-State([IntPtr]$render) {
     }
 }
 
-# Row names are "Read|Unread <middle dot> subject <em dash> sender"; a refresh may change the read state.
-# Windows PowerShell reads this file as ANSI, so the non-ASCII separator is built from its code point.
-$dot = [char]0x00B7
-$dash = [char]0x2014
-function Get-Identity([string]$name) { return ($name -replace "^(Read|Unread) $dot ", '') }
-function Get-Subject([string]$name) { return ((Get-Identity $name) -split " $dash ")[0] }
+# Row names are "[Unread, ]From: <sender>, Subject: <subject>, Received: <full date>"; a refresh may change
+# the read state, which only the "Unread, " prefix tells.
+function Get-Identity([string]$name) { return ($name -replace '^Unread, ', '') }
+function Get-Subject([string]$name) {
+    $identity = Get-Identity $name
+    $start = $identity.IndexOf(', Subject: ')
+    $end = $identity.LastIndexOf(', Received: ')
+    if ($start -lt 0 -or $end -lt $start) { return $identity }
+    return $identity.Substring($start + 11, $end - $start - 11)
+}
 
 function Wait-For([scriptblock]$condition, [int]$milliseconds = 5000) {
     $deadline = (Get-Date).AddMilliseconds($milliseconds)
@@ -413,7 +420,7 @@ function Invoke-Variant([string]$variant) {
                     $result.selected.after = [ordered]@{ name = $row.Name; top = $row.Top }
                     if ((Get-Identity $row.Name) -ne (Get-Identity $beforeSelected.Name)) { $result.findings += "IDENTITY: the selected row became '$($row.Name)'." }
                     if ([Math]::Abs($row.Top - $beforeSelected.Top) -gt 1) { $result.findings += "ANCHOR: the selected row moved from $($beforeSelected.Top) to $($row.Top) px." }
-                    if ($row.Name -notlike "Read $dot *") { $result.findings += "READ_STATE: the server read the open message, but its row says '$($row.Name)'." }
+                    if ($row.Name -like 'Unread, *') { $result.findings += "READ_STATE: the server read the open message, but its row says '$($row.Name)'." }
                 }
                 if ($afterAnchor.Count -ne 1 -or [Math]::Abs(($afterAnchor[0].Top - $after.ListTop) - $result.anchor.top) -gt 1) { $result.findings += "ANCHOR: the first visible row $($beforeAnchor.Id) did not keep its place." }
                 if ($added.Count -lt 1) { $result.findings += 'NEW_ROWS: no new rows were listed.' }
@@ -472,13 +479,16 @@ function Test-Reply([IntPtr]$render, [IntPtr]$window, [string]$name, $all, $resu
     $inboxTab = [RefreshCheck]::Find($all, [System.Windows.Automation.ControlType]::TabItem, 'Inbox')
     if (!$reply -or !$inboxTab) { $result.findings += 'REPLY: the reader has no Reply button or the window no Inbox tab.'; return }
     $replyBounds = $reply.Current.BoundingRectangle
-    # UI Automation splits the tab strip evenly; Inbox is the first tab, so its header starts at the strip's left edge.
-    $tabBounds = $inboxTab.Current.BoundingRectangle
-    $inboxHeader = New-Object System.Windows.Rect ($tabBounds.Left + 8), ($tabBounds.Top + 4), 12, ($tabBounds.Height - 8)
-    # For summary.md: the reported tab item bounds are an equal share of the strip, not the visible header.
+    # A tab item reports its header, so the click goes to the centre of the Inbox tab item's bounds.
+    $inboxHeader = $inboxTab.Current.BoundingRectangle
     $strip = [RefreshCheck]::Find($all, [System.Windows.Automation.ControlType]::Tab, 'Inbox')
     $tabCount = @($all | Where-Object { try { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::TabItem } catch { $false } }).Count
-    $result.tabItemBounds = [ordered]@{ inbox = $tabBounds.Width; strip = if ($strip) { $strip.Current.BoundingRectangle.Width } else { $null }; tabs = $tabCount }
+    $stripWidth = if ($strip) { $strip.Current.BoundingRectangle.Width } else { $null }
+    $result.tabItemBounds = [ordered]@{ inbox = $inboxHeader.Width; strip = $stripWidth; tabs = $tabCount }
+    # The header is narrower than an equal share of the strip, which is what UI Automation reported before Hosting preview.7.
+    if ($stripWidth -and $tabCount -gt 0 -and [Math]::Abs($inboxHeader.Width - $stripWidth / $tabCount) -lt 1) {
+        $result.findings += "TAB_BOUNDS: the Inbox tab item is an equal share of the strip ($($inboxHeader.Width) of $stripWidth px), not its header."
+    }
     $result.focusBeforeReply = [RefreshCheck]::Focused($render)
     foreach ($round in @('click', 'automation')) {
         [RefreshCheck]::Press($render, $replyBounds); Start-Sleep -Milliseconds 200
@@ -566,7 +576,7 @@ foreach ($r in $results | Where-Object { $_.focusInComposer_click }) {
 }
 foreach ($r in $results | Where-Object { $_.tabItemBounds }) {
     $lines.Add('')
-    $lines.Add("Tab item bounds: UI Automation reports the Inbox tab item as $($r.tabItemBounds.inbox) px wide, an equal share of the $($r.tabItemBounds.strip) px tab strip for $($r.tabItemBounds.tabs) tabs, not the visible header. The click round therefore clicks 8 px in from the strip's left edge. Screen readers and Magnifier highlight the same wrong rectangle (Broiler.Hosting tab item peer; UI-09).")
+    $lines.Add("Tab item bounds: UI Automation reports the Inbox tab item as $($r.tabItemBounds.inbox) px wide in the $($r.tabItemBounds.strip) px tab strip of $($r.tabItemBounds.tabs) tabs; the click round clicks the centre of that rectangle.")
 }
 $lines.Add('')
 $lines.Add('## Findings')
@@ -577,9 +587,9 @@ foreach ($r in $results | Where-Object { $_.findings.Count -gt 0 }) {
     $lines.Add('')
 }
 if (@($results | Where-Object { $_.findings -match '^RETURN_FOCUS_AUTOMATION' }).Count -gt 0) {
-    $lines.Add('### Known cause of RETURN_FOCUS_AUTOMATION')
+    $lines.Add('### RETURN_FOCUS_AUTOMATION')
     $lines.Add('')
-    $lines.Add('Checked with a debugger on 4 October 2026: for SelectionItemPattern.Select, UI Automation first calls the tab item provider''s SetFocus, then Select. Broiler.Hosting''s tab item SetFocus selects the tab, which lets Mail restore the reader control, and then focuses the tab view. A pointer click does not take that path. The return-focus acceptance therefore holds for pointer input only; the UI Automation path stays open for UI-09/H-01.')
+    $lines.Add('For SelectionItemPattern.Select, UI Automation first calls the tab item provider''s SetFocus, then Select. Up to Broiler.Hosting preview.5 the tab item''s SetFocus selected the tab, so Mail restored the reader control, and then focused the tab view. Since preview.7 SetFocus focuses the tab view without selecting and Select does what a click does, so this finding is a regression of that change.')
     $lines.Add('')
 }
 $lines.Add('## Not covered by this run')
