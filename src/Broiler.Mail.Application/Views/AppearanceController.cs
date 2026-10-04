@@ -1,9 +1,6 @@
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Settings;
-using Broiler.Graphics.Geometry;
-using Broiler.Graphics.Text;
 using Broiler.UI;
-using Broiler.UI.ComboBox.Standard;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Application.Views;
@@ -45,16 +42,9 @@ public sealed class AppearanceController : IDisposable
         if (_disposed) return;
         var tokens = AppearancePolicy.Resolve(_settings.Settings.Theme, _system?.Settings ?? UiSystemSettings.Default);
         if (tokens == Current) return;
+        // Combo boxes and their rows size themselves from the applied font (Broiler.UI preview.18); Mail sets
+        // no size on them, so a text-scaled theme makes them taller without help here.
         StandardThemeController.Apply(_session, tokens);
-        // UI preview.17 scales the combo font but retains fixed control/popup heights.
-        // Size Mail's choices from the applied font until the shared control does so itself.
-        foreach (var root in _session.Roots)
-            foreach (var choice in StandardTreeTraversal.PreOrder(root).OfType<StandardComboBox>())
-            {
-                double lineHeight = BTextMeasurer.GetLineHeight(choice.Font);
-                choice.PreferredSize = new BSize(choice.PreferredSize.Width, Math.Max(32, lineHeight + 12));
-                choice.ItemHeight = Math.Max(28, lineHeight + 8);
-            }
         Current = tokens;
         Applied?.Invoke(this, EventArgs.Empty);
     }
