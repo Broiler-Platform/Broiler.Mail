@@ -7,9 +7,10 @@ screen-reader pass (H-01).
 Publishes the Windows app as NativeAOT (the shipped configuration) unless -Executable is given, then runs one
 or more short walks on demo fixtures and prints, step by step, the UI Automation events a screen reader
 would be given:
-  - FocusChanged: what gets focus, with its control type, name and help text and, read through the UIA COM
-    client, 'invalid' when it reports IsDataValidForForm = false and its FullDescription (a form field's
-    error comes first in it);
+  - FocusChanged: what gets focus, with its control type, name and help text, 'IsDataValidForForm=False'
+    when it reports that, and its FullDescription (a form field's error comes first in it). Focus is read
+    through the UIA COM client, from the element the event names. List rows and tab items report False
+    too: Hosting preview.7 leaves the property to UIA's default for them;
   - Notification: the text and kind the app announces (status, progress, results);
   - ElementSelected: the row or tab that became selected;
   - property changes of ExpandCollapseState and ToggleState (managed UIA client) and of IsDataValidForForm
@@ -73,9 +74,7 @@ public interface IRecorderAutomation
 {
     void CompareElements(); void CompareRuntimeIds(); void GetRootElement();
     IRecorderElement ElementFromHandle(IntPtr hwnd);
-    void ElementFromPoint();
-    IRecorderElement GetFocusedElement();
-    void GetRootElementBuildCache(); void ElementFromHandleBuildCache();
+    void ElementFromPoint(); void GetFocusedElement(); void GetRootElementBuildCache(); void ElementFromHandleBuildCache();
     void ElementFromPointBuildCache(); void GetFocusedElementBuildCache(); void CreateTreeWalker(); void ControlViewWalker();
     void ContentViewWalker(); void RawViewWalker(); void RawViewCondition(); void ControlViewCondition(); void ContentViewCondition();
     void CreateCacheRequest(); void CreateTrueCondition(); void CreateFalseCondition(); void CreatePropertyCondition();
@@ -85,8 +84,24 @@ public interface IRecorderAutomation
     void AddPropertyChangedEventHandlerNativeArray(IRecorderElement element, int scope, IntPtr cacheRequest, IRecorderPropertyHandler handler,
         [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 5)] int[] properties, int count);
     void AddPropertyChangedEventHandler(); void RemovePropertyChangedEventHandler(); void AddStructureChangedEventHandler();
-    void RemoveStructureChangedEventHandler(); void AddFocusChangedEventHandler(); void RemoveFocusChangedEventHandler();
+    void RemoveStructureChangedEventHandler();
+    void AddFocusChangedEventHandler(IntPtr cacheRequest, IRecorderFocusHandler handler);
+    void RemoveFocusChangedEventHandler();
     void RemoveAllEventHandlers();
+}
+
+[ComImport, Guid("c270f6b5-5c69-4290-9745-7a7f97169468"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderFocusHandler
+{
+    void HandleFocusChangedEvent(IRecorderElement sender);
+}
+
+// Focus is recorded through the COM client, so the form properties read are the focused element's own, not those of
+// whatever has focus by the time a managed handler would ask.
+[ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+public sealed class RecorderFocusHandler : IRecorderFocusHandler
+{
+    public void HandleFocusChangedEvent(IRecorderElement sender) { UiaRecorder.OnFocus(sender); }
 }
 
 [ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -124,6 +139,7 @@ public static class UiaRecorder
     static int _processId;
     static IRecorderAutomation _com;
     static RecorderPropertyHandler _comHandler;
+    static RecorderFocusHandler _comFocus;
 
     public static void Add(string line) { Lines.Enqueue(string.Format("{0,7:0.000}s  {1}", Clock.Elapsed.TotalSeconds, line)); }
 
@@ -153,7 +169,6 @@ public static class UiaRecorder
         _processId = processId;
         Clock.Restart();
         AutomationElement root = AutomationElement.FromHandle(render);
-        Automation.AddAutomationFocusChangedEventHandler(OnFocus);
         Automation.AddAutomationEventHandler(SelectionItemPattern.ElementSelectedEvent, root, TreeScope.Subtree, OnSelected);
         Automation.AddAutomationEventHandler(AutomationElement.NotificationEvent, root, TreeScope.Subtree, OnNotification);
         Automation.AddAutomationPropertyChangedEventHandler(root, TreeScope.Subtree, OnProperty,
@@ -166,6 +181,8 @@ public static class UiaRecorder
             try
             {
                 _com = (IRecorderAutomation)new CUIAutomationRecorderClass();
+                _comFocus = new RecorderFocusHandler();
+                _com.AddFocusChangedEventHandler(IntPtr.Zero, _comFocus);
                 _comHandler = new RecorderPropertyHandler();
                 _com.AddPropertyChangedEventHandlerNativeArray(_com.ElementFromHandle(render), 7 /* TreeScope_Subtree */, IntPtr.Zero,
                     _comHandler, new[] { 30103 /* IsDataValidForForm */ }, 1);
@@ -175,7 +192,7 @@ public static class UiaRecorder
         thread.SetApartmentState(ApartmentState.MTA);
         thread.Start();
         thread.Join();
-        if (failure != null) Add("(IsDataValidForForm changes are not recorded: " + failure.Message + ")");
+        if (failure != null) Add("(focus and IsDataValidForForm changes are not recorded: " + failure.Message + ")");
     }
 
     public static void Stop()
@@ -190,38 +207,29 @@ public static class UiaRecorder
         _com = null;
     }
 
-    static bool Ours(AutomationElement element)
-    {
-        try { return element != null && element.Current.ProcessId == _processId; }
-        catch (ElementNotAvailableException) { return false; }
-    }
-
-    static void OnFocus(object sender, AutomationFocusChangedEventArgs e)
-    {
-        var element = sender as AutomationElement;
-        if (Ours(element)) Add("FocusChanged " + Describe(element) + FormState());
-    }
-
     /// <summary>
-    /// What the COM client reads for the focused element: " invalid" when it reports IsDataValidForForm = false,
-    /// and its FullDescription. It reads the element focused now, which is the event's unless focus moved on at once.
+    /// A focus change, read from the element the COM client hands over: its control type, name and help text, and
+    /// " IsDataValidForForm=False" and its FullDescription where it reports them.
     /// </summary>
-    static string FormState()
+    public static void OnFocus(IRecorderElement element)
     {
-        var com = _com;
-        if (com == null) return "";
         try
         {
-            IRecorderElement focused = com.GetFocusedElement();
-            if (focused == null) return "";
-            string text = "";
-            object valid = focused.GetCurrentPropertyValue(30103 /* IsDataValidForForm */);
-            if (valid is bool && !(bool)valid) text += " invalid";
-            string description = focused.GetCurrentPropertyValue(30159 /* FullDescription */) as string;
+            object process = element.GetCurrentPropertyValue(30002 /* ProcessId */);
+            if (!(process is int) || (int)process != _processId) return;
+            object type = element.GetCurrentPropertyValue(30003 /* ControlType */);
+            ControlType controlType = type is int ? ControlType.LookupById((int)type) : null;
+            string text = (controlType != null ? controlType.ProgrammaticName.Replace("ControlType.", "") : "" + type) +
+                " '" + (element.GetCurrentPropertyValue(30005 /* Name */) as string) + "'";
+            string help = element.GetCurrentPropertyValue(30013 /* HelpText */) as string;
+            if (!string.IsNullOrEmpty(help)) text += " help '" + help + "'";
+            object valid = element.GetCurrentPropertyValue(30103 /* IsDataValidForForm */);
+            if (valid is bool && !(bool)valid) text += " IsDataValidForForm=False";
+            string description = element.GetCurrentPropertyValue(30159 /* FullDescription */) as string;
             if (!string.IsNullOrEmpty(description)) text += " description '" + description + "'";
-            return text;
+            Add("FocusChanged " + text);
         }
-        catch (COMException) { return ""; }
+        catch (COMException) { Add("FocusChanged (gone)"); }
     }
 
     static void OnSelected(object sender, AutomationEventArgs e) { Add("ElementSelected " + Describe(sender as AutomationElement)); }
