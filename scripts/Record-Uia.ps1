@@ -7,7 +7,9 @@ screen-reader pass (H-01).
 Publishes the Windows app as NativeAOT (the shipped configuration) unless -Executable is given, then runs one
 or more short walks on demo fixtures and prints, step by step, the UI Automation events a screen reader
 would be given:
-  - FocusChanged: what gets focus, with its control type, name and, for a form field, its error;
+  - FocusChanged: what gets focus, with its control type, name and help text and, read through the UIA COM
+    client, 'invalid' when it reports IsDataValidForForm = false and its FullDescription (a form field's
+    error comes first in it);
   - Notification: the text and kind the app announces (status, progress, results);
   - ElementSelected: the row or tab that became selected;
   - property changes of ExpandCollapseState and ToggleState (managed UIA client) and of IsDataValidForForm
@@ -62,7 +64,7 @@ using System.Threading;
 using System.Windows.Automation;
 
 // The UIA COM client, declared up to the members the recorder calls; placeholder slots keep the vtable order of
-// UIAutomationClient.h. Only IsDataValidForForm needs it: the managed client has no identifier for it.
+// UIAutomationClient.h. IsDataValidForForm and FullDescription need it: the managed client has no identifiers for them.
 [ComImport, Guid("ff48dba4-60ef-4201-aa87-54103eef594e")]
 public class CUIAutomationRecorderClass { }
 
@@ -71,7 +73,9 @@ public interface IRecorderAutomation
 {
     void CompareElements(); void CompareRuntimeIds(); void GetRootElement();
     IRecorderElement ElementFromHandle(IntPtr hwnd);
-    void ElementFromPoint(); void GetFocusedElement(); void GetRootElementBuildCache(); void ElementFromHandleBuildCache();
+    void ElementFromPoint();
+    IRecorderElement GetFocusedElement();
+    void GetRootElementBuildCache(); void ElementFromHandleBuildCache();
     void ElementFromPointBuildCache(); void GetFocusedElementBuildCache(); void CreateTreeWalker(); void ControlViewWalker();
     void ContentViewWalker(); void RawViewWalker(); void RawViewCondition(); void ControlViewCondition(); void ContentViewCondition();
     void CreateCacheRequest(); void CreateTrueCondition(); void CreateFalseCondition(); void CreatePropertyCondition();
@@ -195,7 +199,29 @@ public static class UiaRecorder
     static void OnFocus(object sender, AutomationFocusChangedEventArgs e)
     {
         var element = sender as AutomationElement;
-        if (Ours(element)) Add("FocusChanged " + Describe(element));
+        if (Ours(element)) Add("FocusChanged " + Describe(element) + FormState());
+    }
+
+    /// <summary>
+    /// What the COM client reads for the focused element: " invalid" when it reports IsDataValidForForm = false,
+    /// and its FullDescription. It reads the element focused now, which is the event's unless focus moved on at once.
+    /// </summary>
+    static string FormState()
+    {
+        var com = _com;
+        if (com == null) return "";
+        try
+        {
+            IRecorderElement focused = com.GetFocusedElement();
+            if (focused == null) return "";
+            string text = "";
+            object valid = focused.GetCurrentPropertyValue(30103 /* IsDataValidForForm */);
+            if (valid is bool && !(bool)valid) text += " invalid";
+            string description = focused.GetCurrentPropertyValue(30159 /* FullDescription */) as string;
+            if (!string.IsNullOrEmpty(description)) text += " description '" + description + "'";
+            return text;
+        }
+        catch (COMException) { return ""; }
     }
 
     static void OnSelected(object sender, AutomationEventArgs e) { Add("ElementSelected " + Describe(sender as AutomationElement)); }

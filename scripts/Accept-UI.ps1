@@ -47,6 +47,8 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+# ValidateSet takes any letter case; the app takes its names in lower case only.
+if ($Contrast) { $Contrast = $Contrast.ToLowerInvariant() }
 if ($HighContrast) {
     if ($Contrast -and $Contrast -ne 'high') { throw "-HighContrast is -Contrast high; it cannot be combined with -Contrast $Contrast." }
     $Contrast = 'high'
