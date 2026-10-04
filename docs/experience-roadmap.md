@@ -3,7 +3,7 @@
 Investigation: **30 September 2026**. Status: proposed work, not an implementation commitment.
 
 For the current implementation/remaining-work split, see the
-[2 October follow-up audit](remaining-improvements-2026-10-02.md). In particular,
+[4 October consolidated audit](roadmap-status-2026-10-04.md). In particular,
 two-line rows, adjustable panes, selectable body text, and C-04 form surfaces have
 since been delivered; the findings below preserve the original investigation.
 Use the [UI implementation roadmap](ui-implementation-roadmap.md) for the current

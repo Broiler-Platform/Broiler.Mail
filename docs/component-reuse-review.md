@@ -1,5 +1,8 @@
 # Broiler.Mail component reuse review
 
+Historical review. The [4 October consolidated audit](roadmap-status-2026-10-04.md)
+records subsequent package adoption, remaining wrappers, and deferred extraction work.
+
 Date: 2026-09-28. Scope: source investigation and recommendations; no runtime code
 or component dependencies changed.
 

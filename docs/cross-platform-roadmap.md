@@ -185,13 +185,13 @@ flowchart LR
 
 ### Phase 0: Dependency Verification, Contract Reuse, and CI
 
-Implementation and evidence: [Phase 0 foundation](phase-0-foundation.md). The hosted matrix has not yet run; the cross-platform exit gate remains open.
+Implementation and evidence: [Phase 0 foundation](phase-0-foundation.md). The hosted matrix and architecture-matched Windows package jobs passed for `d7d78d4` in [run 37117131754](https://github.com/Broiler-Platform/Broiler.Mail/actions/runs/37117131754), verified on 4 October. Phase 0's exit gate is closed; native Linux/Android application acceptance remains in later phases.
 
 - [x] Verify and pin published Broiler packages needed for X11/EGL and Android, documenting features still available only in upstream sources.
 - [x] Reuse existing UI/Core/Application contracts; identify only the shared implementation that needs extraction.
 - [x] Replace Windows-specific copy in shared views and view models.
 - [x] Add shared Linux/Windows and Windows host CI jobs with recorded SDK/dependency/TRX evidence and failure on missing/skipped suites.
-- [ ] Confirm a passing hosted Linux/Windows/ARM64 matrix for the implementation revision.
+- [x] Confirm a passing hosted Linux/Windows/ARM64 matrix for the implementation revision (`d7d78d4`, run linked above).
 - [x] Add Windows publishing with architecture-matched smoke tests and truthful unsigned artifact metadata.
 - [x] Specify the renderer process boundary, threat model, IPC/resource limits, and security acceptance checks before porting the current preview.
 

@@ -1,6 +1,6 @@
 # Phase 0: cross-platform foundation
 
-Implementation date: 2026-09-30. The foundation is implemented; the Phase 0 exit gate still requires a successful hosted CI matrix. No Linux or Android application host is introduced here.
+Implementation date: 2026-09-30. **Exit gate verified 2026-10-04:** [hosted run 37117131754](https://github.com/Broiler-Platform/Broiler.Mail/actions/runs/37117131754) passed at `d7d78d4` on Windows x64, Linux x64, and Windows ARM64, including both architecture-matched Windows NativeAOT package/smoke jobs. No interactive Linux or Android Mail host is introduced here. The tables below preserve the original 30 September dependency and local-validation record; see the [current audit](roadmap-status-2026-10-04.md) for subsequent changes.
 
 ## Published dependency baseline
 

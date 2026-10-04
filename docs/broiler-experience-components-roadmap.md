@@ -1,6 +1,6 @@
 # Shared Broiler components: experience roadmap
 
-Current follow-up: [remaining improvements after Hosting adoption, 2 October 2026](remaining-improvements-2026-10-02.md).
+Current follow-up: [consolidated roadmap status, 4 October 2026](roadmap-status-2026-10-04.md).
 Implementation checkmarks below do not replace the native acceptance criteria.
 The [UI implementation roadmap](ui-implementation-roadmap.md) assigns the remaining
 Mail and shared-component UI work and defines published-app acceptance.
@@ -9,7 +9,7 @@ Date: **30 September 2026**. Proposed extensions driven by the native Broiler.Ma
 
 The strongest shared investment is in text, layout, native input/accessibility, and reusable presentation controls. Mail should supply realistic acceptance scenarios; components should own the generic mechanics. This extends the [earlier component reuse review](component-reuse-review.md), rather than replacing its ownership analysis.
 
-Local sibling sources were inspected in `D:/Broiler.UI`, `D:/Broiler.Graphics`, `D:/Broiler.Input`, `D:/Broiler.HTML`, `D:/Broiler.Media`, and `D:/Broiler.Unicode`. Local source is not evidence of a published API. The Mail build consumes UI `0.1.0-preview.10`, Graphics `0.1.0-preview.7`, and centrally pinned package versions in `Directory.Packages.props`.
+Local sibling sources were inspected in `D:/Broiler.UI`, `D:/Broiler.Graphics`, `D:/Broiler.Input`, `D:/Broiler.HTML`, `D:/Broiler.Media`, and `D:/Broiler.Unicode`. Local source is not evidence of a published API. At the original review, Mail consumed UI `0.1.0-preview.10` and Graphics `0.1.0-preview.7`. Current pins are in `Directory.Packages.props`; the 4 October audit records UI preview.17 and Hosting preview.5.
 
 Only the rendering-default values and presence of `StandardThemeController` / `StandardAnimationScheduler` were directly probed against consumed assemblies in this review. Other source capabilities below require package/API confirmation before implementation. No sibling repository was changed.
 
@@ -19,10 +19,10 @@ Only the rendering-default values and presence of `StandardThemeController` / `S
 | --- | --- | --- | --- | --- |
 | Broiler.Graphics | Direct2D backend, render options, text metrics, window abstraction | Correct defaults; text resource reuse; surface-aware text quality; bounded frame diagnostics | Choice of window sizes and rendering policy | [x] Completed (G-01, G-02, G-03 implemented) |
 | Broiler.UI foundation | Themes, semantic nodes, invalidation flags, dispatcher, animation scheduler | Typography/spacing roles; correct measurement; selective layout; focus/reveal contracts | Mail layout, commands, state copy | [x] Completed (U-01 layout/text correctness, U-02 semantic design tokens and live appearance, U-03 focus/commands/semantic lifecycle) |
-| Broiler.UI controls | Visible-range list rendering, Splitter, labels, RichEdit, buttons/tooltips in source | Structured row presentation, selectable text, grouped forms, status/banner primitives | Sender/subject mapping, recipient and draft semantics | [ ] C-01–C-04 adopted from published preview.11; native acceptance tracked below |
+| Broiler.UI controls | Visible-range list rendering, Splitter, labels, RichEdit, buttons/tooltips in source | Structured row presentation, selectable text, grouped forms, status/banner primitives | Sender/subject mapping, recipient and draft semantics | [ ] C-01–C-04 adopted; current UI preview.17; remaining native acceptance tracked below |
 | Broiler.Input | Device/input contracts, text composition types, legacy adapter | Native text/composition fidelity and high-resolution scrolling integration | Mail shortcuts and composition behavior | [ ] In progress |
-| Broiler.Native.Windows | Native bindings already reused by Mail | Missing UIA/IME/clipboard binding families with correct lifetime/ABI | Credential identity and account policy | [ ] In progress |
-| Shared host integration, proposed | Mail combines Graphics, UI, clipboard, caret, dispatch | Reusable host adapter adopted by Mail and a second application | Startup composition, close/save decisions, app settings | [ ] In progress |
+| Broiler.Native.Windows | Native bindings already reused by Mail | UIA/IME/clipboard binding families with correct lifetime/ABI | Credential identity and account policy | [ ] Implemented through Hosting; remaining native acceptance is H-01/H-02 |
+| Shared host integration | Published Hosting combines Graphics, UI, clipboard, caret, dispatch | Reusable host adapter adopted by Mail and a second application | Startup composition, close/save decisions, app settings | [x] Published and consumed; H-03 records extraction/adoption; platform applications have separate gates |
 | Broiler.HTML / CSS / Layout | Passive HTML rendering and bitmap/render-list frontends | Bounded, viewport-aware rendering, layout diagnostics, deterministic mail fixtures | Content/resource policy and renderer-process lifecycle | [x] Completed (R-01 bounded tiling & layout snapshot, R-03 diagnostics) |
 | Broiler.Media | Existing `MediaLimits`, probing, decode contracts | Consistent bounded thumbnail/decode path and cancellation checks | Attachment presentation and mail-specific limits | [x] Completed (R-02 MediaLimits reuse, codec header inspection, bomb defense) |
 
@@ -246,12 +246,14 @@ Recipient chips are a later specialized control built on generic tokenized input
 
 ## 5. Input, Native, and shared hosting
 
-### [ ] H-01: native accessibility bridge (implemented; native acceptance failing)
+### [ ] H-01: native accessibility bridge (native discovery passes; screen-reader acceptance pending)
 
-**Acceptance update (2026-10-02):** Hosting preview.1 supplies the generated COM
-provider, but the published Mail demo's external UIA tree still omits Broiler
-controls. Managed peer tests pass; native discovery and screen-reader acceptance
-remain open. See [A1 in the current audit](remaining-improvements-2026-10-02.md).
+**Acceptance update (2026-10-04):** External-client discovery and patterns pass in
+Debug and NativeAOT. Mail now attaches the native bridges in `OnCreated`, after
+the HWNDs exist; this fixes the empty-tree failure recorded on 2 October.
+Hosting preview.5 is consumed. Actual screen-reader speech and the remaining
+semantic/lifetime checks stay open; see [UI-09](ui-implementation-roadmap.md#ui-09--native-accessibility-from-discovery-to-text-editing)
+and [the current audit](roadmap-status-2026-10-04.md).
 
 **Implementation (2026-10-01):** Implemented Windows UI Automation bridge at the host boundary in `Broiler.Mail.Windows.Hosting.Accessibility` (`WindowsAutomationBridge`, `WindowsElementAutomationPeer`, and `UiaNative`).
 - Subclasses native window handle to intercept `WM_GETOBJECT` (0x003D with `UiaRootObjectId = -25`) and return root provider via `UiaReturnRawElementProvider`.
@@ -442,10 +444,10 @@ Broiler.Unicode may contribute reviewed locale/property data where appropriate. 
 | Batch | Scope | Consumers / exit condition | Status |
 | --- | --- | --- | --- |
 | A — Small correctness fixes | Graphics defaults; tab/scroll measurement; literal labels | Mail package upgrade removes targeted workaround; focused regressions pass | [x] Graphics defaults (G-01), scrollbar thickness, and U-01 layout & text correctness completed |
-| B — Shared presentation | Role-aware live themes, structured rows, splitter integration, form/action patterns | Mail reader/composer visibly improved; second control-demo consumer | [ ] Planned |
-| C — Text and timing | Layout reuse, selective invalidation, bounded native resources, animation wake contract | Comparable before/after traces; no stale layout or idle redraw | [x] Bounded brushes, text formats & metrics cache implemented (G-02) |
-| D — Native experience | Accessibility bridge, focus/IME, shared hosting | Mail plus second app adopted; native keyboard/screen-reader acceptance | [ ] Planned |
-| E — Rich content | Bounded renderer surface transport and decode improvements | Renderer-isolation gate plus long-content/resource-budget acceptance | [x] Bounded tiling, layout snapshot cache, DPI scaling, truncation banner, and streaming resource limits implemented (R-01, R-02, R-03) |
+| B — Shared presentation | Role-aware live themes, structured rows, splitter integration, form/action patterns | Mail reader/composer visibly improved; second control-demo consumer | [ ] Implemented in Mail; second-consumer acceptance not established by the current audit |
+| C — Text and timing | Layout reuse, selective invalidation, bounded native resources, animation wake contract | Comparable before/after traces; no stale layout or idle redraw | [ ] Caches and measured RichEdit improvements delivered; idle stops; broader performance matrix remains UI-12 |
+| D — Native experience | Accessibility bridge, focus/IME, shared hosting | Mail plus second app adopted; native keyboard/screen-reader acceptance | [ ] Implemented in Mail; physical input, screen-reader and cross-consumer acceptance remain |
+| E — Rich content | Bounded renderer surface transport and decode improvements | Renderer-isolation gate plus long-content/resource-budget acceptance | [ ] Bounded tiles, direct pixels and resource limits delivered; renderer-isolation exit gate remains open |
 
 Each batch should publish compatible packages, then update Mail pins and run its acceptance suite. Avoid permanent sibling project references. Keep an explicit list of workarounds removed by each release.
 

@@ -141,7 +141,7 @@ public sealed class FeedbackPolicyTests
         Assert.Equal(UiVisibility.Collapsed, fixture.SettingsFeedback.Visibility);
         // Going away is not announced, and the footer returns to its hint.
         Assert.Empty(fixture.Announced);
-        Assert.StartsWith("A saved theme applies immediately.", fixture.Footer.Text);
+        Assert.StartsWith("Saved appearance and inbox spacing apply immediately.", fixture.Footer.Text);
 
         settings.WindowWidth = "wide";
         await settings.SaveAsync();

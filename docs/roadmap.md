@@ -1,5 +1,9 @@
 # Broiler.Mail roadmap
 
+Current implementation and acceptance status for every roadmap is consolidated in
+the [4 October audit](roadmap-status-2026-10-04.md). The version scopes below remain
+the product plan; historical component observations are not current package claims.
+
 Status: version 1 implementation is complete and packaged for Windows x64.
 Automated acceptance and native demo checks passed. The user deferred live-provider
 testing to a later run; no public provider is claimed as certified. See the

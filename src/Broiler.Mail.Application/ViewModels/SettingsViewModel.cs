@@ -38,6 +38,7 @@ public sealed class SettingsViewModel : SaveViewModel
         _store = store;
         Settings = settings;
         Theme = settings.Theme;
+        InboxDensity = settings.InboxDensity;
         WindowWidth = settings.WindowWidth.ToString(System.Globalization.CultureInfo.InvariantCulture);
         WindowHeight = settings.WindowHeight.ToString(System.Globalization.CultureInfo.InvariantCulture);
     }
@@ -78,6 +79,7 @@ public sealed class SettingsViewModel : SaveViewModel
         finally { _layoutWrites.Release(); }
     }
     public AppTheme Theme { get; set; }
+    public InboxDensity InboxDensity { get; set; }
     public string WindowWidth { get; set; }
     public string WindowHeight { get; set; }
 
@@ -93,11 +95,11 @@ public sealed class SettingsViewModel : SaveViewModel
                 throw new ConfigurationValidationException("WindowWidth", "Window width must be a whole number.");
             if (!int.TryParse(WindowHeight, out int height))
                 throw new ConfigurationValidationException("WindowHeight", "Window height must be a whole number.");
-            candidate = Settings with { Theme = Theme, WindowWidth = width, WindowHeight = height };
+            candidate = Settings with { Theme = Theme, InboxDensity = InboxDensity, WindowWidth = width, WindowHeight = height };
             // A newly entered size replaces the remembered geometry, so the next start uses it.
             if (width != Settings.WindowWidth || height != Settings.WindowHeight) candidate = candidate with { Window = null };
             ConfigurationValidator.Validate(candidate);
             await _store.SaveAsync(candidate, cancellationToken).ConfigureAwait(false);
-        }, () => Settings = candidate!, "Settings saved. The theme is applied; a new window size is used the next time Broiler.Mail starts.");
+        }, () => Settings = candidate!, "Settings saved. Appearance and inbox spacing are applied; a new window size is used the next time Broiler.Mail starts.");
     }
 }

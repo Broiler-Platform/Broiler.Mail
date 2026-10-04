@@ -19,6 +19,7 @@ using Broiler.Graphics.Geometry;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
+using Broiler.Mail.Core.Settings;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms;
@@ -42,7 +43,7 @@ namespace Broiler.Mail.Application.Views;
 // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=721087
 // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
 // Broiler-Human:        PENDING
-public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, CompositionCommands? commands = null)
+public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, CompositionCommands? commands = null, SettingsViewModel? settings = null)
 {
     private Func<bool>? _back;
     private Func<bool>? _open;
@@ -77,12 +78,24 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         {
             PreferredSize = new BSize(320, 420),
             ItemPresenter = dates is null ? MailMessageItemPresenter.Instance : new MailMessageItemPresenter(dateFormat),
-            Density = UiDensity.Comfortable,
+            Density = settings?.Settings.InboxDensity == InboxDensity.Compact ? UiDensity.Compact : UiDensity.Comfortable,
             // Otherwise the list is announced by its item count.
             AccessibleName = "Messages",
             // Refreshes keep the first visible row in place; at the top, new mail stays visible.
             EnableScrollAnchoring = true,
         };
+        if (settings is not null)
+            settings.Changed += (_, _) =>
+            {
+                if (list.IsDisposed) return;
+                // Only committed settings change the view. Keep the previous first row visible;
+                // changing spacing must not select/reload a message or recreate the reader.
+                var density = settings.Settings.InboxDensity == InboxDensity.Compact ? UiDensity.Compact : UiDensity.Comfortable;
+                if (density == list.Density) return;
+                int first = list.FirstVisibleIndex;
+                list.Density = density;
+                list.ScrollIntoView(first);
+            };
         // The list pane: a notice row (empty inbox, receiving, or a problem with Retry) above the list.
         var listPane = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
         var listNotice = new StandardPanel { Spacing = 4 };

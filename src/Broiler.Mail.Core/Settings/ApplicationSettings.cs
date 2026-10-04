@@ -23,6 +23,7 @@ namespace Broiler.Mail.Core.Settings;
 public sealed record ApplicationSettings
 {
     public AppTheme Theme { get; init; } = AppTheme.System;
+    public InboxDensity InboxDensity { get; init; } = InboxDensity.Comfortable;
     public int WindowWidth { get; init; } = 1100;
     public int WindowHeight { get; init; } = 720;
     public double InboxSplitterFraction { get; init; } = 0.35;
@@ -49,3 +50,6 @@ public sealed record WindowPlacement
 // Broiler-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=6E41ED
 // Broiler-Human:        PENDING
 public enum AppTheme { System, Light, Dark }
+
+/// <summary>Spacing of the two-line inbox rows, independent of text size.</summary>
+public enum InboxDensity { Comfortable, Compact }

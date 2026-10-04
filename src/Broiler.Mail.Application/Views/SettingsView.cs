@@ -40,11 +40,15 @@ public sealed class SettingsView(SettingsViewModel model)
     public UiElement CreateContent()
     {
         var panel = new StandardPanel { Spacing = 20 };
-        var appearance = ConfigurationForm.AddSection(panel, "Appearance", "A saved theme applies immediately. The system high-contrast mode takes precedence.");
+        var appearance = ConfigurationForm.AddSection(panel, "Appearance", "Saved appearance and inbox spacing apply immediately. The system high-contrast mode takes precedence.");
         var theme = new StandardComboBox();
         theme.SetItems([new UiComboBoxItem("System", "Use system theme"), new UiComboBoxItem("Light", "Light"), new UiComboBoxItem("Dark", "Dark")]);
         theme.SelectedIndex = (int)model.Theme;
         ConfigurationForm.AddLabeledControl(appearance, "Theme", theme);
+        var density = new StandardComboBox();
+        density.SetItems([new UiComboBoxItem("Comfortable", "Comfortable"), new UiComboBoxItem("Compact", "Compact")]);
+        density.SelectedIndex = (int)model.InboxDensity;
+        ConfigurationForm.AddLabeledControl(appearance, "Inbox row spacing", density);
         var window = ConfigurationForm.AddSection(panel, "Window size", "Broiler.Mail reopens at its last size and position. A size saved here is used at the next start instead.");
         var width = ConfigurationForm.AddField(window, "Initial window width (640–7680)", model.WindowWidth);
         var height = ConfigurationForm.AddField(window, "Initial window height (480–4320)", model.WindowHeight);
@@ -66,6 +70,7 @@ public sealed class SettingsView(SettingsViewModel model)
             if (panel.IsDisposed)
                 return;
             theme.IsEnabled = model.CanSave;
+            density.IsEnabled = model.CanSave;
             width.IsEnabled = height.IsEnabled = save.IsEnabled = model.CanSave;
         }
         model.Changed += (_, _) => RefreshState();
@@ -74,6 +79,7 @@ public sealed class SettingsView(SettingsViewModel model)
         save.Clicked += async (_, _) =>
         {
             model.Theme = (AppTheme)theme.SelectedIndex;
+            model.InboxDensity = (InboxDensity)density.SelectedIndex;
             model.WindowWidth = width.Text;
             model.WindowHeight = height.Text;
             await model.SaveAsync();

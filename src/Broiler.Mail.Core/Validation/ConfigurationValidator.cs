@@ -56,6 +56,8 @@ public static class ConfigurationValidator
         ArgumentNullException.ThrowIfNull(settings);
         if (!Enum.IsDefined(settings.Theme))
             throw new ArgumentException("Choose a supported theme.");
+        if (!Enum.IsDefined(settings.InboxDensity))
+            throw new ConfigurationValidationException("InboxDensity", "Choose supported inbox row spacing.");
         if (settings.WindowWidth is < 640 or > 7680)
             throw new ConfigurationValidationException("WindowWidth", "Window width must be between 640 and 7680 pixels.");
         if (settings.WindowHeight is < 480 or > 4320)

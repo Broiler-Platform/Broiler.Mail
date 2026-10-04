@@ -21,8 +21,8 @@ reading/composing flows, accessibility, and smoothness, with
 [native screenshot evidence](docs/ux-review-2026-09-30/README.md) and a
 [shared Broiler component roadmap](docs/broiler-experience-components-roadmap.md).
 
-See the [remaining-improvements audit](docs/remaining-improvements-2026-10-02.md)
-for the current priorities after Hosting and NativeAOT integration.
+See the [consolidated roadmap audit, 4 October](docs/roadmap-status-2026-10-04.md)
+for the current status of every roadmap, remaining work, and validation evidence.
 The [detailed UI implementation roadmap](docs/ui-implementation-roadmap.md) splits
 the remaining interface work into tracked packages, delivery slices, and native acceptance checks.
 
@@ -40,8 +40,8 @@ folder, or extract the matching ZIP. The NativeAOT executable needs no installed
 See [Start here / provider checklist](docs/version-2-acceptance.md).
 
 Install the .NET 10 SDK. The native application currently targets Windows.
-Dependencies restore from NuGet.org, including Broiler.UI **0.1.0-preview.11** and
-its shared forms package, plus Broiler.Hosting **0.1.0-preview.1** for Windows,
+Dependencies restore from NuGet.org, including Broiler.UI **0.1.0-preview.17** and
+its shared forms package, plus Broiler.Hosting **0.1.0-preview.5** for Windows,
 Linux, and the Android API probe. Sibling Broiler checkouts and a local package feed are
 not required. See the [C-04 implementation notes](docs/c04-forms/README.md)
 for validation evidence and remaining accessibility checks.
@@ -82,7 +82,9 @@ dotnet run --project src/Broiler.Mail.Windows --no-build -c Release -- --smoke-t
 
 The native shell has **Inbox**, **Account**, **Settings**, and **Compose** tabs. Save one account
 profile and its password, test the IMAP connection, receive mail, and read messages.
-Settings include a theme and initial window size. The executable retains console
+Settings include a theme, Comfortable/Compact inbox row spacing, and initial window
+size. Saving row spacing updates the inbox immediately without changing text size.
+The executable retains console
 output for startup diagnostics.
 
 Tab / Shift+Tab traverses enabled controls and reveals fields below the fold.

@@ -1,8 +1,10 @@
 # Broiler.Mail UI implementation roadmap
 
-Updated **2 October 2026**. Status: implementation plan; unchecked work is not yet
-accepted. Baseline: commit `6bdcb83`, the current source audit, and the prior native
-Hosting validation. This document is the execution plan for the remaining UI work;
+Created **2 October 2026**, with implementation records through **3 October**.
+Status: implementation plan; unchecked work is not yet fully accepted, and combined
+checkboxes can include already delivered subitems. Original baseline: commit `6bdcb83`.
+See the [4 October consolidated audit](roadmap-status-2026-10-04.md) for current
+cross-roadmap status and verification. This document is the execution plan for UI work;
 the [experience review](experience-roadmap.md) remains the original design rationale.
 
 ## Goal and scope
@@ -72,7 +74,7 @@ P1 improves the current app; P2 depends on larger product/platform work.
 
 | ID | Priority | Work | Starting state | Dependencies |
 | --- | --- | --- | --- | --- |
-| UI-01 | P1 | Shared presentation tokens and fixture gallery | Tokens recorded; type scale and system text size done; long-label fixture waits for UI-14 | None |
+| UI-01 | P1 | Shared presentation tokens and fixture gallery | Tokens, text scaling, gallery and inbox density delivered; long-label fixture waits for UI-14 | None |
 | UI-02 | P1 | Refresh continuity and stable selection | Implemented; native new-mail check pending | None |
 | UI-03 | P1 | Reader hierarchy and local reply commands | Implemented; screen-reader check pending (UI-09) | UI-01, UI-02 |
 | UI-04 | P1 | Responsive inbox and shell navigation | Done: compact mode, 200 % text, readable rows, wrapping toolbars; real DPI change while compact pending | UI-01, UI-02, UI-03 |
@@ -97,7 +99,7 @@ P1 improves the current app; P2 depends on larger product/platform work.
   fixture harness. Use synthetic messages only, with fixed dates for reproducible images.
 - [ ] Include long subject/address, empty inbox, 500 messages, plain/HTML-only mail,
   large draft, failed save, send outcome unknown, narrow window, and long translated labels.
-- [ ] Add compact/comfortable density only where the consumed controls support it;
+- [x] Add compact/comfortable density only where the consumed controls support it;
   identify any missing API before creating a Mail-specific workaround.
 
 **Files:** [MailMessageItemPresenter](../src/Broiler.Mail.Application/Views/MailMessageItemPresenter.cs),
@@ -171,8 +173,37 @@ theme:
   first 200 % run found cut-off tab names, overlapping rows, a header over the footer, and a notice
   that left the list no room, all fixed above); high contrast 64/64 clean. Repeated on the published
   preview.16: the full pass 96/96, text 150 % and 200 % 32/32 each, high contrast 64/64, all clean.
-- Open: long translated labels need a string layer first (UI-14); a density choice is not offered
-  (the list supports it, nothing else needs it yet).
+- Open: long translated labels need a string layer first (UI-14).
+
+**4 October — inbox row spacing:** Settings → Appearance now offers Comfortable (the
+existing default) and Compact. Saving applies the choice to the existing inbox list
+through the published `StandardListView.Density` API; text size, reader selection,
+selected message and body are retained, and the previous first visible row stays
+in view where the scroll range permits. This preference changes inbox rows only.
+Unsaved choices and failed saves leave the current spacing in place. The generated
+JSON serializer stores the enum by name; settings without the property retain the
+comfortable default, and unknown/numeric values are rejected without overwriting
+the file. Layout persistence retains the preference.
+
+Validation: `InboxDensityTests` covers the settings control/save path, failed saves,
+live reflow at 640 and 1100 DIPs with 100%/200% text, reading context, theme changes,
+restart/persistence, and invalid values. All 429 solution tests pass (312 shared,
+114 Windows, 3 Linux adapter); Windows x64 NativeAOT publish and four-tab smoke pass.
+
+Native screenshot review at 200% text exposed fixed-height combo boxes clipping
+their selected text (including the existing Theme field). `AppearanceController`
+now sizes Mail's combo fields and popup rows from the applied font through their
+existing sizing properties. This small compatibility adjustment can be removed when
+the shared control measures its font automatically; it does not change row density
+or reduce text size.
+
+Native follow-up: `Accept-UI.ps1` (Windows PowerShell) on the published x64 binary,
+`save-error` Settings fixture at 640×480 and 1100×720, light/dark, 200% text on a
+150% display: **4/4 runs without automated findings**. Screenshots reviewed; the
+visible combo text fits after the adjustment. At minimum size the form scrolls and
+keyboard focus reveals its controls. Evidence: `artifacts/density-acceptance-final/`.
+These checks cover Settings layout, UIA and posted Tab input; compact inbox reflow
+and save/restart behavior are covered by the integration tests above.
 
 Baseline observations from native captures of the Debug build (100% DPI, light 1100×720
 and dark 640×480). They feed the packages named; they are not acceptance results:

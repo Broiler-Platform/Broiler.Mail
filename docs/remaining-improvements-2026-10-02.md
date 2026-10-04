@@ -1,5 +1,10 @@
 # Remaining improvements after Hosting adoption
 
+Historical audit. The [4 October consolidated status](roadmap-status-2026-10-04.md)
+supersedes the current-status claims below: native UIA discovery is fixed, most UI
+slices are implemented, performance fixes have landed, and hosted CI passes.
+The original findings remain here as the investigation record.
+
 Reviewed **2 October 2026**, against Mail commit `6bdcb83` and the pinned NuGet
 packages. This is a source and acceptance-evidence audit, not a new runtime test
 run. The previous package validation passed 256 tests and exercised the Windows

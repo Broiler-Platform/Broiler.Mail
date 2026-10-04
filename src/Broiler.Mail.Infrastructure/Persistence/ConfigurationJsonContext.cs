@@ -29,6 +29,7 @@ internal partial class ConfigurationJsonContext : JsonSerializerContext
             new JsonStringEnumConverter<AuthenticationMethod>(allowIntegerValues: false),
             new JsonStringEnumConverter<SentCopyMode>(allowIntegerValues: false),
             new JsonStringEnumConverter<AppTheme>(allowIntegerValues: false),
+            new JsonStringEnumConverter<InboxDensity>(allowIntegerValues: false),
             new JsonStringEnumConverter<DraftSubmissionState>(allowIntegerValues: false),
             new JsonStringEnumConverter<SentCopyState>(allowIntegerValues: false),
         },

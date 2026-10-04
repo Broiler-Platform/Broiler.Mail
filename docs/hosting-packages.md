@@ -1,12 +1,13 @@
 # Published hosting packages
 
 Mail consumes `Broiler.Hosting.Windows`, `Broiler.Hosting.Linux`, and
-`Broiler.Hosting.Android` **0.1.0-preview.1** from NuGet.org. Versions are pinned in
+`Broiler.Hosting.Android` **0.1.0-preview.5** from NuGet.org. Versions are pinned in
 `Directory.Packages.props`. No sibling checkout or local package source is required.
 
-The packages' repository metadata identifies commit
-`af65d6f7d40801813c79eb33b03f9a032be3683c`. Their dependency requirements match Mail's
-existing UI preview.11, Graphics preview.7, Native preview.6, and Input preview.5.
+Mail currently consumes UI preview.17, Graphics preview.7, Native preview.6, and
+Input preview.5 alongside Hosting. The original preview.1 adoption used UI
+preview.11 and package repository commit `af65d6f7d40801813c79eb33b03f9a032be3683c`;
+the validation record below preserves that historical baseline.
 
 | Consumer | Package and responsibility |
 | --- | --- |
@@ -34,7 +35,20 @@ Mail also retains its generated JSON serialization and the existing, version-spe
 binding must be reviewed when changing renderer versions; adopting Hosting does
 not remove it.
 
-## Validation
+## Current validation status (4 October 2026)
+
+The [consolidated audit](roadmap-status-2026-10-04.md) records 421 passing local
+tests and green hosted Windows x64, Linux x64, and Windows ARM64 jobs at `d7d78d4`,
+including x64/ARM64 NativeAOT package smoke. The recorded native x64 acceptance
+also verifies external UIA controls/patterns and status notification events.
+
+The initial empty UIA tree was fixed by creating the native bridges in
+`WindowsMailWindow.OnCreated`, after the native HWNDs exist. Hosting preview.5
+also fixes IME duplicate-character suppression under load. Real screen-reader
+speech, physical IME/input, interactive ARM64 UI, and Linux/Android application
+acceptance remain open. Package adoption alone does not establish these results.
+
+## Original preview.1 validation (2 October 2026)
 
 Verified on Windows x64 with .NET SDK 10.0.401:
 
@@ -48,29 +62,29 @@ Verified on Windows x64 with .NET SDK 10.0.401:
 - Launched the native executable in `--demo`, loaded 50 synthetic inbox messages
   with the Receive button, and navigated to Compose with Ctrl+4.
 
-### Outstanding UI Automation acceptance
+### Historical UI Automation failure (discovery subsequently fixed)
 
-The live native demo inspection exposed the OS window, render pane, and title-bar
+The initial live native demo inspection exposed the OS window, render pane, and title-bar
 controls, but not the Broiler controls beneath the pane. Explicit COM apartment
 initialization was investigated and did not change that observation; no speculative
 startup workaround was retained. The managed provider tests pass, but do not prove
 that an external UIA client can traverse the native provider.
 
-Follow up in the shared Windows host with an external-client test of `WM_GETOBJECT`,
+The resulting investigation called for an external-client test of `WM_GETOBJECT`,
 fragment navigation, and Control/Content view inclusion. The preview.1 provider
-defines the `IsControlElement`/`IsContentElement` property IDs without handling
-them in its property switches; review this along with the native HWND attachment.
-This is an investigation lead, not a confirmed cause. Keep H-01 native UIA and
-screen-reader acceptance open until the packaged provider exposes the controls.
+defined the `IsControlElement`/`IsContentElement` property IDs without handling
+them in its property switches; this was considered alongside native HWND attachment.
+This was an investigation lead, not the confirmed cause. Packaged native discovery
+now passes; H-01 remains open for actual screen-reader acceptance.
 
-The [2 October follow-up audit](remaining-improvements-2026-10-02.md) prioritizes
-the remaining work. Microsoft documents both view-inclusion flags as defaulting
+The [2 October follow-up audit](remaining-improvements-2026-10-02.md) preserves
+that investigation. Microsoft documents both view-inclusion flags as defaulting
 to true, so their omission alone does not establish the cause of the native failure.
 
-Linux native display/input, Android device execution, Windows ARM64, and full
-screen-reader acceptance are separate platform checks; the headless tests and
-API probe do not establish those results.
+Linux native display/input, Android device execution, Windows ARM64 interactive
+UI, and full screen-reader acceptance remain separate platform checks; the
+headless tests and API probe do not establish those results.
 
-Package pages: [Windows](https://www.nuget.org/packages/Broiler.Hosting.Windows/0.1.0-preview.1),
-[Linux](https://www.nuget.org/packages/Broiler.Hosting.Linux/0.1.0-preview.1),
-[Android](https://www.nuget.org/packages/Broiler.Hosting.Android/0.1.0-preview.1).
+Package pages: [Windows](https://www.nuget.org/packages/Broiler.Hosting.Windows/0.1.0-preview.5),
+[Linux](https://www.nuget.org/packages/Broiler.Hosting.Linux/0.1.0-preview.5),
+[Android](https://www.nuget.org/packages/Broiler.Hosting.Android/0.1.0-preview.5).
