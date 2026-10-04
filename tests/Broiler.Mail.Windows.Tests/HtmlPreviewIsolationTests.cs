@@ -274,6 +274,18 @@ public sealed class HtmlPreviewIsolationTests
     }
 
     [Fact]
+    public void TilesAreRasteredByTheirOwnThreadAlone()
+    {
+        // A parallel raster made the preview's STA thread wait in a way that, in the NativeAOT build,
+        // dispatched input and UI Automation calls in the middle of a tile; after a zoom the window
+        // stopped taking keyboard and mouse input. The JIT test host does not pump that way, so the
+        // setting itself is what can be checked here.
+        _ = new HtmlViewElement("<p>Text</p>", () => null, _ => { });
+        Assert.Equal(1, Broiler.Layout.IR.TileParallelReplay.MaxDegreeOfParallelism);
+        Assert.Equal("1", Environment.GetEnvironmentVariable("BROILER_RASTER_THREADS"));
+    }
+
+    [Fact]
     public void HighDpiTilingFixture_ScalesBitmapsProportionallyAndInvalidatesOnDpiChange()
     {
         string html = "<div style='height: 400px; background: #eee;'><p>High DPI Test</p></div>";
