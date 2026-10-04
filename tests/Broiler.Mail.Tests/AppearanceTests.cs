@@ -154,9 +154,13 @@ public sealed class AppearanceTests
     /// <summary>
     /// Reduced motion: Mail has no motion for the setting to remove. Even with animation allowed,
     /// selecting, disclosing, switching tabs, focusing an editor, and re-theming start no animation on
-    /// the host, and a still window draws the same frame however much time passes. The system's request
-    /// still reaches the theme the session's controls read, so a standard transition would be instant.
+    /// the host, and nothing driven by the UI clock changes a still window. The system's request still
+    /// reaches the theme the session's controls read, so a standard transition would be instant.
     /// </summary>
+    /// <remarks>
+    /// The one timed change in Mail is not motion: a success confirmation is removed 6 s after a save,
+    /// on a <see cref="TimeProvider"/> timer. This test saves nothing, so that timer cannot change a frame.
+    /// </remarks>
     [Fact]
     public async Task NothingInTheShellMovesOnItsOwnAndReducedMotionReachesTheSessionTheme()
     {
