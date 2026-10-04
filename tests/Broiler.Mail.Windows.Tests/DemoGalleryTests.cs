@@ -5,6 +5,7 @@ using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
+using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Settings;
@@ -232,7 +233,7 @@ public sealed class DemoGalleryTests
     }
 
     [Fact]
-    public void Smtp_Test_Failure_Is_Beside_The_Outgoing_Step_And_Sends_Nothing()
+    public void Smtp_Test_Failure_Is_Beside_The_Outgoing_Step_And_Starts_No_Submission()
     {
         Run(DemoScenario.SmtpTestFailed, (model, shell) =>
         {
@@ -242,9 +243,9 @@ public sealed class DemoGalleryTests
             Assert.Equal(FeedbackKind.Error, account.StatusKind);
             Assert.Equal("SMTP sign-in test failed: The demo SMTP server rejected the sign-in. Check the SMTP username and password, then test again.", account.Status);
             Assert.Contains("Optional — " + account.Status, StepLines(shell));
-            // Receiving keeps its own state, and nothing was submitted.
+            // Receiving keeps its own state, and the composer has no draft and no submission or Sent copy.
             Assert.Equal(ConnectionCheck.NotRun, account.ConnectionCheck);
-            Assert.False(model.Composer.HasDraft);
+            AssertNoSubmission(model);
             // Valid actions: test again; nothing to cancel.
             Assert.False(account.IsBusy);
             Assert.True(account.CanTestOutgoing);
@@ -264,7 +265,7 @@ public sealed class DemoGalleryTests
             Assert.Equal("The SMTP server accepted the sign-in over an encrypted connection. No message was sent.", account.Status);
             Assert.Contains("Done — Outgoing sign-in tested; no message was sent.", StepLines(shell));
             Assert.Equal(ConnectionCheck.NotRun, account.ConnectionCheck);
-            Assert.False(model.Composer.HasDraft);
+            AssertNoSubmission(model);
             Assert.True(Button(shell, "Test SMTP sign-in").IsEnabled);
             Assert.Equal(UiVisibility.Collapsed, Button(shell, "Cancel test").Visibility);
         });
@@ -323,6 +324,32 @@ public sealed class DemoGalleryTests
             Assert.Contains("Read section 400", body.HtmlText);
             Assert.Equal("Short HTML note", model.Inbox.Messages.Single(message => message.Key.Uid == 53).Subject);
         });
+    }
+
+    [Fact]
+    public async Task Smtp_Test_Fixtures_Mark_Their_Own_Smtp_Password_As_Saved_Without_Any_Secret()
+    {
+        foreach (var (scenario, saved) in new[] { (DemoScenario.SmtpTestFailed, true), (DemoScenario.SmtpTestPassed, true), (DemoScenario.SendRejected, false) })
+        {
+            var application = DemoApplication.Create(new DemoOptions(scenario));
+            await application.InitializeAsync();
+            var profile = application.LoadedAccount!;
+            var smtp = CredentialKey.For(profile, MailProtocol.Smtp);
+            Assert.Equal(saved, await application.Credentials.ContainsAsync(smtp));
+            // Presence only: no lookup returns a secret, and neither IMAP nor other server details have a password.
+            Assert.Null(await application.Credentials.ReadAsync(smtp));
+            Assert.False(await application.Credentials.ContainsAsync(CredentialKey.For(profile, MailProtocol.Imap)));
+            var moved = profile with { OutgoingServer = profile.OutgoingServer! with { Port = 2525 } };
+            Assert.False(await application.Credentials.ContainsAsync(CredentialKey.For(moved, MailProtocol.Smtp)));
+        }
+    }
+
+    // The demo tester cannot send; this checks that the fixture's command left the composer untouched as well.
+    private static void AssertNoSubmission(MailShellViewModel model)
+    {
+        Assert.False(model.Composer.HasDraft);
+        Assert.Equal(DraftSubmissionState.Editing, model.Composer.SubmissionState);
+        Assert.Equal(SentCopyState.NotRequested, model.Composer.SentCopy);
     }
 
     private static UiElement AccountTab(MailShellView shell) => shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;

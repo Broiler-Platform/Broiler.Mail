@@ -152,7 +152,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
 
     private async Task<bool?> IsStoredAsync(CredentialKey key)
     {
-        try { return await _credentials.ReadAsync(key).ConfigureAwait(false) is not null; }
+        try { return await _credentials.ContainsAsync(key).ConfigureAwait(false); }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or InvalidOperationException or InvalidDataException)
         {
             // Unknown rather than missing: the store may be locked or unavailable.

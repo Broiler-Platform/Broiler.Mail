@@ -38,4 +38,10 @@ public interface ICredentialStore
     // Broiler-Falsified-If: DeleteAsync leaves readable a secret for the same account and protocol that was saved under older connection details
     // Broiler-Human:        PENDING
     Task DeleteAsync(CredentialKey key, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Whether a secret is stored under exactly this key; only its presence is reported. The default reads the
+    /// secret and drops it at once. A store that can answer without one, such as demo mode, says so directly.
+    /// </summary>
+    async Task<bool> ContainsAsync(CredentialKey key, CancellationToken cancellationToken = default) =>
+        await ReadAsync(key, cancellationToken).ConfigureAwait(false) is not null;
 }
