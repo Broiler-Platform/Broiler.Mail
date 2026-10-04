@@ -421,6 +421,74 @@ public sealed class HtmlPreviewIsolationTests
     }
 
     [Fact]
+    public void TileStatistics_CountAScriptedScrollDownAndBackAndAZoom()
+    {
+        // 900 paragraphs of 45 px pass the 32,768-pixel budget: 32 tiles of 1,024 DIPs at 100 %.
+        string html = string.Concat(Enumerable.Repeat("<p style='height: 45px; margin: 0;'>Tall document line</p>", 900));
+        var renderer = new TestBroilerRenderer();
+        var statistics = new Broiler.Mail.Windows.Measurement.HtmlTileStatistics();
+        var element = new HtmlViewElement(html, () => renderer, _ => { }) { Statistics = statistics };
+        element.Measure(new BSize(800, 600));
+        double height = element.Snapshot!.ContentHeight;
+        int rows = (int)Math.Ceiling(height / HtmlViewElement.DefaultTileHeight);
+        Assert.Equal(32, rows);
+        var host = new TestUiHost { ViewportSize = new BSize(800, 600), Scale = 1.0 };
+        var session = new StandardUiSessionBuilder().Build(host);
+        void ShowFrom(double top)
+        {
+            element.Arrange(new BRect(0, -top, 800, element.DesiredSize.Height));
+            element.Render(new UiRenderContext(new BRenderList(), session, host));
+        }
+
+        // Down to the end and back to the top, three wheel notches (96 DIPs) a frame.
+        for (double top = 0; top < height - 600; top += 96) ShowFrom(top);
+        ShowFrom(height - 600);
+        for (double top = height - 600; top > 0; top -= 96) ShowFrom(top);
+        ShowFrom(0);
+
+        var counts = statistics.Snapshot();
+        // Every tile is drawn on the way down; on the way back the cache holds the last sixteen, and the first
+        // sixteen are drawn again.
+        Assert.Equal(rows + 16, counts.Misses);
+        Assert.Equal(16, counts.Rerasters);
+        Assert.Equal(counts.Misses - HtmlViewElement.MaxCachedTiles, counts.Evictions);
+        Assert.Equal(renderer.CreatedImages.Count, counts.Misses);
+        Assert.Equal(renderer.ReleasedImages.Count, counts.Evictions);
+        Assert.Equal(counts.Misses, counts.RasterMs.Length);
+        Assert.Equal(counts.Misses, counts.UploadMs.Length);
+        Assert.Equal(HtmlViewElement.MaxCachedTiles * 800L * HtmlViewElement.DefaultTileHeight * 4, counts.PeakBytes);
+        Assert.Equal((1, 0), (counts.Layouts, counts.Discards));
+
+        // The same view again is all hits.
+        int hits = counts.Hits;
+        ShowFrom(0);
+        Assert.Equal((hits + 1, counts.Misses), (statistics.Snapshot().Hits, statistics.Snapshot().Misses));
+
+        // A zoom lays the document out again and discards the sixteen cached tiles; the tile drawn next is new, not drawn again.
+        element.Zoom = 2;
+        element.Measure(new BSize(800, 600));
+        ShowFrom(0);
+        counts = statistics.Snapshot();
+        Assert.Equal((2, HtmlViewElement.MaxCachedTiles), (counts.Layouts, counts.Discards));
+        Assert.Equal((rows + 17, 16), (counts.Misses, counts.Rerasters));
+    }
+
+    [Fact]
+    public void TileStatistics_TellATileDrawnAgainAfterItsEvictionFromOneDrawnAfterADiscard()
+    {
+        var tiles = new Broiler.Mail.Windows.Measurement.HtmlTileStatistics();
+        tiles.Drawn((0, 0), 0, 0, 10);
+        tiles.Drawn((1, 0), 0, 0, 20);
+        tiles.Evicted();
+        tiles.Drawn((0, 0), 0, 0, 20);
+        tiles.Discarded(2);
+        tiles.Drawn((0, 0), 0, 0, 10);
+
+        var counts = tiles.Snapshot();
+        Assert.Equal((4, 1, 1, 2, 20L), (counts.Misses, counts.Rerasters, counts.Evictions, counts.Discards, counts.PeakBytes));
+    }
+
+    [Fact]
     public void CachedLayoutSnapshotAndLinkHitTestingFixture_CachesLayoutAndDispatchesLink()
     {
         string html = "<p>Message content with <a href='https://example.test/link1'>Link 1</a> and <a href='https://example.test/link2'>Link 2</a>.</p>";

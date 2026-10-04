@@ -40,6 +40,7 @@ using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Preview;
 using Broiler.Mail.Windows.Hosting;
+using Broiler.Mail.Windows.Measurement;
 using Broiler.Media;
 using Broiler.Media.Image.Managed;
 using Broiler.UI;
@@ -1066,6 +1067,8 @@ internal sealed class HtmlViewElement : UiElement
     }
 
     public HtmlLayoutSnapshot? Snapshot => _layoutSnapshot;
+    /// <summary>UI-12: counts the tile cache's work while a --measure run watches it; null otherwise.</summary>
+    internal HtmlTileStatistics? Statistics { get; set; }
     /// <summary>One focusable target per link the preview would open, in document order.</summary>
     internal IReadOnlyList<HtmlLinkTarget> LinkTargets => _linkTargets;
     public int CachedTileCount => _tiles.Count;
@@ -1136,6 +1139,7 @@ internal sealed class HtmlViewElement : UiElement
         if (_layoutSnapshot is not null && Math.Abs(_layoutSnapshot.Width - width) <= 0.5f) return;
         InvalidateTiles();
         _layoutSnapshot = CalculateLayout(width);
+        Statistics?.LaidOut(_layoutSnapshot.LayoutDurationTicks);
         RebuildLinkTargets();
     }
 
@@ -1248,6 +1252,7 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-Human:        PENDING
     private void InvalidateTiles()
     {
+        Statistics?.Discarded(_tiles.Count);
         var renderer = _rendererProvider();
         foreach (var entry in _tiles.Values)
         {
@@ -1364,6 +1369,7 @@ internal sealed class HtmlViewElement : UiElement
         {
             _lruTiles.Remove(key);
             _lruTiles.AddFirst(key);
+            Statistics?.Hit();
             return;
         }
 
@@ -1384,10 +1390,15 @@ internal sealed class HtmlViewElement : UiElement
             {
                 _cachedTileBytes -= (long)evicted.PixelWidth * evicted.PixelHeight * BytesPerPixel;
                 if (evicted.Handle.IsValid) renderer.ReleaseImage(evicted.Handle);
+                Statistics?.Evicted();
             }
         }
 
+        // Timed only while measured.
+        var statistics = Statistics;
+        long started = statistics is null ? 0 : Stopwatch.GetTimestamp();
         using var bitmap = PaintTile(tileTop / _zoom, tileScale * _zoom, pixelW, pixelH, tileLeft / _zoom);
+        long painted = statistics is null ? 0 : Stopwatch.GetTimestamp();
 
         // The renderer keeps RGBA pixels. Encoding a PNG for it to decode straight back cost far more
         // than painting the tile; the pixels are identical either way.
@@ -1396,6 +1407,7 @@ internal sealed class HtmlViewElement : UiElement
         _tiles[key] = (handle, pixelW, pixelH, tileW, tileH);
         _lruTiles.AddFirst(key);
         _cachedTileBytes += tileBytes;
+        statistics?.Drawn(key, painted - started, Stopwatch.GetTimestamp() - painted, _cachedTileBytes);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=98C950
