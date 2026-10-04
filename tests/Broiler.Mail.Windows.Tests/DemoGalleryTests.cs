@@ -456,7 +456,7 @@ public sealed class DemoGalleryTests
     private static StandardButton Button(MailShellView shell, string tab, string text) =>
         Descendants(Tab(shell, tab)).OfType<StandardButton>().Single(button => button.Text == text);
 
-    private static string Footer(MailShellView shell) => ((StandardLabel)shell.Window.Children[0].Children[0]).Text;
+    private static string Footer(MailShellView shell) => shell.Footer.Text;
 
     private static bool IsAvailable(StandardButton button)
     {

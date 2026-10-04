@@ -787,7 +787,7 @@ public sealed class FeedbackPolicyTests
         public StandardEdit Field(string tab, string label) =>
             Descendants(Tab(tab)).OfType<FormField>().Where(field => field.Label.Text.StartsWith(label, StringComparison.Ordinal)).Select(field => field.Control).OfType<StandardEdit>().Single();
         public InlineFeedback SettingsFeedback => Descendants(Tab("settings")).OfType<InlineFeedback>().Single();
-        public StandardLabel Footer => (StandardLabel)Shell.Window.Children[0].Children[0];
+        public StandardLabel Footer => Shell.Footer;
 
         public static Fixture Open(SubmissionStatus sendResult = SubmissionStatus.Accepted, string emailAddress = "test@example.test",
             TestOutgoingTester? outgoing = null, double width = 1100, double height = 720)

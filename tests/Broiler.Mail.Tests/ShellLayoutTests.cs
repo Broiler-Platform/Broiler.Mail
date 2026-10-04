@@ -1,5 +1,6 @@
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Text;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
@@ -113,6 +114,43 @@ public sealed class ShellLayoutTests
             }
             // A form is taller than the window at these sizes, so a scroll position was really checked.
             Assert.NotEqual(0, scrolledForms);
+        }
+        finally
+        {
+            StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        }
+    }
+
+    /// <summary>
+    /// The footer's text starts where the tab names do and stays clear of the window's bottom edge. At
+    /// the minimum size with doubled text it wraps inside that inset and is still shown whole.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 480, 2.0)]
+    [InlineData(1100, 720, 1.0)]
+    public async Task TheFooterIsInsetFromTheWindowsEdgesAndShownWhole(int width, int height, double textScale)
+    {
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var fixture = await Fixture.OpenAsync(width, height);
+            var shell = fixture.Shell;
+            Render(fixture.Session);
+            var footer = shell.Footer;
+            BRect area = shell.Window.ChromeLayout.Content;
+            BRect text = footer.Bounds;
+            string where = $"at {width}x{height}, text {textScale:P0}: the footer is at {text} in {area}";
+
+            // The tab names start this far into the tab view, which spans the window.
+            Assert.Equal(area.Left, shell.Navigation.Bounds.Left, 0.5);
+            Assert.Equal(area.Left + shell.Navigation.HeaderPaddingX, text.Left, 0.5);
+            Assert.Equal(area.Right - shell.Navigation.HeaderPaddingX, text.Right, 0.5);
+            Assert.Equal(area.Bottom - MailShellView.FooterPadding, text.Bottom, 0.5);
+            Assert.True(shell.Navigation.Bounds.Bottom <= text.Top - MailShellView.FooterPadding + 0.5, where);
+            // Shown whole: the text has the height it asked for at that width.
+            Assert.True(text.Height >= footer.DesiredSize.Height - 0.5, where);
+            if (width == 640)
+                Assert.True(BTextMeasurer.MeasureAdvance(footer.Text, footer.Font) > text.Width, $"{where}; '{footer.Text}' does not wrap.");
         }
         finally
         {

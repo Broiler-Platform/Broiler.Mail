@@ -46,11 +46,13 @@ public sealed class MailShellView : IDisposable
         Window.ApplyTheme(StandardControlPaint.Theme);
         var layout = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
         // Literal: statuses carry addresses and server text, where '&' is a character, not an access key.
-        var status = new StandardLabel { Text = model.Status, Wrapping = UiTextWrapping.Wrap, UseMnemonic = false };
-        layout.AddChild(status);
-        layout.SetDock(status, UiDock.Bottom);
-
+        var status = Footer = new StandardLabel { Text = model.Status, Wrapping = UiTextWrapping.Wrap, UseMnemonic = false };
         Navigation = new StandardTabView();
+        // Clear of the window's edges, and starting where the tab names do.
+        var footer = new Inset(status, Navigation.HeaderPaddingX, FooterPadding);
+        layout.AddChild(footer);
+        layout.SetDock(footer, UiDock.Bottom);
+
         Inbox = new InboxView(model.Inbox, htmlPreview, dates, model.Compose, model.Settings);
         var inboxContent = new TabContent(Inbox.CreateContent());
         Navigation.AddTab("inbox", "Inbox", inboxContent);
@@ -122,11 +124,16 @@ public sealed class MailShellView : IDisposable
 
     private const string DetailsBelow = "Details are below the buttons.";
 
+    /// <summary>The space above and below the footer's text.</summary>
+    public const double FooterPadding = 4;
+
     private static bool IsProblem(FeedbackKind kind) => kind is FeedbackKind.Error or FeedbackKind.Warning;
 
     public StandardWindow Window { get; }
     public StandardTabView Navigation { get; }
     public InboxView Inbox { get; }
+    /// <summary>The status line below the tabs.</summary>
+    public StandardLabel Footer { get; }
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=A9E9EB
     // Broiler-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
     // Broiler-Human:        PENDING

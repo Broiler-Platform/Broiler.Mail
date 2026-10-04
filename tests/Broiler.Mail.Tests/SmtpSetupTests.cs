@@ -418,7 +418,7 @@ public sealed class SmtpSetupTests
         public MailKeyboardNavigation Keyboard { get; }
         public UiElement Content => Shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;
         private StandardPanel Checklist => Descendants(Content).OfType<FormSection>().First().Content;
-        public StandardLabel Footer => (StandardLabel)Shell.Window.Children[0].Children[0];
+        public StandardLabel Footer => Shell.Footer;
         public StandardButton Next => Descendants(Content).OfType<StandardButton>().Single(button => button.Text.StartsWith("Next:", StringComparison.Ordinal) || button.Text == "Open Inbox");
         public StandardButton TestSmtp => Button("Test SMTP sign-in");
         public StandardEdit SmtpPassword => Field("SMTP password / app password");
