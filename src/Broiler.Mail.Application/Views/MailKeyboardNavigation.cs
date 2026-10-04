@@ -19,7 +19,6 @@ using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
 using Broiler.UI;
 using Broiler.UI.ListView.Standard;
-using Broiler.UI.ScrollView.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
