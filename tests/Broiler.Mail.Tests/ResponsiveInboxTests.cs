@@ -441,6 +441,45 @@ public sealed class ResponsiveInboxTests
         Assert.Equal(toolbar.Bounds.Bottom - receive.Bounds.Bottom, row.Bounds.Bottom - retry.Bounds.Bottom, 0.5);
     }
 
+    /// <summary>
+    /// A message whose text could not be loaded has nothing below its header, so the header may take
+    /// the reader: opened in a short compact window, the problem and Retry are on screen, not scrolled
+    /// away above an empty text area. Once the text arrives, the header is bounded again.
+    /// </summary>
+    [Fact]
+    public async Task WithoutMessageTextTheCompactReaderShowsTheProblemAndRetry()
+    {
+        using var fixture = await Fixture.OpenAsync(640, 400);
+        var message = fixture.Messages[2] with { Subject = string.Join(" ", Enumerable.Repeat("Agenda, travel arrangements, and the revised budget", 3)) };
+        fixture.Receiver.Inbox = (_, _) => Task.FromResult(new MailInboxPage([message], null));
+        bool fail = true;
+        fixture.Receiver.Body = (key, _) => fail ? throw new MailConnectionException("The connection closed.") : Task.FromResult(new MailMessageBody(key, "Body text"));
+        await fixture.Model.ReceiveAsync();
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        await fixture.Model.SelectAsync(message.Key);
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        Assert.True(fixture.View.OpenSelected());
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        fixture.Session.RenderFrame();
+        Assert.True(fixture.Layout.ShowsReaderOnly);
+        Assert.Equal(InboxProblemScope.Message, fixture.Model.ProblemScope);
+
+        var header = Descendants(fixture.Content).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+        BRect shown = header.Scroll.ContentBounds;
+        var problem = Descendants(header).OfType<InlineFeedback>().Single();
+        var retry = fixture.Button("Retry loading");
+        foreach (var (name, bounds) in new[] { ("The problem", problem.Bounds), ("Retry loading", retry.Bounds) })
+            Assert.True(bounds.Height > 0 && bounds.Top >= shown.Top - 0.5 && bounds.Bottom <= shown.Bottom + 0.5, $"{name} is at {bounds}, the header shows {shown}.");
+
+        fail = false;
+        await fixture.Model.RetryAsync();
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        fixture.Session.RenderFrame();
+        Assert.Equal("Body text", fixture.ReaderText.Text);
+        Assert.True(header.Scroll.HasVerticalScrollbar, "The long subject must scroll within the header.");
+        Assert.InRange(header.Bounds.Height, 1, (header.Parent!.Bounds.Height * 0.45) + 1);
+    }
+
     [Fact]
     public async Task AtTwiceTheTextSizeTheHeaderAndNoticeScrollInsteadOfCrowdingOutTheContent()
     {

@@ -188,7 +188,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, replyActions, previewActions }) headerStack.AddChild(element);
         // A long subject or many recipients at a large text size scroll within the header, so the
         // message text keeps most of the pane.
-        var headerColumn = new BoundedScrollArea(new ReadingColumn(headerStack, verticalMargin: 8), 0.45, "Message header");
+        const double headerShare = 0.45;
+        var headerColumn = new BoundedScrollArea(new ReadingColumn(headerStack, verticalMargin: 8), headerShare, "Message header");
         reading.AddChild(headerColumn);
         reading.SetDock(headerColumn, UiDock.Top);
         var text = new ScrollableMessageText();
@@ -245,6 +246,9 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
                   (body.IsTruncated ? "\n\n[Preview limited to 32,000 characters.]" : "");
             // Rewriting unchanged text would reset the reader's selection during unrelated updates.
             if (reader != shownText) text.Text = shownText = reader;
+            // With no text to make room for, such as a body that could not be loaded, the header may
+            // take the pane, so a short reader shows the problem and Retry instead of empty space.
+            headerColumn.MaximumFraction = reader.Length == 0 ? 1 : headerShare;
             if (!ReferenceEquals(shownBody, body))
             {
                 htmlPreview?.Close();

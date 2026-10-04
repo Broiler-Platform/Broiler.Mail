@@ -14,11 +14,11 @@ public sealed class BoundedScrollArea : UiElement
 {
     private readonly UiElement _content;
     private readonly StandardScrollView _scroll = new() { Constraint = UiScrollConstraint.ConstrainWidth };
+    private double _maximumFraction;
 
     /// <param name="name">What a screen reader announces when the area scrolls and so takes focus.</param>
     public BoundedScrollArea(UiElement content, double maximumFraction, string name)
     {
-        if (maximumFraction is <= 0 or > 1) throw new ArgumentOutOfRangeException(nameof(maximumFraction));
         _content = content;
         MaximumFraction = maximumFraction;
         _scroll.AccessibleName = name;
@@ -27,7 +27,17 @@ public sealed class BoundedScrollArea : UiElement
     }
 
     /// <summary>The largest share of the available height the area takes.</summary>
-    public double MaximumFraction { get; }
+    public double MaximumFraction
+    {
+        get => _maximumFraction;
+        set
+        {
+            if (!(value > 0 && value <= 1)) throw new ArgumentOutOfRangeException(nameof(value));
+            if (value == _maximumFraction) return;
+            _maximumFraction = value;
+            InvalidateMeasure();
+        }
+    }
 
     /// <summary>The scroll view that scrolls the content once it passes the cap.</summary>
     public StandardScrollView Scroll => _scroll;
