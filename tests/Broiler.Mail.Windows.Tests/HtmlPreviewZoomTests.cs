@@ -508,6 +508,51 @@ public sealed class HtmlPreviewZoomTests
     }
 
     [Fact]
+    public async Task AZoomTheTextSizeMovesOntoStaysTheReadersOwn()
+    {
+        await InPreview(TallDocument, StandardThemeTokens.Light,
+            window =>
+            {
+                window.StepZoom(1);
+                window.StepZoom(1);
+                Assert.Equal(1.25, window.Zoom);
+                Task.Run(() => window.ApplyTheme(StandardThemeTokens.Light.WithTextScale(1.25))).Wait();
+            },
+            window =>
+            {
+                // The system text size has come to the reader's zoom; that does not make it the system's.
+                Assert.Equal(1.25, window.Zoom);
+                Assert.Equal(1.25, window.DefaultZoom);
+                Task.Run(() => window.ApplyTheme(StandardThemeTokens.Light.WithTextScale(1.5))).Wait();
+            },
+            window =>
+            {
+                Assert.Equal(1.25, window.Zoom);
+                Assert.Equal(1.5, window.DefaultZoom);
+                Assert.Equal("125 %, reset zoom to 150 %", window.ZoomResetButton.GetSemanticNode().Name);
+                // The reader's own step onto the default does make it follow again.
+                window.StepZoom(1);
+                Assert.Equal(1.5, window.Zoom);
+                Task.Run(() => window.ApplyTheme(StandardThemeTokens.Light.WithTextScale(1.75))).Wait();
+            },
+            window =>
+            {
+                Assert.Equal(1.75, window.Zoom);
+                window.StepZoom(-1);
+                Task.Run(() => window.ApplyTheme(StandardThemeTokens.Light.WithTextScale(1.5))).Wait();
+            },
+            window =>
+            {
+                // So does Ctrl+0 (or Reset) at a zoom the text size has come to, although nothing changes.
+                Assert.Equal(1.5, window.Zoom);
+                Assert.Equal(1.5, window.DefaultZoom);
+                window.ResetZoom();
+                Task.Run(() => window.ApplyTheme(StandardThemeTokens.Light.WithTextScale(1.25))).Wait();
+            },
+            window => Assert.Equal(1.25, window.Zoom));
+    }
+
+    [Fact]
     public async Task TheShortenedPreviewNoticeFollowsTheZoomBothWays()
     {
         await InPreview(BudgetDocument, StandardThemeTokens.Light, window =>

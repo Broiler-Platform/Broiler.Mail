@@ -517,13 +517,20 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     /// <summary>Zooms one level in (a positive direction) or out, as Zoom in, Zoom out, Ctrl+Plus and Ctrl+Minus do.</summary>
     internal void StepZoom(int direction) => ZoomTo(PreviewZoom.Next(Zoom, direction, _defaultZoom));
 
-    /// <summary>Returns to the system text size, as the reset button and Ctrl+0 do.</summary>
-    internal void ResetZoom() => ZoomTo(_defaultZoom);
+    /// <summary>Returns to the system text size, as the reset button and Ctrl+0 do, and follows it again.</summary>
+    internal void ResetZoom()
+    {
+        _zoomFollowsSystem = true;
+        ZoomTo(_defaultZoom);
+    }
 
+    /// <summary>The reader's own zoom. Back at the default, the preview follows the system text size again.</summary>
     private void ZoomTo(double zoom)
     {
         if (PreviewZoom.AreSame(PreviewZoom.Clamp(zoom), Zoom)) return;
         ApplyZoom(zoom);
+        // Only the reader decides this: a text size that moves onto their zoom leaves it theirs.
+        _zoomFollowsSystem = PreviewZoom.AreSame(Zoom, _defaultZoom);
         AnnounceZoom();
         Invalidate();
     }
@@ -565,8 +572,6 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private void ApplyZoom(double zoom)
     {
         zoom = PreviewZoom.Clamp(zoom);
-        // Back at the default, the preview follows the system text size again.
-        _zoomFollowsSystem = PreviewZoom.AreSame(zoom, _defaultZoom);
         _htmlView.SetZoom(zoom);
         // The text view's font already has the system text size; it adds only the reader's own zoom.
         _plainTextView.Zoom = zoom / _defaultZoom;
