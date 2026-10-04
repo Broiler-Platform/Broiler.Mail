@@ -19,6 +19,7 @@ namespace Broiler.Mail.Windows.Tests;
 /// monitor (WindowsMailWindow.SimulateDpiChange): Mail sees a new scale and the suggested rectangle
 /// through the same WM_DPICHANGED handlers as a monitor move, but Windows' own DPI is unchanged.
 /// </summary>
+[Collection("UI theme")]
 public sealed class DpiTransitionTests
 {
     // Above the 640x480 minimum and below the 680-DIP width at which the inbox shows two panes.

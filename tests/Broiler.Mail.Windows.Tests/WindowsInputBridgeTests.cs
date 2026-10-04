@@ -15,6 +15,7 @@ using Xunit;
 
 namespace Broiler.Mail.Windows.Tests;
 
+[Collection("UI theme")]
 public sealed class WindowsInputBridgeTests
 {
     private sealed class HeadlessUiHost : IUiHost

@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using Broiler.Mail.Application;
 using Broiler.Mail.Windows.Hosting;
 using Broiler.UI;
+using Broiler.UI.Standard;
 using static Broiler.Native.Windows.WindowNative;
 
 namespace Broiler.Mail.Windows.Tests;
@@ -22,6 +23,8 @@ internal sealed class HiddenMailWindow : IDisposable
     private readonly TaskCompletionSource<WindowsMailWindow> _ready = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly TaskCompletionSource _closed = new(TaskCreationOptions.RunContinuationsAsynchronously);
     private readonly ConcurrentDictionary<long, TaskCompletionSource> _markers = new();
+    // The window sets the process-wide palette, as do measurement themes applied to it; closing puts this back.
+    private readonly StandardThemeTokens _palette = StandardControlPaint.Theme;
     private long _marker;
 
     private HiddenMailWindow(Func<MailApplication> create, DemoOptions? demo)
@@ -137,6 +140,7 @@ internal sealed class HiddenMailWindow : IDisposable
             PostMessage(Frame, WmClose, 0, 0);
             _closed.Task.ContinueWith(_ => { }, TaskScheduler.Default).Wait(Timeout);
         }
+        StandardControlPaint.ApplyTheme(_palette);
     }
 
     // Rethrows what failed on the window thread itself rather than an AggregateException around it.

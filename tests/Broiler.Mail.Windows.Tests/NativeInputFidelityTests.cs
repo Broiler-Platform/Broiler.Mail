@@ -20,6 +20,7 @@ namespace Broiler.Mail.Windows.Tests;
 /// inbox and the composer exactly once and in proportion. Posted messages carry no modifier state and involve
 /// no real layout, touchpad, or IME, so the physical checks stay manual.
 /// </summary>
+[Collection("UI theme")]
 public sealed class NativeInputFidelityTests
 {
     private const uint WmChar = 0x0102;
@@ -88,6 +89,19 @@ public sealed class NativeInputFidelityTests
 
         (double ReaderX, double ReaderY, double EditorX, double HeaderX, double HeaderY, double List) Offsets() => fixture.Ui(() =>
             (reader.HorizontalOffset, reader.VerticalOffset, editor.HorizontalScrollOffset, header.HorizontalOffset, header.VerticalOffset, list.VerticalOffset));
+    }
+
+    [Fact]
+    public void TheLargestTextSizeEndsWithItsWindowAndLeavesTheProcessWidePaletteAsItWas()
+    {
+        var palette = StandardControlPaint.Theme;
+        using (var fixture = HiddenMailWindow.Start())
+        {
+            // A measurement theme sets the process-wide palette, which sessions built elsewhere start from.
+            fixture.Ui(() => fixture.Window.ApplyThemeForMeasurement(StandardThemeTokens.Light.WithTextScale(2.25)));
+            Assert.Equal(2.25, StandardControlPaint.Theme.TextScale);
+        }
+        Assert.Same(palette, StandardControlPaint.Theme);
     }
 
     [Fact]

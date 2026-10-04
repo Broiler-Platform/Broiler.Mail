@@ -18,6 +18,7 @@ using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Tests;
 
+[Collection("UI theme")]
 public sealed class HtmlPreviewIsolationTests
 {
     [Fact]

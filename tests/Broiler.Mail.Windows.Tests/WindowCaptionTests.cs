@@ -14,6 +14,7 @@ namespace Broiler.Mail.Windows.Tests;
 /// when the saved theme changes, when a measurement run switches themes, and when an open preview is
 /// re-themed. The caption is read back from the window manager, so a dropped call shows.
 /// </summary>
+[Collection("UI theme")]
 public sealed class WindowCaptionTests
 {
     [Fact]

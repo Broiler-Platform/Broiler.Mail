@@ -15,6 +15,7 @@ namespace Broiler.Mail.Windows.Tests;
 /// device-independent pixels; the input context is read back through IMM32, so the order of the style and
 /// position fields in the struct is checked too.
 /// </summary>
+[Collection("UI theme")]
 public sealed class WindowsTextInputTests
 {
     private const uint CfsPoint = 0x0002;

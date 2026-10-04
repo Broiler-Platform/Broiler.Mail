@@ -19,6 +19,7 @@ using Broiler.UI.Standard;
 namespace Broiler.Mail.Windows.Tests;
 
 /// <summary>UI-11 and UI-07: the preview's zoom, which opens at the system text size.</summary>
+[Collection("UI theme")]
 public sealed class HtmlPreviewZoomTests
 {
     private static readonly string TallDocument = string.Concat(Enumerable.Range(1, 60).Select(index => $"<p>Paragraph {index}: a longer line of text that wraps differently once the window becomes narrower than before, so a resize changes how tall the whole document is.</p>"))

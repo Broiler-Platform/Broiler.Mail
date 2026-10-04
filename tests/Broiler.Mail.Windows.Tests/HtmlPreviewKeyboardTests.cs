@@ -15,6 +15,7 @@ using Broiler.UI.Standard;
 namespace Broiler.Mail.Windows.Tests;
 
 /// <summary>UI-11: the HTML preview by keyboard and screen reader, and a reading position that survives reflow.</summary>
+[Collection("UI theme")]
 public sealed class HtmlPreviewKeyboardTests
 {
     private static readonly string TallDocument = string.Concat(Enumerable.Range(1, 60).Select(index => $"<p>Paragraph {index}: a longer line of text that wraps differently once the window becomes narrower than before, so a resize changes how tall the whole document is.</p>"))

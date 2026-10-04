@@ -13,6 +13,7 @@ namespace Broiler.Mail.Windows.Tests;
 /// with an injected composition string, the mechanism Hosting's end-to-end IME test uses; a real IME's input
 /// context, candidate window, and conversion stay a manual check.
 /// </summary>
+[Collection("UI theme")]
 public sealed class ComposerImeTests
 {
     private const uint WmChar = 0x0102;
