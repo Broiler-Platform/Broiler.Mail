@@ -90,12 +90,42 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         // Layout first: the adaptive inbox decides during layout which pane is collapsed (and hidden).
         session.RenderFrame();
         var controls = new List<UiElement> { shell.Navigation };
-        if (shell.Navigation.SelectedTab?.Content is { } content)
+        var content = shell.Navigation.SelectedTab?.Content;
+        if (content is not null)
             controls.AddRange(TabStops(content));
         int current = controls.IndexOf(session.FocusedElement!);
-        int next = current < 0 ? (direction > 0 ? 0 : controls.Count - 1) : (current + direction + controls.Count) % controls.Count;
-        session.SetFocus(controls[next]);
-        Reveal(controls[next]);
+        UiElement next;
+        if (current >= 0) next = controls[(current + direction + controls.Count) % controls.Count];
+        // A control that is no longer a stop, such as a button disabled while its operation runs,
+        // keeps its place: Tab continues from there instead of restarting at the tabs.
+        else if (session.FocusedElement is { } focused && content is not null && focused.IsDescendantOf(content))
+            next = NextTabStop(content, focused, direction) ?? shell.Navigation;
+        else next = direction > 0 ? controls[0] : controls[^1];
+        session.SetFocus(next);
+        Reveal(next);
+    }
+
+    /// <summary>
+    /// The tab stop after <paramref name="from"/> in document order (before it for a negative
+    /// <paramref name="direction"/>), for a control that is not a stop itself, such as a button that
+    /// disabled itself. Null when <paramref name="from"/> is not in <paramref name="scope"/> or no stop follows.
+    /// </summary>
+    internal static UiElement? NextTabStop(UiElement scope, UiElement from, int direction)
+    {
+        var stops = TabStops(scope).ToHashSet();
+        // Every element, shown or not, so a control that was just hidden still has its place.
+        var order = Everything(scope).ToList();
+        int position = order.IndexOf(from);
+        if (position < 0) return null;
+        var following = direction > 0 ? order.Skip(position + 1) : order.Take(position).Reverse();
+        return following.FirstOrDefault(stops.Contains);
+    }
+
+    private static IEnumerable<UiElement> Everything(UiElement element)
+    {
+        yield return element;
+        foreach (var child in element.Children)
+            foreach (var descendant in Everything(child)) yield return descendant;
     }
 
     /// <summary>

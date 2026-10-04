@@ -12,6 +12,7 @@ using Broiler.UI.Edit.Standard;
 using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.ListView.Standard;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Standard;
@@ -388,6 +389,191 @@ public sealed class FeedbackPolicyTests
         Assert.Equal(retained, composer.Status);
     }
 
+    public static TheoryData<string> Outcomes() =>
+    [
+        "settings validation", "account validation in a collapsed section", "account section collapsed",
+        "composer copies collapsed", "composer check failed", "account test canceled", "inbox receive canceled",
+        "inbox retry succeeded", "inbox load older reached the last page", "composer draft discarded",
+        "composer send accepted", "background results while typing",
+    ];
+
+    /// <summary>
+    /// After validation, cancel, retry, disclosure collapse, and a command that disables itself, on
+    /// every surface, focus is on a control that can take it, in the tab the user is on, and Tab
+    /// continues from there instead of restarting at the tabs. Later results never move it.
+    /// </summary>
+    [Theory]
+    [MemberData(nameof(Outcomes))]
+    public async Task FocusLandsOnAUsableControlAfterEveryOutcome(string outcome)
+    {
+        using var fixture = Fixture.Open();
+        var model = fixture.Model;
+        var session = fixture.Session;
+        void Show(string id) { fixture.Shell.Navigation.SelectTab(id); fixture.Settle(); }
+        void Press(StandardButton button) { session.SetFocus(button); button.Click(); fixture.Settle(); }
+        FormSection SentCopy() => Descendants(fixture.Tab("account")).OfType<FormSection>().Single(section => section.Toggle is not null);
+        FormSection Copies() => Descendants(fixture.Tab("compose")).OfType<FormSection>().Single(section => section.Toggle is not null);
+        void AppendSentCopies()
+        {
+            // Chosen in the form, as a user would; the folder field is then required.
+            var handling = Descendants(SentCopy()).OfType<Broiler.UI.ComboBox.Standard.StandardComboBox>().Single();
+            handling.SelectedIndex = (int)SentCopyMode.AppendToFolder;
+            fixture.Settle();
+        }
+
+        string tab;
+        UiElement expected;
+        switch (outcome)
+        {
+            case "settings validation":
+                Show(tab = "settings");
+                var width = fixture.Field(tab, "Initial window width");
+                width.Text = model.Settings.WindowWidth = "wide";
+                Press(fixture.Button("Save settings", tab));
+                expected = width;
+                break;
+            case "account validation in a collapsed section":
+                Show(tab = "account");
+                AppendSentCopies();
+                SentCopy().IsExpanded = false;
+                fixture.Settle();
+                Press(fixture.Button("Save account", tab));
+                Assert.True(SentCopy().IsExpanded);
+                expected = fixture.Field(tab, "Sent folder path");
+                break;
+            case "account section collapsed":
+                Show(tab = "account");
+                AppendSentCopies();
+                SentCopy().IsExpanded = true;
+                fixture.Settle();
+                session.SetFocus(fixture.Field(tab, "Sent folder path"));
+                SentCopy().Toggle!.Click();
+                fixture.Settle();
+                expected = SentCopy().Toggle!;
+                break;
+            case "composer copies collapsed":
+                model.Composer.StartNew();
+                Show(tab = "compose");
+                Copies().Toggle!.Click();
+                fixture.Settle();
+                session.SetFocus(Descendants(Copies().Content).OfType<StandardEdit>().First());
+                Copies().Toggle!.Click();
+                fixture.Settle();
+                expected = Copies().Toggle!;
+                break;
+            case "composer check failed":
+                // The error names no field, so focus stays on the command and the error is announced.
+                model.Composer.StartNew();
+                model.Composer.Edit("team.example.test", "", "", "Plans", "Body");
+                Show(tab = "compose");
+                expected = fixture.Button("Check draft");
+                Press((StandardButton)expected);
+                Assert.Equal(FeedbackKind.Error, model.Composer.StatusKind);
+                break;
+            case "account test canceled":
+                fixture.Receiver.Test = token => Task.Delay(Timeout.InfiniteTimeSpan, token);
+                Show(tab = "account");
+                _ = model.Account.TestConnectionAsync();
+                session.RenderFrame();
+                Press(fixture.Button("Cancel test", tab));
+                expected = fixture.Button("Test connection", tab);
+                break;
+            case "inbox receive canceled":
+                fixture.Receiver.Inbox = async (_, token) => { await Task.Delay(Timeout.InfiniteTimeSpan, token); return null!; };
+                tab = "inbox";
+                _ = model.Inbox.ReceiveAsync();
+                session.RenderFrame();
+                Press(fixture.Button("Cancel", tab));
+                expected = fixture.Button("Receive mail", tab);
+                break;
+            case "inbox retry succeeded":
+            {
+                tab = "inbox";
+                var pages = fixture.Receiver.Inbox;
+                fixture.Receiver.Inbox = (_, _) => throw new MailConnectionException("The server did not respond.");
+                await fixture.ReceiveAsync();
+                fixture.Receiver.Inbox = pages;
+                Press(fixture.Button("Retry receiving", tab));
+                expected = Descendants(fixture.Tab(tab)).OfType<StandardListView>().Single();
+                break;
+            }
+            case "inbox load older reached the last page":
+                tab = "inbox";
+                fixture.PageOlderMessages();
+                await fixture.ReceiveAsync();
+                Press(fixture.Button("Load older", tab));
+                Assert.False(model.Inbox.CanLoadOlder);
+                expected = Descendants(fixture.Tab(tab)).OfType<StandardListView>().Single();
+                break;
+            case "composer draft discarded":
+                model.Composer.StartNew();
+                Show(tab = "compose");
+                Press(fixture.Button("Discard draft"));
+                Assert.False(model.Composer.HasDraft);
+                expected = fixture.Button("New message");
+                break;
+            case "composer send accepted":
+                model.Composer.StartNew();
+                model.Composer.Edit("to@example.test", "", "", "Plans", "Body");
+                Show(tab = "compose");
+                Press(fixture.Button("Send"));
+                Assert.Equal(DraftSubmissionState.Accepted, model.Composer.SubmissionState);
+                // Check draft no longer applies, so the next enabled action takes focus.
+                expected = fixture.Button("Save draft");
+                break;
+            case "background results while typing":
+                model.Composer.StartNew();
+                model.Composer.Edit("to@example.test", "", "", "Plans", "Body");
+                Show(tab = "compose");
+                fixture.Button("Check draft").Click();
+                expected = fixture.ComposerBody;
+                session.SetFocus(expected);
+                model.Settings.WindowWidth = "wide";
+                await model.Settings.SaveAsync();
+                await model.Inbox.ReceiveAsync();
+                fixture.ComposerBody.SetPlainText("Still typing");
+                fixture.Clock.Advance(SaveViewModel.SuccessDisplayTime);
+                fixture.Settle();
+                Assert.Equal("WindowWidth", model.Settings.ValidationField);
+                Assert.Equal("", model.Composer.Status);
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(outcome));
+        }
+
+        Assert.Equal(tab, fixture.Shell.Navigation.SelectedTab?.Id);
+        Assert.Same(expected, session.FocusedElement);
+        Assert.True(expected.CanFocus);
+        var stops = MailKeyboardNavigation.TabStops(fixture.Tab(tab)).ToList();
+        int index = stops.IndexOf(expected);
+        Assert.True(index >= 0, "The focused control is not a tab stop of its tab.");
+        fixture.Shell.CreateKeyboardNavigation(session).MoveFocus(1);
+        Assert.Same(index + 1 < stops.Count ? stops[index + 1] : fixture.Shell.Navigation, session.FocusedElement);
+    }
+
+    [Fact]
+    public async Task FocusStaysOnACommandWhileItRunsAndTabContinuesAfterIt()
+    {
+        using var fixture = Fixture.Open();
+        fixture.PageOlderMessages();
+        await fixture.ReceiveAsync();
+        var older = fixture.Button("Load older", "inbox");
+        var pending = new TaskCompletionSource<MailInboxPage>();
+        var pages = fixture.Receiver.Inbox;
+        fixture.Receiver.Inbox = (cursor, token) => cursor is null ? pages(cursor, token) : pending.Task.WaitAsync(token);
+        fixture.Session.SetFocus(older);
+        older.Click();
+        fixture.Session.RenderFrame();
+
+        Assert.True(fixture.Model.Inbox.IsLoadingList);
+        Assert.False(older.CanFocus);
+        Assert.Same(older, fixture.Session.FocusedElement);
+        // Read message is unavailable while loading, so Tab reaches Cancel rather than the tabs.
+        fixture.Shell.CreateKeyboardNavigation(fixture.Session).MoveFocus(1);
+        Assert.Equal("Cancel", Assert.IsType<StandardButton>(fixture.Session.FocusedElement).Text);
+        fixture.Model.Inbox.Cancel();
+    }
+
     private sealed class FailingSettingsStore : ISettingsStore
     {
         public Task<Broiler.Mail.Core.Settings.ApplicationSettings> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult(new Broiler.Mail.Core.Settings.ApplicationSettings());
@@ -434,11 +620,13 @@ public sealed class FeedbackPolicyTests
         public MailShellViewModel Model { get; }
         public MailShellView Shell { get; }
         public UiSession Session { get; }
-        private UiElement Tab(string id) => Shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
+        public UiElement Tab(string id) => Shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
         public StandardRichEdit ComposerBody => Descendants(Tab("compose")).OfType<StandardRichEdit>().Single();
-        public StandardButton Button(string text) => Descendants(Tab("compose")).OfType<StandardButton>().Single(button => button.Text == text);
+        public StandardButton Button(string text, string tab = "compose") => Descendants(Tab(tab)).OfType<StandardButton>().Single(button => button.Text == text);
         /// <summary>The composer's line for check results, warnings, and errors; the last of its feedback lines.</summary>
         public InlineFeedback ComposerStatus => Descendants(Tab("compose")).OfType<InlineFeedback>().Last();
+        public StandardEdit Field(string tab, string label) =>
+            Descendants(Tab(tab)).OfType<FormField>().Where(field => field.Label.Text.StartsWith(label, StringComparison.Ordinal)).Select(field => field.Control).OfType<StandardEdit>().Single();
         public InlineFeedback SettingsFeedback => Descendants(Tab("settings")).OfType<InlineFeedback>().Single();
         public StandardLabel Footer => (StandardLabel)Shell.Window.Children[0].Children[0];
 
@@ -483,6 +671,16 @@ public sealed class FeedbackPolicyTests
         {
             await Model.Inbox.ReceiveAsync();
             Settle();
+        }
+
+        /// <summary>Two pages: the newest, then one older page, the last.</summary>
+        public void PageOlderMessages()
+        {
+            var account = Model.Account.Profile!;
+            MailMessageSummary Message(uint uid) => new() { Key = new(account.Id, "INBOX", 7, uid), Sender = "author@example.test", Subject = $"Message {uid}" };
+            Receiver.Inbox = (cursor, _) => Task.FromResult(cursor is null
+                ? new MailInboxPage([Message(4), Message(3)], new(account.Id, 7, 5, 4, 1))
+                : new MailInboxPage([Message(2), Message(1)], null));
         }
 
         public void Settle()

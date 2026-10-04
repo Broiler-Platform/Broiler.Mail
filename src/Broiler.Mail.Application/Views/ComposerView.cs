@@ -151,6 +151,10 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             status.Set(model.IsBusy ? model.SubmissionState == DraftSubmissionState.Editing ? "Updating draft…" : ""
                 : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
+            // A command that stays disabled once it has finished hands focus on: Discard draft to New
+            // message, an accepted Send to the next enabled action (Save draft). Focus stays while it runs.
+            if (!model.IsBusy && surface.Session is { } session)
+                FocusNavigation.KeepFocusUsable(session, surface, create);
             updating = false;
         }
         void ShowCopiesSummary()

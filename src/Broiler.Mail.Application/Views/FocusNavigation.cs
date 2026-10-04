@@ -30,6 +30,22 @@ internal static class FocusNavigation
         return session.FocusedElement is not { } focused || focused == area || focused.IsDescendantOf(area) || area.IsDescendantOf(focused);
     }
 
+    /// <summary>
+    /// Hands focus on from a control in <paramref name="scope"/> that can no longer take it, such as a
+    /// command that disabled itself once its work was done: to <paramref name="preferred"/> when that
+    /// can take focus, otherwise to the next tab stop after it, wrapping within the scope. Focus
+    /// anywhere else is left alone, so a result arriving later never moves it. Callers wait until
+    /// the operation has finished; while it runs, focus stays on the command.
+    /// </summary>
+    public static void KeepFocusUsable(UiSession session, UiElement scope, UiElement? preferred = null)
+    {
+        // Only controls that normally take focus: a read-only scroll view is a tab stop without being focusable.
+        if (session.FocusedElement is not { Focusable: true, CanFocus: false } focused || !focused.IsDescendantOf(scope)) return;
+        var target = preferred is { CanFocus: true } ? preferred
+            : MailKeyboardNavigation.NextTabStop(scope, focused, 1) ?? MailKeyboardNavigation.TabStops(scope).FirstOrDefault();
+        if (target is not null) session.SetFocus(target);
+    }
+
     public static void Reveal(UiSession session, UiElement element)
     {
         // Layout first so newly selected tabs have useful bounds. Then reveal off-screen form fields.

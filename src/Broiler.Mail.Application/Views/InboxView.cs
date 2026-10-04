@@ -269,6 +269,9 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             if (focused == listRetry && listRetryRow.Visibility != UiVisibility.Visible) session.SetFocus(list);
             else if (focused == messageRetry && messageRetryRow.Visibility != UiVisibility.Visible) session.SetFocus(text.Editor);
             else if (focused == cancel && !model.IsBusy) session.SetFocus(receive.IsEnabled ? receive : list);
+            // Any other command that stays disabled once its work is done hands focus on; Load older
+            // on the last page goes to the list it extended.
+            else if (!model.IsBusy) FocusNavigation.KeepFocusUsable(session, panel, focused == older ? list : null);
         }
         listRetry.Clicked += async (_, _) => await model.RetryAsync();
         messageRetry.Clicked += async (_, _) => await model.RetryAsync();
