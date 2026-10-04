@@ -166,8 +166,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             if (result == 0) return unchecked((int)message.WParam);
             TranslateMessage(ref message);
             DispatchMessage(ref message);
-            // --measure --detail: WM_PAINT has rendered and presented the frame it built.
-            if (message.Message == 0x000F && _recorder is { Detail: true }) _recorder.EndPaint();
+            // --measure --detail: the render window's WM_PAINT has rendered and presented the frame it built. The
+            // frame window's own WM_PAINT draws nothing, so it cannot present a frame built elsewhere (a resize).
+            if (message.Message == 0x000F && message.Hwnd == RenderNativeHandle && _recorder is { Detail: true }) _recorder.EndPaint();
         }
     }
 
@@ -260,6 +261,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     internal bool RunOnUiThread(Action action) => PostToUiThread(action);
 
     internal WindowsHtmlPreviewHost HtmlPreview => _htmlPreview;
+
+    /// <summary>The recorder of a --measure run; null otherwise.</summary>
+    internal FrameRecorder? Recorder => _recorder;
 
     internal void DispatchMeasured(UiInputEvent input)
     {

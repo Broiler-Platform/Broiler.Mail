@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 using System.Text.Json;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Input;
+using Broiler.Input.Keyboard;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Settings;
 using Broiler.Mail.Infrastructure.Preview;
@@ -267,23 +269,7 @@ public sealed class MeasurementTests
         // A scale other than Windows' own, so the window cannot pass by rendering at that.
         double scale = Math.Abs(WindowsScreen.SystemScale() - 2) < 0.01 ? 1.25 : 2;
         var measurement = new PreviewMeasurement(new FrameRecorder(), new HtmlTileStatistics(), scale);
-        var ready = new TaskCompletionSource<HtmlPreviewWindow>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var thread = new Thread(() =>
-        {
-            try
-            {
-                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<h1>Agenda</h1><p>Items</p>", new HashSet<string>()), "Agenda as text", _ => { },
-                    measurement: measurement) { ShowInTaskbar = false, Opacity = 0 };
-                window.Shown += (_, _) => ready.TrySetResult(window);
-                window.Run();
-                closed.TrySetResult();
-            }
-            catch (Exception error) { ready.TrySetException(error); closed.TrySetException(error); }
-        }) { IsBackground = true };
-        thread.SetApartmentState(ApartmentState.STA);
-        thread.Start();
-        var preview = await ready.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        var (preview, closed) = await OpenPreviewAsync(measurement);
         try
         {
             Assert.True(measurement.Frames.WaitForFrame(0, TimeSpan.FromSeconds(15)), "The preview drew no frame.");
@@ -309,7 +295,163 @@ public sealed class MeasurementTests
         finally
         {
             preview.CloseWindow();
-            await closed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+            await closed.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+    }
+
+    [Fact]
+    public async Task A_Detailed_Preview_Times_The_Dispatch_Phases_And_Paint_Of_A_Measured_Input()
+    {
+        var measurement = new PreviewMeasurement(new FrameRecorder(detail: true), new HtmlTileStatistics(), SimulatedScale: null);
+        var (preview, closed) = await OpenPreviewAsync(measurement);
+        try
+        {
+            var frames = measurement.Frames;
+            Assert.True(frames.WaitForFrame(0, TimeSpan.FromSeconds(15)), "The preview drew no frame.");
+            // Once the opening frames have ended, only the input's frame and its paint are recorded.
+            while (frames.WaitForFrame(frames.Frames, TimeSpan.FromMilliseconds(300))) { }
+            frames.Reset();
+            int before = frames.Frames;
+            Assert.True(preview.RunOnUiThread(() => preview.DispatchMeasured(CtrlPlus())));
+            Assert.True(frames.WaitForFrame(before, TimeSpan.FromSeconds(15)), "The zoom drew no frame.");
+            // The paint that built the frame returns once the frame is rendered and presented.
+            var deadline = DateTime.UtcNow.AddSeconds(15);
+            while (frames.Snapshot().Phases!.InputToPresentMs.Length == 0)
+            {
+                Assert.True(DateTime.UtcNow < deadline, "The zoom's frame was not presented.");
+                await Task.Delay(10);
+            }
+
+            var samples = frames.Snapshot();
+            var phases = samples.Phases!;
+            Assert.Single(phases.DispatchMs);
+            Assert.Single(samples.InputToFrameMs);
+            Assert.Single(phases.InputToPresentMs);
+            Assert.True(phases.InputToPresentMs[0] >= samples.InputToFrameMs[0]);
+            Assert.NotEmpty(phases.RenderPresentMs);
+            Assert.All(new[] { phases.DrainMs, phases.MeasureMs, phases.ArrangeMs, phases.RenderListMs },
+                phase => Assert.Equal(samples.BuildMs.Length, phase.Length));
+
+            // A resize draws its frame inside SetWindowPos, outside any paint message. The frame window's WM_PAINT
+            // that follows draws nothing, so it must not be taken for that frame's present.
+            frames.Reset();
+            before = frames.Frames;
+            Assert.True(preview.RunOnUiThread(() => WindowsScreen.Resize(preview.NativeHandle, WindowsScreen.OuterSize(preview.NativeHandle).Width - 80,
+                WindowsScreen.OuterSize(preview.NativeHandle).Height)));
+            Assert.True(frames.WaitForFrame(before, TimeSpan.FromSeconds(15)), "The resize drew no frame.");
+            await Task.Delay(500);
+            Assert.Empty(frames.Snapshot().Phases!.RenderPresentMs);
+        }
+        finally
+        {
+            preview.CloseWindow();
+            await closed.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+    }
+
+    private static UiInputEvent CtrlPlus() => UiInputEvent.FromKeyboardKey(new KeyboardKeyEvent(
+        new InputEventHeader(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1),
+        KeyboardKey.FromName("VirtualKey:" + 0xBB), KeyboardKeyTransition.Down, KeyboardModifierState.Control, 0xBB, 0, 0, false, false,
+        Source: InputEventSource.Synthetic));
+
+    /// <summary>A measured preview of a short document in a real window on its own thread, open until it is closed.</summary>
+    private static async Task<(HtmlPreviewWindow Window, Task Closed)> OpenPreviewAsync(PreviewMeasurement measurement)
+    {
+        var ready = new TaskCompletionSource<HtmlPreviewWindow>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<h1>Agenda</h1><p>Items</p>", new HashSet<string>()), "Agenda as text", _ => { },
+                    measurement: measurement) { ShowInTaskbar = false, Opacity = 0 };
+                window.Shown += (_, _) => ready.TrySetResult(window);
+                window.Run();
+                closed.TrySetResult();
+            }
+            catch (Exception error) { ready.TrySetException(error); closed.TrySetException(error); }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        return (await ready.Task.WaitAsync(TimeSpan.FromSeconds(30)), closed.Task);
+    }
+
+    [Fact]
+    public async Task A_Detailed_Splitter_Run_Times_Each_Dispatch_Phase_And_Paint()
+    {
+        var (report, samples) = await MeasureInWindowAsync(MeasureWorkload.Splitter);
+        using (report)
+        {
+            var root = report.RootElement;
+            Assert.True(root.GetProperty("detail").GetBoolean());
+            Assert.Equal(60, root.GetProperty("steps").GetInt32());
+            Assert.Equal(0, root.GetProperty("unpaintedSteps").GetInt32());
+            foreach (string field in new[] { "dispatchMsP50", "drainMsP50", "measureMsP50", "arrangeMsP50", "renderListMsP50", "renderPresentMsP50", "inputToPresentMsP50" })
+                Assert.True(root.GetProperty(field).ValueKind == JsonValueKind.Number, field);
+        }
+        var phases = samples.Phases!;
+        // Each key press was dispatched, shown by a frame built in its own paint, and presented when that paint returned.
+        Assert.Equal(60, phases.DispatchMs.Length);
+        Assert.Equal(60, samples.InputToFrameMs.Length);
+        Assert.Equal(60, phases.InputToPresentMs.Length);
+        Assert.True(phases.RenderPresentMs.Length >= 60, $"{phases.RenderPresentMs.Length} presents were timed.");
+        Assert.All(new[] { phases.DrainMs, phases.MeasureMs, phases.ArrangeMs, phases.RenderListMs },
+            phase => Assert.Equal(samples.BuildMs.Length, phase.Length));
+    }
+
+    [Fact]
+    public async Task A_Detailed_Resize_Run_Times_The_Render_And_Present_Inside_Each_Resize()
+    {
+        var (report, samples) = await MeasureInWindowAsync(MeasureWorkload.Resize);
+        using (report)
+        {
+            var root = report.RootElement;
+            Assert.Equal(30, root.GetProperty("steps").GetInt32());
+            Assert.Equal(0, root.GetProperty("unpaintedSteps").GetInt32());
+            foreach (string field in new[] { "measureMsP50", "renderPresentMsP50", "inputToPresentMsP50" })
+                Assert.True(root.GetProperty(field).ValueKind == JsonValueKind.Number, field);
+        }
+        // A resize draws and presents its frame before SetWindowPos returns; no paint message follows for it.
+        var phases = samples.Phases!;
+        Assert.True(phases.InputToPresentMs.Length >= 30, $"{phases.InputToPresentMs.Length} resizes were presented.");
+        Assert.True(phases.RenderPresentMs.Length >= 30, $"{phases.RenderPresentMs.Length} presents were timed.");
+    }
+
+    /// <summary>
+    /// Runs a --measure --detail demo on the inbox fixture in a real window, as the app does: the run closes the
+    /// window once it has written its report. Returns the report and every sample the window's recorder kept.
+    /// </summary>
+    private static async Task<(JsonDocument Report, FrameSamples Samples)> MeasureInWindowAsync(MeasureWorkload workload)
+    {
+        string path = Path.Combine(Path.GetTempPath(), $"broiler-mail-report-{Guid.NewGuid():N}.json");
+        var options = new DemoOptions(DemoScenario.Inbox, AppTheme.Light, Measure: workload, Report: path, Detail: true);
+        var palette = StandardControlPaint.Theme;
+        var finished = new TaskCompletionSource<(int ExitCode, FrameSamples Samples)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var application = DemoApplication.Create(options);
+                application.InitializeAsync().GetAwaiter().GetResult();
+                using var window = new WindowsMailWindow(application, options);
+                int exitCode = window.Run();
+                finished.TrySetResult((exitCode, window.Recorder!.Snapshot()));
+            }
+            catch (Exception error) { finished.TrySetException(error); }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        try
+        {
+            var (exitCode, samples) = await finished.Task.WaitAsync(TimeSpan.FromSeconds(90));
+            Assert.Equal(0, exitCode);
+            return (JsonDocument.Parse(File.ReadAllText(path)), samples);
+        }
+        finally
+        {
+            // The window sets the process-wide palette; the next window or test starts from the one before.
+            StandardControlPaint.ApplyTheme(palette);
+            File.Delete(path);
         }
     }
 

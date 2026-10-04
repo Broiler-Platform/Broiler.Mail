@@ -800,8 +800,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             if (result == 0) return unchecked((int)message.WParam);
             TranslateMessage(ref message);
             DispatchMessage(ref message);
-            // --measure --detail: WM_PAINT has rendered and presented the frame it built.
-            if (message.Message == 0x000F && _measurement?.Frames is { Detail: true } recorder) recorder.EndPaint();
+            // --measure --detail: the render window's WM_PAINT has rendered and presented the frame it built; the
+            // frame window's own WM_PAINT draws nothing.
+            if (message.Message == 0x000F && message.Hwnd == RenderNativeHandle && _measurement?.Frames is { Detail: true } recorder) recorder.EndPaint();
         }
     }
 
