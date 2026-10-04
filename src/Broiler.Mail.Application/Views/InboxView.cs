@@ -118,18 +118,21 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             Orientation = UiSplitterOrientation.Vertical,
             FirstPane = listPane,
             SecondPane = reading,
-            FirstPaneMinimumSize = 180,
-            SecondPaneMinimumSize = 220,
+            // Side by side, neither pane is dragged below the width the compact switch keeps readable;
+            // the saved ratio is only clamped for display, so a wider window shows it again.
+            FirstPaneMinimumSize = AdaptiveInboxLayout.ListReadableWidth,
+            SecondPaneMinimumSize = AdaptiveInboxLayout.ReaderReadableWidth,
             SplitterFraction = model.SplitterFraction,
         };
         // Whether the reader is the pane being looked at. In compact mode only one pane shows, and
         // moving the list selection with the keyboard must not leave the list.
         bool readerOpen = false;
         MailMessageKey? selectedKey = null;
-        var layout = new AdaptiveInboxLayout(split, () => readerOpen && model.SelectedMessage is not null);
+        var layout = new AdaptiveInboxLayout(split, () => readerOpen && model.SelectedMessage is not null, () => model.SplitterFraction);
         split.SplitterPositionChanged += (_, e) =>
         {
-            // Collapsing a pane for compact mode must not overwrite the user's wide split ratio.
+            // Collapsing a pane for compact mode, or a narrow width clamping the split to the panes'
+            // minimum widths, must not overwrite the user's wide split ratio.
             if (!updating && !layout.IsAdapting && !layout.IsCompact)
                 model.SplitterFraction = e.NewFraction;
         };
