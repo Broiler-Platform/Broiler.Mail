@@ -118,8 +118,9 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             Orientation = UiSplitterOrientation.Vertical,
             FirstPane = listPane,
             SecondPane = reading,
-            // Side by side, neither pane is dragged below the width the compact switch keeps readable;
-            // the saved ratio is only clamped for display, so a wider window shows it again.
+            // Side by side, neither pane is dragged below the width the compact switch keeps readable
+            // (just above the switch the two share the splitter's width; see NeedsCompact). The saved
+            // ratio is only clamped for display, so a wider window shows it again.
             FirstPaneMinimumSize = AdaptiveInboxLayout.ListReadableWidth,
             SecondPaneMinimumSize = AdaptiveInboxLayout.ReaderReadableWidth,
             SplitterFraction = model.SplitterFraction,

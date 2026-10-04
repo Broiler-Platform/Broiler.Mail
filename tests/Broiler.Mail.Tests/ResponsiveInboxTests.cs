@@ -137,6 +137,25 @@ public sealed class ResponsiveInboxTests
         Assert.False(fixture.Layout.IsCompact);
     }
 
+    [Theory]
+    [InlineData(680)]
+    [InlineData(684)]
+    [InlineData(687)]
+    public async Task JustAboveTheCompactSwitchThePanesShareTheSplittersWidth(int width)
+    {
+        using var fixture = await Fixture.OpenAsync(1100);
+        fixture.Resize(width);
+        Assert.False(fixture.Layout.IsCompact);
+
+        // The switch compares the two readable widths with the whole width, without the splitter,
+        // so here the panes are together that much narrower, and neither by more than that.
+        double splitter = fixture.Split.Splitter.PreferredSize.Width;
+        Assert.Equal(width - splitter, fixture.List.Bounds.Width + fixture.Reader.Bounds.Width, 0);
+        Assert.InRange(fixture.List.Bounds.Width, AdaptiveInboxLayout.ListReadableWidth - splitter, AdaptiveInboxLayout.ListReadableWidth + 0.5);
+        Assert.InRange(fixture.Reader.Bounds.Width, AdaptiveInboxLayout.ReaderReadableWidth - splitter, AdaptiveInboxLayout.ReaderReadableWidth + 0.5);
+        Assert.Equal(0.35, fixture.Model.SplitterFraction, 3);
+    }
+
     [Fact]
     public async Task TheListCannotBeDraggedNarrowerThanItsReadableWidthAndItsRowsStayInside()
     {

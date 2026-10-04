@@ -51,7 +51,11 @@ public sealed class AdaptiveInboxLayout : UiElement
     /// </summary>
     public bool IsAdapting { get; private set; }
 
-    /// <summary>Compact when the two panes cannot both be readable; not a device or fixed window breakpoint.</summary>
+    /// <summary>
+    /// Compact when the two panes cannot both be readable; not a device or fixed window breakpoint.
+    /// The splitter is not counted: from this width up to the splitter's width more, the two panes
+    /// share that difference and each may be up to that much narrower than its readable width.
+    /// </summary>
     public static bool NeedsCompact(double width) => width < ListReadableWidth + ReaderReadableWidth;
 
     /// <summary>Re-evaluates the compact pane after the reader was opened or closed.</summary>
