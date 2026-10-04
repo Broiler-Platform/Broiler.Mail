@@ -79,7 +79,7 @@ internal static class DemoApplication
                 ToText = "team@example.test", CcText = "", BccText = "",
                 State = DraftSubmissionState.Unknown,
             },
-            DemoScenario.DraftConflict or DemoScenario.SendRejected => new DraftSnapshot
+            DemoScenario.DraftConflict or DemoScenario.SendRejected or DemoScenario.DraftInvalid => new DraftSnapshot
             {
                 Draft = new MailDraft
                 {
@@ -258,6 +258,11 @@ internal static class DemoApplication
             // The first newest-page fetch succeeds so the failed refresh is shown over retained content.
             if (scenario == DemoScenario.ReceiveError && older is null && Interlocked.Increment(ref _receives) > 1)
                 throw new MailConnectionException("The demo server did not respond. Check the connection, then retry.");
+            // The canceled refresh waits for its cancellation, like a server that has not answered yet.
+            if (scenario == DemoScenario.ReceiveCanceled && older is null && Interlocked.Increment(ref _receives) > 1)
+                await Task.Delay(Timeout.Infinite, cancellationToken);
+            if (scenario == DemoScenario.LoadError && older is not null)
+                throw new MailConnectionException("The demo server did not respond while loading older messages. Check the connection, then retry.");
             int total = Total;
             if (total == 0) return new([], null);
             int end = older?.NextIndex ?? total - 1;

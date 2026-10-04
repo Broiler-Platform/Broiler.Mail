@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
 using Broiler.Graphics.Geometry;
@@ -344,6 +345,70 @@ public sealed class DemoGalleryTests
         }
     }
 
+    [Fact]
+    public void Receive_Canceled_Is_Information_Beside_The_Kept_Inbox_With_Retry()
+    {
+        Run(DemoScenario.ReceiveCanceled, (model, shell) =>
+        {
+            var inbox = model.Inbox;
+            Assert.Equal(InboxViewModel.PageSize, inbox.Messages.Count);
+            Assert.Equal(55u, inbox.SelectedMessage?.Key.Uid);
+            Assert.NotNull(inbox.Body);
+            Assert.Equal(InboxProblemScope.List, inbox.ProblemScope);
+            Assert.True(inbox.ProblemIsCancellation);
+            Assert.True(inbox.CanRetry);
+            var notice = Descendants(Tab(shell, "inbox")).OfType<InlineFeedback>().First();
+            Assert.Equal((FeedbackKind.Information, "Receiving was canceled."), (notice.Kind, notice.Message));
+            Assert.True(IsAvailable(Button(shell, "inbox", "Retry receiving")));
+            Assert.True(IsAvailable(Button(shell, "inbox", "Receive mail")));
+            Assert.False(Button(shell, "inbox", "Cancel").IsEnabled);
+            Assert.Equal("Canceled. Retry is available.", Footer(shell));
+        });
+    }
+
+    [Fact]
+    public void Load_Error_Keeps_The_Loaded_Messages_And_Offers_Retry_Beside_The_List()
+    {
+        Run(DemoScenario.LoadError, (model, shell) =>
+        {
+            var inbox = model.Inbox;
+            Assert.Equal(InboxViewModel.PageSize, inbox.Messages.Count);
+            Assert.Equal(55u, inbox.SelectedMessage?.Key.Uid);
+            Assert.NotNull(inbox.Body);
+            Assert.Equal(InboxProblemScope.List, inbox.ProblemScope);
+            Assert.False(inbox.ProblemIsCancellation);
+            Assert.Contains("did not respond while loading older messages", inbox.Problem);
+            Assert.Contains("from the last successful receive", inbox.Problem);
+            // Retry repeats Load older, which stays available too.
+            Assert.True(inbox.CanRetry);
+            Assert.True(inbox.CanLoadOlder);
+            var notice = Descendants(Tab(shell, "inbox")).OfType<InlineFeedback>().First();
+            Assert.Equal((FeedbackKind.Error, inbox.Problem), (notice.Kind, notice.Message));
+            Assert.True(IsAvailable(Button(shell, "inbox", "Retry receiving")));
+            Assert.True(IsAvailable(Button(shell, "inbox", "Load older")));
+            Assert.Equal("Mail could not be received. Details and Retry are beside the list.", Footer(shell));
+        });
+    }
+
+    [Fact]
+    public void Draft_Invalid_Keeps_The_Recipient_Error_Beside_The_Editable_Draft()
+    {
+        Run(DemoScenario.DraftInvalid, (model, shell) =>
+        {
+            var composer = model.Composer;
+            Assert.Equal("team.example.test", composer.To);
+            Assert.Equal(FeedbackKind.Error, composer.StatusKind);
+            Assert.Equal("Enter valid email addresses separated by commas.", composer.Status);
+            Assert.True(composer.CanEdit);
+            var status = Descendants(Tab(shell, "compose")).OfType<InlineFeedback>().Last();
+            Assert.Equal((FeedbackKind.Error, composer.Status), (status.Kind, status.Message));
+            foreach (var action in new[] { "Check draft", "Save draft", "Discard draft" })
+                Assert.True(IsAvailable(Button(shell, "compose", action)), action);
+            // The demo never sends; the send hint says so instead of the error.
+            Assert.False(Button(shell, "compose", "Send").IsEnabled);
+        });
+    }
+
     // The demo tester cannot send; this checks that the fixture's command left the composer untouched as well.
     private static void AssertNoSubmission(MailShellViewModel model)
     {
@@ -352,13 +417,27 @@ public sealed class DemoGalleryTests
         Assert.Equal(SentCopyState.NotRequested, model.Composer.SentCopy);
     }
 
-    private static UiElement AccountTab(MailShellView shell) => shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;
+    private static UiElement AccountTab(MailShellView shell) => Tab(shell, "account");
 
     private static StandardButton Button(MailShellView shell, string text) =>
         Descendants(AccountTab(shell)).OfType<StandardButton>().Single(button => button.Text == text);
 
     private static string[] StepLines(MailShellView shell) => Descendants(AccountTab(shell)).OfType<FormSection>().First().Content.Children
         .OfType<StandardLabel>().Where(label => label.Visibility == UiVisibility.Visible).Select(label => label.Text).ToArray();
+
+    private static UiElement Tab(MailShellView shell, string id) => shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
+
+    private static StandardButton Button(MailShellView shell, string tab, string text) =>
+        Descendants(Tab(shell, tab)).OfType<StandardButton>().Single(button => button.Text == text);
+
+    private static string Footer(MailShellView shell) => ((StandardLabel)shell.Window.Children[0].Children[0]).Text;
+
+    private static bool IsAvailable(StandardButton button)
+    {
+        for (UiElement? current = button; current is not null; current = current.Parent)
+            if (current.Visibility != UiVisibility.Visible) return false;
+        return button.IsEnabled;
+    }
 
     private static IEnumerable<UiElement> Descendants(UiElement root)
     {
