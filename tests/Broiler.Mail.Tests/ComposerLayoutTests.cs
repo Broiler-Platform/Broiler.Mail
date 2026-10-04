@@ -1,5 +1,7 @@
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Windowing;
+using Broiler.Input.Keyboard;
 using Broiler.Mail.Application.Persistence;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
@@ -11,6 +13,7 @@ using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.RichEdit;
 using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Standard;
 
@@ -68,6 +71,63 @@ public sealed class ComposerLayoutTests
 
         Assert.Equal("First line\nSecond line", fixture.Body.GetPlainText());
         Assert.Equal(selection, fixture.Body.Selection);
+    }
+
+    [Fact]
+    public async Task TypingKeepsItsUndoHistoryThroughStatusAutosaveAccountInboxAndDisclosureUpdates()
+    {
+        using var fixture = new Fixture(1100, 720);
+        Assert.True(fixture.Composer.StartNew());
+        fixture.Render();
+        // Text that was there before typing, such as a recovered draft, is not part of the history.
+        const string loaded = "Dear all,\n";
+        fixture.Body.SetPlainText(loaded);
+        Assert.True(fixture.Body.SetEditorSelection(loaded.Length, loaded.Length));
+        fixture.Session.SetFocus(fixture.Body);
+        const string typed = "the agenda is ready";
+        foreach (char character in typed)
+            Assert.True(fixture.Session.DispatchInput(Text(character)));
+        Assert.Equal(loaded + typed, fixture.Composer.PlainText);
+
+        // Everything that refreshes the composer while the user writes.
+        fixture.Dispatcher.DrainUntil(() => fixture.Composer.StorageKind != FeedbackKind.Progress);
+        fixture.Composer.CheckDraft();
+        fixture.Composer.SetAccount(fixture.Account with { DisplayName = "Renamed" });
+        await fixture.Inbox.ReceiveAsync();
+        fixture.Dispatcher.DrainUntil(() => !fixture.Inbox.IsBusy);
+        var copies = Descendants(fixture.Surface).OfType<FormSection>().Single();
+        copies.Toggle!.Click();
+        fixture.Render();
+        copies.Toggle.Click();
+        fixture.Render();
+        Assert.Same(fixture.Body, fixture.Session.FocusedElement);
+        Assert.Equal(loaded + typed, fixture.Body.GetPlainText());
+        Assert.True(fixture.Body.GetCommandState(RichEditCommand.Undo).IsEnabled);
+
+        // Ctrl+Z, through the editor's own keys, takes back the typing and nothing before it; the caret
+        // stays where the text was removed, and the draft follows.
+        for (int press = 0; press < typed.Length && fixture.Body.GetCommandState(RichEditCommand.Undo).IsEnabled; press++)
+        {
+            Assert.True(fixture.Session.DispatchInput(Key(0x5A, control: true)));
+            string text = fixture.Body.GetPlainText();
+            Assert.StartsWith(text, loaded + typed, StringComparison.Ordinal);
+            Assert.True(text.Length >= loaded.Length);
+            var caret = fixture.Body.GetTextEditorMetrics();
+            Assert.Equal((text.Length, text.Length), (caret.SelectionStart, caret.SelectionEnd));
+        }
+        Assert.Equal(loaded, fixture.Body.GetPlainText());
+        Assert.False(fixture.Body.GetCommandState(RichEditCommand.Undo).IsEnabled);
+        fixture.Render();
+        Assert.Equal(loaded, fixture.Composer.PlainText);
+
+        // Ctrl+Y restores it, with the caret after the restored text.
+        for (int press = 0; press < typed.Length && fixture.Body.GetCommandState(RichEditCommand.Redo).IsEnabled; press++)
+            Assert.True(fixture.Session.DispatchInput(Key(0x59, control: true)));
+        Assert.Equal(loaded + typed, fixture.Body.GetPlainText());
+        var end = fixture.Body.GetTextEditorMetrics();
+        Assert.Equal(((loaded + typed).Length, (loaded + typed).Length), (end.SelectionStart, end.SelectionEnd));
+        fixture.Render();
+        Assert.Equal(loaded + typed, fixture.Composer.PlainText);
     }
 
     [Fact]
@@ -165,6 +225,20 @@ public sealed class ComposerLayoutTests
             foreach (var item in Descendants(child)) yield return item;
     }
 
+    private static UiInputEvent Text(char character)
+    {
+#pragma warning disable CS0618
+        return new StandardLegacyGraphicsInputAdapter("composer-layout").FromText(new BTextInputEventArgs(character));
+#pragma warning restore CS0618
+    }
+
+    private static UiInputEvent Key(int code, bool control = false)
+    {
+#pragma warning disable CS0618
+        return new StandardLegacyGraphicsInputAdapter("composer-layout").FromKey(new BKeyEventArgs(code, control, false, false), KeyboardKeyTransition.Down);
+#pragma warning restore CS0618
+    }
+
     private sealed class Sender(bool available) : IMailSender
     {
         public bool IsAvailable => available;
@@ -174,8 +248,6 @@ public sealed class ComposerLayoutTests
 
     private sealed class Fixture : IDisposable
     {
-        private readonly UiSession _session;
-        private readonly InboxViewModel _inbox;
 
         public Fixture(int width, int height)
         {
@@ -183,16 +255,19 @@ public sealed class ComposerLayoutTests
             Dispatcher = new TestQueueDispatcher();
             Composer = new ComposerViewModel(new MemoryDraftStore(), dispatcher: Dispatcher);
             Composer.SetAccount(Account);
-            _inbox = new InboxViewModel(new TestMailReceiver(), Dispatcher);
-            Surface = (FormSurface)new ComposerView(Composer, _inbox).CreateContent();
-            _session = new StandardUiSessionBuilder().WithDispatcher(Dispatcher).Build(new Host(width, height));
-            _session.AddRoot(Surface);
+            Inbox = new InboxViewModel(new TestMailReceiver(), Dispatcher);
+            Inbox.SetAccount(Account);
+            Surface = (FormSurface)new ComposerView(Composer, Inbox).CreateContent();
+            Session = new StandardUiSessionBuilder().WithDispatcher(Dispatcher).Build(new Host(width, height));
+            Session.AddRoot(Surface);
             Render();
         }
 
         public AccountProfile Account { get; }
         public TestQueueDispatcher Dispatcher { get; }
         public ComposerViewModel Composer { get; }
+        public InboxViewModel Inbox { get; }
+        public UiSession Session { get; }
         public FormSurface Surface { get; }
         public StandardRichEdit Body => Descendants(Surface).OfType<StandardRichEdit>().Single();
         public StandardLabel SenderLine => Descendants(Surface).OfType<StandardLabel>().Single(label => label.Text.StartsWith("From:", StringComparison.Ordinal));
@@ -202,14 +277,14 @@ public sealed class ComposerLayoutTests
         public void Render()
         {
             Dispatcher.Drain();
-            _session.RenderFrame();
+            Session.RenderFrame();
         }
 
         public void Dispose()
         {
-            _session.Dispose();
+            Session.Dispose();
             Surface.Dispose();
-            _inbox.Dispose();
+            Inbox.Dispose();
             Composer.Dispose();
         }
     }
