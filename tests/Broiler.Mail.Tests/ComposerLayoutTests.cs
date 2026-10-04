@@ -191,7 +191,8 @@ public sealed class ComposerLayoutTests
             var area = fixture.Surface.Children.OfType<FormViewport>().Last().Scroll;
             BRect shown = fixture.Feedback.First().Bounds;
             Assert.True(area.HasVerticalScrollbar, "The feedback fits its area; the text is not large enough.");
-            Assert.Equal(area.ContentBounds.Top, shown.Top, 0.5);
+            // The area lays its content out just inside its top edge, so a ring there is whole.
+            Assert.Equal(area.ContentBounds.Top + area.VerticalContentInset, shown.Top, 0.5);
             Assert.True(shown.Bottom <= fixture.Feedback.Last().Bounds.Top + 0.5, $"The error is at {shown}, the hint at {fixture.Feedback.Last().Bounds}.");
 
             // A passed check is a result, not a problem: it stays below the hint, as before.

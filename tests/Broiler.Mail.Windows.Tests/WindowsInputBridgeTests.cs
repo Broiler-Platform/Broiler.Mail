@@ -6,6 +6,8 @@ using Broiler.Input;
 using Broiler.Input.Mouse;
 using Broiler.Input.Text;
 using Broiler.Hosting.Windows.Input;
+using Broiler.Native.Windows;
+using Broiler.Native.Windows.Input;
 using Broiler.UI;
 using Broiler.UI.Edit.Standard;
 using Broiler.UI.Panel.Standard;
@@ -56,25 +58,25 @@ public sealed class WindowsInputBridgeTests
         bridge.SetFocusAction = hwnd => focusedHandle = hwnd;
 
         // 1. WM_SETFOCUS on top-level moves focus to render child
-        bridge.OnTopLevelMessage(InputNative.WM_SETFOCUS, 0, 0);
+        bridge.OnTopLevelMessage(WindowNative.WmSetFocus, 0, 0);
         Assert.Equal(renderChild, focusedHandle);
 
         focusedHandle = 0;
 
         // 2. WM_ACTIVATE (WA_ACTIVE = 1) moves focus to render child
-        bridge.OnTopLevelMessage(InputNative.WM_ACTIVATE, (nint)InputNative.WA_ACTIVE, 0);
+        bridge.OnTopLevelMessage(WindowNative.WmActivate, (nint)WindowNative.WaActive, 0);
         Assert.Equal(renderChild, focusedHandle);
 
         focusedHandle = 0;
 
         // 3. WM_ACTIVATE (WA_CLICKACTIVE = 2) moves focus to render child
-        bridge.OnTopLevelMessage(InputNative.WM_ACTIVATE, (nint)InputNative.WA_CLICKACTIVE, 0);
+        bridge.OnTopLevelMessage(WindowNative.WmActivate, (nint)WindowNative.WaClickActive, 0);
         Assert.Equal(renderChild, focusedHandle);
 
         focusedHandle = 0;
 
         // 4. WM_ACTIVATE (WA_INACTIVE = 0) does NOT transfer focus
-        bridge.OnTopLevelMessage(InputNative.WM_ACTIVATE, (nint)InputNative.WA_INACTIVE, 0);
+        bridge.OnTopLevelMessage(WindowNative.WmActivate, (nint)WindowNative.WaInactive, 0);
         Assert.Equal(0, focusedHandle);
     }
 
@@ -131,7 +133,7 @@ public sealed class WindowsInputBridgeTests
         // High surrogate followed by WM_KILLFOCUS
         bridge.ProcessChar('\uD83D');
         Assert.Equal('\uD83D', bridge.PendingHighSurrogate);
-        bridge.ProcessNativeMessage(0, InputNative.WM_KILLFOCUS, 0, 0);
+        bridge.ProcessNativeMessage(0, WindowNative.WmKillFocus, 0, 0);
         Assert.Equal('\0', bridge.PendingHighSurrogate);
         Assert.Empty(events);
     }
@@ -142,7 +144,7 @@ public sealed class WindowsInputBridgeTests
         var (_, bridge, events) = CreateTestHarness();
 
         // Simulate Ctrl down, Alt up
-        bridge.KeyStateProvider = vk => vk == InputNative.VK_CONTROL ? unchecked((short)0x8000) : (short)0;
+        bridge.KeyStateProvider = vk => vk == WindowNative.VkControl ? unchecked((short)0x8000) : (short)0;
 
         // Ctrl+C produces ASCII 0x03 (ETX)
         bridge.ProcessChar((char)0x03);
@@ -167,7 +169,7 @@ public sealed class WindowsInputBridgeTests
 
         // AltGr simulates both Ctrl and Alt down in Windows
         bridge.KeyStateProvider = vk =>
-            (vk == InputNative.VK_CONTROL || vk == InputNative.VK_MENU)
+            (vk == WindowNative.VkControl || vk == WindowNative.VkMenu)
                 ? unchecked((short)0x8000)
                 : (short)0;
 
@@ -195,7 +197,7 @@ public sealed class WindowsInputBridgeTests
     {
         var (_, bridge, events) = CreateTestHarness();
 
-        bridge.ProcessNativeMessage(0, InputNative.WM_DEADCHAR, '^', 0);
+        bridge.ProcessNativeMessage(0, WindowNative.WmDeadChar, '^', 0);
         Assert.True(bridge.DeadKeyActive);
         Assert.Empty(events);
 
@@ -212,7 +214,7 @@ public sealed class WindowsInputBridgeTests
         var (_, bridge, events) = CreateTestHarness();
 
         // 1. WM_IME_STARTCOMPOSITION
-        bridge.ProcessNativeMessage(0, InputNative.WM_IME_STARTCOMPOSITION, 0, 0);
+        bridge.ProcessNativeMessage(0, ImmNative.WM_IME_STARTCOMPOSITION, 0, 0);
         Assert.True(bridge.IsComposing);
         Assert.Single(events);
         Assert.Equal(UiInputEventKind.TextComposition, events[0].Kind);
@@ -221,8 +223,8 @@ public sealed class WindowsInputBridgeTests
         events.Clear();
 
         // 2. WM_IME_COMPOSITION (GCS_COMPSTR)
-        bridge.CompositionStringProvider = (hwnd, idx) => idx == InputNative.GCS_COMPSTR ? "nihon" : "";
-        bridge.ProcessNativeMessage(0, InputNative.WM_IME_COMPOSITION, 0, (nint)InputNative.GCS_COMPSTR);
+        bridge.CompositionStringProvider = (hwnd, idx) => idx == ImmNative.GCS_COMPSTR ? "nihon" : "";
+        bridge.ProcessNativeMessage(0, ImmNative.WM_IME_COMPOSITION, 0, (nint)ImmNative.GCS_COMPSTR);
         Assert.True(bridge.IsComposing);
         Assert.Single(events);
         Assert.Equal("nihon", events[0].Text);
@@ -231,8 +233,8 @@ public sealed class WindowsInputBridgeTests
         events.Clear();
 
         // 3. WM_IME_COMPOSITION (GCS_RESULTSTR commit)
-        bridge.CompositionStringProvider = (hwnd, idx) => idx == InputNative.GCS_RESULTSTR ? "日本" : "";
-        bridge.ProcessNativeMessage(0, InputNative.WM_IME_COMPOSITION, 0, (nint)InputNative.GCS_RESULTSTR);
+        bridge.CompositionStringProvider = (hwnd, idx) => idx == ImmNative.GCS_RESULTSTR ? "日本" : "";
+        bridge.ProcessNativeMessage(0, ImmNative.WM_IME_COMPOSITION, 0, (nint)ImmNative.GCS_RESULTSTR);
         Assert.False(bridge.IsComposing);
         Assert.Single(events);
         Assert.Equal("日本", events[0].Text);
@@ -240,8 +242,9 @@ public sealed class WindowsInputBridgeTests
 
         events.Clear();
 
-        // 4. Windows DefWindowProc subsequently pumps synthetic WM_CHAR for '日' then '本'.
-        // These MUST be suppressed to prevent duplicate text!
+        // 4. A host that calls ProcessNativeMessage itself passes the commit on to DefWindowProc, which then
+        // pumps synthetic WM_CHAR for '日' and '本'. These MUST be suppressed to prevent duplicate text.
+        // (Through the render window's subclass, with DrawsCompositionInline, Windows makes no copies.)
         bridge.ProcessChar('日');
         bridge.ProcessChar('本');
         Assert.Empty(events); // Exactly once: no duplicate insertions!
@@ -257,11 +260,11 @@ public sealed class WindowsInputBridgeTests
     {
         var (_, bridge, events) = CreateTestHarness();
 
-        bridge.ProcessNativeMessage(0, InputNative.WM_IME_STARTCOMPOSITION, 0, 0);
+        bridge.ProcessNativeMessage(0, ImmNative.WM_IME_STARTCOMPOSITION, 0, 0);
         Assert.True(bridge.IsComposing);
         events.Clear();
 
-        bridge.ProcessNativeMessage(0, InputNative.WM_KILLFOCUS, 0, 0);
+        bridge.ProcessNativeMessage(0, WindowNative.WmKillFocus, 0, 0);
         Assert.False(bridge.IsComposing);
         Assert.Single(events);
         Assert.Equal(TextCompositionState.Cancelled, events[0].CompositionState);
@@ -274,7 +277,7 @@ public sealed class WindowsInputBridgeTests
 
         // Standard vertical notch (120)
         nint vWParam = (nint)(120 << 16);
-        bridge.ProcessNativeMessage(0, InputNative.WM_MOUSEWHEEL, vWParam, 0);
+        bridge.ProcessNativeMessage(0, WindowNative.WmMouseWheel, vWParam, 0);
         Assert.Single(events);
         Assert.Equal(UiInputEventKind.PointerWheel, events[0].Kind);
         Assert.Equal(MouseWheelAxis.Vertical, events[0].WheelAxis);
@@ -284,7 +287,7 @@ public sealed class WindowsInputBridgeTests
 
         // High-precision vertical delta (30 = 0.25 notch)
         nint precisionWParam = (nint)(30 << 16);
-        bridge.ProcessNativeMessage(0, InputNative.WM_MOUSEWHEEL, precisionWParam, 0);
+        bridge.ProcessNativeMessage(0, WindowNative.WmMouseWheel, precisionWParam, 0);
         Assert.Single(events);
         Assert.Equal(MouseWheelAxis.Vertical, events[0].WheelAxis);
         Assert.Equal(0.25, events[0].WheelDeltaNotches);
@@ -293,7 +296,7 @@ public sealed class WindowsInputBridgeTests
 
         // Horizontal tilt wheel (WM_MOUSEHWHEEL, 120 = 1.0 notch)
         nint hWParam = (nint)(120 << 16);
-        bridge.ProcessNativeMessage(0, InputNative.WM_MOUSEHWHEEL, hWParam, 0);
+        bridge.ProcessNativeMessage(0, WindowNative.WmMouseHWheel, hWParam, 0);
         Assert.Single(events);
         Assert.Equal(MouseWheelAxis.Horizontal, events[0].WheelAxis);
         Assert.Equal(1.0, events[0].WheelDeltaNotches);
@@ -301,8 +304,8 @@ public sealed class WindowsInputBridgeTests
         events.Clear();
 
         // Shift + Vertical Wheel converts to Horizontal scroll
-        bridge.KeyStateProvider = vk => vk == InputNative.VK_SHIFT ? unchecked((short)0x8000) : (short)0;
-        bridge.ProcessNativeMessage(0, InputNative.WM_MOUSEWHEEL, vWParam, 0);
+        bridge.KeyStateProvider = vk => vk == WindowNative.VkShift ? unchecked((short)0x8000) : (short)0;
+        bridge.ProcessNativeMessage(0, WindowNative.WmMouseWheel, vWParam, 0);
         Assert.Single(events);
         Assert.Equal(MouseWheelAxis.Horizontal, events[0].WheelAxis);
         Assert.Equal(1.0, events[0].WheelDeltaNotches);
@@ -325,7 +328,7 @@ public sealed class WindowsInputBridgeTests
         Assert.Equal("Hello", edit.Text);
 
         // 2. Simulate Ctrl+A and Ctrl+C chords
-        bridge.KeyStateProvider = vk => vk == InputNative.VK_CONTROL ? unchecked((short)0x8000) : (short)0;
+        bridge.KeyStateProvider = vk => vk == WindowNative.VkControl ? unchecked((short)0x8000) : (short)0;
         bridge.ProcessChar((char)0x01); // Ctrl+A
         bridge.ProcessChar((char)0x03); // Ctrl+C
         Assert.Equal("Hello", edit.Text);
@@ -347,17 +350,17 @@ public sealed class WindowsInputBridgeTests
         session.SetFocus(richEdit);
 
         // Start composition
-        bridge.ProcessNativeMessage(0, InputNative.WM_IME_STARTCOMPOSITION, 0, 0);
+        bridge.ProcessNativeMessage(0, ImmNative.WM_IME_STARTCOMPOSITION, 0, 0);
 
         // Update composition
-        bridge.CompositionStringProvider = (_, idx) => idx == InputNative.GCS_COMPSTR ? "nihon" : "";
-        bridge.ProcessNativeMessage(0, InputNative.WM_IME_COMPOSITION, 0, (nint)InputNative.GCS_COMPSTR);
+        bridge.CompositionStringProvider = (_, idx) => idx == ImmNative.GCS_COMPSTR ? "nihon" : "";
+        bridge.ProcessNativeMessage(0, ImmNative.WM_IME_COMPOSITION, 0, (nint)ImmNative.GCS_COMPSTR);
 
         // Commit composition
-        bridge.CompositionStringProvider = (_, idx) => idx == InputNative.GCS_RESULTSTR ? "日本" : "";
-        bridge.ProcessNativeMessage(0, InputNative.WM_IME_COMPOSITION, 0, (nint)InputNative.GCS_RESULTSTR);
+        bridge.CompositionStringProvider = (_, idx) => idx == ImmNative.GCS_RESULTSTR ? "日本" : "";
+        bridge.ProcessNativeMessage(0, ImmNative.WM_IME_COMPOSITION, 0, (nint)ImmNative.GCS_RESULTSTR);
 
-        // Duplicate WM_CHAR suppression
+        // Duplicate WM_CHAR suppression, for a host that passes the commit on to DefWindowProc itself
         bridge.ProcessChar('日');
         bridge.ProcessChar('本');
 
