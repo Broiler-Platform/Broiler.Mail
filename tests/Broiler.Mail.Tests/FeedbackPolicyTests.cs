@@ -400,8 +400,9 @@ public sealed class FeedbackPolicyTests
             foreach (string outcome in new[]
             {
                 "settings validation", "account validation in a collapsed section", "account section collapsed",
-                "composer copies collapsed", "composer check failed", "account test canceled", "inbox receive canceled",
-                "inbox retry succeeded", "inbox load older reached the last page", "inbox load older reached the last page in the reader",
+                "composer copies collapsed", "composer check failed", "account test canceled", "account SMTP test found no password",
+                "inbox receive canceled", "inbox retry succeeded", "inbox load older reached the last page",
+                "inbox load older reached the last page in the reader",
                 "composer draft discarded", "composer send accepted", "background results while typing",
             })
                 data.Add(outcome, layout);
@@ -426,7 +427,9 @@ public sealed class FeedbackPolicyTests
 
     private static async Task FocusLandsOnAUsableControl(string outcome, string layout)
     {
-        using var fixture = layout == Wide ? Fixture.Open() : Fixture.Open(width: 640, height: 480);
+        // Only the SMTP outcome offers the SMTP test; the account form of the others stays as it was.
+        var outgoing = outcome == "account SMTP test found no password" ? new TestOutgoingTester() : null;
+        using var fixture = layout == Wide ? Fixture.Open(outgoing: outgoing) : Fixture.Open(outgoing: outgoing, width: 640, height: 480);
         var model = fixture.Model;
         var session = fixture.Session;
         void Show(string id) { fixture.Shell.Navigation.SelectTab(id); fixture.Settle(); }
@@ -506,6 +509,18 @@ public sealed class FeedbackPolicyTests
                 session.RenderFrame();
                 Press(fixture.Button("Cancel test", tab));
                 expected = fixture.Button("Test connection", tab);
+                break;
+            case "account SMTP test found no password":
+                // A password was saved, but the tester finds none for these server details. The test
+                // then stays disabled until one is saved, so focus moves on to the SMTP password.
+                Show(tab = "account");
+                await model.Account.SavePasswordAsync("synthetic-app-password", MailProtocol.Smtp);
+                fixture.Settle();
+                outgoing!.Test = _ => throw new MailConnectionException("No SMTP password is saved for these server details.", MailConnectionFailure.MissingPassword);
+                Press(fixture.Button("Test SMTP sign-in", tab));
+                Assert.Equal(false, model.Account.HasSmtpPassword);
+                Assert.False(fixture.Button("Test SMTP sign-in", tab).IsEnabled);
+                expected = fixture.Field(tab, "SMTP password");
                 break;
             case "inbox receive canceled":
                 fixture.Receiver.Inbox = async (_, token) => { await Task.Delay(Timeout.InfiniteTimeSpan, token); return null!; };
