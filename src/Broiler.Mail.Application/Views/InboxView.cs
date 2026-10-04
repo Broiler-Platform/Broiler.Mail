@@ -47,11 +47,25 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
 {
     private Func<bool>? _back;
     private Func<bool>? _open;
+    private AdaptiveInboxLayout? _layout;
 
     /// <summary>In compact mode, returns from the reader to the list. False when there is nothing to go back from.</summary>
     public bool GoBackToList() => _back?.Invoke() == true;
     /// <summary>Reloads the selected message and, in compact mode, shows it in place of the list.</summary>
     public bool OpenSelected() => _open?.Invoke() == true;
+
+    /// <summary>
+    /// Raised when compact mode hides the list or the reader, or shows it again. A window resize
+    /// raises it during layout.
+    /// </summary>
+    public event EventHandler? PanesChanged;
+
+    /// <summary>
+    /// Whether the pane that explains a problem of <paramref name="scope"/> is on screen: the list
+    /// pane for the list, the reader for the message. Compact mode shows only one of them.
+    /// </summary>
+    public bool ShowsPaneOf(InboxProblemScope scope) => _layout is not { IsCompact: true } layout
+        || (scope == InboxProblemScope.Message ? layout.ShowsReaderOnly : !layout.ShowsReaderOnly);
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=A38929
     // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
@@ -130,7 +144,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         // moving the list selection with the keyboard must not leave the list.
         bool readerOpen = false;
         MailMessageKey? selectedKey = null;
-        var layout = new AdaptiveInboxLayout(split, () => readerOpen && model.SelectedMessage is not null, () => model.SplitterFraction);
+        var layout = _layout = new AdaptiveInboxLayout(split, () => readerOpen && model.SelectedMessage is not null, () => model.SplitterFraction);
         split.SplitterPositionChanged += (_, e) =>
         {
             // Collapsing a pane for compact mode, or a narrow width clamping the split to the panes'
@@ -291,6 +305,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         {
             backRow.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
             FocusVisiblePane();
+            PanesChanged?.Invoke(this, EventArgs.Empty);
         };
         bool OpenReader()
         {

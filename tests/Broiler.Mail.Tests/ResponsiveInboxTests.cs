@@ -247,6 +247,109 @@ public sealed class ResponsiveInboxTests
         Assert.False(shell.Inbox.GoBackToList());
     }
 
+    /// <summary>
+    /// The footer points to a problem's details and Retry. While compact mode hides the pane they are
+    /// in, it says how to show that pane instead, and points there again once the pane is shown:
+    /// opened, after Back, or beside the other pane in a wider window.
+    /// </summary>
+    [Fact]
+    public async Task WhileCompactModeHidesAProblemsPaneTheFooterSaysHowToShowIt()
+    {
+        using var directory = new TestDirectory();
+        var account = TestDirectory.Profile();
+        var messages = Fixture.CreateMessages(account, 5);
+        var receiver = Fixture.CreateReceiver(messages);
+        receiver.Body = async (key, token) =>
+        {
+            if (key == messages[2].Key) throw new MailConnectionException("The connection closed.");
+            if (key == messages[3].Key) await Task.Delay(Timeout.InfiniteTimeSpan, token);
+            return new MailMessageBody(key, $"Body {key.Uid}");
+        };
+        var dispatcher = new TestQueueDispatcher();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        using var shell = new MailShellView(model);
+        var host = new Host(640, 480);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+        session.AddRoot(shell.Window);
+        shell.Navigation.SelectTab("inbox");
+        void Settle()
+        {
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            session.RenderFrame();
+            // What the frame's layout posted, as the window drains it before the next frame.
+            dispatcher.Drain();
+            session.RenderFrame();
+        }
+        await model.Inbox.ReceiveAsync();
+        Settle();
+        var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
+
+        // Moving through the compact list loads a message without opening it, so its problem is out of sight.
+        const string open = "The message could not be loaded. Open it to see the details and Retry.";
+        const string beside = "The message could not be loaded. Details and Retry are beside it.";
+        await model.Inbox.SelectAsync(messages[2].Key);
+        Settle();
+        Assert.Equal(InboxProblemScope.Message, model.Inbox.ProblemScope);
+        Assert.True(layout.IsCompact && !layout.ShowsReaderOnly);
+        Assert.Equal(open, shell.Footer.Text);
+
+        // Opened (the reload fails again), the reader shows the details and Retry.
+        Assert.True(shell.Inbox.OpenSelected());
+        Settle();
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.Equal(InboxProblemScope.Message, model.Inbox.ProblemScope);
+        Assert.Equal(beside, shell.Footer.Text);
+        Assert.True(shell.Inbox.GoBackToList());
+        Settle();
+        Assert.Equal(open, shell.Footer.Text);
+
+        // Resizing switches between both panes and the list alone.
+        foreach (var (width, expected) in new[] { (1100, beside), (640, open) })
+        {
+            host.Width = width;
+            shell.Window.InvalidateMeasure();
+            Settle();
+            Assert.Equal(width == 640, layout.IsCompact);
+            Assert.Equal(expected, shell.Footer.Text);
+        }
+
+        // A receive failure while the compact reader is shown: the list, with its details and Retry, is hidden.
+        await model.Inbox.SelectAsync(messages[1].Key);
+        Settle();
+        Assert.True(shell.Inbox.OpenSelected());
+        Settle();
+        receiver.Inbox = (_, _) => throw new MailConnectionException("The server did not respond.");
+        await model.Inbox.ReceiveAsync();
+        Settle();
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.Equal("Mail could not be received. Go back to the list to see the details and Retry.", shell.Footer.Text);
+
+        // Canceled, Retry is in that pane too.
+        receiver.Inbox = async (_, token) => { await Task.Delay(Timeout.InfiniteTimeSpan, token); return null!; };
+        _ = model.Inbox.ReceiveAsync();
+        model.Inbox.Cancel();
+        Settle();
+        Assert.Equal("Canceled. Go back to the list to retry.", shell.Footer.Text);
+        Assert.True(shell.Inbox.GoBackToList());
+        Settle();
+        Assert.Equal("Canceled. Retry is available.", shell.Footer.Text);
+        _ = model.Inbox.SelectAsync(messages[3].Key);
+        model.Inbox.Cancel();
+        Settle();
+        Assert.False(layout.ShowsReaderOnly);
+        Assert.Equal("Canceled. Open the message to retry.", shell.Footer.Text);
+
+        // Back in the list, a receive failure is explained above it.
+        receiver.Inbox = (_, _) => throw new MailConnectionException("The server did not respond.");
+        await model.Inbox.ReceiveAsync();
+        Settle();
+        Assert.Equal("Mail could not be received. Details and Retry are above the list.", shell.Footer.Text);
+    }
+
     private static IEnumerable<UiElement> Descendants(UiElement root)
     {
         yield return root;

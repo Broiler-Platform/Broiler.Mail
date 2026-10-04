@@ -81,17 +81,7 @@ public sealed class MailShellView : IDisposable
                 "compose" => !string.IsNullOrEmpty(model.Composer.Status) && model.Composer.StatusKind == FeedbackKind.Information && !model.Composer.IsBusy
                     ? model.Composer.Status
                     : IsProblem(model.Composer.StorageKind) ? $"The draft is not saved. {DetailsBelow}" : model.Composer.StorageStatus,
-                // The explanation and Retry sit in the affected pane, above the list or under the message's
-                // header; the footer only points there.
-                _ => model.Inbox.ProblemScope switch
-                {
-                    InboxProblemScope.List when !model.Inbox.ProblemIsCancellation => model.Inbox.ProblemIsOlderPage
-                        ? "Older messages could not be loaded. Details and Retry are above the list."
-                        : "Mail could not be received. Details and Retry are above the list.",
-                    InboxProblemScope.Message when !model.Inbox.ProblemIsCancellation => "The message could not be loaded. Details and Retry are beside it.",
-                    InboxProblemScope.None => model.Inbox.Status,
-                    _ => "Canceled. Retry is available.",
-                },
+                _ => InboxStatus(model.Inbox, Inbox.ShowsPaneOf(model.Inbox.ProblemScope)),
             };
             status.Text = text;
         }
@@ -113,6 +103,14 @@ public sealed class MailShellView : IDisposable
             if (session is not null && target is not null) FocusNavigation.FocusAndReveal(session, target);
         };
         model.Inbox.Changed += (_, _) => RefreshStatus();
+        // Opening a message, Back, or a resize hides or shows a pane. A resize does so during layout,
+        // after the footer was laid out, so the new text waits until after that frame and is laid out
+        // in the next one.
+        Inbox.PanesChanged += (_, _) =>
+        {
+            if (Window.Session is { } session) session.Dispatcher.Post(RefreshStatus);
+            else RefreshStatus();
+        };
         model.Account.Changed += (_, _) => RefreshStatus();
         model.Settings.Changed += (_, _) => RefreshStatus();
         model.Composer.Changed += (_, _) => RefreshStatus();
@@ -129,6 +127,23 @@ public sealed class MailShellView : IDisposable
     public const double FooterPadding = 4;
 
     private static bool IsProblem(FeedbackKind kind) => kind is FeedbackKind.Error or FeedbackKind.Warning;
+
+    /// <summary>
+    /// The inbox's status or, for a problem, a pointer to its explanation and Retry, which sit in the
+    /// affected pane: above the list, or under the message's header. While compact mode hides that
+    /// pane, the footer says how to show it instead.
+    /// </summary>
+    private static string InboxStatus(InboxViewModel inbox, bool paneShown) => (inbox.ProblemScope, inbox.ProblemIsCancellation, paneShown) switch
+    {
+        (InboxProblemScope.None, _, _) => inbox.Status,
+        (_, true, true) => "Canceled. Retry is available.",
+        (InboxProblemScope.Message, true, false) => "Canceled. Open the message to retry.",
+        (_, true, false) => "Canceled. Go back to the list to retry.",
+        (InboxProblemScope.Message, false, true) => "The message could not be loaded. Details and Retry are beside it.",
+        (InboxProblemScope.Message, false, false) => "The message could not be loaded. Open it to see the details and Retry.",
+        _ => (inbox.ProblemIsOlderPage ? "Older messages could not be loaded. " : "Mail could not be received. ")
+            + (paneShown ? "Details and Retry are above the list." : "Go back to the list to see the details and Retry."),
+    };
 
     public StandardWindow Window { get; }
     public StandardTabView Navigation { get; }
