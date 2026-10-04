@@ -1,0 +1,321 @@
+<#
+.SYNOPSIS
+Records the UI Automation events Broiler.Mail raises during a short scripted walk, as a transcript for the
+screen-reader pass (H-01).
+
+.DESCRIPTION
+Publishes the Windows app as NativeAOT (the shipped configuration) unless -Executable is given, then runs one
+or more short walks on demo fixtures and prints, step by step, the UI Automation events a screen reader
+would be given:
+  - FocusChanged: what gets focus, with its control type, name and, for a form field, its error;
+  - Notification: the text and kind the app announces (status, progress, results);
+  - ElementSelected: the row or tab that became selected;
+  - property changes of ExpandCollapseState and ToggleState (managed UIA client) and of IsDataValidForForm
+    (UIA COM client, which knows that property).
+Walks:
+  - inbox (inbox fixture): Tab through the window, select a row through UI Automation, move down the list
+    with the arrow key, and receive with F5.
+  - composer (draft-invalid fixture, where Check draft has rejected the To address): show and hide Cc and
+    Bcc through ExpandCollapse, type into To so the error goes, and run Check draft again so it comes back.
+Input is posted to the window's render child or given through UI Automation patterns, so the walk does not
+take keyboard focus from other applications, although the window appears briefly. Each demo process this
+script starts is closed, or killed if it does not close. The transcript is printed and saved to -Output as
+transcript.txt. It records what the app raises, not what a particular screen reader then says.
+#>
+param(
+    [string]$Executable,
+    [string]$Output,
+    [ValidateSet('inbox', 'composer')]
+    [string[]]$Walks = @('inbox', 'composer'),
+    [string]$Size = '1100x720',
+    [ValidateRange(500, 20000)]
+    [int]$SettleMilliseconds = 2500,
+    # How long each step waits for its events before the next one.
+    [ValidateRange(100, 5000)]
+    [int]$StepMilliseconds = 600
+)
+
+$ErrorActionPreference = 'Stop'
+$repository = Split-Path -Parent $PSScriptRoot
+if (!$Output) { $Output = Join-Path $repository ("artifacts/uia-record/" + (Get-Date -Format 'yyyy-MM-dd-HHmm')) }
+New-Item -ItemType Directory -Force -Path $Output | Out-Null
+
+if (!$Executable) {
+    # NativeAOT publishing locates the C++ toolchain through vswhere.
+    $installer = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer'
+    if ((Test-Path $installer) -and ($env:PATH -notlike "*$installer*")) { $env:PATH = "$installer;$env:PATH" }
+    $publish = Join-Path $repository 'artifacts/accept-app'
+    dotnet publish (Join-Path $repository 'src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj') -c Release -r win-x64 --self-contained true -p:PublishAot=true -p:PublishTrimmed=true -o $publish | Out-Host
+    if ($LASTEXITCODE -ne 0) { throw "Publishing failed (exit $LASTEXITCODE)." }
+    $Executable = Join-Path $publish 'Broiler.Mail.Windows.exe'
+}
+$Executable = (Resolve-Path -LiteralPath $Executable).Path
+
+Add-Type -AssemblyName UIAutomationClient, UIAutomationTypes, WindowsBase
+Add-Type -ReferencedAssemblies UIAutomationClient, UIAutomationTypes, WindowsBase -TypeDefinition @'
+using System;
+using System.Collections.Concurrent;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.Runtime.InteropServices;
+using System.Threading;
+using System.Windows.Automation;
+
+// The UIA COM client, declared up to the members the recorder calls; placeholder slots keep the vtable order of
+// UIAutomationClient.h. Only IsDataValidForForm needs it: the managed client has no identifier for it.
+[ComImport, Guid("ff48dba4-60ef-4201-aa87-54103eef594e")]
+public class CUIAutomationRecorderClass { }
+
+[ComImport, Guid("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderAutomation
+{
+    void CompareElements(); void CompareRuntimeIds(); void GetRootElement();
+    IRecorderElement ElementFromHandle(IntPtr hwnd);
+    void ElementFromPoint(); void GetFocusedElement(); void GetRootElementBuildCache(); void ElementFromHandleBuildCache();
+    void ElementFromPointBuildCache(); void GetFocusedElementBuildCache(); void CreateTreeWalker(); void ControlViewWalker();
+    void ContentViewWalker(); void RawViewWalker(); void RawViewCondition(); void ControlViewCondition(); void ContentViewCondition();
+    void CreateCacheRequest(); void CreateTrueCondition(); void CreateFalseCondition(); void CreatePropertyCondition();
+    void CreatePropertyConditionEx(); void CreateAndCondition(); void CreateAndConditionFromArray(); void CreateAndConditionFromNativeArray();
+    void CreateOrCondition(); void CreateOrConditionFromArray(); void CreateOrConditionFromNativeArray(); void CreateNotCondition();
+    void AddAutomationEventHandler(); void RemoveAutomationEventHandler();
+    void AddPropertyChangedEventHandlerNativeArray(IRecorderElement element, int scope, IntPtr cacheRequest, IRecorderPropertyHandler handler,
+        [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 5)] int[] properties, int count);
+    void AddPropertyChangedEventHandler(); void RemovePropertyChangedEventHandler(); void AddStructureChangedEventHandler();
+    void RemoveStructureChangedEventHandler(); void AddFocusChangedEventHandler(); void RemoveFocusChangedEventHandler();
+    void RemoveAllEventHandlers();
+}
+
+[ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderElement
+{
+    void SetFocus(); void GetRuntimeId(); void FindFirst(); void FindAll(); void FindFirstBuildCache(); void FindAllBuildCache();
+    void BuildUpdatedCache();
+    [return: MarshalAs(UnmanagedType.Struct)] object GetCurrentPropertyValue(int propertyId);
+}
+
+[ComImport, Guid("40cd37d4-c756-4b0c-8c6f-bddfeeb13b50"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderPropertyHandler
+{
+    void HandlePropertyChangedEvent(IRecorderElement sender, int propertyId, [In, MarshalAs(UnmanagedType.Struct)] object newValue);
+}
+
+[ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+public sealed class RecorderPropertyHandler : IRecorderPropertyHandler
+{
+    public void HandlePropertyChangedEvent(IRecorderElement sender, int propertyId, object newValue)
+    {
+        string name = "";
+        try { name = sender.GetCurrentPropertyValue(30005) as string ?? ""; } catch (COMException) { }
+        UiaRecorder.Add("PropertyChanged IsDataValidForForm = " + newValue + " on '" + name + "'");
+    }
+}
+
+public static class UiaRecorder
+{
+    [DllImport("user32.dll")] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
+    [DllImport("user32.dll", EntryPoint = "PostMessageW")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
+
+    static readonly ConcurrentQueue<string> Lines = new ConcurrentQueue<string>();
+    static readonly Stopwatch Clock = new Stopwatch();
+    static int _processId;
+    static IRecorderAutomation _com;
+    static RecorderPropertyHandler _comHandler;
+
+    public static void Add(string line) { Lines.Enqueue(string.Format("{0,7:0.000}s  {1}", Clock.Elapsed.TotalSeconds, line)); }
+
+    public static string[] Drain()
+    {
+        var drained = new List<string>();
+        string line;
+        while (Lines.TryDequeue(out line)) drained.Add(line);
+        return drained.ToArray();
+    }
+
+    public static string Describe(AutomationElement element)
+    {
+        if (element == null) return "(none)";
+        try
+        {
+            var c = element.Current;
+            string text = c.ControlType.ProgrammaticName.Replace("ControlType.", "") + " '" + c.Name + "'";
+            if (!string.IsNullOrEmpty(c.HelpText)) text += " help '" + c.HelpText + "'";
+            return text;
+        }
+        catch (ElementNotAvailableException) { return "(gone)"; }
+    }
+
+    public static void Start(IntPtr render, int processId)
+    {
+        _processId = processId;
+        Clock.Restart();
+        AutomationElement root = AutomationElement.FromHandle(render);
+        Automation.AddAutomationFocusChangedEventHandler(OnFocus);
+        Automation.AddAutomationEventHandler(SelectionItemPattern.ElementSelectedEvent, root, TreeScope.Subtree, OnSelected);
+        Automation.AddAutomationEventHandler(AutomationElement.NotificationEvent, root, TreeScope.Subtree, OnNotification);
+        Automation.AddAutomationPropertyChangedEventHandler(root, TreeScope.Subtree, OnProperty,
+            ExpandCollapsePattern.ExpandCollapseStateProperty, TogglePattern.ToggleStateProperty);
+        // The COM client registers from a thread of its own in the multithreaded apartment, so its callbacks need
+        // no message loop on this thread.
+        Exception failure = null;
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                _com = (IRecorderAutomation)new CUIAutomationRecorderClass();
+                _comHandler = new RecorderPropertyHandler();
+                _com.AddPropertyChangedEventHandlerNativeArray(_com.ElementFromHandle(render), 7 /* TreeScope_Subtree */, IntPtr.Zero,
+                    _comHandler, new[] { 30103 /* IsDataValidForForm */ }, 1);
+            }
+            catch (Exception error) { failure = error; }
+        });
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        thread.Join();
+        if (failure != null) Add("(IsDataValidForForm changes are not recorded: " + failure.Message + ")");
+    }
+
+    public static void Stop()
+    {
+        Automation.RemoveAllEventHandlers();
+        var com = _com;
+        if (com == null) return;
+        var thread = new Thread(() => { try { com.RemoveAllEventHandlers(); } catch (Exception) { } });
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        thread.Join();
+        _com = null;
+    }
+
+    static bool Ours(AutomationElement element)
+    {
+        try { return element != null && element.Current.ProcessId == _processId; }
+        catch (ElementNotAvailableException) { return false; }
+    }
+
+    static void OnFocus(object sender, AutomationFocusChangedEventArgs e)
+    {
+        var element = sender as AutomationElement;
+        if (Ours(element)) Add("FocusChanged " + Describe(element));
+    }
+
+    static void OnSelected(object sender, AutomationEventArgs e) { Add("ElementSelected " + Describe(sender as AutomationElement)); }
+
+    static void OnNotification(object sender, AutomationEventArgs e)
+    {
+        var notification = e as NotificationEventArgs;
+        if (notification == null) { Add("Notification from " + Describe(sender as AutomationElement)); return; }
+        Add("Notification " + notification.NotificationKind + "/" + notification.NotificationProcessing + " '" + notification.DisplayString +
+            "' activity '" + notification.ActivityId + "' from " + Describe(sender as AutomationElement));
+    }
+
+    static void OnProperty(object sender, AutomationPropertyChangedEventArgs e)
+    {
+        Add("PropertyChanged " + e.Property.ProgrammaticName.Replace("Pattern.", ".").Replace("Property", "") + " = " + e.NewValue + " on " + Describe(sender as AutomationElement));
+    }
+
+    public static AutomationElement Find(IntPtr render, ControlType type, string name)
+    {
+        return AutomationElement.FromHandle(render).FindFirst(TreeScope.Descendants,
+            new AndCondition(new PropertyCondition(AutomationElement.ControlTypeProperty, type), new PropertyCondition(AutomationElement.NameProperty, name)));
+    }
+
+    public static AutomationElement Row(IntPtr render, int index)
+    {
+        var list = Find(render, ControlType.List, "Messages");
+        if (list == null) return null;
+        var rows = list.FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
+        return index < rows.Count ? rows[index] : null;
+    }
+
+    public static void Key(IntPtr render, int key)
+    {
+        PostMessage(render, 0x100, (IntPtr)key, IntPtr.Zero);
+        PostMessage(render, 0x101, (IntPtr)key, IntPtr.Zero);
+    }
+
+    public static void Type(IntPtr render, string text)
+    {
+        foreach (char c in text) PostMessage(render, 0x102, (IntPtr)c, (IntPtr)1);
+    }
+}
+'@
+
+$transcript = [System.Collections.Generic.List[string]]::new()
+function Write-Line([string]$line) { Write-Host $line; $transcript.Add($line) }
+
+function Invoke-Step([string]$description, [scriptblock]$action) {
+    Write-Line "-- $description"
+    try { & $action } catch { Write-Line "   (step failed: $($_.Exception.Message))" }
+    Start-Sleep -Milliseconds $StepMilliseconds
+    foreach ($line in [UiaRecorder]::Drain()) { Write-Line "   $line" }
+}
+
+function Invoke-Walk([string]$walk) {
+    $fixture = if ($walk -eq 'inbox') { 'inbox' } else { 'draft-invalid' }
+    $stderr = Join-Path $Output "$walk.err.txt"
+    $process = Start-Process -FilePath $Executable -PassThru -WindowStyle Normal -RedirectStandardOutput (Join-Path $Output "$walk.out.txt") `
+        -RedirectStandardError $stderr -ArgumentList @('--demo', $fixture, '--theme', 'light', '--size', $Size)
+    $null = $process.Handle
+    $window = [IntPtr]::Zero
+    try {
+        for ($i = 0; $i -lt 150 -and $process.MainWindowHandle -eq 0 -and !$process.HasExited; $i++) { Start-Sleep -Milliseconds 100; $process.Refresh() }
+        Start-Sleep -Milliseconds $SettleMilliseconds
+        $render = [IntPtr]::Zero
+        for ($i = 0; $i -lt 50 -and $render -eq [IntPtr]::Zero -and !$process.HasExited; $i++) {
+            $process.Refresh()
+            $window = $process.MainWindowHandle
+            $render = [UiaRecorder]::FindWindowEx($window, [IntPtr]::Zero, 'BroilerGraphicsDirect2DRenderHost', $null)
+            if ($render -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 100 }
+        }
+        if ($render -eq [IntPtr]::Zero) { Write-Line "== $walk ($fixture): no window with a render child."; return }
+        Write-Line "== $walk walk on the $fixture fixture"
+        [UiaRecorder]::Start($render, $process.Id)
+        $Edit = [System.Windows.Automation.ControlType]::Edit
+        $Button = [System.Windows.Automation.ControlType]::Button
+        try {
+            if ($walk -eq 'inbox') {
+                foreach ($step in 1..5) { Invoke-Step "Tab ($step)" { [UiaRecorder]::Key($render, 0x09) } }
+                Invoke-Step 'Select the second row through UI Automation (SelectionItem.Select)' {
+                    $row = [UiaRecorder]::Row($render, 1)
+                    ([System.Windows.Automation.SelectionItemPattern]$row.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)).Select()
+                }
+                Invoke-Step 'Down arrow in the list' { [UiaRecorder]::Key($render, 0x28) }
+                Invoke-Step 'F5 receives' { [UiaRecorder]::Key($render, 0x74) }
+                Invoke-Step 'Wait for the receive to finish' { Start-Sleep -Milliseconds 1500 }
+            }
+            else {
+                $toggle = [UiaRecorder]::Find($render, $Button, 'Show Cc and Bcc')
+                Invoke-Step 'Show Cc and Bcc (ExpandCollapse.Expand)' {
+                    ([System.Windows.Automation.ExpandCollapsePattern]$toggle.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)).Expand()
+                }
+                Invoke-Step 'Hide Cc and Bcc (ExpandCollapse.Collapse)' {
+                    ([System.Windows.Automation.ExpandCollapsePattern]$toggle.GetCurrentPattern([System.Windows.Automation.ExpandCollapsePattern]::Pattern)).Collapse()
+                }
+                Invoke-Step 'Focus To (SetFocus) and type a character, which clears its error' {
+                    [UiaRecorder]::Find($render, $Edit, 'To').SetFocus()
+                    Start-Sleep -Milliseconds 200
+                    [UiaRecorder]::Type($render, 'x')
+                }
+                Invoke-Step 'Check draft (Invoke)' {
+                    ([System.Windows.Automation.InvokePattern][UiaRecorder]::Find($render, $Button, 'Check draft').GetCurrentPattern([System.Windows.Automation.InvokePattern]::Pattern)).Invoke()
+                }
+                Invoke-Step 'Tab to the next field' { [UiaRecorder]::Key($render, 0x09) }
+            }
+        }
+        finally { [UiaRecorder]::Stop() }
+    }
+    finally {
+        if (!$process.HasExited) {
+            $closeTarget = if ($window -ne [IntPtr]::Zero) { $window } else { $process.MainWindowHandle }
+            [UiaRecorder]::PostMessage($closeTarget, 0x10, [IntPtr]0, [IntPtr]0) | Out-Null
+            if (!$process.WaitForExit(5000)) { $process.Kill(); $process.WaitForExit(); Write-Line '   (the window did not close within 5 seconds and was ended)' }
+        }
+        $errors = (Get-Content -LiteralPath $stderr -Raw -ErrorAction SilentlyContinue)
+        if ($errors -and $errors.Trim().Length -gt 0) { Write-Line "   STDERR: $($errors.Trim())" }
+    }
+}
+
+foreach ($walk in $Walks) { Invoke-Walk $walk }
+$path = Join-Path $Output 'transcript.txt'
+Set-Content -LiteralPath $path -Value $transcript -Encoding utf8
+Write-Host "Transcript: $path"
