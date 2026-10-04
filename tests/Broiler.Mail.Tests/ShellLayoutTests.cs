@@ -188,10 +188,14 @@ public sealed class ShellLayoutTests
         for (int index = 0; index < before.Length; index++)
             Assert.True(before[index] == after[index], $"{where}: {before[index].Element} was at {before[index].Bounds}, but {after[index].Bounds} once measured at the arranged size.");
 
-        // The height caps hold against the height the content was given.
+        // The height caps hold against the height the content was given. An area passes its share only to
+        // show a row of buttons whole, and then still leaves the rest its minimum.
         foreach (var capped in Descendants(content).OfType<BoundedScrollArea>().Where(element => element.Bounds.Height > 0))
-            Assert.True(capped.Bounds.Height <= (capped.Parent!.Bounds.Height * capped.MaximumFraction) + 1,
-                $"{where}: {capped.Scroll.AccessibleName} is {capped.Bounds.Height} of {capped.Parent.Bounds.Height}.");
+        {
+            double available = capped.Parent!.Bounds.Height;
+            double most = Math.Max(available * capped.MaximumFraction, available - (capped.MinimumRemaining?.Invoke() ?? available));
+            Assert.True(capped.Bounds.Height <= most + 1, $"{where}: {capped.Scroll.AccessibleName} is {capped.Bounds.Height} of {available}.");
+        }
     }
 
     private static (string Element, BRect Bounds)[] Layout(UiElement root) =>

@@ -480,6 +480,76 @@ public sealed class ResponsiveInboxTests
         Assert.InRange(header.Bounds.Height, 1, (header.Parent!.Bounds.Height * 0.45) + 1);
     }
 
+    /// <summary>
+    /// The reader header takes up to 45 % of the pane and scrolls the rest, but it does not end inside one
+    /// of its rows. While the message text keeps six lines, it grows to show a row of buttons whole: the
+    /// compact reader at 640x480 shows Reply, Reply all and Forward. Otherwise it ends above the row
+    /// its share would cut, as for a long sender at 640x480, a title at twice the text size, or Reply at
+    /// twice the text size in a shorter window, and keeps to its share, so the text keeps its room.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 480, 1.0, "plain", true, false)]
+    [InlineData(640, 480, 1.0, "html", true, true)]
+    [InlineData(640, 480, 1.0, "long", false, true)]
+    [InlineData(640, 480, 2.0, "plain", false, true)]
+    [InlineData(1100, 720, 1.0, "plain", true, false)]
+    [InlineData(1100, 720, 1.0, "long", true, false)]
+    [InlineData(1100, 720, 2.0, "plain", true, false)]
+    [InlineData(1100, 640, 2.0, "plain", false, true)]
+    public async Task TheReaderHeaderEndsBetweenItsRows(int width, int height, double textScale, string message, bool replyShown, bool scrolls)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(width, height, message);
+            var header = reader.Header;
+            BRect shown = header.Scroll.ContentBounds;
+            double share = header.Parent!.Bounds.Height * 0.45;
+            string where = $"At {width}x{height}, text {textScale:P0}, {message} message, the header shows {shown} of {header.Parent.Bounds}";
+            Assert.Equal(width < 680, reader.Layout.ShowsReaderOnly);
+
+            // Each row (Back, the subject, the sender, the date, Reply, the HTML preview) is on screen whole or
+            // scrolled below the header whole, never cut at its edge.
+            var rows = header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0).ToArray();
+            foreach (var row in rows)
+                Assert.True(row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5, $"{where}: the {row.GetType().Name} is at {row.Bounds}.");
+            var reply = Descendants(header).OfType<StandardButton>().Single(button => button.Text == "Reply");
+            Assert.True(replyShown == reply.Bounds.Bottom <= shown.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
+            Assert.Equal(scrolls, header.Scroll.HasVerticalScrollbar);
+
+            // Past its share, the header leaves the text six lines; with Reply below, it keeps to its share.
+            if (header.Bounds.Height > share + 0.5)
+                Assert.True(reader.Text.Bounds.Height >= reader.Text.HeightOfLines(6) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
+            if (!replyShown)
+                Assert.True(header.Bounds.Height <= share + 0.5, where);
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>
+    /// Ending above a row near the top would leave a very short header showing nothing, so there the row
+    /// is cut at the share as before: part of Back to inbox stays on screen.
+    /// </summary>
+    [Fact]
+    public async Task AHeaderTooShortForBackToInboxStillShowsPartOfIt()
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(640, 360);
+            var header = reader.Header;
+            BRect shown = header.Scroll.ContentBounds;
+            var back = Descendants(header).OfType<StandardButton>().Single(button => button.Text == InboxView.BackText);
+            Assert.True(reader.Layout.ShowsReaderOnly);
+            Assert.True(back.Bounds.Bottom > shown.Bottom, $"Back to inbox at {back.Bounds} fits the header's {shown}; the window is not short enough.");
+            Assert.True(back.Bounds.Top < shown.Bottom - 0.5, $"Back to inbox is at {back.Bounds}, the header shows {shown}.");
+            Assert.Equal(header.Parent!.Bounds.Height * 0.45, header.Bounds.Height, 0.5);
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
     [Fact]
     public async Task AtTwiceTheTextSizeTheHeaderAndNoticeScrollInsteadOfCrowdingOutTheContent()
     {
@@ -629,6 +699,72 @@ public sealed class ResponsiveInboxTests
             Content.Dispose();
             Model.Dispose();
         }
+    }
+
+    /// <summary>The shell's inbox with a message open in the reader: its sender, its recipient, and Reply.</summary>
+    private sealed class ReaderFixture(MailShellView shell, UiSession session, TestDirectory directory) : IDisposable
+    {
+        private const string LongSender = "Maximilian Alexander von Langenstein-Habsburg <maximilian.alexander.von.langenstein-habsburg.office@subdomain.example.test>";
+        private const string LongSubject = "Re: Fwd: Agenda, travel arrangements, accessibility requirements, and the revised budget spreadsheet for the cross-team planning workshop in Zürich";
+
+        public AdaptiveInboxLayout Layout => Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
+        public BoundedScrollArea Header => Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+        public ScrollableMessageText Text => Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
+
+        /// <param name="message">
+        /// "plain"; "html", which also has HTML, so the header ends with the HTML preview's row; or "long",
+        /// with a long subject and sender, as the long-message fixture.
+        /// </param>
+        public static async Task<ReaderFixture> OpenAsync(int width, int height, string message = "plain")
+        {
+            bool html = message == "html";
+            var directory = new TestDirectory();
+            var account = TestDirectory.Profile();
+            var messages = Fixture.CreateMessages(account, 5);
+            if (message == "long") messages[0] = messages[0] with { Subject = LongSubject, Sender = LongSender };
+            var receiver = Fixture.CreateReceiver(messages);
+            receiver.Body = (key, _) => Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20)), html ? "<p>HTML body</p>" : null)
+            {
+                Composition = new MailCompositionSource { From = ["sender@example.test"], To = [account.EmailAddress], Subject = "Subject", MessageId = "message@example.test" },
+            });
+            var dispatcher = new TestQueueDispatcher();
+            var model = new MailShellViewModel(
+                new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
+                new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+                new(receiver, dispatcher),
+                new ComposerViewModel(dispatcher: dispatcher));
+            var shell = new MailShellView(model, html ? new NoPreviewHost() : null);
+            var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(width, height));
+            session.AddRoot(shell.Window);
+            shell.Navigation.SelectTab("inbox");
+            await model.Inbox.ReceiveAsync();
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            await model.Inbox.SelectAsync(messages[0].Key);
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            Assert.True(shell.Inbox.OpenSelected());
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            session.RenderFrame();
+            // What the frame's layout posted, as the window drains it before the next frame.
+            dispatcher.Drain();
+            session.RenderFrame();
+            return new(shell, session, directory);
+        }
+
+        public void Dispose()
+        {
+            session.Dispose();
+            shell.Dispose();
+            directory.Dispose();
+        }
+    }
+
+    private sealed class NoPreviewHost : IHtmlPreviewHost
+    {
+        public event EventHandler<HtmlPreviewChange>? Changed { add { } remove { } }
+        public MailMessageKey? Current => null;
+        public Task<string> ShowAsync(MailMessageBody message) => Task.FromResult("");
+        public void Close() { }
+        public void Dispose() { }
     }
 
     private sealed class Host(int width, int height) : IUiHost

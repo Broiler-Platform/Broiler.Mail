@@ -187,13 +187,34 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var headerStack = new StandardPanel { Spacing = 4 };
         foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, replyActions, previewActions }) headerStack.AddChild(element);
         // A long subject or many recipients at a large text size scroll within the header, so the
-        // message text keeps most of the pane.
+        // message text keeps most of the pane. The header ends between its rows, not inside one: it
+        // grows to show a row of buttons whole while the text keeps a few lines, and otherwise ends
+        // above the row that share would cut.
         const double headerShare = 0.45;
-        var headerColumn = new BoundedScrollArea(new ReadingColumn(headerStack, verticalMargin: 8), headerShare, "Message header");
+        const int textLinesKept = 6;
+        var text = new ScrollableMessageText();
+        var headerContent = new ReadingColumn(headerStack, verticalMargin: 8);
+        UiElement[] buttonRows = [backRow, messageRetryRow, replyActions, previewActions];
+        var headerColumn = new BoundedScrollArea(headerContent, headerShare, "Message header")
+        {
+            Rows = HeaderRows,
+            MinimumRemaining = () => text.HeightOfLines(textLinesKept),
+        };
         reading.AddChild(headerColumn);
         reading.SetDock(headerColumn, UiDock.Top);
-        var text = new ScrollableMessageText();
         reading.AddChild(text);
+
+        // Where the header's rows are, as the stack last measured them, and which are rows of buttons.
+        IEnumerable<(double Start, double End, bool Grows)> HeaderRows()
+        {
+            double top = headerContent.VerticalMargin;
+            foreach (var child in headerStack.Children.Where(child => child.Visibility != UiVisibility.Collapsed))
+            {
+                double height = child.DesiredSize.Height;
+                if (height > 0) yield return (top, top + height, buttonRows.Contains(child));
+                top += height + headerStack.Spacing;
+            }
+        }
         IReadOnlyList<MailMessageSummary>? shown = null;
         MailMessageBody? shownBody = null;
         string? shownText = null;
