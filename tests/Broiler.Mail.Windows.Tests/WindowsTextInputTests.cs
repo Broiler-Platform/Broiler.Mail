@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 using Broiler.Graphics.Geometry;
 using Broiler.Mail.Windows.Services;
 using Broiler.UI;
+using Broiler.UI.Edit.Standard;
+using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel.Standard;
 using static Broiler.Native.Windows.WindowNative;
 
@@ -59,6 +61,59 @@ public sealed class WindowsTextInputTests
     }
 
     [Fact]
+    public void APasswordFieldTurnsTheImeOffUntilItsCaretIsCleared()
+    {
+        OnWindowThread(window =>
+        {
+            var input = new WindowsTextInput(() => window, () => 1.0);
+            var password = new StandardEdit { IsPassword = true };
+            var other = new StandardEdit();
+
+            // Broiler.UI draws no composition in a password field, and the IME's own window would show the password
+            // in plain text. A native password box takes no IME either.
+            input.PublishCaret(new UiTextCaretInfo(password, Caret, 0, 0, 0, false));
+            Assert.False(HasInputContext(window));
+            input.ClearCaret(other);
+            Assert.False(HasInputContext(window));
+            // Focus leaving the password field clears its caret, which gives the window its IME back.
+            input.ClearCaret(password);
+            Assert.True(HasInputContext(window));
+
+            // A caret in another field brings the IME back too, placed at that caret.
+            input.PublishCaret(new UiTextCaretInfo(password, Caret, 0, 0, 0, false));
+            Assert.False(HasInputContext(window));
+            input.PublishCaret(new UiTextCaretInfo(other, Caret, 0, 0, 0, false));
+            Assert.Equal((101, 58), Position(ReadCompositionForm(window)));
+        });
+    }
+
+    [Fact]
+    public void TheAccountPasswordTakesNoImeAndTheNextFieldGetsItBack()
+    {
+        using var fixture = HiddenMailWindow.Start();
+        fixture.Ui(() => fixture.Window.Shell.Navigation.SelectTab("account"));
+        fixture.Layout();
+        var account = fixture.Ui(() => fixture.Window.Shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!);
+        StandardEdit Field(string label) => fixture.Ui(() =>
+            (StandardEdit)HiddenMailWindow.Descendants(account).OfType<StandardLabel>().Single(item => item.Text == label).Target!);
+        var password = Field("Password / app password");
+        var user = Field("Username");
+        double scale = fixture.Ui(() => fixture.Window.DpiScale);
+
+        // The frame that draws the focused password field turns the window's IME off; keys are still typed.
+        fixture.Ui(() => fixture.Window.Session.SetFocus(password));
+        fixture.Type("pw");
+        fixture.Layout();
+        Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
+        Assert.Equal("pw", fixture.Ui(() => password.Text));
+
+        fixture.Ui(() => fixture.Window.Session.SetFocus(user));
+        fixture.Layout();
+        Assert.True(fixture.Ui(() => HasInputContext(fixture.Render)));
+        AssertWithin(fixture.Ui(() => user.Bounds), fixture.Ui(() => ReadCompositionForm(fixture.Render)), scale);
+    }
+
+    [Fact]
     public void TheComposerPlacesTheCompositionWindowAtTheFocusedFieldsCaret()
     {
         using var fixture = HiddenMailWindow.Start();
@@ -91,6 +146,14 @@ public sealed class WindowsTextInputTests
     }
 
     private static (int X, int Y) Position(CompositionForm form) => (form.X, form.Y);
+
+    private static bool HasInputContext(nint window)
+    {
+        nint context = ImmGetContext(window);
+        if (context == 0) return false;
+        ImmReleaseContext(window, context);
+        return true;
+    }
 
     private static CompositionForm ReadCompositionForm(nint window)
     {
