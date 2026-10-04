@@ -107,11 +107,12 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   `--contrast aquatic|desert|dusk|night-sky` forces the palette of that Windows 11
   contrast theme, without changing the system's settings. Broiler.UI strokes a
   button's focus ring inside its fill, and in the system contrast palette (as in the
-  Light preset) the ring and a default button's accent fill are the same color, so
-  `AppearanceController` gives Send, Save account and Save settings their label color
-  as the ring wherever the palette's ring does not stand out (3:1) on their fills
-  (`DefaultButtonFocus`). A hovered secondary button has the same problem on its state
-  fill; one ring color cannot serve both of its fills, so that waits for Broiler.UI.
+  Light preset) the ring and a default button's accent fill are the same color.
+  Broiler.UI picks the ring against the fill the button draws in its current state
+  (ADR 0032): where the palette's ring does not stand out (3:1) there, it draws the
+  ring in that state's label color. Send, Save account and Save settings, and a
+  hovered secondary button on the contrast palette's state fill, keep a visible ring
+  without Mail's help.
 - `MailKeyboardNavigation` adds enabled-control traversal, automatic scrolling to
   focused fields, tab shortcuts, receive, and cancellation. First run opens Account.
   A tab stop is any element that reports `CanFocus` and `IsTabStop`. Read-only scroll

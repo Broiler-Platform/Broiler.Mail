@@ -110,8 +110,8 @@ public sealed class AppearanceTests
 
     /// <summary>
     /// A default button is filled with the accent and strokes its focus ring inside that fill. Where the palette's
-    /// ring is the accent, or too close to it, the button rings itself in its label color, so keyboard focus on
-    /// Save account (and Send, Save settings) stays visible; other buttons keep the palette's ring.
+    /// ring is the accent, or too close to it, Broiler.UI draws the ring in the button's label color (ADR 0032), so
+    /// keyboard focus on Save account (and Send, Save settings) stays visible; other buttons keep the palette's ring.
     /// </summary>
     [Theory]
     [InlineData("Light")]

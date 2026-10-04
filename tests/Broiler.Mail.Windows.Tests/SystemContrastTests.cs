@@ -2,7 +2,6 @@ using Broiler.Graphics.Color;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Hosting.Windows;
-using Broiler.Mail.Application.Views;
 using Broiler.Mail.Windows.Hosting;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
@@ -57,7 +56,8 @@ public sealed class SystemContrastTests
             Assert.Equal(WindowsTheme.CreateHighContrastTheme(WindowsSystemColors.Dusk, settings),
                 fixture.Ui(() => StandardControlPaint.GetTheme(fixture.Window.Session)));
             var save = fixture.Ui(() => HiddenMailWindow.Descendants(fixture.Window.Shell.Window).OfType<StandardButton>().Single(button => button.Text == "Save account"));
-            AssertRingStandsOut(fixture.Ui(() => (save.FocusRing, save.PrimaryBackground)));
+            fixture.Ui(() => fixture.Window.Shell.Navigation.SelectTab("account"));
+            AssertRingStandsOut(fixture.Ui(() => (DrawnRing(fixture.Window.Session, save), save.PrimaryBackground)));
 
             // Switching from one contrast theme to another changes only the colors, and Windows says so with
             // WM_SYSCOLORCHANGE; the settings stay the same.
@@ -66,15 +66,15 @@ public sealed class SystemContrastTests
             fixture.Settle();
             Assert.Equal(WindowsTheme.CreateHighContrastTheme(WindowsSystemColors.Desert, settings),
                 fixture.Ui(() => StandardControlPaint.GetTheme(fixture.Window.Session)));
-            AssertRingStandsOut(fixture.Ui(() => (save.FocusRing, save.PrimaryBackground)));
+            AssertRingStandsOut(fixture.Ui(() => (DrawnRing(fixture.Window.Session, save), save.PrimaryBackground)));
         }
         finally { Reset(); }
     }
 
     /// <summary>
     /// Hosting maps the accent and the focus ring of every Windows contrast theme to Highlight, and Broiler.UI strokes a
-    /// default button's ring inside its accent fill, so Mail rings Send, Save account and Save settings in their label
-    /// color (HighlightText) instead; buttons on the window color keep the Highlight ring.
+    /// default button's ring inside its accent fill, so it draws the ring of Send, Save account and Save settings in their
+    /// label color (HighlightText) instead (ADR 0032); buttons on the window color keep the Highlight ring.
     /// </summary>
     [Theory]
     [InlineData("aquatic")]
@@ -102,12 +102,23 @@ public sealed class SystemContrastTests
         session.AddRoot(bar);
         try
         {
-            AppearanceController.Theme(session, palette);
-            Assert.Equal(colors.HighlightText, send.FocusRing);
-            AssertRingStandsOut((send.FocusRing, send.PrimaryBackground));
+            StandardThemeController.Apply(session, palette);
+            var ring = DrawnRing(session, send);
+            Assert.Equal(colors.HighlightText, ring);
+            AssertRingStandsOut((ring, send.PrimaryBackground));
             Assert.Equal(colors.Highlight, check.FocusRing);
         }
         finally { StandardControlPaint.ApplyTheme(before); }
+    }
+
+    /// <summary>The ring <paramref name="button"/> draws while it has keyboard focus, read from a rendered frame.</summary>
+    private static BColor DrawnRing(UiSession session, StandardButton button)
+    {
+        session.SetFocus(button);
+        Assert.True(session.IsFocusVisible);
+        var commands = session.RenderFrame()!.Commands.ToArray();
+        var ring = StandardControlPaint.Inset(button.Bounds, 2);
+        return commands.OfType<BRenderCommand.StrokeRoundedRect>().Single(command => command.Rect == ring).Color;
     }
 
     private static void AssertRingStandsOut((BColor Ring, BColor Fill) button) =>

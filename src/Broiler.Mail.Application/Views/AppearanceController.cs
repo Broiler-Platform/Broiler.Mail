@@ -52,20 +52,11 @@ public sealed class AppearanceController : IDisposable
         if (tokens == Current) return;
         // Combo boxes and their rows size themselves from the applied font (Broiler.UI preview.18); Mail sets
         // no size on them, so a text-scaled theme makes them taller without help here.
-        Theme(_session, tokens);
+        // Buttons pick their focus ring against the fill they draw (Broiler.UI ADR 0032), so a default button
+        // rings itself visibly on its accent even where the palette's ring is that accent.
+        StandardThemeController.Apply(_session, tokens);
         Current = tokens;
         Applied?.Invoke(this, EventArgs.Empty);
-    }
-
-    /// <summary>
-    /// Applies <paramref name="tokens"/> to every control in <paramref name="session"/> through
-    /// <see cref="StandardThemeController"/>, and keeps each default button's focus ring visible on its fill
-    /// (<see cref="DefaultButtonFocus"/>).
-    /// </summary>
-    public static void Theme(UiSession session, StandardThemeTokens tokens)
-    {
-        StandardThemeController.Apply(session, tokens);
-        DefaultButtonFocus.KeepRingsVisible(session, tokens);
     }
 
     public void Dispose()
