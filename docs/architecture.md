@@ -105,7 +105,13 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   by the Windows composition root, and resolved again when the system colors change.
   The demo's `--contrast high` forces the theme's high-contrast preset, and
   `--contrast aquatic|desert|dusk|night-sky` forces the palette of that Windows 11
-  contrast theme, without changing the system's settings.
+  contrast theme, without changing the system's settings. Broiler.UI strokes a
+  button's focus ring inside its fill, and in the system contrast palette (as in the
+  Light preset) the ring and a default button's accent fill are the same color, so
+  `AppearanceController` gives Send, Save account and Save settings their label color
+  as the ring wherever the palette's ring does not stand out (3:1) on their fills
+  (`DefaultButtonFocus`). A hovered secondary button has the same problem on its state
+  fill; one ring color cannot serve both of its fills, so that waits for Broiler.UI.
 - `MailKeyboardNavigation` adds enabled-control traversal, automatic scrolling to
   focused fields, tab shortcuts, receive, and cancellation. First run opens Account.
   A tab stop is any element that reports `CanFocus` and `IsTabStop`. Read-only scroll
@@ -113,8 +119,13 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   their own through Broiler.UI's `StandardScrollView.FocusWhenScrollable` while they
   scroll and hold nothing focusable, and draw a focus ring then. The reader's frameless
   editors are ringed by Mail: the message text around its view, the header details
-  just outside the editor (`FocusRingFrame`).
-  Full OS screen-reader/UI Automation integration remains the version 7 work item.
+  just outside the editor (`FocusRingFrame`). A field the forms refuse carries the
+  error itself (`FormField.SetError`), so it reports Invalid with the error as its
+  description and takes focus while the user is on the form: in Account and Settings
+  the field validation names, in the composer the recipient field (To, Cc, Bcc) a
+  draft check or a send stopped at.
+  Broiler.Hosting maps the UI to UI Automation (names, states, relations, runtime IDs,
+  events); a pass with a real screen reader (H-01) remains.
   The legacy Graphics input adapter is isolated in the Windows project. For the main
   window's native input it carries only pointer movement, buttons, and key presses
   (the measurement harness also synthesizes events through it); the HTML preview
