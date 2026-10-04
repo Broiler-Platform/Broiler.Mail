@@ -82,18 +82,38 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   window is created, preserving the entry point's STA thread. Controls are never
   updated by storage continuations.
 - The Windows host implements `IUiClipboardHost` using bounded Unicode clipboard
-  access and `IUiTextInputHost` to place the default IME composition window at the
-  caret, in physical pixels, and to turn the IME off while a password field has the
-  caret, as a native password box does. Hosting's `WindowsInputBridge` subclasses the
-  render window. It handles characters, surrogate pairs, IME composition, and both
-  wheel axes, and tracks dead keys, whose composed character Windows delivers; the
-  Graphics character and wheel callbacks are not reached while it is attached.
-  Broiler.UI draws the composition inline, but the default IME window can still show
-  its own copy, because Hosting passes `WM_IME_SETCONTEXT` on unchanged and forwards
-  the composition messages to `DefWindowProc` (UI-10). A per-monitor-v2 manifest and
-  native resize handling preserve logical sizes, with a 640×480 minimum client area.
+  access and `IUiTextInputHost` to place the IME's composition position at the caret,
+  in physical pixels. Hosting's `WindowsInputBridge` subclasses the render window. It
+  handles characters, surrogate pairs, IME composition, and both wheel axes, and
+  tracks dead keys, whose composed character Windows delivers; the Graphics character
+  and wheel callbacks are not reached while it is attached. Broiler.UI draws the
+  composition inline, and since Hosting preview.7 the bridge keeps the IME from
+  drawing a copy of it for the whole window (`DrawsCompositionInline`) and keeps the
+  commit from `DefWindowProc`, so no `WM_CHAR` copies of a commit arrive. The IME is
+  therefore on only while the focus is on an editor that draws the composition (an
+  enabled, writable edit that is no password field, or a writable rich edit); for
+  anything else, a password field, the read-only reader, the message list, a button,
+  or no focus, `WindowsTextInput` turns it off for the window, following the session's
+  focus, as a native password box does. The HTML preview window has no editor and
+  takes no IME. A per-monitor-v2 manifest and native resize handling preserve logical
+  sizes, with a 640×480 minimum client area.
+- `AppearancePolicy` chooses the palette: an active system high-contrast mode first,
+  then the saved Light or Dark choice, then the system's color scheme. On Windows,
+  high contrast uses the user's own contrast colors through Broiler.Hosting's
+  `WindowsTheme.CreateHighContrastTheme` (selections and control states in the
+  highlight pair, at the system's text size), injected into `AppearanceController`
+  by the Windows composition root, and resolved again when the system colors change.
+  The demo's `--contrast high` forces the theme's high-contrast preset, and
+  `--contrast aquatic|desert|dusk|night-sky` forces the palette of that Windows 11
+  contrast theme, without changing the system's settings.
 - `MailKeyboardNavigation` adds enabled-control traversal, automatic scrolling to
   focused fields, tab shortcuts, receive, and cancellation. First run opens Account.
+  A tab stop is any element that reports `CanFocus` and `IsTabStop`. Read-only scroll
+  areas (the forms' status area, the inbox notice, the message header) are stops of
+  their own through Broiler.UI's `StandardScrollView.FocusWhenScrollable` while they
+  scroll and hold nothing focusable, and draw a focus ring then. The reader's frameless
+  editors are ringed by Mail: the message text around its view, the header details
+  just outside the editor (`FocusRingFrame`).
   Full OS screen-reader/UI Automation integration remains the version 7 work item.
   The legacy Graphics input adapter is isolated in the Windows project. For the main
   window's native input it carries only pointer movement, buttons, and key presses
@@ -201,10 +221,10 @@ receiver leaves `HtmlText` null. Header display fields are limited to 512 charac
 
 The reader and the account and settings forms scroll in standard scroll views that
 constrain content to the viewport width (`UiScrollConstraint.ConstrainWidth`), so long
-text wraps and scrolls vertically. The standard tab view measures each tab's content
-at the size it allocates, but it arranges every hidden tab at an empty rectangle, which
-lays a hidden form out at no width and lost the composer status area's scroll position.
-`TabContent` wraps each tab and skips that arrange. Because Broiler.UI has no minimum or
+text wraps and scrolls vertically. The standard tab view lays the shown tab's content out
+at the rectangle it allocates and, since Broiler.UI preview.18, leaves a hidden tab as it
+was last laid out, so the shell adds each tab's content directly (Mail's `TabContent`
+wrapper is gone). Because Broiler.UI has no minimum or
 maximum size, Mail also keeps `BoundedScrollArea`, which caps the message header and the
 inbox notice at a share of the height; `FillLastStack`, which gives the composer body
 the remaining height above a minimum; and `ReadingColumn`, which bounds the reading line
@@ -238,7 +258,12 @@ measurement opens, which takes the simulated scale at its own 900×700 DIPs and 
 title. Neither option changes a Windows setting. The UI-12 measurement harness (`--measure`,
 `scripts/Measure-UI.ps1`) is described in [the performance baseline](ui-performance-baseline-2026-10-02.md);
 while it measures the preview, the preview's tile cache counts hits, misses, evictions, and raster
-time, and otherwise counts nothing.
+time, and otherwise counts nothing. `--contrast` simulates Windows high contrast (see the appearance
+notes above); `scripts/Accept-UI.ps1 -Contrast <name>` runs the acceptance pass with it.
+`scripts/Probe-Uia.ps1` reads the published app's UI Automation tree from outside the process
+(disclosure state and ControllerFor, field validity and its description, row names, and row runtime
+IDs across a refresh), and `scripts/Record-Uia.ps1` prints the focus, notification, selection, and
+state-change events a short scripted walk raises, as input to a screen-reader pass.
 `--data-directory` supports isolated real configuration tests. The user will run
 live-provider acceptance later using the [included checklist](version-1-acceptance.md).
 Physical multi-monitor and IME language coverage are also recorded as user checks.
