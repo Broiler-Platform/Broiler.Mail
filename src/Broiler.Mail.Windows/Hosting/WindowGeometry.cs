@@ -139,6 +139,13 @@ internal static unsafe class WindowsScreen
         catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException) { return 0; }
     }
 
+    /// <summary>Sends WM_DPICHANGED with a suggested outer rectangle in this process's memory, as Windows does.</summary>
+    public static void SendDpiChanged(nint window, uint dpi, PixelRect suggested)
+    {
+        var rect = new RECT(suggested.Left, suggested.Top, suggested.Right, suggested.Bottom);
+        SendMessage(window, 0x02E0, (nint)(dpi | (dpi << 16)), (nint)(&rect));
+    }
+
     public static PixelRect? OuterBounds(nint window) =>
         window != 0 && GetWindowRect(window, out RECT rect) ? new(rect.Left, rect.Top, rect.Right, rect.Bottom) : null;
 
@@ -172,4 +179,7 @@ internal static unsafe class WindowsScreen
 
     [DllImport("shcore.dll")]
     private static extern int GetDpiForMonitor(nint monitor, int type, out uint dpiX, out uint dpiY);
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
 }

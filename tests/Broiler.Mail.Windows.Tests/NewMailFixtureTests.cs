@@ -14,18 +14,20 @@ using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Tests;
 
-/// <summary>UI-02: the new-mail fixture and its acceptance-only server changes.</summary>
+/// <summary>UI-02: the new-mail fixture, its acceptance-only server changes, and the simulated-scale option.</summary>
 public sealed class NewMailFixtureTests
 {
     [Theory]
-    [InlineData("--demo new-mail", "None")]
-    [InlineData("--demo new-mail --server-change vanish", "Vanish")]
-    [InlineData("--demo new-mail --server-change outside --theme dark", "Outside")]
-    [InlineData("--demo new-mail --server-change renumber", "Renumber")]
-    public void Options_Parse_The_Server_Change(string arguments, string change)
+    [InlineData("--demo new-mail", "None", null)]
+    [InlineData("--demo new-mail --server-change vanish", "Vanish", null)]
+    [InlineData("--demo new-mail --server-change outside --theme dark", "Outside", null)]
+    [InlineData("--demo new-mail --scale 200 --server-change renumber", "Renumber", 200)]
+    [InlineData("--demo inbox --scale 150", "None", 150)]
+    [InlineData("--demo --scale 300", "None", 300)]
+    public void Options_Parse_The_Server_Change_And_The_Simulated_Scale(string arguments, string change, int? scale)
     {
         Assert.True(DemoOptions.TryParse(arguments.Split(' '), out var options));
-        Assert.Equal(Enum.Parse<DemoServerChange>(change), options!.ServerChange);
+        Assert.Equal((Enum.Parse<DemoServerChange>(change), scale), (options!.ServerChange, options.ScalePercent));
     }
 
     [Theory]
@@ -34,8 +36,20 @@ public sealed class NewMailFixtureTests
     [InlineData("--demo new-mail --server-change none")]
     [InlineData("--demo new-mail --server-change")]
     [InlineData("--demo new-mail --server-change vanish --server-change outside")]
-    public void Options_Reject_A_Server_Change_Without_New_Mail(string arguments) =>
+    [InlineData("--demo inbox --scale 99")]
+    [InlineData("--demo inbox --scale 301")]
+    [InlineData("--demo inbox --scale 1.5")]
+    [InlineData("--demo inbox --scale +200")]
+    public void Options_Reject_A_Server_Change_Without_New_Mail_And_A_Scale_Outside_100_To_300(string arguments) =>
         Assert.False(DemoOptions.TryParse(arguments.Split(' '), out _));
+
+    [Fact]
+    public void The_Window_Title_Names_A_Simulated_Scale()
+    {
+        Assert.Equal("Broiler.Mail — Demo: new-mail (no network or saved data)", new DemoOptions(DemoScenario.NewMail).WindowTitle);
+        Assert.Equal("Broiler.Mail — Demo (no network or saved data)", new DemoOptions(DemoScenario.Inbox, Interactive: true).WindowTitle);
+        Assert.Equal("Broiler.Mail — Demo: inbox, simulated 200% scale (no network or saved data)", new DemoOptions(DemoScenario.Inbox, ScalePercent: 200).WindowTitle);
+    }
 
     [Fact]
     public void Help_Lists_New_Mail_As_A_Fixture_And_The_Acceptance_Options_After_The_Workloads()
@@ -58,6 +72,7 @@ public sealed class NewMailFixtureTests
         int acceptance = Array.FindIndex(lines, line => line.StartsWith("Acceptance-only", StringComparison.Ordinal));
         Assert.True(acceptance > workloads);
         Assert.Contains(lines[acceptance..], line => line.Trim() == "--server-change vanish|outside|renumber");
+        Assert.Contains(lines[acceptance..], line => line.Contains("simulated display scale", StringComparison.Ordinal));
     }
 
     [Fact]

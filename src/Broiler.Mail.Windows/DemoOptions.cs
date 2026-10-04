@@ -17,7 +17,7 @@ internal enum DemoServerChange { None, Vanish, Outside, Renumber }
 /// <summary>Interactive: plain <c>--demo</c>, where the user drives the synthetic inbox. Otherwise the named fixture is prepared on start.</summary>
 internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTheme.System, int Width = 1100, int Height = 720, bool Interactive = false,
     MeasureWorkload? Measure = null, string? Report = null, int? TextScalePercent = null, bool HighContrast = false,
-    DemoServerChange ServerChange = DemoServerChange.None)
+    DemoServerChange ServerChange = DemoServerChange.None, int? ScalePercent = null)
 {
     internal static IReadOnlyList<(string Name, DemoScenario Scenario, string Description)> Gallery { get; } = Array.AsReadOnly(new[]
     {
@@ -45,11 +45,12 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("new-mail", DemoScenario.NewMail, "Three new messages arrived above the open one, which keeps its body and is now read; each receive adds more"),
     });
 
-    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--text-scale <100-225>] [--contrast high] [--measure <workload> [--report <file.json>]] [--server-change vanish|outside|renumber]";
+    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--text-scale <100-225>] [--contrast high] [--measure <workload> [--report <file.json>]] [--scale <100-300>] [--server-change vanish|outside|renumber]";
 
     /// <summary>Options for acceptance scripts only. They simulate conditions; they are not settings a user would choose.</summary>
     internal static IReadOnlyList<(string Name, string Description)> AcceptanceOptions { get; } = Array.AsReadOnly(new[]
     {
+        ("--scale <100-300>", "Renders at a simulated display scale in percent, named in the window title. This is not a monitor or system change."),
         ("--server-change vanish|outside|renumber", "With new-mail only: the next receive deletes the open message on the server, pushes it below the newest page, or renumbers the inbox."),
     });
 
@@ -65,6 +66,17 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
     });
 
     internal string Name => Gallery.Single(item => item.Scenario == Scenario).Name;
+
+    /// <summary>Names the fixture, and a simulated scale, so a capture cannot be mistaken for real mail or a real display.</summary>
+    internal string WindowTitle
+    {
+        get
+        {
+            string fixture = Interactive ? "Demo" : $"Demo: {Name}";
+            string scale = ScalePercent is { } percent ? $", simulated {percent.ToString(CultureInfo.InvariantCulture)}% scale" : "";
+            return $"Broiler.Mail — {fixture}{scale} (no network or saved data)";
+        }
+    }
     internal string InitialTab => Scenario switch
     {
         DemoScenario.LargeDraft or DemoScenario.SendUnknown or DemoScenario.DraftConflict or DemoScenario.SendRejected or DemoScenario.SentCopyFailed
@@ -96,6 +108,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         int? textScale = null;
         bool highContrast = false;
         var serverChange = DemoServerChange.None;
+        int? scale = null;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         while (index < args.Length)
         {
@@ -129,6 +142,12 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
             }
             // The theme's high-contrast palette, as an active Windows contrast theme selects it.
             else if (flag == "--contrast" && value == "high") highContrast = true;
+            // A render scale in percent for checks on a single monitor; Windows' own scale is unchanged.
+            else if (flag == "--scale")
+            {
+                if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int percent) || percent is < 100 or > 300) return false;
+                scale = percent;
+            }
             else if (flag == "--server-change")
             {
                 serverChange = value switch
@@ -143,7 +162,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         if ((measure is not null && interactive) || (report is not null && measure is null)) return false;
         // Only the new-mail fixture has a server that changes between receives.
         if (serverChange != DemoServerChange.None && scenario != DemoScenario.NewMail) return false;
-        options = new(scenario, theme, width, height, interactive, measure, report, textScale, highContrast, serverChange);
+        options = new(scenario, theme, width, height, interactive, measure, report, textScale, highContrast, serverChange, scale);
         return true;
     }
 }
