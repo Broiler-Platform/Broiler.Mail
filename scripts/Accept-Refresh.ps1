@@ -10,17 +10,22 @@ reader, selects reader text, and presses F5. The next receive then does what the
 demo server:
   - kept:     newer messages arrive and the open message is marked read on the server. The selected
               row keeps its identity and its place on screen (within 1 px), the first visible row keeps
-              its place, the reader keeps its selected text and its pixels (so its scroll offset), and
-              the new rows are listed.
+              its place, the reader keeps its subject, its selected text and its pixels (so its scroll
+              offset), and the new rows are listed.
   - vanish:   the open message is deleted on the server. The reader closes and the status explains that
               the message is no longer in the inbox.
-  - outside:  a page of new mail pushes the open message below the newest page. It stays open with its
-              text selection, and the status suggests Load older.
+  - outside:  a page of new mail pushes the open message below the newest page. It stays open (same
+              subject heading) with its text selection, and the status line explains that it is older
+              than the newest page and suggests Load older.
   - renumber: the server changes UIDVALIDITY. The reader closes and the status says the inbox was renumbered.
 The kept run then clicks Reply with posted mouse input at the button's UI Automation bounds and checks
 that the composer's message body has focus. It returns to the inbox twice, once with a posted click on the
 Inbox tab and once by selecting the tab through UI Automation, and checks each time that focus returns to
 the reader control that had it when composing started.
+
+Before F5 the run also checks that the posted wheel really scrolled the reader, so the scroll check
+cannot pass on an unscrolled reader. Every demo body has the same text, so the reader's subject heading
+identifies the open message.
 
 Input is posted to the window's render child, so the run does not take keyboard focus from other
 applications, although each window appears on screen briefly. Results, before and after screenshots, and
@@ -127,12 +132,33 @@ public static class RefreshCheck
         return null;
     }
 
-    /// <summary>The first element whose name contains the fragment, such as a status line.</summary>
-    public static string NameContaining(List<AutomationElement> all, string fragment)
+    /// <summary>The first text element whose name contains the fragment, such as the status line; buttons never match.</summary>
+    public static string TextContaining(List<AutomationElement> all, string fragment)
     {
         foreach (var element in all)
         {
-            try { string name = element.Current.Name; if (name != null && name.IndexOf(fragment, StringComparison.Ordinal) >= 0) return name; }
+            try
+            {
+                var c = element.Current;
+                if (c.ControlType == ControlType.Text && c.Name != null && c.Name.IndexOf(fragment, StringComparison.Ordinal) >= 0) return c.Name;
+            }
+            catch (ElementNotAvailableException) { }
+        }
+        return null;
+    }
+
+    /// <summary>The first text element after the element named <paramref name="container"/>, such as the reader's subject heading.</summary>
+    public static string TextAfter(List<AutomationElement> all, string container)
+    {
+        bool inside = false;
+        foreach (var element in all)
+        {
+            try
+            {
+                var c = element.Current;
+                if (!inside) { inside = c.Name == container; continue; }
+                if (c.ControlType == ControlType.Text) return c.Name;
+            }
             catch (ElementNotAvailableException) { }
         }
         return null;
@@ -280,13 +306,17 @@ function Get-State([IntPtr]$render) {
         ReaderBounds = if ($readerView) { $readerView.Current.BoundingRectangle } else { [System.Windows.Rect]::Empty }
         Value = if ($reader) { [RefreshCheck]::Value($reader) } else { $null }
         Selection = if ($reader) { [RefreshCheck]::SelectedText($reader) } else { $null }
+        # The open message's subject heading; every demo body has the same text, so this tells messages apart.
+        Heading = [RefreshCheck]::TextAfter($all, 'Message header')
     }
 }
 
 # Row names are "Read|Unread <middle dot> subject <em dash> sender"; a refresh may change the read state.
 # Windows PowerShell reads this file as ANSI, so the non-ASCII separator is built from its code point.
 $dot = [char]0x00B7
+$dash = [char]0x2014
 function Get-Identity([string]$name) { return ($name -replace "^(Read|Unread) $dot ", '') }
+function Get-Subject([string]$name) { return ((Get-Identity $name) -split " $dash ")[0] }
 
 function Wait-For([scriptblock]$condition, [int]$milliseconds = 5000) {
     $deadline = (Get-Date).AddMilliseconds($milliseconds)
@@ -337,11 +367,19 @@ function Invoke-Variant([string]$variant) {
         # A row below the first visible one, so the anchor and the selection are different rows.
         $chosen = $visible[[Math]::Min(3, $visible.Count - 1)]
         if (![RefreshCheck]::SelectRow($state.List, $chosen.Id)) { $result.findings += "SELECT: row $($chosen.Id) could not be selected."; return $result }
-        $null = Wait-For { $s = Get-State $render; $s.Value -and $s.Value -like 'Welcome to Broiler.Mail*' -and (@($s.Rows | Where-Object { $_.Selected })[0].Id -eq $chosen.Id) }
+        $opened = Wait-For { $s = Get-State $render; $s.Value -and $s.Value -like 'Welcome to Broiler.Mail*' -and $s.Heading -eq (Get-Subject $chosen.Name) -and (@($s.Rows | Where-Object { $_.Selected })[0].Id -eq $chosen.Id) }
+        if (!$opened) { $result.findings += "SELECT: row $($chosen.Id) did not open in the reader within 5 seconds."; return $result }
         Start-Sleep -Milliseconds 500
-        # Scroll the reader and select text in it, as someone reading would.
+        # Scroll the reader and select text in it, as someone reading would. A reader that did not scroll
+        # would make the scroll check after F5 prove nothing.
         $state = Get-State $render
+        $unscrolledImage = [RefreshCheck+RECT]::new(); $unscrolled = [RefreshCheck]::Capture($window, [ref]$unscrolledImage)
         [RefreshCheck]::Wheel($render, $state.ReaderBounds, -360); Start-Sleep -Milliseconds 300
+        $scrolledImage = [RefreshCheck+RECT]::new(); $scrolled = [RefreshCheck]::Capture($window, [ref]$scrolledImage)
+        $wheelDiff = [RefreshCheck]::Difference($unscrolled, $scrolled, $unscrolledImage, $state.ReaderBounds, (Join-Path $Output "$name-reader-wheel-diff.png"))
+        $unscrolled.Dispose(); $scrolled.Dispose()
+        $result.readerPixelsScrolled = [Math]::Round($wheelDiff * 100, 3)
+        if ($wheelDiff -lt 0.01) { $result.findings += "READER_WHEEL: the posted wheel changed only $($result.readerPixelsScrolled) % of the reader, so it did not scroll and the scroll check cannot hold." }
         $selected = [RefreshCheck]::SelectText($state.Reader, 'Paragraph 12:')
         if ($selected -ne 'Paragraph 12:') { $result.findings += "TEXT: selecting reader text through TextPattern returned '$selected'." }
         Start-Sleep -Milliseconds 500
@@ -351,7 +389,7 @@ function Invoke-Variant([string]$variant) {
         $beforeAnchor = @($before.Rows | Where-Object { !$_.Offscreen })[0]
         $beforeImage = [RefreshCheck+RECT]::new(); $beforeBitmap = [RefreshCheck]::Capture($window, [ref]$beforeImage)
         $beforeBitmap.Save((Join-Path $Output $result.before), [System.Drawing.Imaging.ImageFormat]::Png)
-        $result.selected = [ordered]@{ id = $beforeSelected.Id; name = $beforeSelected.Name; top = $beforeSelected.Top }
+        $result.selected = [ordered]@{ id = $beforeSelected.Id; name = $beforeSelected.Name; top = $beforeSelected.Top; heading = $before.Heading }
         $result.anchor = [ordered]@{ id = $beforeAnchor.Id; top = $beforeAnchor.Top - $before.ListTop }
         $beforeIds = @($before.Rows | ForEach-Object { $_.Id })
 
@@ -380,7 +418,7 @@ function Invoke-Variant([string]$variant) {
                 if ($afterAnchor.Count -ne 1 -or [Math]::Abs(($afterAnchor[0].Top - $after.ListTop) - $result.anchor.top) -gt 1) { $result.findings += "ANCHOR: the first visible row $($beforeAnchor.Id) did not keep its place." }
                 if ($added.Count -lt 1) { $result.findings += 'NEW_ROWS: no new rows were listed.' }
                 elseif (@($added | Where-Object { !$_.Offscreen }).Count -gt 0) { $result.findings += 'NEW_ROWS: new rows appeared inside the scrolled view instead of above it.' }
-                if ($after.Value -ne $before.Value) { $result.findings += 'READER: the reader text changed.' }
+                if ($after.Value -ne $before.Value -or $after.Heading -ne $before.Heading) { $result.findings += "READER: the reader changed from '$($before.Heading)' to '$($after.Heading)', or its text changed." }
                 if ($after.Selection -ne $before.Selection) { $result.findings += "READER_SELECTION: the selected reader text changed from '$($before.Selection)' to '$($after.Selection)'." }
                 $diff = [RefreshCheck]::Difference($beforeBitmap, $afterBitmap, $beforeImage, $before.ReaderBounds, (Join-Path $Output "$name-reader-diff.png"))
                 $result.readerPixelsChanged = [Math]::Round($diff * 100, 3)
@@ -389,18 +427,22 @@ function Invoke-Variant([string]$variant) {
             'vanish' {
                 if ($afterSelected.Count -ne 0) { $result.findings += "VANISH: the deleted message $($beforeSelected.Id) is still listed." }
                 if ($after.Value -ne $readerPrompt) { $result.findings += "VANISH: the reader still shows text instead of '$readerPrompt'." }
-                $result.status = [RefreshCheck]::NameContaining($after.All, 'no longer in the inbox')
+                $result.status = [RefreshCheck]::TextContaining($after.All, 'no longer in the inbox')
                 if (!$result.status) { $result.findings += 'VANISH: no status explains that the message is no longer in the inbox.' }
             }
             'outside' {
-                if ($after.Value -ne $before.Value) { $result.findings += 'OUTSIDE: the open message did not stay open.' }
+                # The subject heading tells the open message apart; every demo body has the same text.
+                if ($after.Heading -ne $before.Heading -or $after.Heading -ne (Get-Subject $beforeSelected.Name) -or $after.Value -ne $before.Value) {
+                    $result.findings += "OUTSIDE: the open message '$($before.Heading)' did not stay open; the reader shows '$($after.Heading)'."
+                }
                 if ($after.Selection -ne $before.Selection) { $result.findings += 'OUTSIDE: the selected reader text changed.' }
-                $result.status = [RefreshCheck]::NameContaining($after.All, 'Load older')
-                if (!$result.status) { $result.findings += 'OUTSIDE: no status suggests Load older.' }
+                # The status sentence itself: the toolbar's Load older button is always in the tree.
+                $result.status = [RefreshCheck]::TextContaining($after.All, 'older than the newest page')
+                if (!$result.status -or $result.status -notlike '*Load older*') { $result.findings += 'OUTSIDE: no status explains that the message is older than the newest page and suggests Load older.' }
             }
             'renumber' {
                 if ($after.Value -ne $readerPrompt) { $result.findings += "RENUMBER: the reader still shows text instead of '$readerPrompt'." }
-                $result.status = [RefreshCheck]::NameContaining($after.All, 'renumbered')
+                $result.status = [RefreshCheck]::TextContaining($after.All, 'renumbered')
                 if (!$result.status) { $result.findings += 'RENUMBER: no status says the inbox was renumbered.' }
             }
         }
@@ -431,6 +473,10 @@ function Test-Reply([IntPtr]$render, [IntPtr]$window, [string]$name, $all, $resu
     # UI Automation splits the tab strip evenly; Inbox is the first tab, so its header starts at the strip's left edge.
     $tabBounds = $inboxTab.Current.BoundingRectangle
     $inboxHeader = New-Object System.Windows.Rect ($tabBounds.Left + 8), ($tabBounds.Top + 4), 12, ($tabBounds.Height - 8)
+    # For summary.md: the reported tab item bounds are an equal share of the strip, not the visible header.
+    $strip = [RefreshCheck]::Find($all, [System.Windows.Automation.ControlType]::Tab, 'Inbox')
+    $tabCount = @($all | Where-Object { try { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::TabItem } catch { $false } }).Count
+    $result.tabItemBounds = [ordered]@{ inbox = $tabBounds.Width; strip = if ($strip) { $strip.Current.BoundingRectangle.Width } else { $null }; tabs = $tabCount }
     $result.focusBeforeReply = [RefreshCheck]::Focused($render)
     foreach ($round in @('click', 'automation')) {
         [RefreshCheck]::Press($render, $replyBounds); Start-Sleep -Milliseconds 200
@@ -502,7 +548,7 @@ $lines.Add('| --- | --- | --- | ---: | --- | ---: | --- | --- | --- |')
 foreach ($r in $results) {
     $summary = if ($r.findings.Count -eq 0) { 'none' } else { ($r.findings | ForEach-Object { ($_ -split ':')[0] } | Group-Object | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ' }
     $selectedRow = if ($r.selected) { "$($r.selected.id)" } else { '-' }
-    $pixels = if ($null -ne $r.readerPixelsChanged) { "$($r.readerPixelsChanged) %" } else { '-' }
+    $pixels = if ($null -ne $r.readerPixelsChanged) { "$($r.readerPixelsChanged) % (wheel moved $($r.readerPixelsScrolled) %)" } else { '-' }
     $status = if ($r.status) { $r.status } else { '-' }
     $shots = "[before]($($r.before)), [after]($($r.after))"
     if ($r.returned) { $shots += ", [after Reply and back]($($r.returned))" }
@@ -516,12 +562,22 @@ foreach ($r in $results | Where-Object { $_.focusInComposer_click }) {
         $lines.Add("- Reply, then $($back): when composing started $($r."focusAtReply_$round"); in Compose $($r."focusInComposer_$round"); back in Inbox $($r."focusAfterReturn_$round").")
     }
 }
+foreach ($r in $results | Where-Object { $_.tabItemBounds }) {
+    $lines.Add('')
+    $lines.Add("Tab item bounds: UI Automation reports the Inbox tab item as $($r.tabItemBounds.inbox) px wide, an equal share of the $($r.tabItemBounds.strip) px tab strip for $($r.tabItemBounds.tabs) tabs, not the visible header. The click round therefore clicks 8 px in from the strip's left edge. Screen readers and Magnifier highlight the same wrong rectangle (Broiler.Hosting tab item peer; UI-09).")
+}
 $lines.Add('')
 $lines.Add('## Findings')
 $lines.Add('')
 foreach ($r in $results | Where-Object { $_.findings.Count -gt 0 }) {
     $lines.Add("### $($r.variant) $($r.size) $($r.theme)")
     foreach ($f in $r.findings) { $lines.Add("- $f") }
+    $lines.Add('')
+}
+if (@($results | Where-Object { $_.findings -match '^RETURN_FOCUS_AUTOMATION' }).Count -gt 0) {
+    $lines.Add('### Known cause of RETURN_FOCUS_AUTOMATION')
+    $lines.Add('')
+    $lines.Add('Checked with a debugger on 4 October 2026: for SelectionItemPattern.Select, UI Automation first calls the tab item provider''s SetFocus, then Select. Broiler.Hosting''s tab item SetFocus selects the tab, which lets Mail restore the reader control, and then focuses the tab view. A pointer click does not take that path. The return-focus acceptance therefore holds for pointer input only; the UI Automation path stays open for UI-09/H-01.')
     $lines.Add('')
 }
 $lines.Add('## Not covered by this run')
