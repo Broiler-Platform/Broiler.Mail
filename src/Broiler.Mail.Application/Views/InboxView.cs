@@ -16,6 +16,7 @@
 // GENERATED - DO NOT EDIT MANUALLY
 
 using Broiler.Graphics.Geometry;
+using Broiler.Graphics.Text;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
@@ -187,9 +188,9 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var headerStack = new StandardPanel { Spacing = 4 };
         foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, replyActions, previewActions }) headerStack.AddChild(element);
         // A long subject or many recipients at a large text size scroll within the header, so the
-        // message text keeps most of the pane. The header ends between its rows, not inside one: it
-        // grows to show a row of buttons whole while the text keeps a few lines, and otherwise ends
-        // above the row that share would cut.
+        // message text keeps most of the pane. The header ends between its rows or lines of text, not
+        // inside one: while the text keeps a few lines it grows to show the whole header, or the next
+        // row of buttons whole, and otherwise ends above the row or line its share would cut.
         const double headerShare = 0.45;
         const int textLinesKept = 6;
         var text = new ScrollableMessageText();
@@ -204,14 +205,21 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         reading.SetDock(headerColumn, UiDock.Top);
         reading.AddChild(text);
 
-        // Where the header's rows are, as the stack last measured them, and which are rows of buttons.
-        IEnumerable<(double Start, double End, bool Grows)> HeaderRows()
+        // Where the header's rows are, as the stack last measured them, which are rows of buttons, and the
+        // line height of the subject, the sender and recipients, and the date, so the header may end between lines.
+        IEnumerable<(double Start, double End, bool Grows, double LineHeight)> HeaderRows()
         {
             double top = headerContent.VerticalMargin;
             foreach (var child in headerStack.Children.Where(child => child.Visibility != UiVisibility.Collapsed))
             {
                 double height = child.DesiredSize.Height;
-                if (height > 0) yield return (top, top + height, buttonRows.Contains(child));
+                double lineHeight = child switch
+                {
+                    StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
+                    StandardRichEdit edit => BTextMeasurer.GetLineHeight(edit.Font),
+                    _ => 0,
+                };
+                if (height > 0) yield return (top, top + height, buttonRows.Contains(child), lineHeight);
                 top += height + headerStack.Spacing;
             }
         }

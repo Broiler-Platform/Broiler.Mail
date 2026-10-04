@@ -14,7 +14,9 @@ using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
+using Broiler.UI.Label.Standard;
 using Broiler.UI.ListView.Standard;
+using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Splitter.Standard;
 using Broiler.UI.Standard;
 using Broiler.UI.Toolbar.Standard;
@@ -450,7 +452,7 @@ public sealed class ResponsiveInboxTests
     public async Task WithoutMessageTextTheCompactReaderShowsTheProblemAndRetry()
     {
         using var fixture = await Fixture.OpenAsync(640, 400);
-        var message = fixture.Messages[2] with { Subject = string.Join(" ", Enumerable.Repeat("Agenda, travel arrangements, and the revised budget", 3)) };
+        var message = fixture.Messages[2] with { Subject = string.Join(" ", Enumerable.Repeat("Agenda, travel arrangements, and the revised budget", 5)) };
         fixture.Receiver.Inbox = (_, _) => Task.FromResult(new MailInboxPage([message], null));
         bool fail = true;
         fixture.Receiver.Body = (key, _) => fail ? throw new MailConnectionException("The connection closed.") : Task.FromResult(new MailMessageBody(key, "Body text"));
@@ -482,20 +484,31 @@ public sealed class ResponsiveInboxTests
 
     /// <summary>
     /// The reader header takes up to 45 % of the pane and scrolls the rest, but it does not end inside one
-    /// of its rows. While the message text keeps six lines, it grows to show a row of buttons whole: the
-    /// compact reader at 640x480 shows Reply, Reply all and Forward. Otherwise it ends above the row
-    /// its share would cut, as for a long sender at 640x480, a title at twice the text size, or Reply at
-    /// twice the text size in a shorter window, and keeps to its share, so the text keeps its room.
+    /// of its rows or lines. While the message text keeps six lines, it grows to show the whole header,
+    /// as in the compact reader at 640x480 with Reply, Reply all and Forward, or a long sender at 640x640,
+    /// or to show the next row of buttons whole, as Reply above the HTML preview's row. A scroll bar that
+    /// would scroll only the margin below Reply does not appear, as it did at 640x520. Otherwise the header
+    /// ends above the row its share would cut, or between two of its lines, as for a long sender at
+    /// 640x480 or a long subject at twice the text size, so the text keeps its room.
     /// </summary>
     [Theory]
     [InlineData(640, 480, 1.0, "plain", true, false)]
     [InlineData(640, 480, 1.0, "html", true, true)]
     [InlineData(640, 480, 1.0, "long", false, true)]
+    [InlineData(640, 520, 1.0, "plain", true, false)]
+    [InlineData(640, 540, 1.0, "plain", true, false)]
+    [InlineData(640, 640, 1.0, "long", true, false)]
+    [InlineData(640, 528, 1.25, "html", true, true)]
     [InlineData(640, 480, 2.0, "plain", false, true)]
+    [InlineData(640, 640, 2.0, "long", false, true)]
     [InlineData(1100, 720, 1.0, "plain", true, false)]
-    [InlineData(1100, 720, 1.0, "long", true, false)]
+    [InlineData(1100, 720, 1.0, "longer", true, false)]
     [InlineData(1100, 720, 2.0, "plain", true, false)]
+    [InlineData(1100, 720, 2.0, "long", false, true)]
+    [InlineData(1100, 680, 2.0, "plain", true, false)]
+    [InlineData(1100, 740, 2.0, "plain", true, false)]
     [InlineData(1100, 640, 2.0, "plain", false, true)]
+    [InlineData(1100, 500, 2.0, "plain", false, true)]
     public async Task TheReaderHeaderEndsBetweenItsRows(int width, int height, double textScale, string message, bool replyShown, bool scrolls)
     {
         StandardThemeTokens previous = StandardControlPaint.Theme;
@@ -505,24 +518,48 @@ public sealed class ResponsiveInboxTests
             using var reader = await ReaderFixture.OpenAsync(width, height, message);
             var header = reader.Header;
             BRect shown = header.Scroll.ContentBounds;
-            double share = header.Parent!.Bounds.Height * 0.45;
+            double available = header.Parent!.Bounds.Height;
+            double share = available * 0.45;
             string where = $"At {width}x{height}, text {textScale:P0}, {message} message, the header shows {shown} of {header.Parent.Bounds}";
             Assert.Equal(width < 680, reader.Layout.ShowsReaderOnly);
-
-            // Each row (Back, the subject, the sender, the date, Reply, the HTML preview) is on screen whole or
-            // scrolled below the header whole, never cut at its edge.
-            var rows = header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0).ToArray();
-            foreach (var row in rows)
-                Assert.True(row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5, $"{where}: the {row.GetType().Name} is at {row.Bounds}.");
+            AssertEndsBetweenRows(header, where);
             var reply = Descendants(header).OfType<StandardButton>().Single(button => button.Text == "Reply");
             Assert.True(replyShown == reply.Bounds.Bottom <= shown.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
-            Assert.Equal(scrolls, header.Scroll.HasVerticalScrollbar);
+            Assert.True(scrolls == header.Scroll.HasVerticalScrollbar, $"{where}: the header {(scrolls ? "does not scroll" : "scrolls")}.");
 
-            // Past its share, the header leaves the text six lines; with Reply below, it keeps to its share.
+            // Past its share, the rows the header shows leave the text six lines (the margin below the last
+            // row is not a row); with Reply below, it keeps to its share.
+            double rowsEnd = header.Scroll.HasVerticalScrollbar ? header.Bounds.Height : HeaderRows(header)[^1].Bounds.Bottom - shown.Top;
             if (header.Bounds.Height > share + 0.5)
-                Assert.True(reader.Text.Bounds.Height >= reader.Text.HeightOfLines(6) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
+                Assert.True(available - rowsEnd >= reader.Text.HeightOfLines(6) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
             if (!replyShown)
                 Assert.True(header.Bounds.Height <= share + 0.5, where);
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>
+    /// With no message text, the header may take the whole reader. It does not end above a row it would cut
+    /// there: nothing below would use the space, so the problem and Retry would only be scrolled away
+    /// above an empty text area, as they were at 640x570 with twice the text size.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 570, 2.0, "error")]
+    [InlineData(640, 480, 1.5, "error")]
+    [InlineData(640, 600, 1.5, "long error")]
+    public async Task WithoutMessageTextAHeaderThatScrollsTakesTheWholeReader(int width, int height, double textScale, string message)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(width, height, message);
+            var header = reader.Header;
+            string where = $"At {width}x{height}, text {textScale:P0}, {message}, the header is {header.Bounds} of {header.Parent!.Bounds}";
+            Assert.True(reader.Layout.ShowsReaderOnly);
+            Assert.Equal("", reader.Text.Text);
+            Assert.True(header.Scroll.HasVerticalScrollbar, $"{where}: the header fits; the window is not short enough.");
+            Assert.True(Math.Abs(header.Parent.Bounds.Height - header.Bounds.Height) < 0.5, where);
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
@@ -701,19 +738,51 @@ public sealed class ResponsiveInboxTests
         }
     }
 
+    /// <summary>The rows of the reader header: Back, the subject, the sender and recipients, the date, Reply, the HTML preview.</summary>
+    private static UiElement[] HeaderRows(BoundedScrollArea header) =>
+        header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0).ToArray();
+
+    /// <summary>
+    /// Each row of the header is on screen whole, or scrolled below the header whole, or, for the subject,
+    /// the sender and recipients, and the date, cut between two of its lines.
+    /// </summary>
+    private static void AssertEndsBetweenRows(BoundedScrollArea header, string where)
+    {
+        BRect shown = header.Scroll.ContentBounds;
+        foreach (var row in HeaderRows(header))
+        {
+            double line = row switch
+            {
+                StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
+                StandardRichEdit edit => BTextMeasurer.GetLineHeight(edit.Font),
+                _ => 0,
+            };
+            // The header ends between lines at the line height it is given, which is the text's.
+            if (line > 0)
+                Assert.True(IsWhole(row.Bounds.Height / line), $"{where}: the {row.GetType().Name} at {row.Bounds} is not lines of {line}.");
+            if (row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5) continue;
+            Assert.True(line > 0 && IsWhole((shown.Bottom - row.Bounds.Top) / line), $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
+        }
+
+        bool IsWhole(double lines) => Math.Abs(lines - Math.Round(lines)) < 0.01;
+    }
+
     /// <summary>The shell's inbox with a message open in the reader: its sender, its recipient, and Reply.</summary>
     private sealed class ReaderFixture(MailShellView shell, UiSession session, TestDirectory directory) : IDisposable
     {
         private const string LongSender = "Maximilian Alexander von Langenstein-Habsburg <maximilian.alexander.von.langenstein-habsburg.office@subdomain.example.test>";
         private const string LongSubject = "Re: Fwd: Agenda, travel arrangements, accessibility requirements, and the revised budget spreadsheet for the cross-team planning workshop in Zürich";
+        private static readonly string LongerSubject = string.Join(" ", Enumerable.Repeat("Agenda, travel arrangements, and the revised budget", 6));
 
         public AdaptiveInboxLayout Layout => Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
         public BoundedScrollArea Header => Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
         public ScrollableMessageText Text => Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
 
         /// <param name="message">
-        /// "plain"; "html", which also has HTML, so the header ends with the HTML preview's row; or "long",
-        /// with a long subject and sender, as the long-message fixture.
+        /// "plain"; "html", which also has HTML, so the header ends with the HTML preview's row; "long",
+        /// with a long subject and sender, as the long-message fixture; "longer", with a subject of six
+        /// lines at 1100x720, as in ShellLayoutTests; or "error" and "long error", whose body fails to load,
+        /// so the reader has no message text, only the problem and Retry.
         /// </param>
         public static async Task<ReaderFixture> OpenAsync(int width, int height, string message = "plain")
         {
@@ -721,12 +790,16 @@ public sealed class ResponsiveInboxTests
             var directory = new TestDirectory();
             var account = TestDirectory.Profile();
             var messages = Fixture.CreateMessages(account, 5);
-            if (message == "long") messages[0] = messages[0] with { Subject = LongSubject, Sender = LongSender };
+            if (message == "longer") messages[0] = messages[0] with { Subject = LongerSubject };
+            else if (message.StartsWith("long", StringComparison.Ordinal)) messages[0] = messages[0] with { Subject = LongSubject, Sender = LongSender };
             var receiver = Fixture.CreateReceiver(messages);
-            receiver.Body = (key, _) => Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20)), html ? "<p>HTML body</p>" : null)
-            {
-                Composition = new MailCompositionSource { From = ["sender@example.test"], To = [account.EmailAddress], Subject = "Subject", MessageId = "message@example.test" },
-            });
+            receiver.Body = (key, _) => message.EndsWith("error", StringComparison.Ordinal)
+                ? throw new MailConnectionException(message == "error" ? "The connection closed."
+                    : "The server closed the connection while sending this message. It may be busy or restarting. Check the connection, then retry.")
+                : Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20)), html ? "<p>HTML body</p>" : null)
+                {
+                    Composition = new MailCompositionSource { From = ["sender@example.test"], To = [account.EmailAddress], Subject = "Subject", MessageId = "message@example.test" },
+                });
             var dispatcher = new TestQueueDispatcher();
             var model = new MailShellViewModel(
                 new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),

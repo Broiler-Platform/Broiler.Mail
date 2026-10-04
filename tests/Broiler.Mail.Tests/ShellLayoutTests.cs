@@ -189,12 +189,20 @@ public sealed class ShellLayoutTests
             Assert.True(before[index] == after[index], $"{where}: {before[index].Element} was at {before[index].Bounds}, but {after[index].Bounds} once measured at the arranged size.");
 
         // The height caps hold against the height the content was given. An area passes its share only to
-        // show a row of buttons whole, and then still leaves the rest its minimum.
+        // show its whole content or to end below a row of buttons, and the rows it shows leave the rest its
+        // minimum (the margin below the last row is not a row).
         foreach (var capped in Descendants(content).OfType<BoundedScrollArea>().Where(element => element.Bounds.Height > 0))
         {
             double available = capped.Parent!.Bounds.Height;
-            double most = Math.Max(available * capped.MaximumFraction, available - (capped.MinimumRemaining?.Invoke() ?? available));
-            Assert.True(capped.Bounds.Height <= most + 1, $"{where}: {capped.Scroll.AccessibleName} is {capped.Bounds.Height} of {available}.");
+            double share = available * capped.MaximumFraction;
+            string what = $"{where}: {capped.Scroll.AccessibleName} is {capped.Bounds.Height} of {available}";
+            if (capped.Bounds.Height <= share + 1) continue;
+            var rows = capped.Rows?.Invoke().ToArray() ?? [];
+            Assert.True(rows.Length > 0 && capped.MinimumRemaining is not null, $"{what}, past its share without rows or a minimum.");
+            bool whole = !capped.Scroll.HasVerticalScrollbar;
+            Assert.True(whole || rows.Any(row => row.Grows && Math.Abs(row.End - capped.Bounds.Height) < 0.5), $"{what}, past its share but not below a row of buttons.");
+            double rowsEnd = whole ? rows[^1].End : capped.Bounds.Height;
+            Assert.True(rowsEnd <= Math.Max(share, available - capped.MinimumRemaining!()) + 0.5, $"{what}; its rows end at {rowsEnd}.");
         }
     }
 
