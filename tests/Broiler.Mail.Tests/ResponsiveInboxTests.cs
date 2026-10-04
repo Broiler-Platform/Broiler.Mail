@@ -317,7 +317,8 @@ public sealed class ResponsiveInboxTests
             Assert.Equal(expected, shell.Footer.Text);
         }
 
-        // A receive failure while the compact reader is shown: the list, with its details and Retry, is hidden.
+        // A receive failure while the compact reader is shown: the list, with its details and Retry, is
+        // hidden. The footer names the button on screen that leads back to it.
         await model.Inbox.SelectAsync(messages[1].Key);
         Settle();
         Assert.True(shell.Inbox.OpenSelected());
@@ -326,14 +327,29 @@ public sealed class ResponsiveInboxTests
         await model.Inbox.ReceiveAsync();
         Settle();
         Assert.True(layout.ShowsReaderOnly);
-        Assert.Equal("Mail could not be received. Go back to the list to see the details and Retry.", shell.Footer.Text);
+        Assert.Equal("Mail could not be received. Use Back to inbox to see the details and Retry.", shell.Footer.Text);
+        var back = Descendants(shell.Window).OfType<StandardButton>().Single(button => button.Text == "Back to inbox");
+        Assert.True(back.Bounds.Width > 0 && back.Bounds.Height > 0, $"Back to inbox is at {back.Bounds}.");
+
+        // So does a failure to load the older page.
+        receiver.Inbox = (cursor, _) => cursor is null
+            ? Task.FromResult(new MailInboxPage(messages, new(account.Id, 7, 6, 10, 5)))
+            : throw new MailConnectionException("The server did not respond.");
+        await model.Inbox.ReceiveAsync();
+        Settle();
+        Assert.True(model.Inbox.CanLoadOlder);
+        await model.Inbox.LoadOlderAsync();
+        Settle();
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.True(model.Inbox.ProblemIsOlderPage);
+        Assert.Equal("Older messages could not be loaded. Use Back to inbox to see the details and Retry.", shell.Footer.Text);
 
         // Canceled, Retry is in that pane too.
         receiver.Inbox = async (_, token) => { await Task.Delay(Timeout.InfiniteTimeSpan, token); return null!; };
         _ = model.Inbox.ReceiveAsync();
         model.Inbox.Cancel();
         Settle();
-        Assert.Equal("Canceled. Go back to the list to retry.", shell.Footer.Text);
+        Assert.Equal("Canceled. Use Back to inbox to retry.", shell.Footer.Text);
         Assert.True(shell.Inbox.GoBackToList());
         Settle();
         Assert.Equal("Canceled. Retry is available.", shell.Footer.Text);

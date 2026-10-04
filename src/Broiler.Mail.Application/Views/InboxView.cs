@@ -49,6 +49,9 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
     private Func<bool>? _open;
     private AdaptiveInboxLayout? _layout;
 
+    /// <summary>The label of the compact reader's way back to the list, which the footer names.</summary>
+    public const string BackText = "Back to inbox";
+
     /// <summary>In compact mode, returns from the reader to the list. False when there is nothing to go back from.</summary>
     public bool GoBackToList() => _back?.Invoke() == true;
     /// <summary>Reloads the selected message and, in compact mode, shows it in place of the list.</summary>
@@ -178,7 +181,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var messageRetry = new StandardButton { Text = "Retry loading" };
         var messageRetryRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 0, Spacing = 8, PreferredSize = new BSize(0, 36) };
         messageRetryRow.AddChild(messageRetry);
-        var back = new StandardButton { Text = "Back to inbox" };
+        var back = new StandardButton { Text = BackText };
         var backRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 0, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
         backRow.AddChild(back);
         var headerStack = new StandardPanel { Spacing = 4 };
