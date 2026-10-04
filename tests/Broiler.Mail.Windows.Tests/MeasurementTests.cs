@@ -479,68 +479,211 @@ public sealed class MeasurementTests
     [Fact]
     public void The_Summary_Compares_Medians_With_The_Proposed_Budgets_And_Fails_Only_When_Strict()
     {
-        string directory = Path.Combine(Path.GetTempPath(), "Broiler.Mail.Measurements", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(directory);
-        try
-        {
-            WriteReport(directory, "idle-1", "idle", null, frames: 0, buildP95: null, inputP95: null, allocationP50: null);
-            // The lower median of two runs: 5 ms, within 8 ms, although the other run took 9.
-            WriteReport(directory, "scroll-1", "scroll", 200, frames: 300, buildP95: 5, inputP95: 6, allocationP50: 300);
-            WriteReport(directory, "scroll-2", "scroll", 200, frames: 300, buildP95: 9, inputP95: 7, allocationP50: 310);
-            WriteReport(directory, "resize-1", "resize", null, frames: 30, buildP95: 15, inputP95: 18, allocationP50: 400);
-            WriteReport(directory, "long-html-1", "long-html", null, frames: 600, buildP95: 110, inputP95: 112, allocationP50: 4);
+        using var directory = new ScratchDirectory();
+        WriteReport(directory.Path, "idle-1", new("idle", 0, null, null, null));
+        WriteReport(directory.Path, "scroll-1", new("scroll", 300, 5, 6, 300) { Simulated = 200 });
+        WriteReport(directory.Path, "scroll-2", new("scroll", 300, 9, 7, 310) { Simulated = 200 });
+        // The median of two runs is their mean: 8.5 ms is over 8, although one of them took 6.
+        WriteReport(directory.Path, "splitter-1", new("splitter", 60, 6, 7, 200));
+        WriteReport(directory.Path, "splitter-2", new("splitter", 60, 11, 12, 210));
+        WriteReport(directory.Path, "resize-1", new("resize", 30, 15, 18, 400));
+        WriteReport(directory.Path, "long-html-1", new("long-html", 600, 110, 112, 4) { CachedTilesBuildP95 = 0.2, Preview = true });
 
-            var (exitCode, output) = RunSummary("-Evaluate", directory);
-            Assert.True(exitCode == 0, output);
-            using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "summary.json")));
-            var verdicts = summary.RootElement.GetProperty("verdicts").EnumerateArray()
-                .ToDictionary(item => $"{item.GetProperty("workload").GetString()}/{item.GetProperty("field").GetString()}",
-                    item => (item.GetProperty("result").GetString(), item.GetProperty("scale").GetString()));
-            Assert.Equal(("pass", "system 150 %"), verdicts["idle/frames"]);
-            Assert.Equal(("pass", "simulated 200 %"), verdicts["scroll/buildMsP95"]);
-            Assert.Equal(("over", "simulated 200 %"), verdicts["scroll/allocatedKbPerFrameP50"]);
-            Assert.Equal("over", verdicts["resize/buildMsP95"].Item1);
-            Assert.Equal("over", verdicts["resize/inputToFrameMsP95"].Item1);
-            // The preview workloads have no proposed target.
-            Assert.DoesNotContain(verdicts.Keys, key => key.StartsWith("long-html/", StringComparison.Ordinal));
-            Assert.Equal(3, summary.RootElement.GetProperty("budgets").GetProperty("over").GetInt32());
-            string markdown = File.ReadAllText(Path.Combine(directory, "summary.md"));
-            Assert.Contains("| scroll | simulated 200 % | 300 |", markdown);
-            Assert.Contains("not real DPI results", markdown);
-            Assert.Contains("long-html: No target is proposed", markdown);
+        var (exitCode, output) = RunSummary("-Evaluate", directory.Path);
+        Assert.True(exitCode == 0, output);
+        using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory.Path, "summary-evaluated.json")));
+        var verdicts = Verdicts(summary).ToDictionary(item => $"{item.Workload}/{item.Field}", item => (item.Result, item.Scale));
+        Assert.Equal(("pass", "system 150 %"), verdicts["idle/frames"]);
+        Assert.Equal(("pass", "simulated 200 %"), verdicts["scroll/buildMsP95"]);
+        Assert.Equal(("over", "simulated 200 %"), verdicts["scroll/allocatedKbPerFrameP50"]);
+        Assert.Equal("over", verdicts["splitter/buildMsP95"].Result);
+        Assert.Equal("pass", verdicts["splitter/inputToFrameMsP95"].Result);
+        Assert.Equal("over", verdicts["resize/buildMsP95"].Result);
+        Assert.Equal("over", verdicts["resize/inputToFrameMsP95"].Result);
+        // The preview workloads are judged too: every frame against the build and input targets, and the frames that
+        // found every tile cached on their own.
+        Assert.Equal("over", verdicts["long-html/buildMsP95"].Result);
+        Assert.Equal("pass", verdicts["long-html/buildMsCachedTilesP95"].Result);
+        Assert.Equal("over", verdicts["long-html/inputToFrameMsP95"].Result);
+        Assert.Equal("pass", verdicts["long-html/allocatedKbPerFrameP50"].Result);
+        Assert.All(new[] { "scroll", "splitter", "resize", "long-html" }, workload => Assert.Equal("pass", verdicts[$"{workload}/unpaintedSteps"].Result));
+        Assert.False(verdicts.ContainsKey("idle/unpaintedSteps"));
+        Assert.Equal(6, summary.RootElement.GetProperty("budgets").GetProperty("over").GetInt32());
+        string markdown = File.ReadAllText(Path.Combine(directory.Path, "summary-evaluated.md"));
+        Assert.Contains("| scroll | simulated 200 % | 300 | 0 | 300 |", markdown);
+        Assert.Contains("not real DPI results", markdown);
+        Assert.Contains("- long-html: A frame that brings a new tile into view", markdown);
+        Assert.Contains("| Re-rasters after eviction |", markdown);
+        Assert.Contains("opened at zoom 1", markdown);
+        Assert.Contains("6 result(s) over budget, 0 without data.", markdown);
+        // Startup is the median of the baseline workloads' runs, as on 2 October, apart from other scales and fixtures.
+        Assert.Contains("Startup, baseline workloads at system 150 %, 4 runs:", markdown);
+        Assert.Contains("Startup, baseline workloads at simulated 200 %, 2 runs:", markdown);
+        Assert.Contains("Startup, HTML preview workloads (long-html fixture) at system 150 %, 1 run:", markdown);
 
-            Assert.Equal(1, RunSummary("-Evaluate", directory, "-Strict").ExitCode);
-            Assert.Equal(0, RunSummary("-Evaluate", directory, "-Strict", "-Workloads", "idle,long-html").ExitCode);
-        }
-        finally { Directory.Delete(directory, recursive: true); }
+        Assert.Equal(1, RunSummary("-Evaluate", directory.Path, "-Strict").ExitCode);
+        Assert.Equal(0, RunSummary("-Evaluate", directory.Path, "-Strict", "-Workloads", "idle").ExitCode);
     }
 
-    private static void WriteReport(string directory, string name, string workload, int? simulated, int frames, double? buildP95, double? inputP95, double? allocationP50)
+    [Fact]
+    public void Strict_Fails_A_Run_That_Painted_Nothing_And_A_Budget_Without_Data()
+    {
+        using var directory = new ScratchDirectory();
+        WriteReport(directory.Path, "scroll-1", new("scroll", 300, null, null, null) { Frames = 0, Unpainted = 300 });
+        // A report without the allocation the budget judges.
+        WriteReport(directory.Path, "type-1", new("type", 600, 1.2, 5, null));
+
+        var (exitCode, output) = RunSummary("-Evaluate", directory.Path);
+        Assert.True(exitCode == 0, output);
+        using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory.Path, "summary-evaluated.json")));
+        var verdicts = Verdicts(summary).ToDictionary(item => $"{item.Workload}/{item.Field}", item => item.Result);
+        Assert.Equal("over", verdicts["scroll/unpaintedSteps"]);
+        Assert.Equal("no data", verdicts["scroll/buildMsP95"]);
+        Assert.Equal("pass", verdicts["type/buildMsP95"]);
+        Assert.Equal("no data", verdicts["type/allocatedKbPerFrameP50"]);
+        Assert.Equal(4, summary.RootElement.GetProperty("budgets").GetProperty("noData").GetInt32());
+        Assert.Contains("| scroll | system 150 % | 300 | 300 | 0 |", File.ReadAllText(Path.Combine(directory.Path, "summary-evaluated.md")));
+
+        Assert.Equal(1, RunSummary("-Evaluate", directory.Path, "-Strict").ExitCode);
+        // Nothing over budget, but a budget without data.
+        Assert.Equal(1, RunSummary("-Evaluate", directory.Path, "-Strict", "-Workloads", "type").ExitCode);
+    }
+
+    [Fact]
+    public void Evaluating_Stored_Reports_Keeps_Their_Summary_And_Says_When_It_Was_Evaluated()
+    {
+        using var directory = new ScratchDirectory();
+        using var elsewhere = new ScratchDirectory();
+        WriteReport(directory.Path, "idle-1", new("idle", 0, null, null, null));
+        const string stored = "# UI measurements, 2026-10-02 19:04\n";
+        File.WriteAllText(Path.Combine(directory.Path, "summary.md"), stored);
+        File.WriteAllText(Path.Combine(directory.Path, "summary.json"), "{}");
+
+        Assert.Equal(0, RunSummary("-Evaluate", directory.Path).ExitCode);
+        Assert.Equal(stored, File.ReadAllText(Path.Combine(directory.Path, "summary.md")));
+        Assert.Equal("{}", File.ReadAllText(Path.Combine(directory.Path, "summary.json")));
+        string[] evaluated = File.ReadAllLines(Path.Combine(directory.Path, "summary-evaluated.md"));
+        Assert.StartsWith($"# UI measurements in {Path.GetFileName(directory.Path)}, evaluated ", evaluated[0], StringComparison.Ordinal);
+        Assert.StartsWith("- Reports: 1 in ", evaluated[2], StringComparison.Ordinal);
+
+        // Evaluated again into another directory: the first evaluation is not taken for a report.
+        Assert.Equal(0, RunSummary("-Evaluate", directory.Path, "-Output", elsewhere.Path).ExitCode);
+        using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(elsewhere.Path, "summary-evaluated.json")));
+        Assert.Equal(1, Assert.Single(summary.RootElement.GetProperty("rows").EnumerateArray()).GetProperty("runs").GetInt32());
+    }
+
+    [Fact]
+    public void Detailed_And_Plain_Runs_Are_Summarized_Apart()
+    {
+        using var directory = new ScratchDirectory();
+        WriteReport(directory.Path, "scroll-1", new("scroll", 300, 5, 6, 100));
+        WriteReport(directory.Path, "scroll-detail-1", new("scroll", 300, 20, 22, 100) { Detail = true });
+
+        Assert.Equal(0, RunSummary("-Evaluate", directory.Path).ExitCode);
+        using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory.Path, "summary-evaluated.json")));
+        var builds = Verdicts(summary).Where(item => item.Field == "buildMsP95").ToDictionary(item => item.Detail, item => item.Result);
+        Assert.Equal("pass", builds[false]);
+        Assert.Equal("over", builds[true]);
+        Assert.Contains("| scroll | system 150 %, detail | 300 |", File.ReadAllText(Path.Combine(directory.Path, "summary-evaluated.md")));
+    }
+
+    [Fact]
+    public void A_Run_Summarizes_Only_Its_Own_Reports_And_Passes_Its_Scale_And_Detail()
+    {
+        using var tools = new ScratchDirectory();
+        using var output = new ScratchDirectory();
+        // Stands in for the app: records its arguments and writes the report it was given.
+        File.WriteAllText(Path.Combine(tools.Path, "run.cmd"), string.Join("\r\n",
+            "@echo off", "set \"here=%~dp0\"", ">>\"%here%arguments.txt\" echo %*",
+            ":next", "if \"%~1\"==\"\" exit /b 0", "if \"%~1\"==\"--report\" goto report", "shift", "goto next",
+            ":report", "copy /y \"%here%report.json\" \"%~2\" >nul", "exit /b 0", ""));
+        File.WriteAllText(Path.Combine(tools.Path, "silent.cmd"), "@exit /b 0\r\n");
+        WriteReport(tools.Path, "report", new("idle", 0, null, null, null) { Simulated = 200, Detail = true });
+        // Earlier runs in the same directory, which drew frames while idle.
+        WriteReport(output.Path, "idle-s200-earlier-1", new("idle", 0, null, null, null) { Frames = 5, Simulated = 200, Detail = true });
+        WriteReport(output.Path, "idle-s200-earlier-2", new("idle", 0, null, null, null) { Frames = 5, Simulated = 200, Detail = true });
+
+        var (exitCode, text) = RunSummary("-Executable", Path.Combine(tools.Path, "run.cmd"), "-Output", output.Path, "-Workloads", "idle",
+            "-Repeat", "1", "-Scales", "200", "-Detail");
+        Assert.True(exitCode == 0, text);
+        using (var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(output.Path, "summary.json"))))
+        {
+            Assert.Equal(1, Assert.Single(summary.RootElement.GetProperty("rows").EnumerateArray()).GetProperty("runs").GetInt32());
+            Assert.Equal("pass", Assert.Single(Verdicts(summary)).Result);
+        }
+        string arguments = File.ReadAllText(Path.Combine(tools.Path, "arguments.txt"));
+        Assert.Contains("--demo inbox", arguments);
+        Assert.Contains("--measure idle", arguments);
+        Assert.Contains("--scale 200", arguments);
+        Assert.Contains("--detail", arguments);
+
+        // A run that writes no report fails, although a report of the same name is left from the run before.
+        Assert.True(File.Exists(Path.Combine(output.Path, "idle-s200-1.json")));
+        Assert.NotEqual(0, RunSummary("-Executable", Path.Combine(tools.Path, "silent.cmd"), "-Output", output.Path, "-Workloads", "idle",
+            "-Repeat", "1", "-Scales", "200").ExitCode);
+    }
+
+    private static (string Workload, string Scale, bool Detail, string Field, string Result)[] Verdicts(JsonDocument summary) =>
+        summary.RootElement.GetProperty("verdicts").EnumerateArray().Select(item => (item.GetProperty("workload").GetString()!,
+            item.GetProperty("scale").GetString()!, item.GetProperty("detail").GetBoolean(), item.GetProperty("field").GetString()!,
+            item.GetProperty("result").GetString()!)).ToArray();
+
+    /// <summary>A report as the app writes it, with the fields the summary reads; frames default to the steps.</summary>
+    private sealed record SyntheticReport(string Workload, int Steps, double? BuildP95, double? InputP95, double? AllocationP50)
+    {
+        public int? Simulated { get; init; }
+        public bool Detail { get; init; }
+        public int? Frames { get; init; }
+        public int Unpainted { get; init; }
+        public double? CachedTilesBuildP95 { get; init; }
+        /// <summary>A preview workload's report, with the preview's size, scale, and opening zoom.</summary>
+        public bool Preview { get; init; }
+    }
+
+    private static void WriteReport(string directory, string name, SyntheticReport report)
     {
         using var stream = File.Create(Path.Combine(directory, name + ".json"));
         using var writer = new Utf8JsonWriter(stream);
         writer.WriteStartObject();
         writer.WriteNumber("reportVersion", 2);
-        writer.WriteString("workload", workload);
+        writer.WriteString("workload", report.Workload);
         writer.WriteString("theme", "light");
         writer.WriteString("windowSize", "1100x720");
-        writer.WriteNumber("dpiScale", simulated is { } percent ? percent / 100.0 : 1.5);
-        if (simulated is { } simulatedPercent) writer.WriteNumber("simulatedScalePercent", simulatedPercent);
+        writer.WriteNumber("dpiScale", report.Simulated is { } percent ? percent / 100.0 : 1.5);
+        if (report.Simulated is { } simulatedPercent) writer.WriteNumber("simulatedScalePercent", simulatedPercent);
         else writer.WriteNull("simulatedScalePercent");
-        writer.WriteBoolean("detail", false);
+        writer.WriteBoolean("detail", report.Detail);
         writer.WriteString("build", "Release, NativeAOT");
         writer.WriteString("machine", "test");
         writer.WriteNumber("startupFirstFrameMs", 230);
         writer.WriteNumber("startupInteractiveMs", 250);
-        writer.WriteNumber("steps", frames);
-        writer.WriteNumber("frames", frames);
-        foreach (var (field, value) in new[] { ("buildMsP50", buildP95 / 2), ("buildMsP95", buildP95), ("buildMsP99", buildP95),
-            ("inputToFrameMsP95", inputP95), ("allocatedKbPerFrameP50", allocationP50), ("workingSetMb", (double?)70) })
+        writer.WriteNumber("steps", report.Steps);
+        writer.WriteNumber("unpaintedSteps", report.Unpainted);
+        writer.WriteNumber("frames", report.Frames ?? report.Steps);
+        foreach (var (field, value) in new[] { ("buildMsP50", report.BuildP95 / 2), ("buildMsP95", report.BuildP95), ("buildMsP99", report.BuildP95),
+            ("inputToFrameMsP95", report.InputP95), ("allocatedKbPerFrameP50", report.AllocationP50), ("workingSetMb", (double?)70) })
         {
             if (value is { } number) writer.WriteNumber(field, number);
             else writer.WriteNull(field);
         }
+        if (report.Preview)
+        {
+            writer.WriteString("previewWindowSize", "900x700");
+            writer.WriteNumber("previewDpiScale", 1.5);
+            writer.WriteNumber("previewOpeningZoom", 1);
+            if (report.CachedTilesBuildP95 is { } cached) writer.WriteNumber("buildMsCachedTilesP95", cached);
+        }
         writer.WriteEndObject();
+    }
+
+    /// <summary>An empty directory of its own under the temporary directory, deleted with everything in it.</summary>
+    private sealed class ScratchDirectory : IDisposable
+    {
+        public string Path { get; } = System.IO.Path.Combine(System.IO.Path.GetTempPath(), "Broiler.Mail.Measurements", Guid.NewGuid().ToString("N"));
+
+        public ScratchDirectory() => Directory.CreateDirectory(Path);
+
+        public void Dispose() => Directory.Delete(Path, recursive: true);
     }
 
     private static (int ExitCode, string Output) RunSummary(params string[] arguments)
