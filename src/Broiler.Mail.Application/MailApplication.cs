@@ -33,7 +33,8 @@ namespace Broiler.Mail.Application;
 // Broiler-Falsified-If: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
 // Broiler-Human:        PENDING
 public sealed class MailApplication(
-    IAccountStore accounts, ISettingsStore settings, IMailReceiver receiver, IMailSender sender, ICredentialStore credentials, IDraftStore? drafts = null, ISentCopyWriter? sentCopies = null)
+    IAccountStore accounts, ISettingsStore settings, IMailReceiver receiver, IMailSender sender, ICredentialStore credentials, IDraftStore? drafts = null, ISentCopyWriter? sentCopies = null,
+    IOutgoingConnectionTester? outgoingTester = null)
 {
     public IAccountStore Accounts { get; } = accounts ?? throw new ArgumentNullException(nameof(accounts));
     public ISettingsStore Settings { get; } = settings ?? throw new ArgumentNullException(nameof(settings));
@@ -42,6 +43,8 @@ public sealed class MailApplication(
     public ICredentialStore Credentials { get; } = credentials ?? throw new ArgumentNullException(nameof(credentials));
     public IDraftStore Drafts { get; } = drafts ?? new MemoryDraftStore();
     public ISentCopyWriter? SentCopies { get; } = sentCopies;
+    /// <summary>The non-sending SMTP sign-in test; without it the Account tab offers no SMTP test.</summary>
+    public IOutgoingConnectionTester? OutgoingTester { get; } = outgoingTester;
     public DraftStoreState LoadedDraft { get; private set; } = new(0, null);
     public string? DraftLoadError { get; private set; }
 
@@ -99,7 +102,7 @@ public sealed class MailApplication(
     {
         dispatcher ??= new ImmediateUiDispatcher();
         return new MailShellViewModel(
-            new AccountProfileViewModel(Accounts, Credentials, Receiver, dispatcher, LoadedAccount, AccountLoadError),
+            new AccountProfileViewModel(Accounts, Credentials, Receiver, dispatcher, LoadedAccount, AccountLoadError, OutgoingTester),
             new SettingsViewModel(Settings, dispatcher, LoadedSettings, SettingsLoadError),
             new InboxViewModel(Receiver, dispatcher),
             new ComposerViewModel(Drafts, LoadedDraft, dispatcher, Sender, DraftLoadError, SentCopies));

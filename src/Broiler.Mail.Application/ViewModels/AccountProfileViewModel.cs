@@ -31,12 +31,16 @@ public enum AccountSetupStep { SaveDetails, SavePassword, TestConnection, Ready 
 /// <summary>The result of the most recent connection test for the saved profile and password.</summary>
 public enum ConnectionCheck { NotRun, Running, Passed, Failed }
 
+/// <summary>Where optional outgoing mail stands. Separate from <see cref="AccountSetupStep"/>: receiving never waits for it.</summary>
+public enum OutgoingSetupStep { NotConfigured, SavePassword, Test, Ready }
+
 public sealed class AccountProfileViewModel : SaveViewModel
 {
     private readonly IAccountStore _store;
     private readonly AccountId _id;
     private readonly ICredentialStore _credentials;
     private readonly IMailReceiver _receiver;
+    private readonly IOutgoingConnectionTester? _outgoingTester;
     private CancellationTokenSource? _connectionCancellation;
     private int _credentialCheck;
 
@@ -44,12 +48,13 @@ public sealed class AccountProfileViewModel : SaveViewModel
     // Broiler-Falsified-If: a profile without an outgoing server opens with SMTP configuration switched on
     // Broiler-Human:        PENDING
     public AccountProfileViewModel(IAccountStore store, ICredentialStore credentials, IMailReceiver receiver,
-        IUiDispatcher dispatcher, AccountProfile? profile, string? loadError)
+        IUiDispatcher dispatcher, AccountProfile? profile, string? loadError, IOutgoingConnectionTester? outgoingTester = null)
         : base(dispatcher, loadError)
     {
         _store = store;
         _credentials = credentials;
         _receiver = receiver;
+        _outgoingTester = outgoingTester;
         Profile = profile;
         _id = profile?.Id ?? AccountId.New();
         DisplayName = profile?.DisplayName ?? string.Empty;
@@ -77,6 +82,16 @@ public sealed class AccountProfileViewModel : SaveViewModel
     public ConnectionCheck ConnectionCheck { get; private set; }
     /// <summary>Why the last connection test failed, shown beside the setup step.</summary>
     public string? ConnectionFailure { get; private set; }
+    /// <summary>The result of the most recent SMTP sign-in test. Kept in memory only; it never affects receiving.</summary>
+    public ConnectionCheck OutgoingCheck { get; private set; }
+    /// <summary>Why the last SMTP sign-in test failed, shown beside the outgoing step.</summary>
+    public string? OutgoingFailure { get; private set; }
+    /// <summary>The kind of the last SMTP sign-in failure, when the tester classified it.</summary>
+    public MailConnectionFailure? OutgoingFailureKind { get; private set; }
+    /// <summary>The protocol of the most recently started test, so Cancel can hand focus back to the test that ran.</summary>
+    public MailProtocol? LastTest { get; private set; }
+    /// <summary>Whether this app can test an SMTP sign-in at all.</summary>
+    public bool SupportsOutgoingTest => _outgoingTester is not null;
 
     /// <summary>The form differs from the saved profile, including a profile that was never saved.</summary>
     public bool HasUnsavedChanges
@@ -95,6 +110,12 @@ public sealed class AccountProfileViewModel : SaveViewModel
         : ConnectionCheck != ConnectionCheck.Passed ? AccountSetupStep.TestConnection
         : AccountSetupStep.Ready;
 
+    public OutgoingSetupStep OutgoingStep =>
+        Profile?.OutgoingServer is null ? OutgoingSetupStep.NotConfigured
+        : OutgoingCheck == ConnectionCheck.Passed ? OutgoingSetupStep.Ready
+        : HasSmtpPassword == false ? OutgoingSetupStep.SavePassword
+        : OutgoingSetupStep.Test;
+
     /// <summary>The view calls this after copying edited fields, so unsaved-change state stays current.</summary>
     public void NotifyEdited() => NotifyChanged();
 
@@ -102,7 +123,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     /// Checks which passwords are stored for the saved profile. Only the presence is kept; the secret
     /// itself is dropped immediately and never reaches the view, status text, or diagnostics.
     /// </summary>
-    private void RefreshCredentialState()
+    private void RefreshCredentialState(bool receiving = true, bool sending = true)
     {
         int check = ++_credentialCheck;
         var profile = Profile;
@@ -112,8 +133,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
             HasSmtpPassword = null;
             return;
         }
-        HasPassword = null;
-        HasSmtpPassword = null;
+        // Both are read again; only a binding that changed shows as unknown until then.
+        if (receiving) HasPassword = null;
+        if (sending) HasSmtpPassword = null;
         _ = Task.Run(async () =>
         {
             bool? imap = await IsStoredAsync(CredentialKey.For(profile, MailProtocol.Imap)).ConfigureAwait(false);
@@ -162,6 +184,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     // Broiler-Falsified-If: the SMTP password controls are enabled for a saved profile without an outgoing server
     // Broiler-Human:        PENDING
     public bool CanManageSmtpPassword => CanManagePassword && Profile?.OutgoingServer is not null;
+    public bool CanTestOutgoing => CanManageSmtpPassword && SupportsOutgoingTest;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=6D5116
     // Broiler-Falsified-If: Cancel is offered while no connection test is running
     // Broiler-Human:        PENDING
@@ -180,10 +203,17 @@ public sealed class AccountProfileViewModel : SaveViewModel
             await _store.SaveAsync(candidate, cancellationToken).ConfigureAwait(false);
         }, () =>
         {
-            bool changed = candidate != Profile;
+            var previous = Profile;
             Profile = candidate!;
-            // Connection settings are part of the credential binding, so presence and test results start over.
-            if (changed) { ConnectionCheck = ConnectionCheck.NotRun; ConnectionFailure = null; RefreshCredentialState(); }
+            if (candidate == previous) return;
+            // Server settings are part of the credential binding, so a protocol's presence and test result start
+            // over when its own settings change. Each protocol is judged on its own: adding outgoing mail does not
+            // undo a passed receiving test, and editing the incoming server does not undo a passed SMTP test.
+            bool receiving = previous is null || previous.IncomingServer != candidate!.IncomingServer || previous.IsEnabled != candidate.IsEnabled;
+            bool sending = previous is null || previous.OutgoingServer != candidate!.OutgoingServer || previous.IsEnabled != candidate.IsEnabled;
+            if (receiving) { ConnectionCheck = ConnectionCheck.NotRun; ConnectionFailure = null; }
+            if (sending) ResetOutgoingCheck();
+            RefreshCredentialState(receiving, sending);
         }, "Account profile saved.");
     }
 
@@ -218,11 +248,23 @@ public sealed class AccountProfileViewModel : SaveViewModel
 
     private void RecordPassword(MailProtocol protocol, bool stored)
     {
-        if (protocol == MailProtocol.Smtp) { HasSmtpPassword = stored; return; }
+        // A different password needs a new test of that protocol only.
+        if (protocol == MailProtocol.Smtp)
+        {
+            HasSmtpPassword = stored;
+            ResetOutgoingCheck();
+            return;
+        }
         HasPassword = stored;
-        // A different password needs a new test.
         ConnectionCheck = ConnectionCheck.NotRun;
         ConnectionFailure = null;
+    }
+
+    private void ResetOutgoingCheck()
+    {
+        OutgoingCheck = ConnectionCheck.NotRun;
+        OutgoingFailure = null;
+        OutgoingFailureKind = null;
     }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=FDC9C0
@@ -233,17 +275,72 @@ public sealed class AccountProfileViewModel : SaveViewModel
         if (!CanSave) return Task.CompletedTask;
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _connectionCancellation = cancellation;
+        LastTest = MailProtocol.Imap;
+        var previous = (ConnectionCheck, ConnectionFailure);
+        bool started = false;
         ConnectionCheck = ConnectionCheck.Running;
-        return RunAsync(() => _receiver.TestConnectionAsync(RequireSavedProfile(), cancellation.Token), () => ConnectionCheck = ConnectionCheck.Passed,
+        return RunAsync(() =>
+            {
+                var account = RequireSavedProfile();
+                started = true;
+                return _receiver.TestConnectionAsync(account, cancellation.Token);
+            }, () => ConnectionCheck = ConnectionCheck.Passed,
             "Connecting and authenticating…", "Connected securely and authenticated. No messages were fetched.",
             "Connection test failed", "Connection test canceled.", failure =>
             {
                 if (failure is not null)
                 {
-                    // A canceled test proves nothing either way; a real failure is kept beside the step.
+                    // A canceled test proves nothing either way; a real failure is kept beside the step. A test
+                    // refused before it started (unsaved edits) keeps the result of the saved profile.
                     bool canceled = cancellation.IsCancellationRequested;
-                    ConnectionCheck = canceled ? ConnectionCheck.NotRun : ConnectionCheck.Failed;
-                    ConnectionFailure = canceled ? null : failure;
+                    (ConnectionCheck, ConnectionFailure) = !started ? previous
+                        : canceled ? (ConnectionCheck.NotRun, null) : (ConnectionCheck.Failed, failure);
+                }
+                _connectionCancellation = null;
+                cancellation.Dispose();
+            });
+    }
+
+    /// <summary>
+    /// Signs in to the saved SMTP server without sending anything. The result stands beside the outgoing step
+    /// only; the receiving checklist and <see cref="NextStep"/> never depend on it. Cancel and Escape stop it
+    /// like the connection test, and only one test runs at a time.
+    /// </summary>
+    public Task TestOutgoingConnectionAsync(CancellationToken cancellationToken = default)
+    {
+        if (!CanSave || _outgoingTester is not { } tester) return Task.CompletedTask;
+        var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
+        _connectionCancellation = cancellation;
+        LastTest = MailProtocol.Smtp;
+        var previous = (OutgoingCheck, OutgoingFailure, OutgoingFailureKind);
+        bool started = false;
+        MailConnectionFailure? kind = null;
+        OutgoingCheck = ConnectionCheck.Running;
+        return RunAsync(async () =>
+            {
+                var account = RequireSavedProfile(MailProtocol.Smtp);
+                started = true;
+                try { await tester.TestConnectionAsync(account, cancellation.Token).ConfigureAwait(false); }
+                catch (MailConnectionException error) { kind = error.Failure; throw; }
+            }, () => { ResetOutgoingCheck(); OutgoingCheck = ConnectionCheck.Passed; },
+            "Signing in to the SMTP server… No message is sent.",
+            "The SMTP server accepted the sign-in over an encrypted connection. No message was sent.",
+            "SMTP sign-in test failed", "SMTP sign-in test canceled.", failure =>
+            {
+                if (failure is not null)
+                {
+                    // As for the connection test: canceled proves nothing, refused-before-start keeps the saved
+                    // profile's result, and a real failure stays beside the outgoing step with its kind.
+                    if (!started) (OutgoingCheck, OutgoingFailure, OutgoingFailureKind) = previous;
+                    else if (cancellation.IsCancellationRequested) ResetOutgoingCheck();
+                    else
+                    {
+                        OutgoingCheck = ConnectionCheck.Failed;
+                        OutgoingFailure = failure;
+                        OutgoingFailureKind = kind;
+                        // The tester found no password bound to these details, whatever the earlier check said.
+                        if (kind == MailConnectionFailure.MissingPassword) HasSmtpPassword = false;
+                    }
                 }
                 _connectionCancellation = null;
                 cancellation.Dispose();

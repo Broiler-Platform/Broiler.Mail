@@ -42,3 +42,16 @@ internal sealed class TestMailReceiver : IMailReceiver
     public Task<MailInboxPage> GetInboxAsync(AccountProfile account, int maximumCount, MailInboxCursor? older = null, CancellationToken cancellationToken = default) => Inbox(older, cancellationToken);
     public Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default) => Body(message, cancellationToken);
 }
+
+internal sealed class TestOutgoingTester : IOutgoingConnectionTester
+{
+    public int Calls { get; private set; }
+    public AccountProfile? Account { get; private set; }
+    public Func<CancellationToken, Task> Test { get; set; } = _ => Task.CompletedTask;
+    public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default)
+    {
+        Calls++;
+        Account = account;
+        return Test(cancellationToken);
+    }
+}

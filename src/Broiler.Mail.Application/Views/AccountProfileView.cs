@@ -105,7 +105,10 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         smtpPassword.MaxLength = 1280;
         var saveSmtpPassword = new StandardButton { Text = "Save SMTP password" };
         var forgetSmtpPassword = new StandardButton { Text = "Forget SMTP password" };
-        smtpFields.AddChild(FormSurface.ActionBar(saveSmtpPassword, forgetSmtpPassword));
+        // Beside the SMTP password, inside the SMTP fields: it is no Tab stop while outgoing mail is off,
+        // and the bottom bar keeps its order. Without a tester the app offers no SMTP test at all.
+        var testSmtp = new StandardButton { Text = "Test SMTP sign-in" };
+        smtpFields.AddChild(FormSurface.ActionBar(saveSmtpPassword, forgetSmtpPassword, testSmtp));
         ConfigurationForm.AddText(smtpFields, "Forget the SMTP password before removing outgoing setup.");
         var advanced = new FormSection("Sent-copy settings", collapsible: true, expanded: model.SentCopyMode != SentCopyMode.NotConfigured);
         smtpFields.AddChild(advanced);
@@ -142,9 +145,13 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             save.IsEnabled = model.CanSave;
             password.IsEnabled = savePassword.IsEnabled = forgetPassword.IsEnabled = test.IsEnabled = model.CanManagePassword;
             test.IsEnabled = model.CanManagePassword && password.Text.Length == 0;
+            // As for IMAP, typed text is never silently replaced by the saved secret: save it first.
+            testSmtp.Visibility = model.SupportsOutgoingTest ? UiVisibility.Visible : UiVisibility.Collapsed;
+            testSmtp.IsEnabled = model.CanTestOutgoing && model.HasSmtpPassword != false && smtpSetup.SelectedIndex == 1 && smtpPassword.Text.Length == 0;
             cancel.IsEnabled = model.CanCancelTest;
+            // Focus goes back to the test that ran, or to Test connection when that one cannot take it.
             if (!model.CanCancelTest && surface.Session?.FocusedElement == cancel)
-                surface.Session.SetFocus(test);
+                surface.Session.SetFocus(model.LastTest == MailProtocol.Smtp && testSmtp.CanFocus ? testSmtp : test);
             cancel.Visibility = model.CanCancelTest ? UiVisibility.Visible : UiVisibility.Collapsed;
             RefreshSetup();
         }
@@ -168,9 +175,22 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
                 ConnectionCheck.Failed => $"Next — {model.ConnectionFailure} Check the server details and password, then test again.",
                 _ => step == AccountSetupStep.TestConnection ? "Next — Test the connection. No messages are fetched." : "Then — Test the connection.",
             };
+            // Sending stays optional and apart from receiving: its result stands on this line only, and the
+            // next-step button never offers it. A failure is explained here, beside the step.
             outgoingStep.Text = model.Profile?.OutgoingServer is null ? "Optional — Outgoing mail is not set up; add it below to send messages."
-                : model.HasSmtpPassword == true ? "Done — Outgoing mail set up with a saved password."
-                : "Optional — Outgoing mail is set up; save its password to send messages.";
+                : model.OutgoingCheck switch
+                {
+                    ConnectionCheck.Running => "Testing the SMTP sign-in… No message is sent.",
+                    ConnectionCheck.Failed => $"Optional — {model.OutgoingFailure}",
+                    ConnectionCheck.Passed => "Done — Outgoing sign-in tested; no message was sent.",
+                    _ => model.HasSmtpPassword switch
+                    {
+                        true when model.SupportsOutgoingTest => "Optional — SMTP password saved. Test the SMTP sign-in below; no message is sent.",
+                        true => "Done — Outgoing mail set up with a saved password.",
+                        false => "Optional — Outgoing mail is set up; save its SMTP password to send messages.",
+                        _ => "Checking for a saved SMTP password…",
+                    },
+                };
             next.Text = step switch
             {
                 AccountSetupStep.SaveDetails => "Next: save account details",
@@ -199,6 +219,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             ["SentFolder"] = sentFolder,
         });
         password.TextChanged += (_, _) => RefreshState();
+        smtpPassword.TextChanged += (_, _) => RefreshState();
         // Copying edits as they happen keeps the unsaved-changes step accurate.
         foreach (var field in new[] { name, email, host, port, user, smtpHost, smtpPort, smtpUser, sentFolder })
             field.TextChanged += (_, _) => { CaptureFields(); model.NotifyEdited(); };
@@ -282,6 +303,12 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             CaptureFields();
             password.Text = string.Empty;
             await model.TestConnectionAsync();
+        };
+        testSmtp.Clicked += async (_, _) =>
+        {
+            CaptureFields();
+            smtpPassword.Text = string.Empty;
+            await model.TestOutgoingConnectionAsync();
         };
         cancel.Clicked += (_, _) => model.CancelConnectionTest();
         RefreshState();
