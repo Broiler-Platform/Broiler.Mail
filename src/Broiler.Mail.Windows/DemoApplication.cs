@@ -42,7 +42,8 @@ internal static class DemoApplication
     {
         options ??= new(DemoScenario.Inbox, Interactive: true);
         var store = new DemoStore(options);
-        return new(store, store, new DemoReceiver(options.Scenario, options.Interactive), new DemoSender(options.Scenario), store, CreateDrafts(options.Scenario, store.Profile));
+        return new(store, store, new DemoReceiver(options.Scenario, options.Interactive), new DemoSender(options.Scenario), store, CreateDrafts(options.Scenario, store.Profile),
+            outgoingTester: new DemoOutgoingTester(options.Scenario));
     }
 
     /// <summary>Dates relative to a fixed moment, zone, and culture, so gallery captures are reproducible.</summary>
@@ -145,13 +146,17 @@ internal static class DemoApplication
     // Broiler-Human:        PENDING
     private sealed class DemoStore(DemoOptions options) : IAccountStore, ISettingsStore, ICredentialStore
     {
+        private bool SmtpTest => options.Scenario is DemoScenario.SmtpTestFailed or DemoScenario.SmtpTestPassed;
         private AccountProfile _profile = new()
         {
             Id = DemoAccount, DisplayName = "Demo inbox", EmailAddress = "reader@example.test",
             IncomingServer = new() { Host = "imap.example.test", Port = 993, UserName = "reader" },
-            // The send fixtures need outgoing mail and a Sent folder to describe their outcomes.
+            // The send fixtures need outgoing mail and a Sent folder to describe their outcomes; the SMTP test
+            // fixtures need outgoing mail only.
             OutgoingServer = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed
-                ? new() { Host = "smtp.example.test", Port = 465, UserName = "reader" } : null,
+                ? new() { Host = "smtp.example.test", Port = 465, UserName = "reader" }
+                : options.Scenario is DemoScenario.SmtpTestFailed or DemoScenario.SmtpTestPassed
+                ? new() { Host = "smtp.example.test", Port = 587, UserName = "reader", Security = TransportSecurity.StartTls } : null,
             SentCopyMode = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed ? SentCopyMode.AppendToFolder : SentCopyMode.NotConfigured,
             SentFolder = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed ? "Sent" : null,
         };
@@ -178,9 +183,30 @@ internal static class DemoApplication
         // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=15E384
         // Broiler-Falsified-If: a credential lookup in demo mode returns a non-null secret
         // Broiler-Human:        PENDING
-        public Task<string?> ReadAsync(CredentialKey key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
+        public Task<string?> ReadAsync(CredentialKey key, CancellationToken cancellationToken = default) =>
+            // The SMTP test fixtures show a saved SMTP password. This placeholder only marks its presence: no secret
+            // exists, and the demo tester and sender never read credentials.
+            Task.FromResult(SmtpTest && key.Protocol == MailProtocol.Smtp ? SavedPasswordMarker : null);
+        private const string SavedPasswordMarker = "demo-saved-password-marker";
         public Task WriteAsync(CredentialKey key, string secret, CancellationToken cancellationToken = default) => throw new InvalidOperationException("Demo mode does not store passwords. Restart without --demo to configure an account.");
         public Task DeleteAsync(CredentialKey key, CancellationToken cancellationToken = default) => throw new InvalidOperationException("Demo mode does not access saved passwords.");
+    }
+
+    /// <summary>Answers the SMTP sign-in test synthetically; it never opens a connection or reads a credential.</summary>
+    private sealed class DemoOutgoingTester(DemoScenario scenario) : IOutgoingConnectionTester
+    {
+        public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return scenario switch
+            {
+                DemoScenario.SmtpTestPassed => Task.CompletedTask,
+                DemoScenario.SmtpTestFailed => Task.FromException(new MailConnectionException(
+                    "The demo SMTP server rejected the sign-in. Check the SMTP username and password, then test again.", MailConnectionFailure.AuthenticationRejected)),
+                _ => Task.FromException(new MailConnectionException(
+                    "Demo mode does not connect to a server. Restart without --demo to test an account.", MailConnectionFailure.Setup)),
+            };
+        }
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=73E97D

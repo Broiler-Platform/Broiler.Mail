@@ -87,6 +87,11 @@ internal sealed class DemoScenarioDriver
                     return test;
                 };
                 break;
+            case DemoScenario.SmtpTestFailed:
+            case DemoScenario.SmtpTestPassed:
+                // The same command as Test SMTP sign-in; the demo tester answers without a network.
+                yield return () => model.Account.TestOutgoingConnectionAsync();
+                break;
             case DemoScenario.DraftConflict:
                 yield return () =>
                 {

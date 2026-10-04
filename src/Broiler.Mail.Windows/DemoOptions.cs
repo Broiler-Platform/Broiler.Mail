@@ -5,7 +5,7 @@ using Broiler.Mail.Windows.Measurement;
 namespace Broiler.Mail.Windows;
 
 internal enum DemoScenario { Inbox, Empty, LongMessage, LargeInbox, LargeDraft, ReceiveError, SaveError, SendUnknown, HtmlOnly, BodyError,
-    InvalidSetup, TestCanceled, DraftConflict, SendRejected, SentCopyFailed, LongHtml }
+    InvalidSetup, TestCanceled, DraftConflict, SendRejected, SentCopyFailed, LongHtml, SmtpTestFailed, SmtpTestPassed }
 
 /// <summary>Interactive: plain <c>--demo</c>, where the user drives the synthetic inbox. Otherwise the named fixture is prepared on start.</summary>
 internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTheme.System, int Width = 1100, int Height = 720, bool Interactive = false,
@@ -29,6 +29,8 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("send-rejected", DemoScenario.SendRejected, "Send rejected by the server with its reason; the draft is kept"),
         ("sent-copy-failed", DemoScenario.SentCopyFailed, "Message accepted but its Sent copy was not saved"),
         ("long-html", DemoScenario.LongHtml, "Selected HTML message longer than the preview's render budget, with links; the next message is HTML too"),
+        ("smtp-test-failed", DemoScenario.SmtpTestFailed, "SMTP sign-in test rejected by the demo server; no message was sent"),
+        ("smtp-test-passed", DemoScenario.SmtpTestPassed, "SMTP sign-in test accepted by the demo server; no message was sent"),
     });
 
     internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--text-scale <100-225>] [--contrast high] [--measure <workload> [--report <file.json>]]";
@@ -48,7 +50,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
     internal string InitialTab => Scenario switch
     {
         DemoScenario.LargeDraft or DemoScenario.SendUnknown or DemoScenario.DraftConflict or DemoScenario.SendRejected or DemoScenario.SentCopyFailed => "compose",
-        DemoScenario.InvalidSetup or DemoScenario.TestCanceled => "account",
+        DemoScenario.InvalidSetup or DemoScenario.TestCanceled or DemoScenario.SmtpTestFailed or DemoScenario.SmtpTestPassed => "account",
         DemoScenario.SaveError => "settings",
         _ => "inbox",
     };

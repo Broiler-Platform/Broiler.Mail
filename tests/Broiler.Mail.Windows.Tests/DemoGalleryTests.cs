@@ -6,9 +6,13 @@ using Broiler.Graphics.RenderList;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
+using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Settings;
 using Broiler.UI;
+using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms;
+using Broiler.UI.Forms.Standard;
+using Broiler.UI.Label.Standard;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Tests;
@@ -228,6 +232,45 @@ public sealed class DemoGalleryTests
     }
 
     [Fact]
+    public void Smtp_Test_Failure_Is_Beside_The_Outgoing_Step_And_Sends_Nothing()
+    {
+        Run(DemoScenario.SmtpTestFailed, (model, shell) =>
+        {
+            var account = model.Account;
+            Assert.Equal(ConnectionCheck.Failed, account.OutgoingCheck);
+            Assert.Equal(MailConnectionFailure.AuthenticationRejected, account.OutgoingFailureKind);
+            Assert.Equal(FeedbackKind.Error, account.StatusKind);
+            Assert.Equal("SMTP sign-in test failed: The demo SMTP server rejected the sign-in. Check the SMTP username and password, then test again.", account.Status);
+            Assert.Contains("Optional — " + account.Status, StepLines(shell));
+            // Receiving keeps its own state, and nothing was submitted.
+            Assert.Equal(ConnectionCheck.NotRun, account.ConnectionCheck);
+            Assert.False(model.Composer.HasDraft);
+            // Valid actions: test again; nothing to cancel.
+            Assert.False(account.IsBusy);
+            Assert.True(account.CanTestOutgoing);
+            Assert.True(Button(shell, "Test SMTP sign-in").IsEnabled);
+            Assert.Equal(UiVisibility.Collapsed, Button(shell, "Cancel test").Visibility);
+        });
+    }
+
+    [Fact]
+    public void Smtp_Test_Pass_Says_That_No_Message_Was_Sent()
+    {
+        Run(DemoScenario.SmtpTestPassed, (model, shell) =>
+        {
+            var account = model.Account;
+            Assert.Equal(ConnectionCheck.Passed, account.OutgoingCheck);
+            Assert.Equal(FeedbackKind.Success, account.StatusKind);
+            Assert.Equal("The SMTP server accepted the sign-in over an encrypted connection. No message was sent.", account.Status);
+            Assert.Contains("Done — Outgoing sign-in tested; no message was sent.", StepLines(shell));
+            Assert.Equal(ConnectionCheck.NotRun, account.ConnectionCheck);
+            Assert.False(model.Composer.HasDraft);
+            Assert.True(Button(shell, "Test SMTP sign-in").IsEnabled);
+            Assert.Equal(UiVisibility.Collapsed, Button(shell, "Cancel test").Visibility);
+        });
+    }
+
+    [Fact]
     public void Draft_Conflict_Keeps_The_Edits_Open_And_Explains_The_Other_Instance()
     {
         Run(DemoScenario.DraftConflict, model =>
@@ -282,9 +325,26 @@ public sealed class DemoGalleryTests
         });
     }
 
+    private static UiElement AccountTab(MailShellView shell) => shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;
+
+    private static StandardButton Button(MailShellView shell, string text) =>
+        Descendants(AccountTab(shell)).OfType<StandardButton>().Single(button => button.Text == text);
+
+    private static string[] StepLines(MailShellView shell) => Descendants(AccountTab(shell)).OfType<FormSection>().First().Content.Children
+        .OfType<StandardLabel>().Where(label => label.Visibility == UiVisibility.Visible).Select(label => label.Text).ToArray();
+
+    private static IEnumerable<UiElement> Descendants(UiElement root)
+    {
+        yield return root;
+        foreach (var child in root.Children)
+            foreach (var item in Descendants(child)) yield return item;
+    }
+
+    private static void Run(DemoScenario scenario, Action<MailShellViewModel> verify) => Run(scenario, (model, _) => verify(model));
+
     // Mirrors WindowsMailWindow: a queued dispatcher drained on the owning thread, then a rendered frame.
     // Verification runs before the shell is disposed, because disposal also disables the view models.
-    private static void Run(DemoScenario scenario, Action<MailShellViewModel> verify)
+    private static void Run(DemoScenario scenario, Action<MailShellViewModel, MailShellView> verify)
     {
         var options = new DemoOptions(scenario, AppTheme.Light, 640, 480);
         var application = DemoApplication.Create(options);
@@ -308,7 +368,7 @@ public sealed class DemoGalleryTests
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new HeadlessHost(options.Width, options.Height));
         session.AddRoot(shell.Window);
         Assert.NotNull(session.RenderFrame());
-        verify(model);
+        verify(model, shell);
     }
 
     private sealed class HeadlessHost(int width, int height) : IUiHost
