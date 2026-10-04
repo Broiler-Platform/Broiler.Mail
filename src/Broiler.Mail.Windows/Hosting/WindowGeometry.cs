@@ -93,6 +93,7 @@ internal static unsafe class WindowsScreen
 {
     private const uint MonitorPrimary = 1;
     private const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010;
+    private const int GwlStyle = -16, GwlExStyle = -20;
 
     /// <summary>Work areas of all monitors, primary first.</summary>
     public static IReadOnlyList<PixelRect> WorkAreas()
@@ -120,6 +121,21 @@ internal static unsafe class WindowsScreen
         if (OuterBounds(window) is not { } outer || !GetClientRect(window, out RECT client)) return;
         if (WindowGeometry.FitClient(outer, (client.Right - client.Left, client.Bottom - client.Top), width, height, centered) is { } fitted)
             SetWindowPos(window, 0, fitted.Left, fitted.Top, fitted.Width, fitted.Height, SwpNoZOrder | SwpNoActivate);
+    }
+
+    /// <summary>
+    /// Track sizes for a window that renders at a simulated scale (WM_GETMINMAXINFO): the minimum client
+    /// size in pixels plus the frame for the window's real DPI, which a simulated scale does not change, and
+    /// no maximum from the real desktop, whose size says nothing about the pixels the simulated scale needs.
+    /// </summary>
+    public static void SimulatedTrackSize(nint window, nint minMaxInfo, int minimumClientWidth, int minimumClientHeight)
+    {
+        var frame = new RECT(0, 0, minimumClientWidth, minimumClientHeight);
+        if (minMaxInfo == 0 || !AdjustWindowRectExForDpi(ref frame, (uint)GetWindowLong32(window, GwlStyle), false,
+            (uint)GetWindowLong32(window, GwlExStyle), GetDpiForWindow(window))) return;
+        var limits = (MINMAXINFO*)minMaxInfo;
+        limits->ptMinTrackSize = new POINT { X = frame.Right - frame.Left, Y = frame.Bottom - frame.Top };
+        limits->ptMaxTrackSize = new POINT { X = short.MaxValue, Y = short.MaxValue };
     }
 
     /// <summary>Sends WM_DPICHANGED with a suggested outer rectangle in this process's memory, as Windows does.</summary>
@@ -162,4 +178,10 @@ internal static unsafe class WindowsScreen
 
     [DllImport("user32.dll", EntryPoint = "SendMessageW")]
     private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MINMAXINFO
+    {
+        public POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize;
+    }
 }

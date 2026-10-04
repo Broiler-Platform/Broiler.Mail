@@ -60,6 +60,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private int _exitCode;
     // A simulated display scale (demo --scale, DPI tests); null reports Windows' own.
     private double? _simulatedScale;
+    // WindowsWindowSizing's default minimum client size in DIPs.
+    private const int MinimumClientWidth = 640, MinimumClientHeight = 480;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
     // Broiler-Falsified-If: IME positioning calls receive the top-level frame handle instead of the render child window that holds keyboard focus, so the composition window is placed against the wrong client origin
     // Broiler-Human:        PENDING
@@ -324,6 +326,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         if (hwnd == NativeHandle)
         {
             WindowsWindowSizing.OnMessage(hwnd, message, lParam, DpiScale);
+            // WM_GETMINMAXINFO: a simulated scale keeps Windows' frame and needs its own pixels on any desktop.
+            if (message == 0x0024 && _simulatedScale is { } simulated)
+                WindowsScreen.SimulatedTrackSize(hwnd, lParam, (int)Math.Ceiling(MinimumClientWidth * simulated), (int)Math.Ceiling(MinimumClientHeight * simulated));
             _inputBridge?.OnTopLevelMessage(message, wParam, lParam);
             // WM_EXITSIZEMOVE: one write when a move or resize ends, never one per pixel.
             if (message == 0x0232) _ = RememberLayout();

@@ -50,7 +50,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
     /// <summary>Options for acceptance scripts only. They simulate conditions; they are not settings a user would choose.</summary>
     internal static IReadOnlyList<(string Name, string Description)> AcceptanceOptions { get; } = Array.AsReadOnly(new[]
     {
-        ("--scale <100-300>", "Renders at a simulated display scale in percent, named in the window title. This is not a monitor or system change."),
+        ("--scale <100-300>", "Renders the main window at a simulated display scale in percent, named in the window title, at the requested size in DIPs even if that is larger than the screen. HTML previews and Windows' own scale are unchanged."),
         ("--server-change vanish|outside|renumber", "With new-mail only: the next receive deletes the open message on the server, pushes it below the newest page, or renumbers the inbox."),
     });
 

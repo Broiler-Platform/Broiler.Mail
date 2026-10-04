@@ -72,7 +72,9 @@ public sealed class NewMailFixtureTests
         int acceptance = Array.FindIndex(lines, line => line.StartsWith("Acceptance-only", StringComparison.Ordinal));
         Assert.True(acceptance > workloads);
         Assert.Contains(lines[acceptance..], line => line.Trim() == "--server-change vanish|outside|renumber");
-        Assert.Contains(lines[acceptance..], line => line.Contains("simulated display scale", StringComparison.Ordinal));
+        // Only the main window is simulated; an HTML preview keeps Windows' own scale.
+        Assert.Contains(lines[acceptance..], line => line.Contains("main window at a simulated display scale", StringComparison.Ordinal)
+            && line.Contains("HTML previews", StringComparison.Ordinal));
     }
 
     [Fact]

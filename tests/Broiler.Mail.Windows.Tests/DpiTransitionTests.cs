@@ -21,8 +21,7 @@ namespace Broiler.Mail.Windows.Tests;
 /// </summary>
 public sealed class DpiTransitionTests
 {
-    // Above the 640x480 minimum, so the minimum track size computed at a simulated DPI never resizes it,
-    // and below the 680-DIP width at which the inbox shows two panes.
+    // Above the 640x480 minimum and below the 680-DIP width at which the inbox shows two panes.
     private const int Width = 660, Height = 500;
 
     [Fact]
@@ -84,6 +83,28 @@ public sealed class DpiTransitionTests
         Assert.Equal(doubled, await window.InvokeAsync(w => ChangeScale(w, controls, 2.0, Width * 2, Height * 2)));
         // And to 100 % keeping the DIP size.
         Assert.Equal(start with { Scale = 1.0 }, await window.InvokeAsync(w => ChangeScale(w, controls, 1.0, Width, Height)));
+    }
+
+    /// <summary>
+    /// A simulated scale starts at the requested DIP size: at the minimum size, where the minimum track size
+    /// must add Windows' real frame rather than one for the simulated DPI, and taller than the real desktop,
+    /// to which Windows otherwise limits a window. Tests run on desktops of any size, CI's included.
+    /// </summary>
+    [Theory]
+    [InlineData(200, false)]
+    [InlineData(300, true)]
+    public async Task A_Simulated_Scale_Starts_At_The_Requested_Dip_Size_On_Any_Desktop(int percent, bool tallerThanTheDesktop)
+    {
+        const int SmCyMaxTrack = 60;
+        int height = tallerThanTheDesktop ? Math.Max(560, GetSystemMetrics(SmCyMaxTrack) * 100 / percent + 20) : 480;
+        await using var window = await HiddenMailWindow.StartAsync(new DemoOptions(DemoScenario.Inbox, AppTheme.Light, 640, height, ScalePercent: percent));
+        var (client, viewport) = await window.InvokeAsync(w =>
+        {
+            Assert.True(GetClientRect(w.NativeHandle, out RECT rect));
+            return ((rect.Right - rect.Left, rect.Bottom - rect.Top), w.Host.ViewportSize);
+        });
+        Assert.Equal((640 * percent / 100, height * percent / 100), client);
+        Assert.Equal(new BSize(640, height), viewport);
     }
 
     /// <summary>Simulates the change with a suggested client size in pixels, checks that the window took it, and captures the state.</summary>
