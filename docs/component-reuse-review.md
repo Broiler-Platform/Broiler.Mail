@@ -1,7 +1,9 @@
 # Broiler.Mail component reuse review
 
-Historical review. The [4 October consolidated audit](roadmap-status-2026-10-04.md)
-records subsequent package adoption, remaining wrappers, and deferred extraction work.
+Historical review. The [current disposition](#4-october-2026-current-disposition)
+at the end records which Mail wrappers remain and why. The
+[4 October consolidated audit](roadmap-status-2026-10-04.md) records package
+adoption and deferred extraction work.
 
 Date: 2026-09-28. Scope: source investigation and recommendations; no runtime code
 or component dependencies changed.
@@ -45,7 +47,7 @@ measures content at its preferred size, then arranges it at the actual allocatio
 That mismatch affects wrapped content. Correct allocation-aware measurement in the
 control; do not publish Mail's workaround as a new helper.
 
-[ViewportScrollView](D:/Broiler.Mail/src/Broiler.Mail.Application/Views/ViewportScrollView.cs:20)
+`ViewportScrollView` (since removed)
 and [ScrollableMessageText](D:/Broiler.Mail/src/Broiler.Mail.Application/Preview/ScrollableMessageText.cs:27)
 contain almost the same content-width wrapper. The message variant even hardcodes
 the scrollbar thickness as `12`, while the form variant reads the control property.
@@ -245,6 +247,8 @@ Mail-local wrapper from this review now stands as follows:
 | `TabContent` | Kept, for a different reason | `StandardTabView` now measures every tab's content at its allocated size, and the selected tab lays out the same without the wrapper: `ShellLayoutTests` passed without it, also after height-only resizes, and NativeAOT Accept-UI (inbox, large-draft, save-error; 640x480 and 1100x720; light; 100% and 200% text) matched a build with it. But the tab view arranges each hidden tab at an empty rectangle, so a hidden form was laid out at no width and re-laid out on return, and the composer's status area came back scrolled to its top (640x480, 200% text). The wrapper skips that empty arrange; `ShellLayoutTests.ATabIsAsItWasLeftAfterAnotherTabWasShown` fails without it. It still re-measures at the given size, which covers a height difference the tab view's own arrange check (width only) ignores. Upstream need: `StandardTabView` should leave hidden content unarranged, or keep its last arrangement. |
 | `ViewportScrollView` and `ConfigurationForm.Wrap` | Removed | Dead code: nothing called `Wrap`, its only user. The forms scroll in `FormSurface`/`FormViewport`; width-constrained scrolling is `StandardScrollView.Constraint = ConstrainWidth`. |
 | `ScrollableMessageText` | Kept as a composite | Its own measurement wrapper is gone; it composes a read-only `StandardRichEdit`, a `ReadingColumn`, and a `ConstrainWidth` scroll view, and names the reader for screen readers. |
+| `ReadingColumn` | Kept | Bounds the reader's and the header's line length at 720 DIP and narrows the margins before the text in small windows. Broiler.UI has no maximum width; an upstream maximum size or reading-width layout would retire it (optional). |
+| `AdaptiveInboxLayout` | Kept by design | Mail's responsive policy: the list and reader side by side when both are readable, one at a time otherwise. It is product behavior built on the standard split container, not a missing control feature. |
 | `BoundedScrollArea` | Kept | Caps the message header (45%) and the inbox notice (40%) at a share of the available height and scrolls past it. Broiler.UI has no maximum size or height share. An upstream `MaxHeight`/max-fraction option on a scroll view would retire it (optional). |
 | `FillLastStack` | Kept | Gives the composer body the height left under the fields, but never less than a minimum; outer scrolling starts only when the fields need the room. Broiler.UI's dock fill has no minimum. An upstream minimum size or fill-with-minimum stack would retire it (optional). |
 | Literal labels | Done | `UiLabel.UseMnemonic = false` on every label showing addresses, subjects, server text, or the footer status. No `&&` escaping remains in Mail. |

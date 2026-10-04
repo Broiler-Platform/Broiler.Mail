@@ -177,12 +177,15 @@ constrain content to the viewport width (`UiScrollConstraint.ConstrainWidth`), s
 text wraps and scrolls vertically. The standard tab view measures each tab's content
 at the size it allocates, but it arranges every hidden tab at an empty rectangle, which
 lays a hidden form out at no width and lost the composer status area's scroll position.
-`TabContent` wraps each tab and skips that arrange.
-Two Mail layouts remain because Broiler.UI has no minimum or maximum size:
-`BoundedScrollArea` caps the message header and the inbox notice at a share of the
-height, and `FillLastStack` gives the composer body the remaining height above a
-minimum. Labels that show addresses, subjects, server text, or the footer status set
-`UseMnemonic = false`, so an `&` is shown as written, not read as an access key.
+`TabContent` wraps each tab and skips that arrange. Because Broiler.UI has no minimum or
+maximum size, Mail also keeps `BoundedScrollArea`, which caps the message header and the
+inbox notice at a share of the height; `FillLastStack`, which gives the composer body
+the remaining height above a minimum; and `ReadingColumn`, which bounds the reading line
+length. `AdaptiveInboxLayout` is Mail's own responsive policy for the inbox panes. The
+[component reuse review](component-reuse-review.md#4-october-2026-current-disposition)
+records what would retire each one. Labels that show addresses, subjects, server text,
+or the footer status set `UseMnemonic = false`, so an `&` is shown as written, not read
+as an access key.
 
 ## Distribution and acceptance
 
