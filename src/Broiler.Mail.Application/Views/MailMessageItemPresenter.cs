@@ -12,7 +12,7 @@ namespace Broiler.Mail.Application.Views;
 /// <summary>
 /// Specialized list item presenter for Mail messages displaying sender, subject, received time, and read/unread status.
 /// A narrow row drops the sender's address before shortening the name, and shortens or leaves out the
-/// date rather than crowd the sender out; the accessible name always carries the full sender and
+/// date rather than crowd the sender out; the row's semantic name always carries the full sender and
 /// received time.
 /// </summary>
 public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null) : IUiListItemPresenter
@@ -114,16 +114,20 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null)
     /// <summary>
     /// The longest of <paramref name="forms"/> (<see cref="MessageDateFormatter.ListForms"/>) that still
     /// leaves the sender's name its first few characters, or an empty string when even the shortest
-    /// would crowd the sender out. The full date stays in the row's accessible name and in the reader.
+    /// would crowd the sender out. The full date stays in the row's semantic name
+    /// (<see cref="CreateSemanticNode"/>) and in the reader.
     /// </summary>
     public static string RowDate(IReadOnlyList<string> forms, string sender, bool unread, double rowWidth, BFontStyle font)
     {
         ArgumentNullException.ThrowIfNull(forms);
         ArgumentNullException.ThrowIfNull(sender);
         ArgumentNullException.ThrowIfNull(font);
-        var name = new StringInfo(SenderName(sender));
-        string shortest = name.LengthInTextElements <= MinimumSenderCharacters ? name.String
-            : name.SubstringByTextElements(0, MinimumSenderCharacters) + "...";
+        // The name's first few characters (whole text elements), as the row shortens it.
+        string name = SenderName(sender);
+        int end = 0;
+        for (int count = 0; count < MinimumSenderCharacters && end < name.Length; count++)
+            end += StringInfo.GetNextTextElementLength(name, end);
+        string shortest = end >= name.Length ? name : string.Concat(name.AsSpan(0, end), "...");
         // The presenter never starts the date closer than 20 DIP to the sender's left edge, so a date
         // that leaves less is pushed past the row's edge instead.
         double needed = Math.Max(BTextMeasurer.MeasureAdvance(shortest, SenderFont(unread, font)), DateMinimumOffset - DateGap);
