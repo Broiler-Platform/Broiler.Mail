@@ -1,0 +1,134 @@
+using System.Runtime.ExceptionServices;
+using System.Runtime.InteropServices;
+using Broiler.Graphics.Geometry;
+using Broiler.Mail.Windows.Services;
+using Broiler.UI;
+using Broiler.UI.Panel.Standard;
+using static Broiler.Native.Windows.WindowNative;
+
+namespace Broiler.Mail.Windows.Tests;
+
+/// <summary>
+/// UI-10: the IME composition window is placed at the caret in physical client pixels. The caret arrives in
+/// device-independent pixels; the input context is read back through IMM32, so the struct layout is checked too.
+/// </summary>
+public sealed class WindowsTextInputTests
+{
+    private const uint CfsPoint = 0x0002;
+    // A caret in DIPs whose left edge and bottom are not whole pixels at any of the scales below.
+    private static readonly BRect Caret = new(101.3, 40.5, 1, 17.25);
+
+    [Theory]
+    [InlineData(1.0, 101, 58)]
+    [InlineData(1.5, 152, 87)]
+    [InlineData(2.0, 203, 116)]
+    public void TheCompositionWindowStartsBelowTheCaretInPhysicalPixels(double scale, int x, int y)
+    {
+        OnWindowThread(window =>
+        {
+            new WindowsTextInput(() => window, () => scale).PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, true));
+
+            var form = ReadCompositionForm(window);
+            Assert.Equal(CfsPoint, form.Style);
+            Assert.Equal((x, y), (form.X, form.Y));
+        });
+    }
+
+    [Fact]
+    public void AScaleChangeAppliesToTheNextCaretWithoutANewInputHost()
+    {
+        OnWindowThread(window =>
+        {
+            double scale = 1.0;
+            var input = new WindowsTextInput(() => window, () => scale);
+            input.PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, false));
+            Assert.Equal((101, 58), Position(ReadCompositionForm(window)));
+
+            // Moving the window to a 200 % monitor changes the scale the host reports, not the host.
+            scale = 2.0;
+            input.PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, false));
+            Assert.Equal((203, 116), Position(ReadCompositionForm(window)));
+        });
+    }
+
+    [Fact]
+    public void NoWindowYetLeavesTheInputContextAlone()
+    {
+        // Before WM_CREATE the render window handle is 0; publishing a caret then must neither throw nor guess.
+        new WindowsTextInput(() => 0, () => 1.5).PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, false));
+    }
+
+    [Fact]
+    public void TheComposerPlacesTheCompositionWindowAtTheFocusedFieldsCaret()
+    {
+        using var fixture = HiddenMailWindow.Start();
+        var (to, body) = NativeInputFidelityTests.StartDraft(fixture);
+        double scale = fixture.Ui(() => fixture.Window.DpiScale);
+
+        // Each frame publishes the focused field's caret; the window's input context must hold it in physical pixels.
+        fixture.Type("team@example.test");
+        fixture.Layout();
+        var inTo = fixture.Ui(() => ReadCompositionForm(fixture.Render));
+        AssertWithin(fixture.Ui(() => to.Bounds), inTo, scale);
+
+        fixture.Ui(() => fixture.Window.Session.SetFocus(body));
+        fixture.Type("Hi");
+        fixture.Layout();
+        var inBody = fixture.Ui(() => ReadCompositionForm(fixture.Render));
+        AssertWithin(fixture.Ui(() => body.Bounds), inBody, scale);
+        fixture.Type(" there");
+        fixture.Layout();
+        var further = fixture.Ui(() => ReadCompositionForm(fixture.Render));
+        Assert.True(further.X > inBody.X, "The composition window follows the caret along the line.");
+        Assert.Equal(inBody.Y, further.Y);
+    }
+
+    private static void AssertWithin(BRect field, CompositionForm form, double scale)
+    {
+        Assert.Equal(CfsPoint, form.Style);
+        Assert.InRange(form.X, (int)Math.Floor(field.Left * scale), (int)Math.Ceiling(field.Right * scale));
+        Assert.InRange(form.Y, (int)Math.Floor(field.Top * scale), (int)Math.Ceiling(field.Bottom * scale));
+    }
+
+    private static (int X, int Y) Position(CompositionForm form) => (form.X, form.Y);
+
+    private static CompositionForm ReadCompositionForm(nint window)
+    {
+        nint context = ImmGetContext(window);
+        Assert.NotEqual(0, context);
+        try
+        {
+            Assert.True(ImmGetCompositionWindow(context, out var form), "The input context has no composition form.");
+            return form;
+        }
+        finally { ImmReleaseContext(window, context); }
+    }
+
+    /// <summary>Runs <paramref name="test"/> with a hidden native window, on its own thread, as the input context requires.</summary>
+    private static void OnWindowThread(Action<nint> test)
+    {
+        Exception? failure = null;
+        var thread = new Thread(() =>
+        {
+            nint window = CreateWindowEx(0, "STATIC", "IME placement fixture", 0x80000000 /* WS_POPUP */, 0, 0, 200, 100, 0, 0, 0, 0);
+            try
+            {
+                Assert.NotEqual(0, window);
+                test(window);
+            }
+            catch (Exception error) { failure = error; }
+            finally { if (window != 0) DestroyWindow(window); }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.True(thread.Join(TimeSpan.FromSeconds(15)));
+        if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct CompositionForm { public uint Style; public int X, Y, Left, Top, Right, Bottom; }
+
+    [DllImport("imm32.dll")] private static extern nint ImmGetContext(nint window);
+    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmReleaseContext(nint window, nint context);
+    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmGetCompositionWindow(nint context, out CompositionForm form);
+}
