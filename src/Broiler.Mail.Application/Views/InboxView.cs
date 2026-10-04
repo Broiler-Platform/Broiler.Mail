@@ -256,6 +256,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             listWasLoading = model.IsLoadingList;
             listRetryRow.Visibility = listProblem ? UiVisibility.Visible : UiVisibility.Collapsed;
             listRetry.IsEnabled = model.CanRetry;
+            // Named for what it repeats (RetryAsync): the older page, or receiving the newest messages.
+            listRetry.Text = model.ProblemIsOlderPage && model.CanLoadOlder ? "Retry loading older" : "Retry receiving";
             bool messageProblem = model.ProblemScope == InboxProblemScope.Message && model.SelectedMessage is not null;
             messageFeedback.Set(messageProblem ? model.Problem! : "", model.ProblemIsCancellation ? FeedbackKind.Information : FeedbackKind.Error);
             messageRetryRow.Visibility = messageProblem ? UiVisibility.Visible : UiVisibility.Collapsed;

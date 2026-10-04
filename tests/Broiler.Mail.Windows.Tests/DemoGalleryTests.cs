@@ -379,14 +379,15 @@ public sealed class DemoGalleryTests
             Assert.False(inbox.ProblemIsCancellation);
             Assert.Contains("did not respond while loading older messages", inbox.Problem);
             Assert.Contains("from the last successful receive", inbox.Problem);
-            // Retry repeats Load older, which stays available too.
+            // Retry repeats Load older, which stays available too, and both name the older page.
             Assert.True(inbox.CanRetry);
             Assert.True(inbox.CanLoadOlder);
+            Assert.True(inbox.ProblemIsOlderPage);
             var notice = Descendants(Tab(shell, "inbox")).OfType<InlineFeedback>().First();
             Assert.Equal((FeedbackKind.Error, inbox.Problem), (notice.Kind, notice.Message));
-            Assert.True(IsAvailable(Button(shell, "inbox", "Retry receiving")));
+            Assert.True(IsAvailable(Button(shell, "inbox", "Retry loading older")));
             Assert.True(IsAvailable(Button(shell, "inbox", "Load older")));
-            Assert.Equal("Mail could not be received. Details and Retry are beside the list.", Footer(shell));
+            Assert.Equal("Older messages could not be loaded. Details and Retry are beside the list.", Footer(shell));
         });
     }
 

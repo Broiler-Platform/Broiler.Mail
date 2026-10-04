@@ -661,6 +661,46 @@ public sealed class FeedbackPolicyTests
     }
 
     [Fact]
+    public async Task ALoadOlderProblemNamesTheOlderPageAndItsRetryLoadsThatPage()
+    {
+        using var fixture = Fixture.Open();
+        var inbox = fixture.Model.Inbox;
+        fixture.PageOlderMessages();
+        await fixture.ReceiveAsync();
+        var pages = fixture.Receiver.Inbox;
+        fixture.Receiver.Inbox = (cursor, token) => cursor is null ? pages(cursor, token) : throw new MailConnectionException("The server did not respond.");
+        await inbox.LoadOlderAsync();
+        fixture.Settle();
+
+        Assert.True(inbox.ProblemIsOlderPage);
+        Assert.Equal("Older messages could not be loaded. Details and Retry are beside the list.", fixture.Footer.Text);
+        var retry = fixture.Button("Retry loading older", "inbox");
+        Assert.True(retry.IsEnabled);
+        fixture.Receiver.Inbox = pages;
+        retry.Click();
+        fixture.Settle();
+        Assert.Equal(4, inbox.Messages.Count);
+        Assert.False(inbox.CanLoadOlder);
+
+        // Canceled, it says which page it was.
+        await fixture.ReceiveAsync();
+        var pending = new TaskCompletionSource<MailInboxPage>();
+        fixture.Receiver.Inbox = (cursor, token) => cursor is null ? pages(cursor, token) : pending.Task.WaitAsync(token);
+        _ = inbox.LoadOlderAsync();
+        inbox.Cancel();
+        fixture.Settle();
+        Assert.Equal("Loading older messages was canceled.", inbox.Problem);
+        Assert.True(fixture.Button("Retry loading older", "inbox").IsEnabled);
+
+        // Receiving the newest messages keeps its own wording.
+        fixture.Receiver.Inbox = (_, _) => throw new MailConnectionException("The server did not respond.");
+        await fixture.ReceiveAsync();
+        Assert.False(inbox.ProblemIsOlderPage);
+        Assert.Equal("Mail could not be received. Details and Retry are beside the list.", fixture.Footer.Text);
+        Assert.True(fixture.Button("Retry receiving", "inbox").IsEnabled);
+    }
+
+    [Fact]
     public void TabFromAControlThatIsNoLongerAStopFollowsTabOrder()
     {
         using var fixture = Fixture.Open();
