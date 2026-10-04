@@ -15,6 +15,7 @@ internal sealed class FrameRecorder(bool detail = false)
     private readonly List<double> _buildMs = [];
     private readonly List<double> _allocatedKb = [];
     private readonly List<double> _inputToFrameMs = [];
+    private readonly List<int> _tilesDrawn = [];
     // --detail only.
     private readonly List<double> _dispatchMs = [];
     private readonly List<double> _drainMs = [];
@@ -33,22 +34,26 @@ internal sealed class FrameRecorder(bool detail = false)
     /// <summary>Phase and render-and-present timers are on (--detail).</summary>
     public bool Detail { get; } = detail;
     public double? FirstFrameMs { get; private set; }
+    /// <summary>When the first frame was built, as a <see cref="Stopwatch"/> timestamp.</summary>
+    public long? FirstFrameAt { get; private set; }
     public double? InteractiveMs { get; private set; }
     public int Frames { get { lock (_gate) return _frames; } }
 
     public (long Started, long Allocated) BeginFrame() => (Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread());
 
     /// <param name="phases">With --detail, when the frame's phases ended; see <see cref="FramePhaseTimer"/>.</param>
-    public void EndFrame((long Started, long Allocated) begin, FramePhases? phases = null) =>
-        EndFrame(begin, phases, Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread());
+    /// <param name="tilesDrawn">HTML preview tiles the frame drew because they were not cached.</param>
+    public void EndFrame((long Started, long Allocated) begin, FramePhases? phases = null, int tilesDrawn = 0) =>
+        EndFrame(begin, phases, tilesDrawn, Stopwatch.GetTimestamp(), GC.GetAllocatedBytesForCurrentThread());
 
-    internal void EndFrame((long Started, long Allocated) begin, FramePhases? phases, long ended, long allocatedAtEnd)
+    internal void EndFrame((long Started, long Allocated) begin, FramePhases? phases, int tilesDrawn, long ended, long allocatedAtEnd)
     {
         lock (_gate)
         {
             _frames++;
             _buildMs.Add(Milliseconds(begin.Started, ended));
             _allocatedKb.Add((allocatedAtEnd - begin.Allocated) / 1024.0);
+            _tilesDrawn.Add(tilesDrawn);
             foreach (long input in _pendingInputs)
                 _inputToFrameMs.Add(Milliseconds(input, ended));
             if (Detail)
@@ -67,6 +72,7 @@ internal sealed class FrameRecorder(bool detail = false)
                 _paintPending = true;
             }
             _pendingInputs.Clear();
+            FirstFrameAt ??= ended;
             FirstFrameMs ??= SinceProcessStart();
         }
         _frameBuilt.Release();
@@ -142,6 +148,7 @@ internal sealed class FrameRecorder(bool detail = false)
             _buildMs.Clear();
             _allocatedKb.Clear();
             _inputToFrameMs.Clear();
+            _tilesDrawn.Clear();
             _pendingInputs.Clear();
             _dispatchMs.Clear();
             _drainMs.Clear();
@@ -160,6 +167,7 @@ internal sealed class FrameRecorder(bool detail = false)
         lock (_gate)
             return new([.. _buildMs], [.. _allocatedKb], [.. _inputToFrameMs])
             {
+                TilesDrawn = [.. _tilesDrawn],
                 Phases = Detail ? new([.. _dispatchMs], [.. _drainMs], [.. _measureMs], [.. _arrangeMs], [.. _renderListMs],
                     [.. _renderPresentMs], [.. _inputToPresentMs]) : null,
             };
@@ -180,6 +188,9 @@ internal readonly record struct FramePhases(long Drained, long Measured, long Ar
 /// <summary>Samples from a measured section.</summary>
 internal sealed record FrameSamples(double[] BuildMs, double[] AllocatedKb, double[] InputToFrameMs)
 {
+    /// <summary>Per frame, the HTML preview tiles it drew; zero for the main window.</summary>
+    public int[] TilesDrawn { get; init; } = [];
+
     /// <summary>With --detail, the phase timers; otherwise null.</summary>
     public FramePhaseSamples? Phases { get; init; }
 
@@ -191,6 +202,10 @@ internal sealed record FrameSamples(double[] BuildMs, double[] AllocatedKb, doub
         int rank = (int)Math.Ceiling(percentile / 100 * sorted.Length);
         return sorted[Math.Clamp(rank - 1, 0, sorted.Length - 1)];
     }
+
+    /// <summary>Build times of the frames that drew at least one tile (true) or none (false).</summary>
+    public double[] BuildMsWhere(bool drewTiles) =>
+        BuildMs.Where((_, index) => index < TilesDrawn.Length && (TilesDrawn[index] > 0) == drewTiles).ToArray();
 }
 
 /// <summary>

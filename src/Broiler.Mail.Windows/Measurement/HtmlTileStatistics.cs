@@ -82,3 +82,9 @@ internal sealed class HtmlTileStatistics
 /// <summary>Counts and times from <see cref="HtmlTileStatistics"/>; misses are tiles drawn, re-rasters the subset drawn again after an eviction.</summary>
 internal sealed record HtmlTileSnapshot(int Hits, int Misses, int Rerasters, int Evictions, int Discards, double[] RasterMs, double[] UploadMs,
     long PeakBytes, int Layouts, double LayoutMsTotal, double LayoutMsMax);
+
+/// <summary>
+/// What a --measure run records about the HTML preview it opens: the preview's frames, its tile cache, and the
+/// simulated scale (--scale) it renders at, or null for Windows' own.
+/// </summary>
+internal sealed record PreviewMeasurement(FrameRecorder Frames, HtmlTileStatistics Tiles, double? SimulatedScale);

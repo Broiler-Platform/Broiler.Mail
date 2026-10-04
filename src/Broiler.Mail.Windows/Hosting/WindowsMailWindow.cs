@@ -259,6 +259,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // UI-12 measurement hooks; only a --measure demo run uses them.
     internal bool RunOnUiThread(Action action) => PostToUiThread(action);
 
+    internal WindowsHtmlPreviewHost HtmlPreview => _htmlPreview;
+
     internal void DispatchMeasured(UiInputEvent input)
     {
         _recorder?.MarkInput();

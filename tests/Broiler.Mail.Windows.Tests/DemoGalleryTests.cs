@@ -61,13 +61,22 @@ public sealed class DemoGalleryTests
     {
         foreach (var (name, workload, _) in DemoOptions.Workloads)
         {
-            Assert.True(DemoOptions.TryParse(["--demo", "large-inbox", "--measure", name, "--report", "out.json"], out var options));
+            string fixture = DemoOptions.MeasuresPreview(workload) ? "long-html" : "large-inbox";
+            Assert.True(DemoOptions.TryParse(["--demo", fixture, "--measure", name, "--report", "out.json"], out var options));
             Assert.Equal(workload, options!.Measure);
             Assert.True(System.IO.Path.IsPathFullyQualified(options.Report!));
             Assert.False(options.Detail);
         }
         Assert.Equal(Enum.GetValues<Measurement.MeasureWorkload>().Order(), DemoOptions.Workloads.Select(item => item.Workload).Order());
     }
+
+    [Theory]
+    [InlineData("--demo long-html --measure long-html", true)]
+    [InlineData("--demo long-html --measure preview-zoom --scale 200", true)]
+    [InlineData("--demo html-only --measure long-html", false)]
+    [InlineData("--demo inbox --measure preview-zoom", false)]
+    public void Preview_Workloads_Need_The_Long_Html_Fixture(string args, bool valid) =>
+        Assert.Equal(valid, DemoOptions.TryParse(args.Split(' '), out _));
 
     [Theory]
     [InlineData("--demo inbox --measure scroll --detail", true)]

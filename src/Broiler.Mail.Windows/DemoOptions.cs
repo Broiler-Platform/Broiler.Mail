@@ -50,7 +50,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
     /// <summary>Options for acceptance scripts only. They simulate conditions; they are not settings a user would choose.</summary>
     internal static IReadOnlyList<(string Name, string Description)> AcceptanceOptions { get; } = Array.AsReadOnly(new[]
     {
-        ("--scale <100-300>", "Renders the main window at a simulated display scale in percent, named in the window title, at the requested size in DIPs even if that is larger than the screen. HTML previews and Windows' own scale are unchanged."),
+        ("--scale <100-300>", "Renders the main window at a simulated display scale in percent, named in the window title, at the requested size in DIPs even if that is larger than the screen. HTML previews keep Windows' own scale, except the one a long-html or preview-zoom measurement opens; Windows' own scale is unchanged."),
         ("--server-change vanish|outside|renumber", "With new-mail only: the next receive deletes the open message on the server, pushes it below the newest page, or renumbers the inbox."),
     });
 
@@ -63,7 +63,12 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("theme", MeasureWorkload.Theme, "20 live switches between the dark and light themes"),
         ("resize", MeasureWorkload.Resize, "30 window size changes"),
         ("splitter", MeasureWorkload.Splitter, "60 keyboard moves of the inbox splitter"),
+        ("long-html", MeasureWorkload.LongHtml, "On long-html: opens the HTML preview (900x700 DIPs) and scrolls it to the end and back, three wheel notches per input"),
+        ("preview-zoom", MeasureWorkload.PreviewZoom, "On long-html: opens the HTML preview and zooms it in to 300 %, out to 50 %, and back, one level per input"),
     });
+
+    /// <summary>Workloads that measure the HTML preview window; they need the long-html fixture's document.</summary>
+    internal static bool MeasuresPreview(MeasureWorkload workload) => workload is MeasureWorkload.LongHtml or MeasureWorkload.PreviewZoom;
 
     internal string Name => Gallery.Single(item => item.Scenario == Scenario).Name;
 
@@ -168,6 +173,8 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         }
         // A measurement runs on a prepared fixture, and a report or detail without a measurement is meaningless.
         if ((measure is not null && interactive) || ((report is not null || detail) && measure is null)) return false;
+        // The preview workloads measure the long-html fixture's document.
+        if (measure is { } workload && MeasuresPreview(workload) && scenario != DemoScenario.LongHtml) return false;
         // Only the new-mail fixture has a server that changes between receives.
         if (serverChange != DemoServerChange.None && scenario != DemoScenario.NewMail) return false;
         options = new(scenario, theme, width, height, interactive, measure, report, textScale, highContrast, serverChange, scale, detail);

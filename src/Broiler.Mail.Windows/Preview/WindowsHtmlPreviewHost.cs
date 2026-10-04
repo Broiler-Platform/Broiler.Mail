@@ -19,6 +19,7 @@ using System.Diagnostics;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Preview;
+using Broiler.Mail.Windows.Measurement;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Preview;
@@ -42,6 +43,7 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
     private MailMessageKey? _current;
     private bool _disposed;
     private int _generation;
+    private PreviewMeasurement? _measurement;
 
     public event EventHandler<HtmlPreviewChange>? Changed;
 
@@ -84,11 +86,12 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
             {
                 string title = "Broiler.Mail — HTML snapshot — " + (message.Composition?.Subject ?? $"Message {message.Key.Uid}");
                 StandardThemeTokens? theme;
-                lock (_gate) theme = _theme;
+                PreviewMeasurement? measurement;
+                lock (_gate) (theme, measurement) = (_theme, _measurement);
                 theme ??= currentTheme?.Invoke();
                 using var window = new HtmlPreviewWindow(document, message.PlainText,
                     uri => Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }),
-                    message.HtmlText, message.EmbeddedImages, theme: theme, title: title);
+                    message.HtmlText, message.EmbeddedImages, theme: theme, title: title, measurement: measurement);
                 lock (_gate)
                 {
                     if (!_disposed && generation == _generation)
@@ -165,6 +168,13 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
 
     /// <summary>The window of the open preview, if any.</summary>
     internal HtmlPreviewWindow? Window { get { lock (_gate) return _window; } }
+
+    /// <summary>UI-12: what a --measure run records about the previews opened from now on; null for none.</summary>
+    internal PreviewMeasurement? Measurement
+    {
+        get { lock (_gate) return _measurement; }
+        set { lock (_gate) _measurement = value; }
+    }
 
     /// <summary>Passes a theme change to the open preview window, if any, which applies it on its own thread.</summary>
     public void ApplyTheme(StandardThemeTokens theme)

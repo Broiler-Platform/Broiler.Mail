@@ -4,13 +4,14 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
 using System.Text.Json;
+using Broiler.Graphics.Geometry;
 
 namespace Broiler.Mail.Windows.Measurement;
 
 /// <summary>One workload's results with the machine and build they came from.</summary>
 internal sealed class MeasurementReport
 {
-    /// <summary>2 added the scale and --detail fields; the fields of version 1 keep their names and meaning.</summary>
+    /// <summary>2 added the scale, --detail, and HTML preview fields; the fields of version 1 keep their names and meaning.</summary>
     public const int Version = 2;
 
     private readonly Dictionary<string, object?> _values = new(StringComparer.Ordinal);
@@ -19,7 +20,7 @@ internal sealed class MeasurementReport
     private MeasurementReport() { }
 
     public static MeasurementReport Create(DemoOptions options, MeasureWorkload workload, FrameRecorder recorder, FrameSamples samples,
-        int steps, int unpainted, TimeSpan elapsed, MeasurementScale scale)
+        int steps, int unpainted, TimeSpan elapsed, MeasurementScale scale, PreviewResult? preview = null)
     {
         using var process = Process.GetCurrentProcess();
         process.Refresh();
@@ -61,7 +62,39 @@ internal sealed class MeasurementReport
             report.AddDistribution("renderPresentMs", phases.RenderPresentMs);
             report.AddDistribution("inputToPresentMs", phases.InputToPresentMs);
         }
+        if (preview is not null) report.AddPreview(preview, samples);
         return report;
+    }
+
+    private void AddPreview(PreviewResult preview, FrameSamples samples)
+    {
+        Add("previewWindowSize", $"{Math.Round(preview.ClientSize.Width)}x{Math.Round(preview.ClientSize.Height)}");
+        Add("previewDpiScale", preview.DpiScale);
+        Add("previewZoom", preview.Zoom);
+        // Opening: from the reader's button to the preview's first frame (layout and the first tiles), reported apart.
+        Add("openToFirstFrameMs", preview.OpenToFirstFrameMs);
+        Add("openFrames", preview.Open.BuildMs.Length);
+        Add("openBuildMsMax", preview.Open.BuildMs.Length == 0 ? double.NaN : preview.Open.BuildMs.Max());
+        // A frame that draws a tile pays for its raster; one that finds every tile cached does not.
+        var drawing = samples.BuildMsWhere(drewTiles: true);
+        Add("framesDrawingTiles", drawing.Length);
+        AddDistribution("buildMsCachedTiles", samples.BuildMsWhere(drewTiles: false));
+        AddDistribution("buildMsDrawingTiles", drawing);
+        var tiles = preview.Tiles;
+        Add("tileHits", tiles.Hits);
+        Add("tileMisses", tiles.Misses);
+        Add("tileRerasters", tiles.Rerasters);
+        Add("tileEvictions", tiles.Evictions);
+        Add("tileDiscards", tiles.Discards);
+        AddDistribution("tileRasterMs", tiles.RasterMs);
+        AddDistribution("tileUploadMs", tiles.UploadMs);
+        Add("tileRasterMsTotal", tiles.RasterMs.Sum());
+        Add("tilePeakCachedMb", tiles.PeakBytes / 1048576.0);
+        Add("tileCachedMbAtEnd", preview.CachedBytes / 1048576.0);
+        Add("tileCachedCountAtEnd", preview.CachedTiles);
+        Add("htmlLayouts", tiles.Layouts);
+        Add("htmlLayoutMsTotal", tiles.LayoutMsTotal);
+        Add("htmlLayoutMsMax", tiles.LayoutMsMax);
     }
 
     public void Write(string? path)
@@ -136,3 +169,7 @@ internal sealed class MeasurementReport
 
 /// <summary>The scale the main window rendered at, Windows' own scale for it, and the simulated percent (--scale) if any.</summary>
 internal readonly record struct MeasurementScale(double DpiScale, double SystemDpiScale, int? SimulatedPercent);
+
+/// <summary>The measured HTML preview: its size in DIPs, scale, and zoom, its opening, its tile cache, and what the cache held at the end.</summary>
+internal sealed record PreviewResult(BSize ClientSize, double DpiScale, double Zoom, double OpenToFirstFrameMs, FrameSamples Open,
+    HtmlTileSnapshot Tiles, long CachedBytes, int CachedTiles);

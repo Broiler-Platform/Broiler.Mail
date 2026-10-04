@@ -1,16 +1,20 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Settings;
+using Broiler.Mail.Infrastructure.Preview;
+using Broiler.Mail.Windows.Hosting;
 using Broiler.Mail.Windows.Measurement;
+using Broiler.Mail.Windows.Preview;
 using Broiler.UI;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Tests;
 
-/// <summary>UI-12: the measurement harness's recorder, report, and phase timer.</summary>
+/// <summary>UI-12: the measurement harness's recorder, report, phase timer, and preview hooks.</summary>
 [Collection("UI theme")]
 public sealed class MeasurementTests
 {
@@ -30,7 +34,7 @@ public sealed class MeasurementTests
         var recorder = new FrameRecorder(detail: true);
         recorder.MarkInput(At(0));
         recorder.EndDispatch(At(0), At(0.5));
-        recorder.EndFrame((At(1), 0), new FramePhases(At(2), At(3), At(5)), At(9), 10 * 1024);
+        recorder.EndFrame((At(1), 0), new FramePhases(At(2), At(3), At(5)), 0, At(9), 10 * 1024);
         recorder.EndPaint(At(12));
         // A paint that built no frame adds nothing.
         recorder.EndPaint(At(20));
@@ -55,8 +59,8 @@ public sealed class MeasurementTests
         var recorder = new FrameRecorder(detail: true);
         recorder.MarkInput(At(0));
         // Built outside a paint message: no present sample, and its input is not charged to the next present.
-        recorder.EndFrame((At(1), 0), new FramePhases(At(1), At(1), At(1)), At(2), 0);
-        recorder.EndFrame((At(10), 0), new FramePhases(At(10), At(10), At(10)), At(11), 0);
+        recorder.EndFrame((At(1), 0), new FramePhases(At(1), At(1), At(1)), 0, At(2), 0);
+        recorder.EndFrame((At(10), 0), new FramePhases(At(10), At(10), At(10)), 0, At(11), 0);
         recorder.EndPaint(At(15));
 
         var phases = recorder.Snapshot().Phases!;
@@ -71,13 +75,26 @@ public sealed class MeasurementTests
         var recorder = new FrameRecorder();
         recorder.MarkInput(At(0));
         recorder.EndDispatch(At(0), At(0.5));
-        recorder.EndFrame((At(1), 0), new FramePhases(At(2), At(3), At(5)), At(9), 0);
+        recorder.EndFrame((At(1), 0), new FramePhases(At(2), At(3), At(5)), 0, At(9), 0);
         recorder.EndPaint(At(12));
 
         var samples = recorder.Snapshot();
         Assert.Null(samples.Phases);
         AssertMs([8], samples.BuildMs);
         AssertMs([9], samples.InputToFrameMs);
+    }
+
+    [Fact]
+    public void Preview_Frames_Are_Split_By_Whether_They_Drew_Tiles()
+    {
+        var recorder = new FrameRecorder();
+        recorder.EndFrame((At(0), 0), null, 0, At(1), 0);
+        recorder.EndFrame((At(10), 0), null, 2, At(110), 0);
+        recorder.EndFrame((At(200), 0), null, 0, At(202), 0);
+
+        var samples = recorder.Snapshot();
+        AssertMs([1, 2], samples.BuildMsWhere(drewTiles: false));
+        AssertMs([100], samples.BuildMsWhere(drewTiles: true));
     }
 
     [Fact]
@@ -105,7 +122,7 @@ public sealed class MeasurementTests
     public void A_Default_Report_Keeps_The_Baseline_Fields_And_Names_The_System_Scale()
     {
         var recorder = new FrameRecorder();
-        recorder.EndFrame((At(0), 0), null, At(4), 0);
+        recorder.EndFrame((At(0), 0), null, 0, At(4), 0);
         var options = new DemoOptions(DemoScenario.LargeInbox, AppTheme.Light, Measure: MeasureWorkload.Scroll);
 
         using var report = Write(MeasurementReport.Create(options, MeasureWorkload.Scroll, recorder, recorder.Snapshot(), 1, 0,
@@ -121,6 +138,42 @@ public sealed class MeasurementTests
         Assert.False(root.TryGetProperty("measureMsP50", out _));
         Assert.False(root.TryGetProperty("tileMisses", out _));
         Assert.Equal(4, root.GetProperty("buildMsP50").GetDouble(), 3);
+    }
+
+    [Fact]
+    public void A_Detailed_Preview_Report_Names_The_Simulated_Scale_Phases_And_Tiles()
+    {
+        var recorder = new FrameRecorder(detail: true);
+        recorder.EndFrame((At(0), 0), new FramePhases(At(1), At(2), At(3)), 0, At(4), 0);
+        recorder.EndFrame((At(10), 0), new FramePhases(At(11), At(12), At(13)), 1, At(130), 0);
+        recorder.EndPaint(At(140));
+        var tiles = new HtmlTileStatistics();
+        tiles.Hit();
+        tiles.Drawn((0, 0), Stopwatch.Frequency / 10, Stopwatch.Frequency / 100, 4 * 1048576);
+        var preview = new PreviewResult(new BSize(900, 700), 2, 1, 250, new FrameSamples([40], [0], []), tiles.Snapshot(), 4 * 1048576, 1);
+        var options = new DemoOptions(DemoScenario.LongHtml, AppTheme.Light, Measure: MeasureWorkload.LongHtml, ScalePercent: 200, Detail: true);
+
+        using var report = Write(MeasurementReport.Create(options, MeasureWorkload.LongHtml, recorder, recorder.Snapshot(), 2, 0,
+            TimeSpan.FromSeconds(1), new MeasurementScale(2, 1.5, 200), preview));
+        var root = report.RootElement;
+
+        Assert.Equal("long-html", root.GetProperty("workload").GetString());
+        Assert.Equal("simulated", root.GetProperty("scaleKind").GetString());
+        Assert.Equal(200, root.GetProperty("simulatedScalePercent").GetInt32());
+        Assert.Equal(1.5, root.GetProperty("systemDpiScale").GetDouble());
+        Assert.True(root.GetProperty("detail").GetBoolean());
+        Assert.Equal(1, root.GetProperty("measureMsP50").GetDouble(), 3);
+        Assert.Equal(10, root.GetProperty("renderPresentMsP95").GetDouble(), 3);
+        Assert.Equal("900x700", root.GetProperty("previewWindowSize").GetString());
+        Assert.Equal(1, root.GetProperty("framesDrawingTiles").GetInt32());
+        Assert.Equal(4, root.GetProperty("buildMsCachedTilesP50").GetDouble(), 3);
+        Assert.Equal(120, root.GetProperty("buildMsDrawingTilesP50").GetDouble(), 3);
+        Assert.Equal(1, root.GetProperty("tileHits").GetInt32());
+        Assert.Equal(1, root.GetProperty("tileMisses").GetInt32());
+        Assert.Equal(100, root.GetProperty("tileRasterMsP50").GetDouble(), 3);
+        Assert.Equal(10, root.GetProperty("tileUploadMsP95").GetDouble(), 3);
+        Assert.Equal(4, root.GetProperty("tilePeakCachedMb").GetDouble(), 3);
+        Assert.Equal(250, root.GetProperty("openToFirstFrameMs").GetDouble(), 3);
     }
 
     private static JsonDocument Write(MeasurementReport report)
@@ -192,6 +245,89 @@ public sealed class MeasurementTests
 
         protected override void RenderCore(UiRenderContext context) => Renders++;
     }
+
+    [Fact]
+    public void Help_Names_The_Detail_Switch_After_The_Workloads()
+    {
+        using var output = new StringWriter();
+        Program.WriteHelp(output);
+        string[] lines = output.ToString().Split(Environment.NewLine);
+        int workloads = Array.FindIndex(lines, line => line.StartsWith("--measure", StringComparison.Ordinal));
+        int detail = Array.FindIndex(lines, line => line.StartsWith("--detail", StringComparison.Ordinal));
+        int acceptance = Array.FindIndex(lines, line => line.StartsWith("Acceptance-only", StringComparison.Ordinal));
+        Assert.True(workloads < detail && detail < acceptance);
+        Assert.Contains(lines[workloads..detail], line => line.TrimStart().StartsWith("long-html ", StringComparison.Ordinal));
+        Assert.Contains(lines[workloads..detail], line => line.TrimStart().StartsWith("preview-zoom ", StringComparison.Ordinal));
+        Assert.Contains("[--detail]", lines[0], StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task A_Measured_Preview_Renders_At_The_Simulated_Scale_And_Records_Its_Frames_And_Tiles()
+    {
+        // A scale other than Windows' own, so the window cannot pass by rendering at that.
+        double scale = Math.Abs(WindowsScreen.SystemScale() - 2) < 0.01 ? 1.25 : 2;
+        var measurement = new PreviewMeasurement(new FrameRecorder(), new HtmlTileStatistics(), scale);
+        var ready = new TaskCompletionSource<HtmlPreviewWindow>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<h1>Agenda</h1><p>Items</p>", new HashSet<string>()), "Agenda as text", _ => { },
+                    measurement: measurement) { ShowInTaskbar = false, Opacity = 0 };
+                window.Shown += (_, _) => ready.TrySetResult(window);
+                window.Run();
+                closed.TrySetResult();
+            }
+            catch (Exception error) { ready.TrySetException(error); closed.TrySetException(error); }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        var preview = await ready.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        try
+        {
+            Assert.True(measurement.Frames.WaitForFrame(0, TimeSpan.FromSeconds(15)), "The preview drew no frame.");
+            var read = new TaskCompletionSource<(double Scale, BSize Size, (int PixelWidth, int PixelHeight, double WidthDip, double HeightDip)[] Tiles)>(
+                TaskCreationOptions.RunContinuationsAsynchronously);
+            Assert.True(preview.RunOnUiThread(() => read.TrySetResult((preview.DpiScale, preview.ClientSize, preview.HtmlView.Content.CachedTileSizes.ToArray()))));
+            var (dpiScale, size, cached) = await read.Task.WaitAsync(TimeSpan.FromSeconds(15));
+            // WM_GETMINMAXINFO: the simulated pixels are not limited to the real desktop's size.
+            var limits = new TaskCompletionSource<(int X, int Y)>(TaskCreationOptions.RunContinuationsAsynchronously);
+            Assert.True(preview.RunOnUiThread(() => limits.TrySetResult(MaximumTrackSize(preview.NativeHandle))));
+            Assert.Equal((short.MaxValue, short.MaxValue), ((int, int))await limits.Task.WaitAsync(TimeSpan.FromSeconds(15)));
+
+            Assert.Equal(scale, dpiScale);
+            Assert.Equal(900, size.Width, 1.0);
+            Assert.Equal(700, size.Height, 1.0);
+            var tile = Assert.Single(cached);
+            Assert.Equal(Math.Ceiling(tile.WidthDip * scale), tile.PixelWidth);
+            var counts = measurement.Tiles.Snapshot();
+            Assert.Equal(1, counts.Misses);
+            Assert.Equal(1, counts.Layouts);
+            Assert.Equal(measurement.Frames.Snapshot().TilesDrawn.Sum(), counts.Misses);
+        }
+        finally
+        {
+            preview.CloseWindow();
+            await closed.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        }
+    }
+
+    private static (int X, int Y) MaximumTrackSize(nint window)
+    {
+        // MINMAXINFO: five POINTs; ptMaxTrackSize is the fifth.
+        nint info = Marshal.AllocHGlobal(40);
+        try
+        {
+            for (int offset = 0; offset < 40; offset += 4) Marshal.WriteInt32(info, offset, 0);
+            SendMessage(window, 0x0024, 0, info);
+            return (Marshal.ReadInt32(info, 32), Marshal.ReadInt32(info, 36));
+        }
+        finally { Marshal.FreeHGlobal(info); }
+    }
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
 
     /// <summary>The inbox fixture, settled as the demo prepares it, in a headless session of its own.</summary>
     private sealed class SettledShell : IDisposable
