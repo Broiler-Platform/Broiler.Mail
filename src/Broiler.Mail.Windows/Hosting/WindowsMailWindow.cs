@@ -33,6 +33,7 @@ using Broiler.Hosting.Windows.Input;
 using Broiler.Mail.Windows.Measurement;
 using Broiler.Mail.Windows.Preview;
 using System.ComponentModel;
+using System.Diagnostics;
 using System.Runtime.InteropServices;
 using static Broiler.Native.Windows.WindowNative;
 
@@ -139,7 +140,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             var driver = DemoScenarioDriver.Start(demo, model, _shell, _dispatcher);
             if (demo.Measure is not null)
             {
-                _recorder = new FrameRecorder();
+                _recorder = new FrameRecorder(demo.Detail);
                 MeasurementRun.Start(this, _recorder, demo, driver.Completion);
             }
         }
@@ -165,6 +166,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             if (result == 0) return unchecked((int)message.WParam);
             TranslateMessage(ref message);
             DispatchMessage(ref message);
+            // --measure --detail: WM_PAINT has rendered and presented the frame it built.
+            if (message.Message == 0x000F && _recorder is { Detail: true }) _recorder.EndPaint();
         }
     }
 
@@ -219,8 +222,16 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         var frame = _recorder?.BeginFrame();
         _host.Update(clientSize, DpiScale);
         DrainDispatcher();
-        var renderList = _session.RenderFrame();
-        if (frame is { } begin) _recorder!.EndFrame(begin);
+        BRenderList renderList;
+        FramePhases? phases = null;
+        // --measure --detail times layout and the render list apart; otherwise the frame is built as always.
+        if (_recorder is { Detail: true })
+        {
+            renderList = FramePhaseTimer.Render(_session, Stopwatch.GetTimestamp(), out var timed);
+            phases = timed;
+        }
+        else renderList = _session.RenderFrame();
+        if (frame is { } begin) _recorder!.EndFrame(begin, phases);
         return renderList;
     }
 
@@ -228,6 +239,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     public override double DpiScale => _simulatedScale ?? base.DpiScale;
 
     internal WindowsUiHost Host => _host;
+
+    /// <summary>Windows' own scale for the window, whether or not a simulated one is rendered.</summary>
+    internal double SystemDpiScale => base.DpiScale;
 
     /// <summary>
     /// Changes the scale the way a WM_DPICHANGED from Windows does, for checks on one monitor: from now on
@@ -248,7 +262,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     internal void DispatchMeasured(UiInputEvent input)
     {
         _recorder?.MarkInput();
+        long started = Stopwatch.GetTimestamp();
         Dispatch(input);
+        _recorder?.EndDispatch(started);
     }
 
     internal void DispatchUnmeasured(UiInputEvent input) => Dispatch(input);
@@ -256,18 +272,21 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     internal void ApplyThemeForMeasurement(StandardThemeTokens tokens)
     {
         _recorder?.MarkInput();
+        long started = Stopwatch.GetTimestamp();
         StandardThemeController.Apply(_session, tokens);
         WindowsTitleBar.ApplyDarkMode(NativeHandle, tokens.IsDark);
         Invalidate();
+        _recorder?.EndDispatch(started);
     }
 
     internal (int Width, int Height) OuterSize() => WindowsScreen.OuterSize(NativeHandle);
 
     internal void ResizeForMeasurement(int width, int height)
     {
-        // The resize draws its frame before SetWindowPos returns, so the mark comes first.
+        // The resize draws and presents its frame before SetWindowPos returns, so the mark comes first.
         _recorder?.MarkInput();
         WindowsScreen.Resize(NativeHandle, width, height);
+        _recorder?.EndPaint();
     }
 
     internal void CloseAfterMeasurement(int exitCode)

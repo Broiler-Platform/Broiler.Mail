@@ -67,7 +67,10 @@ internal sealed class MeasurementRun
             Thread.Sleep(250);
             elapsed.Stop();
             sampler?.Stop();
-            var report = MeasurementReport.Create(options, _workload, _recorder, _recorder.Snapshot(), _steps, _unpainted, elapsed.Elapsed, _window.DpiScale);
+            double dpiScale = 0, systemScale = 0;
+            Ui(() => (dpiScale, systemScale) = (_window.DpiScale, _window.SystemDpiScale));
+            var report = MeasurementReport.Create(options, _workload, _recorder, _recorder.Snapshot(), _steps, _unpainted, elapsed.Elapsed,
+                new MeasurementScale(dpiScale, systemScale, options.ScalePercent));
             report.Write(options.Report);
             Console.WriteLine(report.Summary());
             if (sampler is not null)

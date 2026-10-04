@@ -17,7 +17,7 @@ internal enum DemoServerChange { None, Vanish, Outside, Renumber }
 /// <summary>Interactive: plain <c>--demo</c>, where the user drives the synthetic inbox. Otherwise the named fixture is prepared on start.</summary>
 internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTheme.System, int Width = 1100, int Height = 720, bool Interactive = false,
     MeasureWorkload? Measure = null, string? Report = null, int? TextScalePercent = null, bool HighContrast = false,
-    DemoServerChange ServerChange = DemoServerChange.None, int? ScalePercent = null)
+    DemoServerChange ServerChange = DemoServerChange.None, int? ScalePercent = null, bool Detail = false)
 {
     internal static IReadOnlyList<(string Name, DemoScenario Scenario, string Description)> Gallery { get; } = Array.AsReadOnly(new[]
     {
@@ -45,7 +45,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("new-mail", DemoScenario.NewMail, "Three new messages arrived above the open one, which keeps its body and is now read; each receive adds more"),
     });
 
-    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--text-scale <100-225>] [--contrast high] [--measure <workload> [--report <file.json>]] [--scale <100-300>] [--server-change vanish|outside|renumber]";
+    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--text-scale <100-225>] [--contrast high] [--measure <workload> [--report <file.json>] [--detail]] [--scale <100-300>] [--server-change vanish|outside|renumber]";
 
     /// <summary>Options for acceptance scripts only. They simulate conditions; they are not settings a user would choose.</summary>
     internal static IReadOnlyList<(string Name, string Description)> AcceptanceOptions { get; } = Array.AsReadOnly(new[]
@@ -109,11 +109,19 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         bool highContrast = false;
         var serverChange = DemoServerChange.None;
         int? scale = null;
+        bool detail = false;
         var seen = new HashSet<string>(StringComparer.Ordinal);
         while (index < args.Length)
         {
             string flag = args[index++];
-            if (!seen.Add(flag) || index >= args.Length) return false;
+            if (!seen.Add(flag)) return false;
+            // Phase and render-and-present timers for a measurement; the only option without a value.
+            if (flag == "--detail")
+            {
+                detail = true;
+                continue;
+            }
+            if (index >= args.Length) return false;
             string value = args[index++];
             if (flag == "--theme")
             {
@@ -158,11 +166,11 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
             }
             else return false;
         }
-        // A measurement runs on a prepared fixture, and a report without a measurement is meaningless.
-        if ((measure is not null && interactive) || (report is not null && measure is null)) return false;
+        // A measurement runs on a prepared fixture, and a report or detail without a measurement is meaningless.
+        if ((measure is not null && interactive) || ((report is not null || detail) && measure is null)) return false;
         // Only the new-mail fixture has a server that changes between receives.
         if (serverChange != DemoServerChange.None && scenario != DemoScenario.NewMail) return false;
-        options = new(scenario, theme, width, height, interactive, measure, report, textScale, highContrast, serverChange, scale);
+        options = new(scenario, theme, width, height, interactive, measure, report, textScale, highContrast, serverChange, scale, detail);
         return true;
     }
 }

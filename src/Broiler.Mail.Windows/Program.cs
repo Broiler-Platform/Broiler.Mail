@@ -45,6 +45,7 @@ internal static class Program
         output.WriteLine("--measure runs a fixed workload on the scenario, prints UI frame statistics, writes them to --report, and exits:");
         foreach (var (name, _, description) in DemoOptions.Workloads)
             output.WriteLine($"  {name.PadRight(column)} {description}");
+        output.WriteLine("--detail also times each frame's phases (input dispatch, layout, render list) and the render-and-present call; compare detailed runs only with detailed runs.");
         output.WriteLine("Acceptance-only options simulate conditions for UI checks; they are not settings:");
         foreach (var (name, description) in DemoOptions.AcceptanceOptions)
         {

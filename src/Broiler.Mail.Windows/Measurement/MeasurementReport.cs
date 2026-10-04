@@ -10,22 +10,31 @@ namespace Broiler.Mail.Windows.Measurement;
 /// <summary>One workload's results with the machine and build they came from.</summary>
 internal sealed class MeasurementReport
 {
-    private readonly Dictionary<string, object> _values = new(StringComparer.Ordinal);
+    /// <summary>2 added the scale and --detail fields; the fields of version 1 keep their names and meaning.</summary>
+    public const int Version = 2;
+
+    private readonly Dictionary<string, object?> _values = new(StringComparer.Ordinal);
     private readonly List<string> _order = [];
 
     private MeasurementReport() { }
 
     public static MeasurementReport Create(DemoOptions options, MeasureWorkload workload, FrameRecorder recorder, FrameSamples samples,
-        int steps, int unpainted, TimeSpan elapsed, double dpiScale)
+        int steps, int unpainted, TimeSpan elapsed, MeasurementScale scale)
     {
         using var process = Process.GetCurrentProcess();
         process.Refresh();
         var report = new MeasurementReport();
-        report.Add("workload", workload.ToString().ToLowerInvariant());
+        report.Add("reportVersion", Version);
+        report.Add("workload", DemoOptions.Workloads.Single(item => item.Workload == workload).Name);
         report.Add("scenario", options.Name);
         report.Add("theme", options.Theme.ToString().ToLowerInvariant());
         report.Add("windowSize", $"{options.Width}x{options.Height}");
-        report.Add("dpiScale", dpiScale);
+        report.Add("dpiScale", scale.DpiScale);
+        // A simulated scale renders Mail at that scale on this display; Windows' DPI, the frame, and monitors are unchanged.
+        report.Add("scaleKind", scale.SimulatedPercent is null ? "system" : "simulated");
+        report.Add("simulatedScalePercent", scale.SimulatedPercent);
+        report.Add("systemDpiScale", scale.SystemDpiScale);
+        report.Add("detail", samples.Phases is not null);
         report.Add("build", BuildDescription());
         report.Add("machine", MachineDescription());
         report.Add("startupFirstFrameMs", recorder.FirstFrameMs ?? double.NaN);
@@ -42,6 +51,16 @@ internal sealed class MeasurementReport
         report.Add("privateMb", process.PrivateMemorySize64 / 1048576.0);
         report.Add("managedHeapMb", GC.GetTotalMemory(forceFullCollection: false) / 1048576.0);
         report.Add("gcCollections", $"{GC.CollectionCount(0)}/{GC.CollectionCount(1)}/{GC.CollectionCount(2)}");
+        if (samples.Phases is { } phases)
+        {
+            report.AddDistribution("dispatchMs", phases.DispatchMs);
+            report.AddDistribution("drainMs", phases.DrainMs);
+            report.AddDistribution("measureMs", phases.MeasureMs);
+            report.AddDistribution("arrangeMs", phases.ArrangeMs);
+            report.AddDistribution("renderListMs", phases.RenderListMs);
+            report.AddDistribution("renderPresentMs", phases.RenderPresentMs);
+            report.AddDistribution("inputToPresentMs", phases.InputToPresentMs);
+        }
         return report;
     }
 
@@ -57,8 +76,9 @@ internal sealed class MeasurementReport
             {
                 case string text: writer.WriteString(key, text); break;
                 case int number: writer.WriteNumber(key, number); break;
+                case bool flag: writer.WriteBoolean(key, flag); break;
                 case double number when double.IsFinite(number): writer.WriteNumber(key, Math.Round(number, 3)); break;
-                case double: writer.WriteNull(key); break;
+                case double or null: writer.WriteNull(key); break;
             }
         }
         writer.WriteEndObject();
@@ -72,7 +92,7 @@ internal sealed class MeasurementReport
         return text.ToString();
     }
 
-    private void Add(string key, object value)
+    private void Add(string key, object? value)
     {
         _order.Add(key);
         _values[key] = value;
@@ -86,10 +106,11 @@ internal sealed class MeasurementReport
         Add(name + "Max", values.Length == 0 ? double.NaN : values.Max());
     }
 
-    private static string Format(object value) => value switch
+    private static string Format(object? value) => value switch
     {
         double number when double.IsFinite(number) => number.ToString("0.###", CultureInfo.InvariantCulture),
-        double => "n/a",
+        double or null => "n/a",
+        bool flag => flag ? "true" : "false",
         _ => Convert.ToString(value, CultureInfo.InvariantCulture) ?? "",
     };
 
@@ -112,3 +133,6 @@ internal sealed class MeasurementReport
         return $"{cpu}, {Environment.ProcessorCount} logical processors, {RuntimeInformation.OSDescription}";
     }
 }
+
+/// <summary>The scale the main window rendered at, Windows' own scale for it, and the simulated percent (--scale) if any.</summary>
+internal readonly record struct MeasurementScale(double DpiScale, double SystemDpiScale, int? SimulatedPercent);
