@@ -29,6 +29,7 @@ using Broiler.Graphics.Resources;
 using Broiler.Graphics.Text;
 using Broiler.Graphics.Windowing;
 using Broiler.Graphics.Windows;
+using Broiler.Hosting.Windows;
 using Broiler.Hosting.Windows.Accessibility;
 using Broiler.HTML.Image;
 using Broiler.Net.Http;
@@ -146,7 +147,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             // The panel is not a themed control; its surface was taken from the theme at creation.
             _root.Background = theme.Surface;
             _dark = theme.IsDark;
-            if (NativeHandle != 0) WindowsTitleBar.Apply(NativeHandle, _dark);
+            if (NativeHandle != 0) WindowsTitleBar.ApplyDarkMode(NativeHandle, _dark);
             Invalidate();
         });
     }
@@ -484,7 +485,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     {
         base.OnCreated();
         // Match the caption to the shell's theme; the handle exists only from here on.
-        WindowsTitleBar.Apply(NativeHandle, _dark);
+        WindowsTitleBar.ApplyDarkMode(NativeHandle, _dark);
         // Screen readers see the buttons, the document, and each link, as in the main window.
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _root, () => DpiScale);
     }

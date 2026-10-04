@@ -196,6 +196,7 @@ public sealed class HtmlPreviewKeyboardTests
                 { ShowInTaskbar = false, Opacity = 0 };
                 window.Shown += (_, _) =>
                 {
+                    bool lightCaption = !CaptionIsDark(window.NativeHandle);
                     // Applied from another thread, as the main window does; it runs on the preview's thread.
                     Task.Run(() => window.ApplyTheme(changed)).Wait();
                     window.Post(() =>
@@ -206,6 +207,9 @@ public sealed class HtmlPreviewKeyboardTests
                             Assert.Equal(changed.FontBody, window.ToggleButton.Font);
                             Assert.Equal(changed.FontBody, window.Status.Font);
                             Assert.Equal(changed.Surface, window.Root.Background);
+                            // The caption follows as well: light when created, dark once the theme arrives.
+                            Assert.True(lightCaption);
+                            Assert.True(CaptionIsDark(window.NativeHandle));
                             window.Session.RenderFrame();
                             finished.TrySetResult();
                         }
@@ -222,6 +226,13 @@ public sealed class HtmlPreviewKeyboardTests
         await finished.Task.WaitAsync(TimeSpan.FromSeconds(30));
         Assert.NotSame(changed, StandardControlPaint.Theme); // the process-wide palette is the main window's
     }
+
+    /// <summary>Reads DWMWA_USE_IMMERSIVE_DARK_MODE back from the window manager.</summary>
+    private static bool CaptionIsDark(nint window) =>
+        DwmGetWindowAttribute(window, 20, out int value, sizeof(int)) == 0 && value != 0;
+
+    [System.Runtime.InteropServices.DllImport("dwmapi.dll")]
+    private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
 
     [Theory]
     [InlineData(1.0)]
