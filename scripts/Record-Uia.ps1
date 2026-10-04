@@ -9,15 +9,18 @@ or more short walks on demo fixtures and prints, step by step, the UI Automation
 would be given:
   - FocusChanged: what gets focus, with its control type, name and help text, 'IsDataValidForForm=False'
     when it reports that, and its FullDescription (a form field's error comes first in it). Focus is read
-    through the UIA COM client, from the element the event names. List rows and tab items report False
-    too: Hosting preview.7 leaves the property to UIA's default for them;
+    through the UIA COM client, from the element the event names. List rows and tab items answer valid
+    (Hosting preview.7), so only a refused field is marked;
   - Notification: the text and kind the app announces (status, progress, results);
   - ElementSelected: the row or tab that became selected;
   - property changes of ExpandCollapseState and ToggleState (managed UIA client) and of IsDataValidForForm
     (UIA COM client, which knows that property).
 Walks:
   - inbox (inbox fixture): Tab through the window, select a row through UI Automation, move down the list
-    with the arrow key, and receive with F5.
+    with the arrow key, and receive with F5. The row is selected through the managed (UIA2) client, for
+    which UIAutomationCore first calls SetFocus on the row; that focuses the list without selecting, so the
+    transcript first names the row selected before. A COM client, as screen readers use, does not hear that
+    (Broiler.Hosting README, Focus).
   - composer (draft-invalid fixture, where Check draft has rejected the To address): show and hide Cc and
     Bcc through ExpandCollapse, type into To so the error goes, and run Check draft again so it comes back.
 Input is posted to the window's render child or given through UI Automation patterns, so the walk does not
