@@ -79,4 +79,41 @@ public sealed class WindowGeometryTests
         Assert.Equal((360, 120), (moved.Normal!.Left, moved.Normal.Top));
         Assert.Equal(360, moved.Left);
     }
+
+    [Fact]
+    public void Restore_On_A_Monitor_With_Another_Scale_Keeps_The_Dip_Client_Size()
+    {
+        // The system scale is the 150 % primary's; the window was last on a 100 % monitor to its right.
+        var right = new PixelRect(1920, 0, 3840, 1040);
+        var settings = new ApplicationSettings { Window = At(2100, 100) };
+        var plan = WindowRestorePlan.For(settings, [Primary, right], 1.5, [1.5, 1.0]);
+        // The window converts option DIPs at 150 % but renders at 100 % there: 787 x 493 option DIPs
+        // become about 1180 x 740 pixels, which are the remembered 1180 x 740 DIPs at 100 %.
+        Assert.Equal((787, 493), (plan.ClientWidth, plan.ClientHeight));
+        Assert.InRange(Math.Round(plan.ClientWidth * 1.5), 1179, 1181);
+        Assert.Equal((1400, 100 / 1.5), (plan.Left, plan.Top));
+        Assert.Equal(At(2100, 100), plan.Normal);
+
+        // At the system scale, or with unknown monitor scales, the remembered DIPs are already right.
+        Assert.Equal((1180, 740), Size(WindowRestorePlan.For(settings, [Primary, right], 1.5, [1.5, 1.5])));
+        Assert.Equal((1180, 740), Size(WindowRestorePlan.For(settings, [Primary, right], 1.5)));
+        Assert.Equal((1180, 740), Size(WindowRestorePlan.For(settings, [Primary, right], 1.5, [1.5, 0])));
+        Assert.Equal((1573, 987), Size(WindowRestorePlan.For(settings, [Primary, right], 1.5, [1.5, 2.0])));
+        // A monitor left of the primary one is reached by a move after Show, whose WM_DPICHANGED keeps the DIP size.
+        var left = WindowRestorePlan.For(new ApplicationSettings { Window = At(-2000, -100) }, [Primary, LeftMonitor], 1.5, [1.5, 1.0]);
+        Assert.Equal((1180, 740), Size(left));
+        Assert.Equal((-2000, -100), left.MoveAfterShow);
+
+        static (int, int) Size(WindowRestorePlan plan) => (plan.ClientWidth, plan.ClientHeight);
+    }
+
+    [Fact]
+    public void The_Monitor_Scale_Is_The_One_The_Window_Overlaps_Most()
+    {
+        var right = new PixelRect(1920, 0, 3840, 1040);
+        Assert.Equal(1.0, WindowGeometry.ScaleAt(At(1500, 100), [Primary, right], [1.5, 1.0]));
+        Assert.Equal(1.5, WindowGeometry.ScaleAt(At(1000, 100), [Primary, right], [1.5, 1.0]));
+        Assert.Null(WindowGeometry.ScaleAt(At(5000, 5000), [Primary, right], [1.5, 1.0]));
+        Assert.Null(WindowGeometry.ScaleAt(At(1500, 100), [Primary, right], [1.5]));
+    }
 }

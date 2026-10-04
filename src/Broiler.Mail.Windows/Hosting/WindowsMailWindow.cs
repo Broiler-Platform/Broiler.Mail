@@ -82,8 +82,14 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Broiler-Falsified-If: a result posted by a background mail operation runs its callback on the posting thread instead of waiting for DrainDispatcher on the window thread
     // Broiler-Human:        PENDING
     public WindowsMailWindow(MailApplication application, DemoOptions? demo = null)
-        : this(application, demo, WindowRestorePlan.For(application.LoadedSettings, WindowsScreen.WorkAreas(), WindowsScreen.SystemScale()))
+        : this(application, demo, Plan(application.LoadedSettings))
     {
+    }
+
+    private static WindowRestorePlan Plan(ApplicationSettings settings)
+    {
+        var (workAreas, scales) = WindowsScreen.Monitors();
+        return WindowRestorePlan.For(settings, workAreas, WindowsScreen.SystemScale(), scales);
     }
 
     private WindowsMailWindow(MailApplication application, DemoOptions? demo, WindowRestorePlan restore)

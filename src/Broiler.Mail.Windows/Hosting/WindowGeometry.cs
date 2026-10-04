@@ -50,26 +50,57 @@ internal static class WindowGeometry
         if (window.Intersect(target).Width == 0) target = workAreas[0];
         return (target.Left + Math.Max(0, (target.Width - saved.Width) / 2), target.Top + Math.Max(0, (target.Height - saved.Height) / 2));
     }
+
+    /// <param name="scales">The scale of each work area's monitor, in the same order; null when unknown.</param>
+    /// <returns>The scale of the monitor whose work area the window overlaps most, or null when unknown.</returns>
+    public static double? ScaleAt(WindowPlacement placement, IReadOnlyList<PixelRect> workAreas, IReadOnlyList<double>? scales)
+    {
+        if (scales is null || scales.Count != workAreas.Count) return null;
+        var window = new PixelRect(placement.Left, placement.Top, placement.Left + placement.Width, placement.Top + placement.Height);
+        int best = -1;
+        long bestArea = 0;
+        for (int index = 0; index < workAreas.Count; index++)
+        {
+            var overlap = window.Intersect(workAreas[index]);
+            long area = (long)overlap.Width * overlap.Height;
+            if (area > bestArea) (best, bestArea) = (index, area);
+        }
+        return best >= 0 && scales[best] > 0 ? scales[best] : null;
+    }
 }
 
 /// <summary>How the main window is created and placed from remembered settings.</summary>
+/// <param name="ClientWidth">Option DIPs, which the window converts to pixels at the system scale.</param>
 /// <param name="Left">Option coordinates in DIPs, or null to let the window center itself.</param>
 /// <param name="MoveAfterShow">A physical position the window must be moved to once it exists.</param>
 /// <param name="Normal">The remembered normal bounds after clamping, kept while the window starts maximized.</param>
 internal sealed record WindowRestorePlan(int ClientWidth, int ClientHeight, double? Left, double? Top,
     (int Left, int Top)? MoveAfterShow, bool Maximized, WindowPlacement? Normal)
 {
-    public static WindowRestorePlan For(ApplicationSettings settings, IReadOnlyList<PixelRect> workAreas, double systemScale)
+    /// <param name="workAreaScales">The scale of each work area's monitor, in the same order; null assumes the system scale everywhere.</param>
+    public static WindowRestorePlan For(ApplicationSettings settings, IReadOnlyList<PixelRect> workAreas, double systemScale, IReadOnlyList<double>? workAreaScales = null)
     {
         if (settings.Window is not { } saved || WindowGeometry.Restore(saved, workAreas) is not { } position)
             return new(settings.WindowWidth, settings.WindowHeight, null, null, null, false, null);
         var normal = saved with { Left = position.Left, Top = position.Top };
         // Window options clamp coordinates to at least one pixel, so monitors left of or above the
-        // primary one (negative coordinates) need a move once the native window exists.
-        if (position.Left >= 1 && position.Top >= 1)
-            return new(saved.ClientWidth, saved.ClientHeight, position.Left / systemScale, position.Top / systemScale, null, saved.Maximized, normal);
-        return new(saved.ClientWidth, saved.ClientHeight, null, null, position, saved.Maximized, normal);
+        // primary one (negative coordinates) need a move once the native window exists. That move
+        // reaches another monitor's scale through WM_DPICHANGED, which keeps the DIP size.
+        if (position.Left < 1 || position.Top < 1)
+            return new(saved.ClientWidth, saved.ClientHeight, null, null, position, saved.Maximized, normal);
+        // A window created on a monitor takes that monitor's scale without a WM_DPICHANGED, but its
+        // pixel size comes from the options at the system scale. On a monitor with another scale the
+        // remembered DIP size therefore needs that monitor's pixels, expressed in option DIPs.
+        var plan = new WindowRestorePlan(saved.ClientWidth, saved.ClientHeight, position.Left / systemScale, position.Top / systemScale, null, saved.Maximized, normal);
+        return WindowGeometry.ScaleAt(normal, workAreas, workAreaScales) is { } monitorScale ? plan.At(monitorScale, systemScale) : plan;
     }
+
+    /// <summary>The same plan with option DIPs that give this plan's DIP size when the window renders at <paramref name="scale"/>.</summary>
+    public WindowRestorePlan At(double scale, double systemScale) => scale == systemScale || systemScale <= 0 ? this : this with
+    {
+        ClientWidth = (int)Math.Round(ClientWidth * scale / systemScale),
+        ClientHeight = (int)Math.Round(ClientHeight * scale / systemScale),
+    };
 }
 
 /// <summary>Native window geometry helpers for the main window.</summary>
@@ -79,24 +110,33 @@ internal static unsafe class WindowsScreen
     private const uint MonitorPrimary = 1;
     private const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010;
 
-    /// <summary>Work areas of all monitors, primary first.</summary>
-    public static IReadOnlyList<PixelRect> WorkAreas()
+    /// <summary>Work areas of all monitors, primary first, with each monitor's scale (0 when unknown).</summary>
+    public static (IReadOnlyList<PixelRect> WorkAreas, IReadOnlyList<double> Scales) Monitors()
     {
-        var areas = new List<(PixelRect Area, bool Primary)>();
-        var handle = GCHandle.Alloc(areas);
+        var monitors = new List<(PixelRect Area, bool Primary, double Scale)>();
+        var handle = GCHandle.Alloc(monitors);
         try { EnumDisplayMonitors(0, 0, &Collect, GCHandle.ToIntPtr(handle)); }
         catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException) { }
         finally { handle.Free(); }
-        return areas.OrderByDescending(item => item.Primary).Select(item => item.Area).ToArray();
+        var ordered = monitors.OrderByDescending(item => item.Primary).ToArray();
+        return (ordered.Select(item => item.Area).ToArray(), ordered.Select(item => item.Scale).ToArray());
     }
 
     [UnmanagedCallersOnly]
     private static int Collect(nint monitor, nint hdc, RECT* bounds, nint state)
     {
         var info = new MONITORINFO { CbSize = (uint)sizeof(MONITORINFO) };
-        if (GetMonitorInfo(monitor, ref info) && GCHandle.FromIntPtr(state).Target is List<(PixelRect, bool)> areas)
-            areas.Add((new(info.RcWork.Left, info.RcWork.Top, info.RcWork.Right, info.RcWork.Bottom), (info.DwFlags & MonitorPrimary) != 0));
+        if (GetMonitorInfo(monitor, ref info) && GCHandle.FromIntPtr(state).Target is List<(PixelRect, bool, double)> monitors)
+            monitors.Add((new(info.RcWork.Left, info.RcWork.Top, info.RcWork.Right, info.RcWork.Bottom), (info.DwFlags & MonitorPrimary) != 0, MonitorScale(monitor)));
         return 1;
+    }
+
+    /// <summary>The effective scale Windows gives windows on this monitor; 0 when it cannot be read.</summary>
+    private static double MonitorScale(nint monitor)
+    {
+        // Nothing may be thrown out of the unmanaged enumeration callback.
+        try { return GetDpiForMonitor(monitor, 0 /* MDT_EFFECTIVE_DPI */, out uint dpi, out _) == 0 && dpi > 0 ? dpi / 96.0 : 0; }
+        catch (Exception error) when (error is DllNotFoundException or EntryPointNotFoundException) { return 0; }
     }
 
     public static PixelRect? OuterBounds(nint window) =>
@@ -129,4 +169,7 @@ internal static unsafe class WindowsScreen
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForSystem();
+
+    [DllImport("shcore.dll")]
+    private static extern int GetDpiForMonitor(nint monitor, int type, out uint dpiX, out uint dpiY);
 }
