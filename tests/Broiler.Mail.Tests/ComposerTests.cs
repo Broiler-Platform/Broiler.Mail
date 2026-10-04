@@ -211,7 +211,41 @@ public sealed class ComposerTests
         foreach (var section in sections)
         {
             Assert.Same(section.Content, section.Toggle!.Controls);
-            Assert.EndsWith(" " + section.Content.GetSemanticNode().Name, section.Toggle.Text);
+            Assert.EndsWith(" " + section.Content.GetSemanticNode().Name, section.Toggle.Text, StringComparison.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// Each disclosure says Show or Hide in sentence case, as every other command does ("Show plain text", "Save
+    /// settings"), rather than "Show " and the section's title; abbreviations and the Sent folder's name keep their capitals.
+    /// </summary>
+    [Fact]
+    public void EveryDisclosureToggleSaysShowOrHideInSentenceCase()
+    {
+        using var directory = new TestDirectory();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, new ImmediateUiDispatcher(), TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), new ImmediateUiDispatcher(), new(), null),
+            new(receiver, new ImmediateUiDispatcher()));
+        using var shell = new MailShellView(model);
+        var expected = new Dictionary<string, (string Show, string Hide)>
+        {
+            ["Cc and Bcc"] = ("Show Cc and Bcc", "Hide Cc and Bcc"),
+            ["Keyboard shortcuts"] = ("Show keyboard shortcuts", "Hide keyboard shortcuts"),
+            ["Sent-copy settings"] = ("Show Sent-copy settings", "Hide Sent-copy settings"),
+        };
+        var sections = Descendants(shell.Window).OfType<FormSection>().Where(section => section.Toggle is not null).ToArray();
+        Assert.Equal(expected.Keys.Order(), sections.Select(section => section.Content.GetSemanticNode().Name).Order());
+        foreach (var section in sections)
+        {
+            var (show, hide) = expected[section.Content.GetSemanticNode().Name];
+            section.Collapse();
+            Assert.Equal(show, section.Toggle!.Text);
+            Assert.Equal(show, section.Toggle.GetSemanticNode().Name);
+            section.Expand();
+            Assert.Equal(hide, section.Toggle.Text);
+            Assert.Equal(hide, section.Toggle.GetSemanticNode().Name);
         }
     }
 

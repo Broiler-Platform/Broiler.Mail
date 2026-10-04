@@ -78,7 +78,11 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var to = Field("name@example.com, another@example.com");
         var toField = new FormField("To", to);
         panel.Add(toField);
-        var copies = new FormSection("Cc and Bcc", "", collapsible: true, expanded: false);
+        var copies = new FormSection("Cc and Bcc", "", collapsible: true, expanded: false)
+        {
+            // Abbreviations keep their capitals in the sentence-case toggle.
+            ShowText = "Show Cc and Bcc", HideText = "Hide Cc and Bcc",
+        };
         // The toggle names this content as the part it controls; a screen reader following it lands on a name.
         copies.Content.AccessibleName = "Cc and Bcc";
         panel.Add(copies);

@@ -110,7 +110,11 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         var testSmtp = new StandardButton { Text = "Test SMTP sign-in" };
         smtpFields.AddChild(FormSurface.ActionBar(saveSmtpPassword, forgetSmtpPassword, testSmtp));
         ConfigurationForm.AddText(smtpFields, "Forget the SMTP password before removing outgoing setup.");
-        var advanced = new FormSection("Sent-copy settings", collapsible: true, expanded: model.SentCopyMode != SentCopyMode.NotConfigured);
+        var advanced = new FormSection("Sent-copy settings", collapsible: true, expanded: model.SentCopyMode != SentCopyMode.NotConfigured)
+        {
+            // "Sent" keeps its capital: it names the Sent folder, as everywhere else in the app.
+            ShowText = "Show Sent-copy settings", HideText = "Hide Sent-copy settings",
+        };
         // Named for the toggle that controls it, as the composer's Cc and Bcc are.
         advanced.Content.AccessibleName = "Sent-copy settings";
         smtpFields.AddChild(advanced);
