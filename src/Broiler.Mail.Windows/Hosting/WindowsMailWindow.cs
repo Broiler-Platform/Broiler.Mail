@@ -126,8 +126,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _session.AddRoot(_shell.Window);
         _keyboard = _shell.CreateKeyboardNavigation(_session);
         _session.SetFocus(_shell.Navigation);
-        // Saved theme and OS appearance changes re-theme the live controls; no restart is needed.
-        _appearance = new AppearanceController(_session, model.Settings, _host);
+        // Saved theme and OS appearance changes re-theme the live controls; no restart is needed. In high
+        // contrast the palette comes from the system's own contrast colors.
+        _appearance = new AppearanceController(_session, model.Settings, _host, MailSystemSettings.HighContrastTheme);
         _appearance.Applied += (_, _) =>
         {
             WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
@@ -357,9 +358,12 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             _inputBridge?.OnTopLevelMessage(message, wParam, lParam);
             // WM_EXITSIZEMOVE: one write when a move or resize ends, never one per pixel.
             if (message == 0x0232) _ = RememberLayout();
-            if (message is 0x001A or 0x031A)
+            // WM_SETTINGCHANGE, WM_THEMECHANGED, WM_SYSCOLORCHANGE. A switch between two contrast themes changes
+            // only the colors, so the palette is resolved again even when the settings stay the same.
+            if (message is 0x001A or 0x031A or 0x0015)
             {
                 _host.RefreshSettings();
+                _appearance.Apply();
             }
         }
     }

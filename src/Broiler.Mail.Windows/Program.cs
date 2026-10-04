@@ -98,7 +98,8 @@ internal static class Program
             // The same policy the running window applies live: system high contrast first, then the saved choice.
             MailSystemSettings.TextScaleOverride = demoOptions?.TextScalePercent / 100.0;
             MailSystemSettings.HighContrastOverride = demoOptions?.HighContrast == true;
-            StandardControlPaint.ApplyTheme(AppearancePolicy.Resolve(application.LoadedSettings.Theme, MailSystemSettings.Query()));
+            MailSystemSettings.ContrastColorsOverride = demoOptions?.ContrastColors;
+            StandardControlPaint.ApplyTheme(AppearancePolicy.Resolve(application.LoadedSettings.Theme, MailSystemSettings.Query(), MailSystemSettings.HighContrastTheme));
             Console.WriteLine(demo ? "Demo mode: synthetic mail; no files, saved credentials, or network access." : $"Configuration directory: {dataDirectory}");
             using var window = new WindowsMailWindow(application, demoOptions);
             return window.Run();

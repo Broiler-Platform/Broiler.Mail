@@ -127,6 +127,35 @@ public sealed class DemoGalleryTests
         Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--contrast", "low"], out _));
     }
 
+    [Theory]
+    [InlineData("high", null)]
+    [InlineData("aquatic", "aquatic")]
+    [InlineData("desert", "desert")]
+    [InlineData("dusk", "dusk")]
+    [InlineData("night-sky", "night-sky")]
+    public void Contrast_Option_Picks_The_Preset_Or_A_Windows_Contrast_Theme(string value, string? theme)
+    {
+        Assert.True(DemoOptions.TryParse(["--demo", "inbox", "--contrast", value], out var options));
+        Assert.True(options!.HighContrast);
+        Assert.Equal(theme, options.ContrastTheme);
+        Broiler.Hosting.Windows.WindowsSystemColors? expected = value switch
+        {
+            "aquatic" => Broiler.Hosting.Windows.WindowsSystemColors.Aquatic,
+            "desert" => Broiler.Hosting.Windows.WindowsSystemColors.Desert,
+            "dusk" => Broiler.Hosting.Windows.WindowsSystemColors.Dusk,
+            "night-sky" => Broiler.Hosting.Windows.WindowsSystemColors.NightSky,
+            _ => null,
+        };
+        Assert.Equal(expected, options.ContrastColors);
+        // Given once, and only with a known name.
+        Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--contrast", value, "--contrast", "high"], out _));
+        Assert.True(DemoOptions.TryParse(["--demo", "inbox"], out var none));
+        Assert.False(none!.HighContrast);
+        Assert.Null(none.ContrastColors);
+        foreach (var invalid in new[] { "Dusk", "nightsky", "aquatic ", "" })
+            Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--contrast", invalid], out _));
+    }
+
     [Fact]
     public void Every_Gallery_Scenario_Has_One_Unique_Name()
     {

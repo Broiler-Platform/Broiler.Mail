@@ -1,3 +1,4 @@
+using Broiler.Graphics.Color;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Mail.Application.ViewModels;
@@ -43,6 +44,68 @@ public sealed class AppearanceTests
         Assert.Equal(StandardThemeTokens.Select(system), tokens);
         Assert.True(tokens.ReducedMotion);
         Assert.True(AppearancePolicy.Resolve(preference, LightSystem with { ReducedMotion = true }).ReducedMotion);
+    }
+
+    [Theory]
+    [InlineData(AppTheme.Light)]
+    [InlineData(AppTheme.Dark)]
+    [InlineData(AppTheme.System)]
+    public void SystemHighContrastUsesTheSystemsOwnPaletteWhereTheHostHasOne(AppTheme preference)
+    {
+        var system = DarkSystem with { ContrastPreference = UiContrastPreference.More, TextScale = 1.5, ReducedMotion = true };
+        // A palette shaped like Hosting's: the selection's text differs from the window text.
+        var palette = StandardThemeTokens.HighContrastDark with { Name = "HighContrastSystem", SelectionText = BColor.FromArgb(0xFF, 0x26, 0x3B, 0x50) };
+        UiSystemSettings? asked = null;
+
+        var tokens = AppearancePolicy.Resolve(preference, system, settings => { asked = settings; return palette; });
+
+        // It wins over the saved choice, and is built for the whole of the system's settings (text scale and motion).
+        Assert.Same(palette, tokens);
+        Assert.Equal(system, asked);
+        // A host that cannot read its colors keeps the theme's preset, as before.
+        Assert.Equal(StandardThemeTokens.Select(system), AppearancePolicy.Resolve(preference, system, _ => null));
+        // Without high contrast the system palette is not even asked for.
+        Assert.Equal(AppearancePolicy.Resolve(preference, LightSystem),
+            AppearancePolicy.Resolve(preference, LightSystem, _ => throw new InvalidOperationException("Asked without high contrast.")));
+    }
+
+    [Fact]
+    public void TheLiveShellTakesTheSystemContrastPaletteAndFollowsItsColors()
+    {
+        using var directory = new TestDirectory();
+        var dispatcher = new TestQueueDispatcher();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        var host = new Host(LightSystem);
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+        session.AddRoot(shell.Window);
+        try
+        {
+            var first = StandardThemeTokens.HighContrastDark with { Name = "HighContrastSystem", SelectionText = BColor.FromArgb(0xFF, 0x26, 0x3B, 0x50) };
+            var system = first;
+            using var appearance = new AppearanceController(session, model.Settings, host, _ => system);
+            Assert.Equal(StandardThemeTokens.Light, appearance.Current);
+
+            host.Change(LightSystem with { ContrastPreference = UiContrastPreference.More });
+            Assert.Same(first, appearance.Current);
+            Assert.Same(first, StandardControlPaint.GetTheme(session));
+            var list = Descendants(shell.Window).OfType<Broiler.UI.ListView.Standard.StandardListView>().Single();
+            Assert.Equal(first.SelectionText, list.SelectedForeground);
+
+            // Another contrast theme changes only the colors; the host asks for the palette again.
+            var second = first with { Surface = BColor.FromArgb(0xFF, 0x2D, 0x32, 0x36), SelectionText = BColor.FromArgb(0xFF, 0x21, 0x2D, 0x3B) };
+            system = second;
+            appearance.Apply();
+            Assert.Same(second, appearance.Current);
+            Assert.Equal(second.SelectionText, list.SelectedForeground);
+        }
+        finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
     }
 
     [Fact]

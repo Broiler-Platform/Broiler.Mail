@@ -35,13 +35,22 @@ param(
     # The system text size in percent for every run (--text-scale); 0 uses the system's own setting.
     [ValidateScript({ $_ -eq 0 -or ($_ -ge 100 -and $_ -le 225) })]
     [int]$TextScale = 0,
-    # Render with the theme's high-contrast palette (--contrast high).
+    # Render as if Windows high contrast were on (--contrast): 'high' uses the theme's high-contrast preset, as
+    # earlier acceptance runs did; a Windows 11 contrast theme's name uses the palette its colors give, built as
+    # for the system's own contrast colors. The system's settings are not changed.
+    [ValidateSet('high', 'aquatic', 'desert', 'dusk', 'night-sky')]
+    [string]$Contrast,
+    # The same as -Contrast high.
     [switch]$HighContrast,
     # Also open the selected message (Read message), and check and capture the reader before the Tab walk.
     [switch]$OpenReader
 )
 
 $ErrorActionPreference = 'Stop'
+if ($HighContrast) {
+    if ($Contrast -and $Contrast -ne 'high') { throw "-HighContrast is -Contrast high; it cannot be combined with -Contrast $Contrast." }
+    $Contrast = 'high'
+}
 $repository = Split-Path -Parent $PSScriptRoot
 if (!$Output) { $Output = Join-Path $repository ("artifacts/acceptance/" + (Get-Date -Format 'yyyy-MM-dd-HHmm')) }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
@@ -271,10 +280,10 @@ function Save-Screenshot([IntPtr]$handle, [string]$path) {
 function Invoke-Run([string]$scenario, [string]$size, [string]$theme) {
     $name = "$scenario-$size-$theme"
     $stdout = Join-Path $Output "$name.out.txt"; $stderr = Join-Path $Output "$name.err.txt"
-    $result = [ordered]@{ scenario = $scenario; size = $size; theme = $theme; findings = @(); tab = @(); screenshot = "$name.png" }
+    $result = [ordered]@{ scenario = $scenario; size = $size; theme = $theme; contrast = $Contrast; findings = @(); tab = @(); screenshot = "$name.png" }
     $arguments = @('--demo', $scenario, '--theme', $theme, '--size', $size)
     if ($TextScale -gt 0) { $arguments += @('--text-scale', "$TextScale") }
-    if ($HighContrast) { $arguments += @('--contrast', 'high') }
+    if ($Contrast) { $arguments += @('--contrast', $Contrast) }
     $process = Start-Process -FilePath $Executable -PassThru -WindowStyle Normal -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
         -ArgumentList $arguments
     $null = $process.Handle
@@ -395,7 +404,12 @@ $lines.Add("- Packages: $packages")
 $lines.Add("- Executable: $Executable")
 $lines.Add("- SDK: $(dotnet --version); OS: $($os.Caption) $($os.Version); architecture: $env:PROCESSOR_ARCHITECTURE")
 $textScaleNote = if ($TextScale -gt 0) { "$TextScale % (fixed with --text-scale)" } else { 'system setting' }
-$lines.Add("- Text scale: $textScaleNote; high-contrast palette forced: $([bool]$HighContrast); reader opened: $([bool]$OpenReader)")
+$contrastNote = switch ($Contrast) {
+    '' { 'no' }
+    'high' { 'the theme''s preset (--contrast high)' }
+    default { "the Windows $Contrast contrast theme's colors (--contrast $Contrast)" }
+}
+$lines.Add("- Text scale: $textScaleNote; high-contrast palette forced: $contrastNote; reader opened: $([bool]$OpenReader)")
 $lines.Add("- Display scale: $scales; monitors: $([Acceptance]::GetSystemMetrics(80)); high contrast on: $([System.Windows.Forms.SystemInformation]::HighContrast)")
 $lines.Add("- Method: published executable, demo fixtures (fixed clock and data), posted keyboard input, UI Automation, PrintWindow screenshots")
 $lines.Add('')
