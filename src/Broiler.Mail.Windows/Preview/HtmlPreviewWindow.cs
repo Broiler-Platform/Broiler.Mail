@@ -1002,14 +1002,15 @@ internal sealed class HtmlViewElement : UiElement
     private readonly Func<double>? _dpiScaleProvider;
     private readonly Func<string, bool>? _canOpenLink;
     private readonly List<HtmlLinkTarget> _linkTargets = new();
-    private readonly Dictionary<int, (BImageHandle Handle, int PixelWidth, int PixelHeight, double HeightDip)> _tiles = new();
-    private readonly LinkedList<int> _lruTiles = new();
+    // Keyed by row and column; a page that fits the viewport has one column.
+    private readonly Dictionary<(int Row, int Column), (BImageHandle Handle, int PixelWidth, int PixelHeight, double WidthDip, double HeightDip)> _tiles = new();
+    private readonly LinkedList<(int Row, int Column)> _lruTiles = new();
     private long _cachedTileBytes;
 
     private HtmlContainer _container;
     private HtmlLayoutSnapshot? _layoutSnapshot;
-    // What the cached tiles were drawn for: the page width in DIPs, the zoom, and the display scale.
-    private (double PageWidth, double Zoom, double DpiScale) _tileKey;
+    // What the cached tiles were drawn for: the page and column widths in DIPs, the zoom, and the display scale.
+    private (double PageWidth, double ColumnWidth, double Zoom, double DpiScale) _tileKey;
     private string _html;
 
     private double _contentWidth = 800;
@@ -1059,9 +1060,10 @@ internal sealed class HtmlViewElement : UiElement
     internal IReadOnlyList<HtmlLinkTarget> LinkTargets => _linkTargets;
     public int CachedTileCount => _tiles.Count;
     public long CachedTileBytes => _cachedTileBytes;
-    internal IEnumerable<(int PixelWidth, int PixelHeight)> CachedTileSizes => _tiles.Values.Select(tile => (tile.PixelWidth, tile.PixelHeight)).ToArray();
-    public bool IsTileCached(int tileIndex) => _tiles.ContainsKey(tileIndex);
-    internal IReadOnlyCollection<int> CachedTileIndices => _tiles.Keys.ToArray();
+    internal IEnumerable<(int PixelWidth, int PixelHeight, double WidthDip, double HeightDip)> CachedTileSizes =>
+        _tiles.Values.Select(tile => (tile.PixelWidth, tile.PixelHeight, tile.WidthDip, tile.HeightDip)).ToArray();
+    public bool IsTileCached(int row, int column = 0) => _tiles.ContainsKey((row, column));
+    internal IReadOnlyCollection<(int Row, int Column)> CachedTileIndices => _tiles.Keys.ToArray();
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=EA9C6B
     // Broiler-Falsified-If: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
@@ -1326,43 +1328,46 @@ internal sealed class HtmlViewElement : UiElement
     }
 
     /// <summary>
-    /// Paints the document from <paramref name="layoutTop"/> (in CSS pixels) down, each CSS pixel drawn
-    /// <paramref name="scale"/> pixels large: the tile's own scale (the display scale unless the pixel
-    /// cap lowered it) times the zoom. Broiler.HTML takes the scroll offset in layout units and applies
-    /// the scale itself; multiplying it by the scale, as before, drew every tile after the first from too
-    /// far down at any display scale other than 100 %, so at 150 % the text ran out two-thirds of the way
-    /// through a long message and the rest of the preview was blank.
+    /// Paints the document from <paramref name="layoutTop"/> (in CSS pixels) down and from
+    /// <paramref name="layoutLeft"/> right, each CSS pixel drawn <paramref name="scale"/> pixels large:
+    /// the tile's own scale (the display scale unless the pixel cap lowered it) times the zoom.
+    /// Broiler.HTML takes the scroll offset in layout units and applies the scale itself; multiplying it
+    /// by the scale, as before, drew every tile after the first from too far down at any display scale
+    /// other than 100 %, so at 150 % the text ran out two-thirds of the way through a long message and
+    /// the rest of the preview was blank.
     /// </summary>
-    internal HtmlBitmap PaintTile(double layoutTop, double scale, int pixelWidth, int pixelHeight)
+    internal HtmlBitmap PaintTile(double layoutTop, double scale, int pixelWidth, int pixelHeight, double layoutLeft = 0)
     {
         var bitmap = new HtmlBitmap(pixelWidth, pixelHeight);
         _container.ViewportZoom = (float)scale;
-        _container.ScrollOffset = new PointF(0, -(float)layoutTop);
+        _container.ScrollOffset = new PointF(-(float)layoutLeft, -(float)layoutTop);
         _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelWidth, pixelHeight));
         _container.ScrollOffset = PointF.Empty;
         _container.ViewportZoom = 1.0f;
         return bitmap;
     }
 
-    private void EnsureTile(int tileIndex, double pageWidth, double dpiScale, IBroilerRenderer renderer)
+    private void EnsureTile((int Row, int Column) key, double pageWidth, double columnWidth, double dpiScale, IBroilerRenderer renderer)
     {
-        if (_tiles.ContainsKey(tileIndex))
+        if (_tiles.ContainsKey(key))
         {
-            _lruTiles.Remove(tileIndex);
-            _lruTiles.AddFirst(tileIndex);
+            _lruTiles.Remove(key);
+            _lruTiles.AddFirst(key);
             return;
         }
 
         // Tiles are cut from the zoomed page in DIPs, so zooming does not enlarge them.
-        double tileTop = tileIndex * DefaultTileHeight;
+        double tileTop = key.Row * DefaultTileHeight;
+        double tileLeft = key.Column * columnWidth;
         double tileH = Math.Min(DefaultTileHeight, (_layoutSnapshot!.ContentHeight * _zoom) - tileTop);
-        if (tileH <= 0) return;
+        double tileW = Math.Min(columnWidth, pageWidth - tileLeft);
+        if (tileH <= 0 || tileW <= 0) return;
 
-        (double tileScale, int pixelW, int pixelH) = TilePixelSize(pageWidth, tileH, dpiScale);
+        (double tileScale, int pixelW, int pixelH) = TilePixelSize(tileW, tileH, dpiScale);
         long tileBytes = (long)pixelW * pixelH * BytesPerPixel;
         while ((_tiles.Count >= MaxCachedTiles || _cachedTileBytes + tileBytes > MaxCachedTileBytes) && _lruTiles.Count > 0)
         {
-            int lru = _lruTiles.Last!.Value;
+            var lru = _lruTiles.Last!.Value;
             _lruTiles.RemoveLast();
             if (_tiles.Remove(lru, out var evicted))
             {
@@ -1371,14 +1376,14 @@ internal sealed class HtmlViewElement : UiElement
             }
         }
 
-        using var bitmap = PaintTile(tileTop / _zoom, tileScale * _zoom, pixelW, pixelH);
+        using var bitmap = PaintTile(tileTop / _zoom, tileScale * _zoom, pixelW, pixelH, tileLeft / _zoom);
 
         // The renderer keeps RGBA pixels. Encoding a PNG for it to decode straight back cost far more
         // than painting the tile; the pixels are identical either way.
         BImageHandle handle = renderer.CreateImage(bitmap.ToPixelBuffer());
 
-        _tiles[tileIndex] = (handle, pixelW, pixelH, tileH);
-        _lruTiles.AddFirst(tileIndex);
+        _tiles[key] = (handle, pixelW, pixelH, tileW, tileH);
+        _lruTiles.AddFirst(key);
         _cachedTileBytes += tileBytes;
     }
 
@@ -1395,25 +1400,14 @@ internal sealed class HtmlViewElement : UiElement
         double dpiScale = _dpiScaleProvider?.Invoke() ?? context.Host?.Scale ?? 1.0;
         if (dpiScale <= 0.1 || double.IsNaN(dpiScale)) dpiScale = 1.0;
 
-        // Tiles hold one page width, zoom, and display scale; a change to any of them discards them all.
         double pageWidth = Math.Max(1, Bounds.Width);
-        var tileKey = (Math.Round(pageWidth, 1), _zoom, dpiScale);
-        if (tileKey != _tileKey)
-        {
-            InvalidateTiles();
-            _tileKey = tileKey;
-        }
-
-        var renderer = _rendererProvider();
-        if (renderer is null) return;
-
         double docHeight = _layoutSnapshot.ContentHeight * _zoom;
         int totalTiles = (int)Math.Ceiling(docHeight / DefaultTileHeight);
         if (totalTiles <= 0) totalTiles = 1;
 
         double parentViewportHeight;
         double visibleTop;
-        double visibleLeft = 0;
+        double visibleLeft;
         double viewportWidth = pageWidth;
         if (Parent is StandardScrollView sv && sv.Bounds.Height > 0)
         {
@@ -1426,7 +1420,26 @@ internal sealed class HtmlViewElement : UiElement
         {
             parentViewportHeight = context.Host?.ViewportSize.Height > 0 ? context.Host.ViewportSize.Height : docHeight;
             visibleTop = Math.Max(0, -Bounds.Y);
+            visibleLeft = Math.Max(0, -Bounds.X);
+            if (context.Host?.ViewportSize.Width > 0) viewportWidth = Math.Min(pageWidth, context.Host.ViewportSize.Width);
         }
+
+        // A page wider than the viewport (content that cannot wrap) is cut into columns as wide as the
+        // viewport. A tile of it is then no larger than one of an ordinary page and keeps the display
+        // scale; drawn across the whole page, one long address made every tile of the message soft.
+        double columnWidth = pageWidth > viewportWidth + 0.5 ? Math.Max(1, viewportWidth) : pageWidth;
+        int totalColumns = Math.Max(1, (int)Math.Ceiling((pageWidth / columnWidth) - 0.001));
+
+        // Tiles hold one page and column width, zoom, and display scale; a change to any of them discards them all.
+        var tileKey = (Math.Round(pageWidth, 1), Math.Round(columnWidth, 1), _zoom, dpiScale);
+        if (tileKey != _tileKey)
+        {
+            InvalidateTiles();
+            _tileKey = tileKey;
+        }
+
+        var renderer = _rendererProvider();
+        if (renderer is null) return;
 
         if (parentViewportHeight <= 0) parentViewportHeight = docHeight;
         double visibleBottom = Math.Min(docHeight, visibleTop + parentViewportHeight);
@@ -1437,15 +1450,21 @@ internal sealed class HtmlViewElement : UiElement
 
         int firstTile = Math.Clamp((int)(bufferTop / DefaultTileHeight), 0, totalTiles - 1);
         int lastTile = Math.Clamp((int)(bufferBottom / DefaultTileHeight), 0, totalTiles - 1);
+        // Only the columns in view: at most two, when the page is scrolled part of a column sideways.
+        int firstColumn = Math.Clamp((int)(visibleLeft / columnWidth), 0, totalColumns - 1);
+        int lastColumn = Math.Clamp((int)((visibleLeft + viewportWidth - 0.5) / columnWidth), firstColumn, totalColumns - 1);
 
         for (int i = firstTile; i <= lastTile; i++)
         {
-            EnsureTile(i, pageWidth, dpiScale, renderer);
-            if (_tiles.TryGetValue(i, out var tile) && tile.Handle.IsValid)
+            for (int column = firstColumn; column <= lastColumn; column++)
             {
-                var srcRect = new BRect(0, 0, tile.PixelWidth, tile.PixelHeight);
-                var destRect = new BRect(Bounds.X, Bounds.Y + (i * DefaultTileHeight), pageWidth, tile.HeightDip);
-                context.RenderList.DrawImage(tile.Handle, srcRect, destRect, 1.0);
+                EnsureTile((i, column), pageWidth, columnWidth, dpiScale, renderer);
+                if (_tiles.TryGetValue((i, column), out var tile) && tile.Handle.IsValid)
+                {
+                    var srcRect = new BRect(0, 0, tile.PixelWidth, tile.PixelHeight);
+                    var destRect = new BRect(Bounds.X + (column * columnWidth), Bounds.Y + (i * DefaultTileHeight), tile.WidthDip, tile.HeightDip);
+                    context.RenderList.DrawImage(tile.Handle, srcRect, destRect, 1.0);
+                }
             }
         }
 

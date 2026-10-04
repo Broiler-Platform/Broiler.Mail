@@ -187,6 +187,11 @@ public sealed class HtmlPreviewZoomTests
         fixture.Session.SetFocus(view.Content);
         Assert.True(fixture.Press(0x27)); // Right
         Assert.True(scroll.HorizontalOffset > 0);
+        // Shift+wheel scrolls sideways too.
+        double sideways = scroll.HorizontalOffset;
+        Assert.True(fixture.Session.DispatchInput(Wheel(300, 200, -1, InputModifiers.Shift)));
+        fixture.Session.RenderFrame();
+        Assert.True(scroll.HorizontalOffset > sideways, $"Offset {scroll.HorizontalOffset}, before {sideways}.");
         // The page stays laid out at the viewport's width, not at its own wider extent.
         Assert.Equal(view.Content.ContentWidth / 2.5, view.Snapshot!.Width, 1);
     }
@@ -293,32 +298,101 @@ public sealed class HtmlPreviewZoomTests
     }
 
     [Theory]
-    [InlineData(2.0)]
-    [InlineData(2.5)]
-    public void AtTheLargestZoomWideTilesStayWithinThePixelAndByteBudgets(double dpiScale)
+    [InlineData(2.0, 1400)]
+    [InlineData(2.5, 900)]
+    public void AtTheLargestZoomWideTilesKeepTheDisplayScaleWithinThePixelAndByteBudgets(double dpiScale, int viewportWidth)
     {
         // One address far wider than the width budget, and lines wider than the zoomed page.
         string html = $"<p>{new string('w', 3000)}</p>" + string.Concat(Enumerable.Range(1, 40).Select(index =>
             $"<p>Line {index}: https://example.test/{new string('x', 60)}</p>"));
         var renderer = new PixelRenderer();
         var view = new HtmlViewElement(html, () => renderer, _ => { }, () => dpiScale) { Zoom = PreviewZoom.Maximum };
-        BSize size = view.Measure(new BSize(900, 700));
+        BSize size = view.Measure(new BSize(viewportWidth, 700));
         // The overflow is held at the width budget: 8,192 CSS pixels, drawn three times as large.
         Assert.Equal(HtmlViewElement.MaxBudgetWidth * PreviewZoom.Maximum, size.Width, 1);
-        var host = new Host { Width = 900, Height = 700, Scale = dpiScale };
+        var host = new Host { Width = viewportWidth, Height = 700, Scale = dpiScale };
         var session = new StandardUiSessionBuilder().Build(host);
 
-        int tiles = (int)Math.Ceiling(size.Height / HtmlViewElement.DefaultTileHeight);
-        for (int tileIndex = 0; tileIndex < tiles; tileIndex++)
+        // Across the first two rows, column by column: each tile is about 23 MB, so the cache reaches
+        // its byte budget well before its count limit.
+        int columns = (int)Math.Ceiling(size.Width / viewportWidth), largestCount = 0;
+        for (int row = 0; row < 2; row++)
+            for (int column = 0; column < columns; column++)
+            {
+                view.Arrange(new BRect(-column * viewportWidth, -row * HtmlViewElement.DefaultTileHeight, size.Width, size.Height));
+                view.Render(new UiRenderContext(new BRenderList(), session, host));
+                // At the display scale, within the pixel cap, and no side longer than a Direct2D bitmap takes.
+                Assert.All(view.CachedTileSizes, tile =>
+                {
+                    Assert.Equal(Math.Ceiling(tile.WidthDip * dpiScale), tile.PixelWidth);
+                    Assert.Equal(Math.Ceiling(tile.HeightDip * dpiScale), tile.PixelHeight);
+                    Assert.True((long)tile.PixelWidth * tile.PixelHeight <= HtmlViewElement.MaxTilePixels
+                        && tile.PixelWidth <= HtmlViewElement.MaxTileSide && tile.PixelHeight <= HtmlViewElement.MaxTileSide, $"{tile}");
+                });
+                Assert.True(view.CachedTileBytes <= HtmlViewElement.MaxCachedTileBytes, $"{view.CachedTileBytes} bytes cached");
+                Assert.Equal(view.CachedTileSizes.Sum(tile => (long)tile.PixelWidth * tile.PixelHeight * 4), view.CachedTileBytes);
+                largestCount = Math.Max(largestCount, view.CachedTileCount);
+            }
+
+        // Tiles were let go while the cache held fewer than its count limit: the byte budget did that.
+        Assert.NotEmpty(renderer.Released);
+        Assert.True(largestCount < HtmlViewElement.MaxCachedTiles, $"{largestCount} tiles cached at most.");
+    }
+
+    [Fact]
+    public void AShortTileOfAWidePageKeepsItsSidesWithinWhatDirect2DTakes()
+    {
+        // The short last tile of a 7,680-DIP page at 300 % is far under the pixel cap, but 23,040 pixels wide.
+        var (scale, pixelWidth, pixelHeight) = HtmlViewElement.TilePixelSize(7680, 100, 3.0);
+        Assert.True(scale < 3.0);
+        Assert.InRange(pixelWidth, 1, HtmlViewElement.MaxTileSide);
+        Assert.InRange(pixelHeight, 1, HtmlViewElement.MaxTileSide);
+        Assert.True((long)pixelWidth * pixelHeight <= HtmlViewElement.MaxTilePixels);
+    }
+
+    [Theory]
+    [InlineData(1.5, 2.0)]
+    [InlineData(2.0, 2.0)]
+    [InlineData(2.0, 3.0)]
+    public void APageWiderThanTheViewportIsDrawnInColumnsAtTheDisplayScale(double dpiScale, double zoom)
+    {
+        // An unbroken link running past the window, and below it unbroken text running three times as
+        // far; the paragraphs after them fit the window.
+        string html = $"<p><a href='https://example.test/far'>{new string('w', 100)}</a></p><p>{new string('w', 300)}</p>" + TallDocument;
+        var renderer = new PixelRenderer();
+        var view = new HtmlViewElement(html, () => renderer, _ => { }, () => dpiScale) { Zoom = zoom };
+        const int width = 600;
+        BSize size = view.Measure(new BSize(width, 400));
+        var far = view.Snapshot!.Links.First(link => link.Href == "https://example.test/far").Bounds;
+        var link = new BRect(far.X * zoom, far.Y * zoom, far.Width * zoom, far.Height * zoom);
+        // The column the link ends in (with at least 20 DIPs of it), and the next, which it does not reach.
+        int last = (int)((link.Right - 20) / width), after = last + 1;
+        Assert.True(last >= 2 && (after + 1) * width < size.Width, $"The link at {link} should end in the third column or later, on a page {size.Width} wide.");
+
+        var host = new Host { Width = width, Height = 400, Scale = dpiScale };
+        var session = new StandardUiSessionBuilder().Build(host);
+        BPixelBuffer ColumnShown(int column)
         {
-            view.Arrange(new BRect(0, -tileIndex * HtmlViewElement.DefaultTileHeight, size.Width, size.Height));
-            view.Render(new UiRenderContext(new BRenderList(), session, host));
-            // Within the pixel cap, and no side longer than a Direct2D bitmap takes.
-            Assert.All(view.CachedTileSizes, tile => Assert.True((long)tile.PixelWidth * tile.PixelHeight <= HtmlViewElement.MaxTilePixels
-                && tile.PixelWidth <= HtmlViewElement.MaxTileSide && tile.PixelHeight <= HtmlViewElement.MaxTileSide, $"{tile}"));
-            Assert.True(view.CachedTileBytes <= HtmlViewElement.MaxCachedTileBytes, $"{view.CachedTileBytes} bytes cached");
-            Assert.Equal(view.CachedTileSizes.Sum(tile => (long)tile.PixelWidth * tile.PixelHeight * 4), view.CachedTileBytes);
+            // Scrolled sideways to the column: it alone is drawn in view, at the display scale.
+            view.Arrange(new BRect(-column * width, 0, size.Width, size.Height));
+            var list = new BRenderList();
+            view.Render(new UiRenderContext(list, session, host));
+            var draws = list.Commands.OfType<BRenderCommand.DrawImage>().ToList();
+            Assert.All(draws, draw => Assert.InRange(draw.Destination.X, -0.5, width));
+            var tile = draws.Single(draw => Math.Abs(draw.Destination.X) < 0.5 && Math.Abs(draw.Destination.Y) < 0.5);
+            Assert.Equal(width, tile.Destination.Width, 3);
+            var pixels = renderer.Pixels[tile.Image];
+            Assert.Equal((int)Math.Ceiling(width * dpiScale), pixels.Width);
+            return pixels;
         }
+
+        // Each column shows its own part of the page: the link's end where the layout puts it, and past
+        // it no link at all, although the page's left edge has one at that height.
+        double left = last * width;
+        var end = new BRect(Math.Max(link.X, left) - left, link.Y, link.Right - Math.Max(link.X, left), link.Height);
+        Assert.True(HasLinkColor(ColumnShown(last), end, 0, dpiScale), $"No link colour at {end} in column {last}, display {dpiScale}, zoom {zoom}.");
+        var band = new BRect(0, link.Y, width, link.Height);
+        Assert.False(HasLinkColor(ColumnShown(after), band, 0, dpiScale), $"Link colour in column {after}, past the link's end, display {dpiScale}, zoom {zoom}.");
     }
 
     [Fact]
