@@ -1,9 +1,12 @@
 using System.Runtime.InteropServices;
+using Broiler.Mail.Infrastructure.Preview;
 using Broiler.Mail.Windows.Hosting;
+using Broiler.Mail.Windows.Preview;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Edit.Standard;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.Standard;
 using static Broiler.Native.Windows.WindowNative;
 
 namespace Broiler.Mail.Windows.Tests;
@@ -18,6 +21,36 @@ public sealed class NativeBridgeAttachmentTests
 {
     private const uint WmGetObject = 0x003D;
     private const int UiaRootObjectId = -25;
+
+    /// <summary>
+    /// Broiler.Hosting raises UI Automation structure changes once per changed parent when the session's
+    /// dispatcher next runs; with ImmediateUiDispatcher each change would be raised on its own, mid-operation.
+    /// </summary>
+    [Fact]
+    public async Task EveryWindowThatHostsABridgeRunsAQueuedDispatcher()
+    {
+        using (var fixture = HiddenMailWindow.Start())
+        {
+            Assert.NotNull(fixture.Ui(() => fixture.Window.AutomationBridge));
+            Assert.IsType<StandardQueuedUiDispatcher>(fixture.Ui(() => fixture.Window.Session.Dispatcher));
+        }
+
+        var preview = new TaskCompletionSource<IUiDispatcher>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<p>Agenda</p>", new HashSet<string>()), "Agenda as text", _ => { })
+                { ShowInTaskbar = false, Opacity = 0 };
+                window.Shown += (_, _) => { preview.TrySetResult(window.Session.Dispatcher); window.Close(); };
+                window.Run();
+            }
+            catch (Exception error) { preview.TrySetException(error); }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        Assert.IsType<StandardQueuedUiDispatcher>(await preview.Task.WaitAsync(TimeSpan.FromSeconds(30)));
+    }
 
     [Fact]
     public async Task BridgesAttachToTheNativeWindowsAndAnswerAutomationAndTextInput()

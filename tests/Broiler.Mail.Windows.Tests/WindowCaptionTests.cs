@@ -22,8 +22,8 @@ public sealed class WindowCaptionTests
     {
         if (!DwmCaption.IsSupported) return; // Older builds keep the default caption by design.
         // High contrast decides the palette over the saved theme; expect whatever the policy chooses.
-        bool darkWhenDark = AppearancePolicy.Resolve(AppTheme.Dark, MailSystemSettings.Query()).IsDark;
-        bool darkWhenLight = AppearancePolicy.Resolve(AppTheme.Light, MailSystemSettings.Query()).IsDark;
+        bool darkWhenDark = AppearancePolicy.Resolve(AppTheme.Dark, MailSystemSettings.Query(), MailSystemSettings.HighContrastTheme).IsDark;
+        bool darkWhenLight = AppearancePolicy.Resolve(AppTheme.Light, MailSystemSettings.Query(), MailSystemSettings.HighContrastTheme).IsDark;
         var palette = StandardControlPaint.Theme;
         var result = new TaskCompletionSource<(bool Created, bool Saved, bool Measured)>(TaskCreationOptions.RunContinuationsAsynchronously);
         var thread = new Thread(() =>
