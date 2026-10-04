@@ -35,6 +35,41 @@ public sealed class ScrollableMessageTextZoomTests
         Assert.InRange(scroll.VerticalOffset / Range(), 0.45, 0.55);
     }
 
+    [Fact]
+    public void AZoomWhileTheTextIsHiddenKeepsItsPlaceForWhenItIsShown()
+    {
+        // The preview's plain text is hidden while the HTML is shown, which is when a reader zooms.
+        var text = new ScrollableMessageText
+        {
+            Text = string.Join("\n\n", Enumerable.Range(1, 80).Select(index => $"Paragraph {index}: a line of plain text that wraps in a narrow window.")),
+        };
+        using var session = new StandardUiSessionBuilder().WithDispatcher(new ImmediateUiDispatcher()).Build(new Host());
+        session.AddRoot(text);
+        session.RenderFrame();
+        var scroll = Assert.IsType<StandardScrollView>(text.Children[0]);
+        double Range() => scroll.ExtentSize.Height - scroll.ViewportSize.Height;
+        scroll.SetOffset(new BPoint(0, Math.Round(Range() / 2)));
+        session.RenderFrame();
+
+        // Hidden, the scroll view is laid out at no size, so its extent says nothing about the place.
+        text.Visibility = UiVisibility.Collapsed;
+        session.RenderFrame();
+        text.Zoom = 2;
+        session.RenderFrame();
+        text.Visibility = UiVisibility.Visible;
+        session.RenderFrame();
+        Assert.InRange(scroll.VerticalOffset / Range(), 0.45, 0.55);
+
+        // A new text starts at its top, even with a zoom's place still to restore.
+        text.Visibility = UiVisibility.Collapsed;
+        session.RenderFrame();
+        text.Zoom = 1.5;
+        text.ScrollToStart();
+        text.Visibility = UiVisibility.Visible;
+        session.RenderFrame();
+        Assert.Equal(0, scroll.VerticalOffset);
+    }
+
     private sealed class Host : IUiHost
     {
         public BSize ViewportSize => new(600, 400);
