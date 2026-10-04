@@ -389,28 +389,55 @@ public sealed class FeedbackPolicyTests
         Assert.Equal(retained, composer.Status);
     }
 
-    public static TheoryData<string> Outcomes() =>
-    [
-        "settings validation", "account validation in a collapsed section", "account section collapsed",
-        "composer copies collapsed", "composer check failed", "account test canceled", "inbox receive canceled",
-        "inbox retry succeeded", "inbox load older reached the last page", "composer draft discarded",
-        "composer send accepted", "background results while typing",
-    ];
+    private const string Wide = "1100x720";
+    // Compact inbox, and forms that scroll.
+    private const string SmallLargeText = "640x480 at 200 % text";
+
+    public static TheoryData<string, string> Outcomes()
+    {
+        var data = new TheoryData<string, string>();
+        foreach (string layout in new[] { Wide, SmallLargeText })
+            foreach (string outcome in new[]
+            {
+                "settings validation", "account validation in a collapsed section", "account section collapsed",
+                "composer copies collapsed", "composer check failed", "account test canceled", "inbox receive canceled",
+                "inbox retry succeeded", "inbox load older reached the last page", "inbox load older reached the last page in the reader",
+                "composer draft discarded", "composer send accepted", "background results while typing",
+            })
+                data.Add(outcome, layout);
+        return data;
+    }
 
     /// <summary>
     /// After validation, cancel, retry, disclosure collapse, and a command that disables itself, on
-    /// every surface, focus is on a control that can take it, in the tab the user is on, and Tab
-    /// continues from there instead of restarting at the tabs. Later results never move it.
+    /// every surface, focus is on a control that can take it, in the tab the user is on, scrolled
+    /// into view, and Tab continues from there instead of restarting at the tabs. Later results
+    /// never move it.
     /// </summary>
     [Theory]
     [MemberData(nameof(Outcomes))]
-    public async Task FocusLandsOnAUsableControlAfterEveryOutcome(string outcome)
+    public async Task FocusLandsOnAUsableControlAfterEveryOutcome(string outcome, string layout)
     {
-        using var fixture = Fixture.Open();
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(layout == Wide ? 1 : 2));
+        try { await FocusLandsOnAUsableControl(outcome, layout); }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    private static async Task FocusLandsOnAUsableControl(string outcome, string layout)
+    {
+        using var fixture = layout == Wide ? Fixture.Open() : Fixture.Open(width: 640, height: 480);
         var model = fixture.Model;
         var session = fixture.Session;
         void Show(string id) { fixture.Shell.Navigation.SelectTab(id); fixture.Settle(); }
         void Press(StandardButton button) { session.SetFocus(button); button.Click(); fixture.Settle(); }
+        // Tab there, as a user would, which also scrolls the form to it.
+        void TabTo(UiElement target)
+        {
+            var navigation = fixture.Shell.CreateKeyboardNavigation(session);
+            for (int step = 0; step < 40 && session.FocusedElement != target; step++) navigation.MoveFocus(1);
+            Assert.Same(target, session.FocusedElement);
+        }
         FormSection SentCopy() => Descendants(fixture.Tab("account")).OfType<FormSection>().Single(section => section.Toggle is not null);
         FormSection Copies() => Descendants(fixture.Tab("compose")).OfType<FormSection>().Single(section => section.Toggle is not null);
         void AppendSentCopies()
@@ -423,6 +450,8 @@ public sealed class FeedbackPolicyTests
 
         string tab;
         UiElement expected;
+        // Where focus moved, the control is entirely in view.
+        bool entirelyInView = true;
         switch (outcome)
         {
             case "settings validation":
@@ -446,7 +475,7 @@ public sealed class FeedbackPolicyTests
                 AppendSentCopies();
                 SentCopy().IsExpanded = true;
                 fixture.Settle();
-                session.SetFocus(fixture.Field(tab, "Sent folder path"));
+                TabTo(fixture.Field(tab, "Sent folder path"));
                 SentCopy().Toggle!.Click();
                 fixture.Settle();
                 expected = SentCopy().Toggle!;
@@ -456,7 +485,7 @@ public sealed class FeedbackPolicyTests
                 Show(tab = "compose");
                 Copies().Toggle!.Click();
                 fixture.Settle();
-                session.SetFocus(Descendants(Copies().Content).OfType<StandardEdit>().First());
+                TabTo(Descendants(Copies().Content).OfType<StandardEdit>().First());
                 Copies().Toggle!.Click();
                 fixture.Settle();
                 expected = Copies().Toggle!;
@@ -505,13 +534,38 @@ public sealed class FeedbackPolicyTests
                 Assert.False(model.Inbox.CanLoadOlder);
                 expected = Descendants(fixture.Tab(tab)).OfType<StandardListView>().Single();
                 break;
+            case "inbox load older reached the last page in the reader":
+            {
+                tab = "inbox";
+                fixture.PageOlderMessages();
+                await fixture.ReceiveAsync();
+                await model.Inbox.SelectAsync(model.Inbox.Messages[0].Key);
+                fixture.Settle();
+                Assert.True(fixture.Shell.Inbox.OpenSelected());
+                fixture.Settle();
+                var inbox = Descendants(fixture.Tab(tab)).OfType<AdaptiveInboxLayout>().Single();
+                Assert.Equal(layout != Wide, inbox.ShowsReaderOnly);
+                Press(fixture.Button("Load older", tab));
+                Assert.False(model.Inbox.CanLoadOlder);
+                // The list it extended, or while the reader is shown alone (the list pane hidden),
+                // Back to inbox, which leads there.
+                expected = inbox.ShowsReaderOnly ? fixture.Button("Back to inbox", tab) : Descendants(fixture.Tab(tab)).OfType<StandardListView>().Single();
+                break;
+            }
             case "composer draft discarded":
+            {
                 model.Composer.StartNew();
                 Show(tab = "compose");
+                // Tab to the body as when writing; at a small size the form scrolls, and New message,
+                // which returns above the fields after the discard, starts out of view.
+                TabTo(fixture.ComposerBody);
+                var form = Descendants(fixture.Tab(tab)).OfType<FormSurface>().Single().Content.Scroll;
+                Assert.Equal(layout != Wide, form.VerticalOffset > 0);
                 Press(fixture.Button("Discard draft"));
                 Assert.False(model.Composer.HasDraft);
                 expected = fixture.Button("New message");
                 break;
+            }
             case "composer send accepted":
                 model.Composer.StartNew();
                 model.Composer.Edit("to@example.test", "", "", "Plans", "Body");
@@ -525,17 +579,27 @@ public sealed class FeedbackPolicyTests
                 model.Composer.StartNew();
                 model.Composer.Edit("to@example.test", "", "", "Plans", "Body");
                 Show(tab = "compose");
-                fixture.Button("Check draft").Click();
                 expected = fixture.ComposerBody;
-                session.SetFocus(expected);
+                fixture.Field(tab, "To").Text = "to@example.test";
+                TabTo(expected);
+                fixture.ComposerBody.SetPlainText("Still typing");
+                fixture.Settle();
+                // Checked, then left alone while other work finishes: the confirmation goes away by
+                // itself, not because of an edit.
+                fixture.Button("Check draft").Click();
+                fixture.Settle();
+                Assert.Equal(FeedbackKind.Success, model.Composer.StatusKind);
                 model.Settings.WindowWidth = "wide";
                 await model.Settings.SaveAsync();
                 await model.Inbox.ReceiveAsync();
-                fixture.ComposerBody.SetPlainText("Still typing");
                 fixture.Clock.Advance(SaveViewModel.SuccessDisplayTime);
                 fixture.Settle();
                 Assert.Equal("WindowWidth", model.Settings.ValidationField);
                 Assert.Equal("", model.Composer.Status);
+                Assert.Equal("Still typing", model.Composer.PlainText);
+                // Nothing moved focus here. Lines shown below the form's buttons shorten its view, so
+                // at a small size part of the body can go out of view (the form surface's layout).
+                entirelyInView = false;
                 break;
             default:
                 throw new ArgumentOutOfRangeException(nameof(outcome));
@@ -544,11 +608,33 @@ public sealed class FeedbackPolicyTests
         Assert.Equal(tab, fixture.Shell.Navigation.SelectedTab?.Id);
         Assert.Same(expected, session.FocusedElement);
         Assert.True(expected.CanFocus);
+        AssertScrolledIntoView(session, expected, entirelyInView);
         var stops = MailKeyboardNavigation.TabStops(fixture.Tab(tab)).ToList();
         int index = stops.IndexOf(expected);
         Assert.True(index >= 0, "The focused control is not a tab stop of its tab.");
         fixture.Shell.CreateKeyboardNavigation(session).MoveFocus(1);
         Assert.Same(index + 1 < stops.Count ? stops[index + 1] : fixture.Shell.Navigation, session.FocusedElement);
+    }
+
+    /// <summary>
+    /// Within every scroll view around it, the control is entirely in view, or for one taller than
+    /// the view (such as the body editor), or when <paramref name="entirely"/> is false, at least
+    /// part of it is.
+    /// </summary>
+    private static void AssertScrolledIntoView(UiSession session, UiElement element, bool entirely)
+    {
+        session.RenderFrame();
+        BRect bounds = element.Bounds;
+        Assert.True(bounds.Width > 0 && bounds.Height > 0, $"The focused control has no area: {bounds}.");
+        for (var parent = element.Parent; parent is not null; parent = parent.Parent)
+        {
+            if (parent is not Broiler.UI.ScrollView.Standard.StandardScrollView scroll) continue;
+            BRect view = scroll.ContentBounds;
+            bool shown = entirely && bounds.Height <= view.Height + 0.5
+                ? bounds.Top >= view.Top - 0.5 && bounds.Bottom <= view.Bottom + 0.5
+                : bounds.Top < view.Bottom && bounds.Bottom > view.Top;
+            Assert.True(shown, $"The focused control at {bounds} is outside its scroll view's visible area {view}.");
+        }
     }
 
     [Fact]
@@ -630,7 +716,8 @@ public sealed class FeedbackPolicyTests
         public InlineFeedback SettingsFeedback => Descendants(Tab("settings")).OfType<InlineFeedback>().Single();
         public StandardLabel Footer => (StandardLabel)Shell.Window.Children[0].Children[0];
 
-        public static Fixture Open(SubmissionStatus sendResult = SubmissionStatus.Accepted, string emailAddress = "test@example.test", TestOutgoingTester? outgoing = null)
+        public static Fixture Open(SubmissionStatus sendResult = SubmissionStatus.Accepted, string emailAddress = "test@example.test",
+            TestOutgoingTester? outgoing = null, double width = 1100, double height = 720)
         {
             var directory = new TestDirectory();
             var account = TestDirectory.Profile() with
@@ -651,7 +738,7 @@ public sealed class FeedbackPolicyTests
                 new(receiver, dispatcher),
                 new ComposerViewModel(dispatcher: dispatcher, sender: sender) { Clock = clock });
             var shell = new MailShellView(model);
-            var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host());
+            var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(width, height));
             session.AddRoot(shell.Window);
             shell.Navigation.SelectTab("inbox");
             session.RenderFrame();
@@ -705,9 +792,9 @@ public sealed class FeedbackPolicyTests
             Task.FromResult(new SendResult(Result, Message));
     }
 
-    private sealed class Host : IUiHost
+    private sealed class Host(double width, double height) : IUiHost
     {
-        public BSize ViewportSize => new(1100, 720);
+        public BSize ViewportSize => new(width, height);
         public double Scale => 1;
         public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
         public void Invalidate(UiInvalidation invalidation) { }
