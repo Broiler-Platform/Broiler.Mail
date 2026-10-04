@@ -61,7 +61,7 @@ public sealed class SmtpSetupTests
     }
 
     [Fact]
-    public async Task AFailedSmtpTestIsExplainedBesideTheOutgoingStepOnly()
+    public async Task AFailedSmtpTestIsExplainedBesideTheOutgoingStepAndLeavesReceivingAlone()
     {
         var (profile, credentials) = await SavedAccountAsync();
         var tester = new TestOutgoingTester
@@ -173,11 +173,19 @@ public sealed class SmtpSetupTests
         Assert.Equal(stops.IndexOf(fixture.Button("Forget SMTP password")) + 1, stops.IndexOf(fixture.TestSmtp));
         Assert.Equal("Test connection", ((StandardButton)stops[^1]).Text);
 
-        // Typed text is never replaced by the saved password: it has to be saved first.
-        fixture.SmtpPassword.Text = "typed-but-not-saved";
-        Assert.False(fixture.TestSmtp.IsEnabled);
+        // Typed text is never replaced by the saved password: it has to be saved first. Typing announces nothing.
+        fixture.Announced.Clear();
+        string typed = "";
+        foreach (char c in "typed-but-not-saved")
+        {
+            fixture.SmtpPassword.Text = typed += c;
+            fixture.Session.RenderFrame();
+            Assert.False(fixture.TestSmtp.IsEnabled);
+        }
         fixture.SmtpPassword.Text = "";
+        fixture.Session.RenderFrame();
         Assert.True(fixture.TestSmtp.IsEnabled);
+        Assert.Empty(fixture.Announced);
 
         // Without a saved SMTP password there is nothing to sign in with.
         await fixture.Account.ForgetPasswordAsync(MailProtocol.Smtp);
