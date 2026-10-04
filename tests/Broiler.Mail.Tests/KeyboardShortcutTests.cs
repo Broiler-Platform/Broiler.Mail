@@ -222,6 +222,37 @@ public sealed class KeyboardShortcutTests
         Assert.Empty(MailKeyboardNavigation.TabStops(root));
     }
 
+    /// <summary>
+    /// A focused area that stops scrolling is no stop any more. Broiler.UI hands its focus to the next stop when the
+    /// area is next drawn (ADR 0032), through the session's dispatcher, so Mail needs no rule of its own for the
+    /// inbox notice, the message header or a form's status area.
+    /// </summary>
+    [Fact]
+    public void AFocusedBoundedAreaThatStopsScrollingHandsFocusOn()
+    {
+        var notice = new StandardLabel { Text = string.Join(" ", Enumerable.Repeat("A notice long enough to wrap many times.", 30)), Wrapping = UiTextWrapping.Wrap };
+        var content = new StandardPanel();
+        content.AddChild(notice);
+        var area = new BoundedScrollArea(content, 0.4, "Inbox notice");
+        var receive = new StandardButton { Text = "Receive" };
+        var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
+        root.AddChild(area);
+        root.SetDock(area, UiDock.Top);
+        root.AddChild(receive);
+        var dispatcher = new TestQueueDispatcher();
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(400, 300));
+        session.AddRoot(root);
+        session.RenderFrame();
+        session.SetFocus(area.Scroll);
+        Assert.Same(area.Scroll, session.FocusedElement);
+
+        notice.Text = "The inbox is empty.";
+        session.RenderFrame();
+        dispatcher.Drain();
+        Assert.False(area.Scroll.CanFocus);
+        Assert.Same(receive, session.FocusedElement);
+    }
+
     [Fact]
     public async Task SettingsListsEveryShortcutFromTheTable()
     {

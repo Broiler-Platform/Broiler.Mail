@@ -41,7 +41,8 @@ internal static class FocusNavigation
     public static void KeepFocusUsable(UiSession session, UiElement scope, UiElement? preferred = null)
     {
         // Only controls that normally take focus: a read-only scroll view is a tab stop through
-        // FocusWhenScrollable, without being Focusable, and loses the stop when its content stops scrolling.
+        // FocusWhenScrollable, without being Focusable, and when it stops being one Broiler.UI hands its
+        // focus to the next stop itself (ADR 0032).
         if (session.FocusedElement is not { Focusable: true, CanFocus: false } focused || !focused.IsDescendantOf(scope)) return;
         // A tab stop, not merely focusable: a collapsed split pane stays visible but is hidden from
         // the keyboard and from screen readers.
