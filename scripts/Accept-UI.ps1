@@ -242,15 +242,35 @@ function Invoke-Run([string]$scenario, [string]$size, [string]$theme) {
     $process = Start-Process -FilePath $Executable -PassThru -WindowStyle Normal -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
         -ArgumentList $arguments
     $null = $process.Handle
+    try {
+        return Invoke-Checks $scenario $process $stderr $result
+    }
+    finally {
+        # Never leave a demo process behind: it would lock the published app for the next run.
+        if (!$process.HasExited) { $process.Kill(); $process.WaitForExit() }
+    }
+}
+
+function Invoke-Checks([string]$scenario, $process, [string]$stderr, $result) {
     for ($i = 0; $i -lt 150 -and $process.MainWindowHandle -eq 0 -and !$process.HasExited; $i++) { Start-Sleep -Milliseconds 100; $process.Refresh() }
     if ($process.MainWindowHandle -eq 0) {
         $result.findings += "START: no window appeared (exit $($process.ExitCode))."
-        if (!$process.HasExited) { $process.Kill() }
         return $result
     }
     Start-Sleep -Milliseconds $SettleMilliseconds
-    $window = $process.MainWindowHandle
-    $render = [Acceptance]::FindWindowEx($window, [IntPtr]::Zero, 'BroilerGraphicsDirect2DRenderHost', $null)
+    # The main window handle can briefly be the console window of the published exe; wait for the
+    # top-level window that has the render child.
+    $render = [IntPtr]::Zero
+    for ($i = 0; $i -lt 50 -and $render -eq [IntPtr]::Zero -and !$process.HasExited; $i++) {
+        $process.Refresh()
+        $window = $process.MainWindowHandle
+        $render = [Acceptance]::FindWindowEx($window, [IntPtr]::Zero, 'BroilerGraphicsDirect2DRenderHost', $null)
+        if ($render -eq [IntPtr]::Zero) { Start-Sleep -Milliseconds 100 }
+    }
+    if ($render -eq [IntPtr]::Zero) {
+        $result.findings += 'START: the window has no render child.'
+        return $result
+    }
     $result.dpiScale = [Acceptance]::GetDpiForWindow($window) / 96.0
     Save-Screenshot $window (Join-Path $Output "$name.png")
 

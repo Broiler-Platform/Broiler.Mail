@@ -452,7 +452,9 @@ function Invoke-Variant([string]$variant) {
     }
     finally {
         if (!$process.HasExited) {
-            [RefreshCheck]::PostMessage($process.MainWindowHandle, 0x10, [IntPtr]0, [IntPtr]0) | Out-Null
+            # Close the window found above: MainWindowHandle can be the console window of the published exe.
+            $closeTarget = if ($window) { $window } else { $process.MainWindowHandle }
+            [RefreshCheck]::PostMessage($closeTarget, 0x10, [IntPtr]0, [IntPtr]0) | Out-Null
             if (!$process.WaitForExit(5000)) { $process.Kill(); $process.WaitForExit(); $result.findings += 'CLOSE: the window did not close within 5 seconds.' }
             elseif ($process.ExitCode -ne 0) { $result.findings += "EXIT: exit code $($process.ExitCode)." }
         }
