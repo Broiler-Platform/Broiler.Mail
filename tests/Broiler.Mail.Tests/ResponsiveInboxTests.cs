@@ -12,9 +12,12 @@ using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
+using Broiler.UI.Forms;
+using Broiler.UI.Forms.Standard;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.Splitter.Standard;
 using Broiler.UI.Standard;
+using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Tests;
 
@@ -279,6 +282,39 @@ public sealed class ResponsiveInboxTests
         model.Dispose();
     }
 
+    /// <summary>
+    /// A list problem's explanation and its Retry keep the toolbar's inset from the list pane's edges, so
+    /// the accent stripe and the button's border stay clear of the frame drawn around the tabs.
+    /// </summary>
+    [Theory]
+    [InlineData(640)]
+    [InlineData(1100)]
+    public async Task TheListNoticeAndItsRetryKeepTheToolbarsInset(int width)
+    {
+        using var fixture = await Fixture.OpenAsync(width);
+        fixture.Receiver.Inbox = (_, _) => throw new MailConnectionException("The server did not respond.");
+        await fixture.Model.ReceiveAsync();
+        fixture.Dispatcher.DrainUntil(() => !fixture.Model.IsBusy);
+        fixture.Session.RenderFrame();
+
+        var receive = fixture.Button("Receive mail");
+        double inset = ((StandardToolbar)receive.Parent!).Padding;
+        BRect pane = fixture.Split.FirstPane!.Bounds;
+        var notice = Descendants(fixture.Content).OfType<InlineFeedback>().First();
+        var retry = fixture.Button("Retry receiving");
+        var row = retry.Parent!;
+        Assert.Equal(FeedbackKind.Error, notice.Kind);
+        foreach (var (name, bounds) in new[] { ("notice", notice.Bounds), ("Retry row", row.Bounds) })
+        {
+            Assert.True(Math.Abs(bounds.Left - (pane.Left + inset)) < 0.5, $"The {name} starts at {bounds.Left}, the list pane at {pane.Left}.");
+            Assert.True(Math.Abs(bounds.Right - (pane.Right - inset)) < 0.5, $"The {name} ends at {bounds.Right}, the list pane at {pane.Right}.");
+        }
+        Assert.Equal(pane.Top + inset, notice.Bounds.Top, 0.5);
+        Assert.True(fixture.List.Bounds.Top >= row.Bounds.Bottom + inset - 0.5, $"The list starts at {fixture.List.Bounds.Top}, the Retry row ends at {row.Bounds.Bottom}.");
+        // Retry lines up with the first of the toolbar's commands above it.
+        Assert.Equal(receive.Bounds.Left, retry.Bounds.Left, 0.5);
+    }
+
     [Fact]
     public async Task AtTwiceTheTextSizeTheHeaderAndNoticeScrollInsteadOfCrowdingOutTheContent()
     {
@@ -358,7 +394,8 @@ public sealed class ResponsiveInboxTests
         public StandardListView List => Descendants(Content).OfType<StandardListView>().Single();
         public UiElement Reader => Split.SecondPane!;
         public ScrollableMessageText ReaderText => Descendants(Content).OfType<ScrollableMessageText>().Single();
-        public StandardButton BackButton => Descendants(Content).OfType<StandardButton>().Single(button => button.Text == "Back to inbox");
+        public StandardButton BackButton => Button("Back to inbox");
+        public StandardButton Button(string text) => Descendants(Content).OfType<StandardButton>().Single(button => button.Text == text);
 
         public static MailMessageSummary[] CreateMessages(AccountProfile account, int count, DateTimeOffset? received = null) => Enumerable.Range(1, count).Reverse()
             .Select(uid => new MailMessageSummary

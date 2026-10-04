@@ -105,8 +105,9 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         listRetryRow.AddChild(listRetry);
         listNotice.AddChild(listFeedback);
         listNotice.AddChild(listRetryRow);
-        // A long notice at a large text size scrolls instead of leaving the list no room.
-        var noticeArea = new BoundedScrollArea(listNotice, 0.4, "Inbox notice");
+        // A long notice at a large text size scrolls instead of leaving the list no room. It keeps the
+        // toolbar's inset, so its accent and Retry stay clear of the frame around the pane.
+        var noticeArea = new BoundedScrollArea(new Inset(listNotice, toolbar.Padding, toolbar.Padding), 0.4, "Inbox notice");
         listPane.AddChild(noticeArea);
         listPane.SetDock(noticeArea, UiDock.Top);
         listPane.AddChild(list);
