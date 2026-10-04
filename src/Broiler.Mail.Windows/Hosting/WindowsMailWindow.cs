@@ -119,8 +119,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _restore = restore;
         _normal = restore.Normal;
         _maximized = restore.Maximized;
-        // A preview opens with the shell's current theme, so its caption matches.
-        _htmlPreview = new WindowsHtmlPreviewHost(() => _appearance?.Current?.IsDark == true);
+        // A preview opens with the shell's current theme, so its caption matches and its zoom starts at the text size.
+        _htmlPreview = new WindowsHtmlPreviewHost(() => _appearance?.Current);
         _shell = new MailShellView(model, _htmlPreview, demo is null ? null : DemoApplication.CreateDateFormatter());
         _session.AddRoot(_shell.Window);
         _keyboard = _shell.CreateKeyboardNavigation(_session);

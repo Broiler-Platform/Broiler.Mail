@@ -50,6 +50,8 @@ using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
+using Broiler.UI.Toolbar;
+using Broiler.UI.Toolbar.Standard;
 using static Broiler.Native.Windows.WindowNative;
 using HtmlBitmap = Broiler.HTML.Image.BBitmap;
 
@@ -95,6 +97,17 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private bool _truncationShown;
     private readonly StandardButton _toggleButton;
     private readonly StandardButton _loadImagesButton;
+    private readonly StandardButton _zoomOutButton;
+    private readonly StandardButton _zoomResetButton;
+    private readonly StandardButton _zoomInButton;
+    private readonly PreviewZoomWheel _zoomWheel = new();
+    // The system text size: a preview opens at it, and Reset returns to it.
+    private double _defaultZoom = 1;
+    // Until the reader zooms, the preview follows the system text size as it changes.
+    private bool _zoomFollowsSystem = true;
+    private string? _zoomAnnouncement;
+    private readonly object _themeGate = new();
+    private StandardThemeTokens? _pendingTheme;
     private readonly ScrollableMessageText _plainTextView;
     private readonly ScrollableHtmlView _htmlView;
     private readonly StandardPanel _root;
@@ -132,24 +145,37 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     /// <summary>
     /// Re-themes the open preview, from any thread: the header, buttons, plain text, and caption follow
     /// the shell's new palette and text size, as the main window does. The HTML page keeps its own
-    /// white canvas.
+    /// white canvas; its zoom follows the new text size unless the reader has zoomed.
     /// </summary>
     internal void ApplyTheme(StandardThemeTokens theme)
     {
         ArgumentNullException.ThrowIfNull(theme);
-        PostToUiThread(() =>
-        {
-            if (IsDisposed) return;
-            // The session and its controls only: the main window has already set the process-wide
-            // palette, and a theme queued here earlier must not overwrite a newer one there.
-            StandardControlPaint.SetSessionTheme(_session, theme);
-            StandardThemeController.ApplyToSubtree(_root, theme);
-            // The panel is not a themed control; its surface was taken from the theme at creation.
-            _root.Background = theme.Surface;
-            _dark = theme.IsDark;
-            if (NativeHandle != 0) WindowsTitleBar.ApplyDarkMode(NativeHandle, _dark);
-            Invalidate();
-        });
+        // Only the newest theme is applied. Nothing can be posted before the native window exists; a
+        // theme that arrives then waits for OnCreated instead of being dropped.
+        lock (_themeGate) _pendingTheme = theme;
+        PostToUiThread(ApplyPendingTheme);
+    }
+
+    private void ApplyPendingTheme()
+    {
+        StandardThemeTokens? theme;
+        lock (_themeGate) (theme, _pendingTheme) = (_pendingTheme, null);
+        if (theme is null || IsDisposed) return;
+        ApplyThemeToSession(theme);
+        if (NativeHandle != 0) WindowsTitleBar.ApplyDarkMode(NativeHandle, _dark);
+        Invalidate();
+    }
+
+    private void ApplyThemeToSession(StandardThemeTokens theme)
+    {
+        // The session and its controls only: the main window has already set the process-wide
+        // palette, and a theme queued here earlier must not overwrite a newer one there.
+        StandardControlPaint.SetSessionTheme(_session, theme);
+        StandardThemeController.ApplyToSubtree(_root, theme);
+        // The panel is not a themed control; its surface was taken from the theme at creation.
+        _root.Background = theme.Surface;
+        _dark = theme.IsDark;
+        FollowTextSize(theme.TextScale);
     }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=12DA3F
@@ -161,7 +187,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         Action<Uri> openExternal,
         string? rawHtml = null,
         IReadOnlyDictionary<string, MailEmbeddedImage>? embeddedImages = null,
-        bool dark = false,
+        StandardThemeTokens? theme = null,
         string? title = null)
         : base(new BWindowOptions
         {
@@ -182,7 +208,6 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _rawHtml = rawHtml;
         _embeddedImages = embeddedImages;
 
-        _dark = dark;
         _host = new WindowsUiHost(this, () => InputHandle);
         _dispatcher = new StandardQueuedUiDispatcher(() => PostToUiThread(DrainDispatcher));
         _session = new StandardUiSessionBuilder().WithDispatcher(_dispatcher).Build(_host);
@@ -209,10 +234,20 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         header.AddChild(_truncationNotice);
         header.SetDock(_truncationNotice, UiDock.Top);
 
-        var toolbar = new StandardPanel { StackOrientation = UiStackOrientation.Horizontal, Spacing = 8 };
+        // Wraps onto another row in a narrow window or at a large text size instead of clipping its buttons.
+        var toolbar = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 0, Spacing = 8, PreferredSize = new BSize(0, 36) };
         _toggleButton = new StandardButton { Text = "Show plain text" };
         _toggleButton.Clicked += (_, _) => ToggleView();
         toolbar.AddChild(_toggleButton);
+
+        // One zoom for the HTML and the plain text: Zoom out, the current level (which resets it), Zoom in.
+        _zoomOutButton = new StandardButton { Text = "Zoom out" };
+        _zoomOutButton.Clicked += (_, _) => StepZoom(-1);
+        _zoomResetButton = new StandardButton();
+        _zoomResetButton.Clicked += (_, _) => ResetZoom();
+        _zoomInButton = new StandardButton { Text = "Zoom in" };
+        _zoomInButton.Clicked += (_, _) => StepZoom(1);
+        foreach (var button in new[] { _zoomOutButton, _zoomResetButton, _zoomInButton }) toolbar.AddChild(button);
 
         _loadImagesButton = new StandardButton { Text = "Load remote images" };
         _loadImagesButton.Clicked += async (_, _) => await LoadRemoteImagesAsync();
@@ -245,6 +280,15 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
 
         root.AddChild(content);
         _session.AddRoot(root);
+
+        // The preview opens at the system text size, so the document's text grows with the shell's.
+        // Without a theme, the session's own (the process-wide palette) supplies it.
+        if (theme is not null) ApplyThemeToSession(theme);
+        var initialTheme = StandardControlPaint.GetTheme(_session);
+        _dark = initialTheme.IsDark;
+        _defaultZoom = PreviewZoom.Clamp(initialTheme.TextScale);
+        ApplyZoom(_defaultZoom);
+
         // The document starts focused, so the keyboard scrolls it at once; Tab reaches the buttons and links.
         _session.SetFocus(_htmlView.Content);
 
@@ -464,11 +508,123 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         return -1;
     }
 
+    /// <summary>The zoom both views are drawn at; 1 is the document's own size.</summary>
+    internal double Zoom => _htmlView.Zoom;
+
+    /// <summary>The zoom a preview opens at and Reset returns to: the system text size.</summary>
+    internal double DefaultZoom => _defaultZoom;
+
+    /// <summary>Zooms one level in (a positive direction) or out, as Zoom in, Zoom out, Ctrl+Plus and Ctrl+Minus do.</summary>
+    internal void StepZoom(int direction) => ZoomTo(PreviewZoom.Next(Zoom, direction, _defaultZoom));
+
+    /// <summary>Returns to the system text size, as the reset button and Ctrl+0 do.</summary>
+    internal void ResetZoom() => ZoomTo(_defaultZoom);
+
+    private void ZoomTo(double zoom)
+    {
+        if (PreviewZoom.AreSame(PreviewZoom.Clamp(zoom), Zoom)) return;
+        ApplyZoom(zoom);
+        AnnounceZoom();
+        Invalidate();
+    }
+
+    /// <summary>
+    /// Says the new level, from the control that shows it, once the current input has been handled: once
+    /// per change, and once for a burst of changes (a held key, a fast wheel) at the level it ends on,
+    /// so a screen reader is not handed a queue of levels already passed.
+    /// </summary>
+    private void AnnounceZoom()
+    {
+        bool queued = _zoomAnnouncement is not null;
+        _zoomAnnouncement = "Zoom " + PreviewZoom.Format(Zoom) + ".";
+        if (!queued && !PostToUiThread(SayZoom)) _zoomAnnouncement = null;
+    }
+
+    private void SayZoom()
+    {
+        string? message = _zoomAnnouncement;
+        _zoomAnnouncement = null;
+        if (message is not null && !IsDisposed) _session.AnnounceStatus(_zoomResetButton, message);
+    }
+
+    /// <summary>
+    /// A new system text size moves the default zoom. A preview the reader has not zoomed follows it;
+    /// an explicit zoom stays, and only Reset's target moves.
+    /// </summary>
+    private void FollowTextSize(double textScale)
+    {
+        double next = PreviewZoom.Clamp(textScale);
+        if (PreviewZoom.AreSame(next, _defaultZoom)) return;
+        _defaultZoom = next;
+        ApplyZoom(_zoomFollowsSystem ? next : Zoom);
+    }
+
+    private void ApplyZoom(double zoom)
+    {
+        zoom = PreviewZoom.Clamp(zoom);
+        // Back at the default, the preview follows the system text size again.
+        _zoomFollowsSystem = PreviewZoom.AreSame(zoom, _defaultZoom);
+        _htmlView.SetZoom(zoom);
+        // The text view's font already has the system text size; it adds only the reader's own zoom.
+        _plainTextView.Zoom = zoom / _defaultZoom;
+        UpdateZoomControls();
+    }
+
+    private void UpdateZoomControls()
+    {
+        double zoom = Zoom;
+        bool atDefault = PreviewZoom.AreSame(zoom, _defaultZoom);
+        _zoomOutButton.IsEnabled = !PreviewZoom.IsAtMinimum(zoom);
+        _zoomInButton.IsEnabled = !PreviewZoom.IsAtMaximum(zoom);
+        _zoomResetButton.IsEnabled = !atDefault;
+        _zoomResetButton.Text = PreviewZoom.Format(zoom);
+        // The button shows the current level; its name also says where it goes.
+        _zoomResetButton.AccessibleName = atDefault
+            ? $"Zoom {PreviewZoom.Format(zoom)}, the default"
+            : $"Reset zoom to {PreviewZoom.Format(_defaultZoom)}, now {PreviewZoom.Format(zoom)}";
+        // A zoom button that has just become unavailable passes focus to one that still works.
+        if (_session.FocusedElement is StandardButton { IsEnabled: false } focused
+            && (focused == _zoomInButton || focused == _zoomOutButton || focused == _zoomResetButton)
+            && new[] { _zoomResetButton, _zoomInButton, _zoomOutButton }.FirstOrDefault(button => button.IsEnabled) is { } next)
+            _session.SetFocus(next);
+    }
+
+    /// <summary>
+    /// Ctrl+Plus and Ctrl+Minus, on the main keys or the number pad, zoom in and out; Ctrl+0 resets;
+    /// Ctrl+wheel zooms. They are taken before any control sees them: the scroll view would scroll on
+    /// Ctrl+wheel. Ctrl+Alt is AltGr on many keyboard layouts, where it types characters, so it never zooms.
+    /// </summary>
+    private bool TryZoom(UiInputEvent input)
+    {
+        if (!PreviewModifiers.Control(input.KeyModifiers) || PreviewModifiers.Alt(input.KeyModifiers)) return false;
+        if (input.Kind == UiInputEventKind.PointerWheel && input.WheelAxis == MouseWheelAxis.Vertical)
+        {
+            int steps = _zoomWheel.Add(input.WheelDeltaNotches);
+            double zoom = Zoom;
+            for (int step = 0; step < Math.Abs(steps); step++) zoom = PreviewZoom.Next(zoom, Math.Sign(steps), _defaultZoom);
+            ZoomTo(zoom);
+            return true;
+        }
+        if (input.Kind != UiInputEventKind.KeyboardKey || input.KeyTransition != KeyboardKeyTransition.Down) return false;
+        switch (input.NativeKeyCode)
+        {
+            case 0xBB or 0x6B: StepZoom(1); return true; // "=" (with Shift "+") and the number pad's "+"
+            case 0xBD or 0x6D: StepZoom(-1); return true; // "-" and the number pad's "-"
+            case 0x30 or 0x60: ResetZoom(); return true; // "0" and the number pad's "0"
+            default: return false;
+        }
+    }
+
     internal UiSession Session => _session;
     internal ScrollableHtmlView HtmlView => _htmlView;
+    internal ScrollableMessageText PlainTextView => _plainTextView;
     internal StandardButton ToggleButton => _toggleButton;
+    internal StandardButton ZoomOutButton => _zoomOutButton;
+    internal StandardButton ZoomResetButton => _zoomResetButton;
+    internal StandardButton ZoomInButton => _zoomInButton;
     internal StandardPanel Root => _root;
     internal StandardLabel Status => _status;
+    internal StandardLabel TruncationNotice => _truncationNotice;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=A4CEFC
     // Broiler-Falsified-If: an exception thrown by a queued UI callback escapes DrainDispatcher and aborts the frame being built or the posted-callback handler
@@ -484,6 +640,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     protected override void OnCreated()
     {
         base.OnCreated();
+        ApplyPendingTheme();
         // Match the caption to the shell's theme; the handle exists only from here on.
         WindowsTitleBar.ApplyDarkMode(NativeHandle, _dark);
         // Screen readers see the buttons, the document, and each link, as in the main window.
@@ -495,13 +652,20 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _host.Update(clientSize, DpiScale);
         DrainDispatcher();
         BRenderList? frame = _session.RenderFrame();
-        if (!_truncationShown && _htmlView.Snapshot is { IsTruncated: true })
-        {
-            _truncationShown = true;
-            _truncationNotice.Visibility = UiVisibility.Visible;
-            Invalidate();
-        }
+        SyncTruncationNotice();
         return frame;
+    }
+
+    /// <summary>
+    /// The header notice follows the current layout: zooming in can take a document past the render
+    /// budget, and zooming out can bring it back within it.
+    /// </summary>
+    internal void SyncTruncationNotice()
+    {
+        if (_htmlView.Snapshot is not { } snapshot || snapshot.IsTruncated == _truncationShown) return;
+        _truncationShown = snapshot.IsTruncated;
+        _truncationNotice.Visibility = _truncationShown ? UiVisibility.Visible : UiVisibility.Collapsed;
+        Invalidate();
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=3E34D4
@@ -544,12 +708,17 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=17558C
     // Broiler-Falsified-If: an input event the UI session reports as handled leaves the window without an invalidation, so the frame on screen stays stale
     // Broiler-Human:        PENDING
-    private void Dispatch(UiInputEvent input)
+    internal void Dispatch(UiInputEvent input)
     {
         if (input.Kind == UiInputEventKind.KeyboardKey && input.KeyTransition == KeyboardKeyTransition.Down
             && input.NativeKeyCode == 0x09 && !PreviewModifiers.ControlOrAlt(input.KeyModifiers))
         {
             MoveFocus(PreviewModifiers.Shift(input.KeyModifiers) ? -1 : 1);
+            Invalidate();
+            return;
+        }
+        if (TryZoom(input))
+        {
             Invalidate();
             return;
         }
@@ -613,6 +782,7 @@ internal sealed record HtmlLinkGeometry(
 
 internal sealed record HtmlLayoutSnapshot(
     float Width,
+    float ExtentWidth,
     float ContentHeight,
     float UnclampedHeight,
     bool IsTruncated,
@@ -622,6 +792,13 @@ internal sealed record HtmlLayoutSnapshot(
 {
     public TimeSpan LayoutDuration => TimeSpan.FromTicks(LayoutDurationTicks);
 }
+
+/// <summary>
+/// A place in a laid-out document that a relayout at another width can find again: a block (by its
+/// position in the layout's element list and its tag), how far into it, and, for a place in the gap
+/// above a block, the distance above it in CSS pixels.
+/// </summary>
+internal readonly record struct HtmlReadingAnchor(int Index, string TagName, double Fraction, double Gap);
 
 // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=35E864
 // Broiler-Falsified-If: a document shown through this view has an http(s) image or stylesheet it names fetched over the network instead of denied
@@ -644,7 +821,20 @@ internal sealed class ScrollableHtmlView : UiElement
         _content = new HtmlViewElement(html, rendererProvider, onLinkClicked, dpiScaleProvider, canOpenLink);
         _scroll.AddChild(_content);
         AddChild(_scroll);
-        _scroll.OffsetChanged += (_, _) => _readFraction = ReadFraction();
+        _scroll.OffsetChanged += (_, change) =>
+        {
+            // The scroll view also clamps the offset while it measures a shorter document; that is not the
+            // reader moving, and recording it lost the place (and sent the reader to the end) before
+            // ArrangeCore could restore it.
+            if (_inLayout) return;
+            _readFraction = ReadFraction();
+            // Scrolling after a zoom, before the document is laid out again, moves the place the zoom
+            // keeps by the same distance in the document.
+            if (_zoomAnchor is null) return;
+            _zoomAnchorShift = new BPoint(
+                _zoomAnchorShift.X + ((change.NewOffset.X - change.OldOffset.X) / _zoomAnchorZoom),
+                _zoomAnchorShift.Y + ((change.NewOffset.Y - change.OldOffset.Y) / _zoomAnchorZoom));
+        };
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=2D6686
@@ -654,8 +844,32 @@ internal sealed class ScrollableHtmlView : UiElement
     {
         _content.UpdateHtml(html);
         _scroll.ScrollToStart();
-        // A new document starts at its top; that is the one deliberate reset of the reading position.
+        // A new document starts at its top, at the same zoom; that is the one deliberate reset of the
+        // reading position.
         _newDocument = true;
+        _zoomAnchor = null;
+    }
+
+    /// <summary>The document's zoom; see <see cref="HtmlViewElement.Zoom"/>.</summary>
+    public double Zoom => _content.Zoom;
+
+    /// <summary>
+    /// Zooms the document and keeps the text at the top of the viewport there: the view notes which
+    /// block that text is in and how far into it, and scrolls back to it once the document has been
+    /// laid out again at the new width.
+    /// </summary>
+    public void SetZoom(double zoom)
+    {
+        double next = PreviewZoom.Clamp(zoom);
+        if (next == _content.Zoom) return;
+        // Several steps before the next layout keep the first place: only that one was measured.
+        if (!_newDocument && _zoomAnchor is null && _content.AnchorAt(_scroll.VerticalOffset) is { } anchor)
+        {
+            _zoomAnchor = anchor;
+            _zoomAnchorZoom = _content.Zoom;
+            _zoomAnchorShift = new BPoint(_scroll.HorizontalOffset / _content.Zoom, 0);
+        }
+        _content.Zoom = next;
     }
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=AB27B5
@@ -667,6 +881,11 @@ internal sealed class ScrollableHtmlView : UiElement
     private double _readFraction;
     private double _arrangedExtent;
     private bool _newDocument = true;
+    private bool _inLayout;
+    private HtmlReadingAnchor? _zoomAnchor;
+    private double _zoomAnchorZoom = 1;
+    // In CSS pixels: the left edge, and any scrolling since the anchor was taken.
+    private BPoint _zoomAnchorShift;
 
     /// <summary>Scrolls a focused link (or other element) inside the document into view.</summary>
     public void Reveal(UiElement element)
@@ -682,17 +901,37 @@ internal sealed class ScrollableHtmlView : UiElement
 
     protected override void ArrangeCore(BRect finalRect)
     {
-        base.ArrangeCore(finalRect);
+        ArrangeScroll(finalRect);
+        // Hidden behind the plain text, the view is not laid out; a zoom's place waits until it is shown.
+        if (finalRect.IsEmpty) return;
         // Reflowing at another width (a resize, or the header growing) changes the document's height.
         // Keep the reader at the same relative place rather than at the same, now unrelated, offset.
         double extent = _scroll.ExtentSize.Height;
-        if (_newDocument) { _newDocument = false; _readFraction = 0; }
-        else if (Math.Abs(extent - _arrangedExtent) > 0.5 && _arrangedExtent > 0)
+        double range = extent - _scroll.ViewportSize.Height;
+        if (_newDocument) { _newDocument = false; _readFraction = 0; _zoomAnchor = null; }
+        else if (_zoomAnchor is { } anchor)
         {
-            double range = extent - _scroll.ViewportSize.Height;
-            if (range > 0) _scroll.SetOffset(new BPoint(_scroll.HorizontalOffset, Math.Round(_readFraction * range)));
+            // A zoom puts the same text back at the top; a block the new layout lacks falls back to the
+            // relative place.
+            _zoomAnchor = null;
+            double zoom = _content.Zoom;
+            double top = _content.OffsetOf(anchor) is { } offset ? offset + (_zoomAnchorShift.Y * zoom) : (range > 0 ? _readFraction * range : 0);
+            if (_scroll.SetOffset(new BPoint(_zoomAnchorShift.X * zoom, Math.Round(top)))) ArrangeScroll(finalRect);
+        }
+        else if (Math.Abs(extent - _arrangedExtent) > 0.5 && _arrangedExtent > 0 && range > 0)
+        {
+            if (_scroll.SetOffset(new BPoint(_scroll.HorizontalOffset, Math.Round(_readFraction * range)))) ArrangeScroll(finalRect);
         }
         _arrangedExtent = extent;
+    }
+
+    // Offsets the scroll view sets meanwhile are layout, not the reader scrolling. ArrangeCore arranges
+    // again after correcting the offset, so this frame already shows the new place.
+    private void ArrangeScroll(BRect finalRect)
+    {
+        _inLayout = true;
+        try { base.ArrangeCore(finalRect); }
+        finally { _inLayout = false; }
     }
     public HtmlLayoutSnapshot? Snapshot => _content.Snapshot;
 
@@ -702,7 +941,9 @@ internal sealed class ScrollableHtmlView : UiElement
     protected override BSize MeasureCore(BSize availableSize)
     {
         _content.ContentWidth = double.IsFinite(availableSize.Width) ? Math.Max(1, availableSize.Width - 12) : 800;
-        return _scroll.Measure(availableSize);
+        _inLayout = true;
+        try { return _scroll.Measure(availableSize); }
+        finally { _inLayout = false; }
     }
 
     // Mail HTML is authored for a white page, and the renderer paints the document white; the canvas
@@ -733,12 +974,18 @@ internal sealed class HtmlViewElement : UiElement
 {
     public const int DefaultTileHeight = 1024;
     public const float MaxBudgetHeight = 32768f;
+    // Content the renderer cannot wrap (a long address, say) may run past the page; it scrolls
+    // sideways up to this width in CSS pixels and is cut beyond it (24,576 DIPs at the largest zoom).
+    public const float MaxBudgetWidth = 8192f;
     public const int MaxCachedTiles = 16;
     // The count limit alone let memory grow with width and DPI: at 7680 DIPs and 300 % one tile is
     // about 280 MB, sixteen about 4.5 GB. A tile larger than this is rendered at a lower scale and
     // drawn stretched; the cache as a whole stays within the byte budget.
     public const long MaxTilePixels = 8L * 1024 * 1024;
     public const long MaxCachedTileBytes = 256L * 1024 * 1024;
+    // The longest bitmap side Direct2D takes on older (feature level 10) hardware. A short last tile
+    // of a page widened by zoomed overflow stayed under the pixel cap at more than twice this width.
+    public const int MaxTileSide = 8192;
     private const int BytesPerPixel = 4;
 
     private readonly Func<IBroilerRenderer?> _rendererProvider;
@@ -752,10 +999,35 @@ internal sealed class HtmlViewElement : UiElement
 
     private HtmlContainer _container;
     private HtmlLayoutSnapshot? _layoutSnapshot;
-    private double _cachedDpiScale = 1.0;
+    // What the cached tiles were drawn for: the page width in DIPs, the zoom, and the display scale.
+    private (double PageWidth, double Zoom, double DpiScale) _tileKey;
     private string _html;
 
     private double _contentWidth = 800;
+    private double _viewportWidth;
+    private double _zoom = 1;
+
+    /// <summary>
+    /// How large the document is drawn, as a browser's page zoom: at 2 it is laid out at half the
+    /// viewport's width in CSS pixels and drawn twice as large, so the text grows and still wraps to
+    /// the window. A new zoom lays the document out again and discards every tile.
+    /// </summary>
+    public double Zoom
+    {
+        get => _zoom;
+        set
+        {
+            double zoom = PreviewZoom.Clamp(value);
+            if (zoom == _zoom) return;
+            _zoom = zoom;
+            _layoutSnapshot = null;
+            InvalidateTiles();
+            Invalidate(UiInvalidationKind.Measure | UiInvalidationKind.Render);
+        }
+    }
+
+    /// <summary>The width the document is laid out at, in CSS pixels: the viewport's width at this zoom.</summary>
+    private float LayoutWidth => (float)Math.Max(1, _viewportWidth / _zoom);
 
     /// <summary>
     /// The width the document is laid out at when its parent measures without a width limit. A new
@@ -868,7 +1140,7 @@ internal sealed class HtmlViewElement : UiElement
         var used = new HashSet<int>();
         foreach (var (href, _, bounds) in merged)
         {
-            var target = new HtmlLinkTarget(href, HtmlLinkNames.NameFor(href, names, used), bounds);
+            var target = new HtmlLinkTarget(href, HtmlLinkNames.NameFor(href, names, used), bounds, _zoom);
             target.Clicked += (_, _) => _onLinkClicked(target.Href);
             AddChild(target);
             target.Measure(target.PreferredSize);
@@ -893,8 +1165,50 @@ internal sealed class HtmlViewElement : UiElement
         foreach (var target in _linkTargets)
         {
             var b = target.DocumentBounds;
-            target.Arrange(new BRect(origin.X + b.X, origin.Y + b.Y, b.Width, b.Height));
+            target.Arrange(new BRect(origin.X + (b.X * _zoom), origin.Y + (b.Y * _zoom), b.Width * _zoom, b.Height * _zoom));
         }
+    }
+
+    // Inline elements move within their lines when the text reflows; a reading position is kept by blocks.
+    private static readonly HashSet<string> NotAnchors = new(StringComparer.Ordinal)
+    { "html", "body", "a", "b", "strong", "em", "i", "u", "s", "small", "sub", "sup", "span", "code", "br", "img" };
+
+    /// <summary>
+    /// The place <paramref name="offset"/> DIPs from the document's top: the innermost block there and
+    /// how far into it, or, in the gap between blocks, the next block and the distance above it.
+    /// Null before the document is laid out.
+    /// </summary>
+    internal HtmlReadingAnchor? AnchorAt(double offset)
+    {
+        if (_layoutSnapshot is not { } snapshot) return null;
+        double y = offset / _zoom;
+        int inside = -1, below = -1;
+        var boxes = snapshot.Diagnostics;
+        for (int index = 0; index < boxes.Count; index++)
+        {
+            var box = boxes[index].BorderBox;
+            if (box.Height <= 0 || NotAnchors.Contains(boxes[index].TagName)) continue;
+            if (box.Y <= y && y < box.Bottom)
+            {
+                if (inside < 0 || box.Height < boxes[inside].BorderBox.Height) inside = index;
+            }
+            else if (box.Y > y && (below < 0 || box.Y < boxes[below].BorderBox.Y)) below = index;
+        }
+        if (inside >= 0)
+        {
+            var box = boxes[inside].BorderBox;
+            return new HtmlReadingAnchor(inside, boxes[inside].TagName, (y - box.Y) / box.Height, 0);
+        }
+        return below >= 0 ? new HtmlReadingAnchor(below, boxes[below].TagName, 0, y - boxes[below].BorderBox.Y) : null;
+    }
+
+    /// <summary>Where <paramref name="anchor"/> is in the current layout, in DIPs from the top; null if the layout lacks its block.</summary>
+    internal double? OffsetOf(HtmlReadingAnchor anchor)
+    {
+        if (_layoutSnapshot is not { } snapshot || anchor.Index >= snapshot.Diagnostics.Count
+            || snapshot.Diagnostics[anchor.Index].TagName != anchor.TagName) return null;
+        var box = snapshot.Diagnostics[anchor.Index].BorderBox;
+        return (box.Y + (anchor.Fraction * box.Height) + anchor.Gap) * _zoom;
     }
 
     private static BRect Union(BRect a, BRect b)
@@ -928,12 +1242,14 @@ internal sealed class HtmlViewElement : UiElement
 
     /// <summary>
     /// The scale and pixel size a tile is rendered at: the display scale, lowered only when that would
-    /// exceed <see cref="MaxTilePixels"/>. A capped size rounds down so it never passes the cap.
+    /// exceed <see cref="MaxTilePixels"/> or make a side longer than <see cref="MaxTileSide"/>. A capped
+    /// size rounds down so it never passes a cap.
     /// </summary>
     internal static (double Scale, int Width, int Height) TilePixelSize(double widthDip, double heightDip, double dpiScale)
     {
-        bool capped = widthDip * heightDip * dpiScale * dpiScale > MaxTilePixels;
-        double scale = capped ? Math.Sqrt(MaxTilePixels / (widthDip * heightDip)) : dpiScale;
+        double limit = Math.Min(Math.Sqrt(MaxTilePixels / (widthDip * heightDip)), MaxTileSide / Math.Max(widthDip, heightDip));
+        bool capped = limit < dpiScale;
+        double scale = capped ? limit : dpiScale;
         Func<double, double> round = capped ? Math.Floor : Math.Ceiling;
         return (scale, (int)Math.Max(1, round(widthDip * scale)), (int)Math.Max(1, round(heightDip * scale)));
     }
@@ -969,6 +1285,9 @@ internal sealed class HtmlViewElement : UiElement
         float rawHeight = Math.Max(100f, maxBottom + 32f);
         bool isTruncated = rawHeight > MaxBudgetHeight;
         float contentHeight = isTruncated ? MaxBudgetHeight : rawHeight;
+        // The renderer's extent includes words and lines it could not wrap; the boxes do not.
+        float actualWidth = _container.ActualSize.Width;
+        float extentWidth = actualWidth > width + 0.5f ? Math.Min(actualWidth, Math.Max(width, MaxBudgetWidth)) : width;
 
         var linksRaw = _container.GetLinks();
         var links = new List<HtmlLinkGeometry>(linksRaw.Count);
@@ -981,7 +1300,7 @@ internal sealed class HtmlViewElement : UiElement
         }
 
         long elapsedTicks = Stopwatch.GetTimestamp() - start;
-        return new HtmlLayoutSnapshot(width, contentHeight, rawHeight, isTruncated, links, diagnostics, elapsedTicks);
+        return new HtmlLayoutSnapshot(width, extentWidth, contentHeight, rawHeight, isTruncated, links, diagnostics, elapsedTicks);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=F7F59D
@@ -989,33 +1308,34 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
     {
-        float targetWidth = (float)(double.IsFinite(availableSize.Width) && availableSize.Width > 50
-            ? availableSize.Width
-            : ContentWidth);
-
-        EnsureLayout(targetWidth);
-        return new BSize(targetWidth, _layoutSnapshot!.ContentHeight);
+        _viewportWidth = double.IsFinite(availableSize.Width) && availableSize.Width > 50 ? availableSize.Width : ContentWidth;
+        EnsureLayout(LayoutWidth);
+        var snapshot = _layoutSnapshot!;
+        // As wide as the viewport, or wider where content the renderer could not wrap runs past it:
+        // the scroll view then scrolls sideways.
+        return new BSize(Math.Max(_viewportWidth, snapshot.ExtentWidth * _zoom), snapshot.ContentHeight * _zoom);
     }
 
     /// <summary>
-    /// Paints the document from <paramref name="topDip"/> down at <paramref name="scale"/>, the tile's own
-    /// scale (the display scale unless the pixel cap lowered it). Broiler.HTML takes the scroll offset in
-    /// layout units and applies the zoom itself; multiplying it by the scale, as before, drew every tile
-    /// after the first from too far down at any display scale other than 100 %, so at 150 % the text ran
-    /// out two-thirds of the way through a long message and the rest of the preview was blank.
+    /// Paints the document from <paramref name="layoutTop"/> (in CSS pixels) down, each CSS pixel drawn
+    /// <paramref name="scale"/> pixels large: the tile's own scale (the display scale unless the pixel
+    /// cap lowered it) times the zoom. Broiler.HTML takes the scroll offset in layout units and applies
+    /// the scale itself; multiplying it by the scale, as before, drew every tile after the first from too
+    /// far down at any display scale other than 100 %, so at 150 % the text ran out two-thirds of the way
+    /// through a long message and the rest of the preview was blank.
     /// </summary>
-    internal HtmlBitmap PaintTile(double topDip, double scale, int pixelWidth, int pixelHeight)
+    internal HtmlBitmap PaintTile(double layoutTop, double scale, int pixelWidth, int pixelHeight)
     {
         var bitmap = new HtmlBitmap(pixelWidth, pixelHeight);
         _container.ViewportZoom = (float)scale;
-        _container.ScrollOffset = new PointF(0, -(float)topDip);
+        _container.ScrollOffset = new PointF(0, -(float)layoutTop);
         _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelWidth, pixelHeight));
         _container.ScrollOffset = PointF.Empty;
         _container.ViewportZoom = 1.0f;
         return bitmap;
     }
 
-    private void EnsureTile(int tileIndex, float targetWidth, double dpiScale, IBroilerRenderer renderer)
+    private void EnsureTile(int tileIndex, double pageWidth, double dpiScale, IBroilerRenderer renderer)
     {
         if (_tiles.ContainsKey(tileIndex))
         {
@@ -1024,11 +1344,12 @@ internal sealed class HtmlViewElement : UiElement
             return;
         }
 
+        // Tiles are cut from the zoomed page in DIPs, so zooming does not enlarge them.
         double tileTop = tileIndex * DefaultTileHeight;
-        double tileH = Math.Min(DefaultTileHeight, _layoutSnapshot!.ContentHeight - tileTop);
+        double tileH = Math.Min(DefaultTileHeight, (_layoutSnapshot!.ContentHeight * _zoom) - tileTop);
         if (tileH <= 0) return;
 
-        (double tileScale, int pixelW, int pixelH) = TilePixelSize(targetWidth, tileH, dpiScale);
+        (double tileScale, int pixelW, int pixelH) = TilePixelSize(pageWidth, tileH, dpiScale);
         long tileBytes = (long)pixelW * pixelH * BytesPerPixel;
         while ((_tiles.Count >= MaxCachedTiles || _cachedTileBytes + tileBytes > MaxCachedTileBytes) && _lruTiles.Count > 0)
         {
@@ -1041,7 +1362,7 @@ internal sealed class HtmlViewElement : UiElement
             }
         }
 
-        using var bitmap = PaintTile(tileTop, tileScale, pixelW, pixelH);
+        using var bitmap = PaintTile(tileTop / _zoom, tileScale * _zoom, pixelW, pixelH);
 
         // The renderer keeps RGBA pixels. Encoding a PNG for it to decode straight back cost far more
         // than painting the tile; the pixels are identical either way.
@@ -1057,32 +1378,40 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-Human:        PENDING
     protected override void RenderCore(UiRenderContext context)
     {
-        float w = (float)Math.Max(1, Bounds.Width);
-        EnsureLayout(w);
+        // The width measure laid the document out at; the arranged width also holds any overflow.
+        if (_viewportWidth <= 0) _viewportWidth = Math.Max(1, Bounds.Width);
+        EnsureLayout(LayoutWidth);
         if (_layoutSnapshot is null) return;
 
         double dpiScale = _dpiScaleProvider?.Invoke() ?? context.Host?.Scale ?? 1.0;
         if (dpiScale <= 0.1 || double.IsNaN(dpiScale)) dpiScale = 1.0;
 
-        if (Math.Abs(_cachedDpiScale - dpiScale) > 0.001)
+        // Tiles hold one page width, zoom, and display scale; a change to any of them discards them all.
+        double pageWidth = Math.Max(1, Bounds.Width);
+        var tileKey = (Math.Round(pageWidth, 1), _zoom, dpiScale);
+        if (tileKey != _tileKey)
         {
             InvalidateTiles();
-            _cachedDpiScale = dpiScale;
+            _tileKey = tileKey;
         }
 
         var renderer = _rendererProvider();
         if (renderer is null) return;
 
-        double docHeight = _layoutSnapshot.ContentHeight;
+        double docHeight = _layoutSnapshot.ContentHeight * _zoom;
         int totalTiles = (int)Math.Ceiling(docHeight / DefaultTileHeight);
         if (totalTiles <= 0) totalTiles = 1;
 
         double parentViewportHeight;
         double visibleTop;
+        double visibleLeft = 0;
+        double viewportWidth = pageWidth;
         if (Parent is StandardScrollView sv && sv.Bounds.Height > 0)
         {
             visibleTop = Math.Max(0, sv.VerticalOffset);
-            parentViewportHeight = sv.Bounds.Height;
+            parentViewportHeight = sv.ViewportSize.Height > 0 ? sv.ViewportSize.Height : sv.Bounds.Height;
+            visibleLeft = Math.Max(0, sv.HorizontalOffset);
+            if (sv.ViewportSize.Width > 0) viewportWidth = Math.Min(pageWidth, sv.ViewportSize.Width);
         }
         else
         {
@@ -1102,11 +1431,11 @@ internal sealed class HtmlViewElement : UiElement
 
         for (int i = firstTile; i <= lastTile; i++)
         {
-            EnsureTile(i, w, dpiScale, renderer);
+            EnsureTile(i, pageWidth, dpiScale, renderer);
             if (_tiles.TryGetValue(i, out var tile) && tile.Handle.IsValid)
             {
                 var srcRect = new BRect(0, 0, tile.PixelWidth, tile.PixelHeight);
-                var destRect = new BRect(Bounds.X, Bounds.Y + (i * DefaultTileHeight), Bounds.Width, tile.HeightDip);
+                var destRect = new BRect(Bounds.X, Bounds.Y + (i * DefaultTileHeight), pageWidth, tile.HeightDip);
                 context.RenderList.DrawImage(tile.Handle, srcRect, destRect, 1.0);
             }
         }
@@ -1117,7 +1446,8 @@ internal sealed class HtmlViewElement : UiElement
             double bannerY = Bounds.Y + docHeight - bannerHeight;
             if (bannerY < (Bounds.Y + visibleBottom + 64) && (bannerY + bannerHeight) > (Bounds.Y + visibleTop - 64))
             {
-                var bannerRect = new BRect(Bounds.X + 8, bannerY - 4, Math.Max(100, Bounds.Width - 16), bannerHeight);
+                // Across the visible width, so it is readable however far the page is scrolled sideways.
+                var bannerRect = new BRect(Bounds.X + visibleLeft + 8, bannerY - 4, Math.Max(100, viewportWidth - 16), bannerHeight);
                 context.RenderList.FillRect(bannerRect, new BColor(255, 243, 205));
                 context.RenderList.StrokeRect(bannerRect, new BColor(255, 220, 150), 1);
                 context.RenderList.DrawText(
@@ -1132,7 +1462,7 @@ internal sealed class HtmlViewElement : UiElement
         // The document's own focus ring frames the viewport, even below a short document's end.
         if (Session is { IsFocusVisible: true } session && session.FocusedElement == this)
             StandardControlPaint.DrawFocusRing(context.RenderList,
-                new BRect(Bounds.X + 2, Bounds.Y + visibleTop + 2, Math.Max(0, Bounds.Width - 4), Math.Max(0, parentViewportHeight - 4)), 4);
+                new BRect(Bounds.X + visibleLeft + 2, Bounds.Y + visibleTop + 2, Math.Max(0, viewportWidth - 4), Math.Max(0, parentViewportHeight - 4)), 4);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=2248F9
@@ -1150,8 +1480,9 @@ internal sealed class HtmlViewElement : UiElement
         }
         if (e.Kind == UiInputEventKind.PointerButton && e.MouseButton == MouseButton.Left && e.MouseButtonTransition == MouseButtonTransition.Up)
         {
-            float relX = (float)(e.Position.X - Bounds.X);
-            float relY = (float)(e.Position.Y - Bounds.Y);
+            // Links are found in document coordinates, CSS pixels before the zoom.
+            float relX = (float)((e.Position.X - Bounds.X) / _zoom);
+            float relY = (float)((e.Position.Y - Bounds.Y) / _zoom);
 
             if (_layoutSnapshot is not null)
             {

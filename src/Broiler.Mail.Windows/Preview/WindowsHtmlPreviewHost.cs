@@ -31,11 +31,13 @@ namespace Broiler.Mail.Windows.Preview;
 // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=5F4FCA
 // Broiler-Falsified-If: a URI whose scheme is not http or https is passed to Process.Start with shell execution by the preview's open-external callback
 // Broiler-Human:        PENDING
-internal sealed class WindowsHtmlPreviewHost(Func<bool>? isDark = null) : IHtmlPreviewHost
+internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? currentTheme = null) : IHtmlPreviewHost
 {
     private const string Unavailable = "HTML preview unavailable. The text preview remains available.";
     private readonly object _gate = new();
     private HtmlPreviewWindow? _window;
+    // The newest theme passed on, so a window that was still being built when it changed gets it too.
+    private StandardThemeTokens? _theme;
     private Task _finished = Task.CompletedTask;
     private MailMessageKey? _current;
     private bool _disposed;
@@ -81,15 +83,20 @@ internal sealed class WindowsHtmlPreviewHost(Func<bool>? isDark = null) : IHtmlP
             try
             {
                 string title = "Broiler.Mail — HTML snapshot — " + (message.Composition?.Subject ?? $"Message {message.Key.Uid}");
+                StandardThemeTokens? theme;
+                lock (_gate) theme = _theme;
+                theme ??= currentTheme?.Invoke();
                 using var window = new HtmlPreviewWindow(document, message.PlainText,
                     uri => Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true }),
-                    message.HtmlText, message.EmbeddedImages, dark: isDark?.Invoke() == true, title: title);
+                    message.HtmlText, message.EmbeddedImages, theme: theme, title: title);
                 lock (_gate)
                 {
                     if (!_disposed && generation == _generation)
                     {
                         _window = window;
                         _ = window.NativeHandle;
+                        // A theme applied while the window was being built could not reach it.
+                        if (_theme is { } latest && !ReferenceEquals(latest, theme)) window.ApplyTheme(latest);
                     }
                 }
                 if (_window != window)
@@ -156,11 +163,15 @@ internal sealed class WindowsHtmlPreviewHost(Func<bool>? isDark = null) : IHtmlP
     // Broiler-Human:        PENDING
     public void Dispose() { lock (_gate) _disposed = true; Close(); }
 
+    /// <summary>The window of the open preview, if any.</summary>
+    internal HtmlPreviewWindow? Window { get { lock (_gate) return _window; } }
+
     /// <summary>Passes a theme change to the open preview window, if any, which applies it on its own thread.</summary>
     public void ApplyTheme(StandardThemeTokens theme)
     {
         lock (_gate)
         {
+            _theme = theme;
             if (_window is { IsDisposed: false } window)
                 try { window.ApplyTheme(theme); } catch (InvalidOperationException) { }
         }

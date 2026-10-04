@@ -64,6 +64,25 @@ public sealed class ScrollableMessageText : UiElement
 
     public StandardRichEdit Editor => _editor;
 
+    private double? _zoomFraction;
+
+    /// <summary>
+    /// How large the text is drawn on top of its font's size; 1 is the font's size. The reader stays
+    /// at the same relative place in the text.
+    /// </summary>
+    public double Zoom
+    {
+        get => _editor.Zoom;
+        set
+        {
+            double before = _editor.Zoom;
+            _editor.Zoom = value;
+            if (_editor.Zoom == before) return;
+            double range = _scroll.ExtentSize.Height - _scroll.ViewportSize.Height;
+            _zoomFraction ??= range > 0 ? _scroll.VerticalOffset / range : 0;
+        }
+    }
+
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=050DA5
     // Broiler-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
     // Broiler-Human:        PENDING
@@ -82,5 +101,14 @@ public sealed class ScrollableMessageText : UiElement
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize) => _scroll.Measure(availableSize);
 
-    protected override void ArrangeCore(BRect finalRect) => _scroll.Arrange(finalRect);
+    protected override void ArrangeCore(BRect finalRect)
+    {
+        _scroll.Arrange(finalRect);
+        // A hidden view keeps the place until it is shown and laid out at the new zoom.
+        if (_zoomFraction is not { } fraction || finalRect.IsEmpty) return;
+        _zoomFraction = null;
+        double range = _scroll.ExtentSize.Height - _scroll.ViewportSize.Height;
+        if (range > 0 && _scroll.SetOffset(new BPoint(_scroll.HorizontalOffset, Math.Round(fraction * range))))
+            _scroll.Arrange(finalRect);
+    }
 }

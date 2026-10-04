@@ -15,17 +15,18 @@ namespace Broiler.Mail.Windows.Preview;
 /// </summary>
 internal sealed class HtmlLinkTarget : UiButton
 {
-    public HtmlLinkTarget(string href, string name, BRect documentBounds)
+    public HtmlLinkTarget(string href, string name, BRect documentBounds, double zoom = 1)
     {
         Href = href;
         Text = name;
         DocumentBounds = documentBounds;
-        PreferredSize = new BSize(documentBounds.Width, documentBounds.Height);
+        // The document is laid out in CSS pixels and drawn zoomed; the target covers the drawn link.
+        PreferredSize = new BSize(documentBounds.Width * zoom, documentBounds.Height * zoom);
     }
 
     public string Href { get; }
 
-    /// <summary>The link's rectangle in document coordinates, before the view's own position.</summary>
+    /// <summary>The link's rectangle in document coordinates (CSS pixels), before the view's zoom and position.</summary>
     public BRect DocumentBounds { get; }
 
     protected override BSize MeasureCore(BSize availableSize) => PreferredSize;
@@ -66,9 +67,13 @@ internal static class PreviewModifiers
     public static bool Shift(KeyboardModifierState state) =>
         (state & (KeyboardModifierState.Shift | KeyboardModifierState.LeftShift | KeyboardModifierState.RightShift)) != 0;
 
-    public static bool ControlOrAlt(KeyboardModifierState state) =>
-        (state & (KeyboardModifierState.Control | KeyboardModifierState.LeftControl | KeyboardModifierState.RightControl
-            | KeyboardModifierState.Alt | KeyboardModifierState.LeftAlt | KeyboardModifierState.RightAlt)) != 0;
+    public static bool Control(KeyboardModifierState state) =>
+        (state & (KeyboardModifierState.Control | KeyboardModifierState.LeftControl | KeyboardModifierState.RightControl)) != 0;
+
+    public static bool Alt(KeyboardModifierState state) =>
+        (state & (KeyboardModifierState.Alt | KeyboardModifierState.LeftAlt | KeyboardModifierState.RightAlt)) != 0;
+
+    public static bool ControlOrAlt(KeyboardModifierState state) => Control(state) || Alt(state);
 
     public static bool Any(KeyboardModifierState state) => Shift(state) || ControlOrAlt(state);
 }
