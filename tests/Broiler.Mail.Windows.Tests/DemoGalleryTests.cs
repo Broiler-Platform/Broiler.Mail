@@ -315,7 +315,7 @@ public sealed class DemoGalleryTests
                         double line = row switch
                         {
                             StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
-                            StandardRichEdit edit => BTextMeasurer.GetLineHeight(edit.Font),
+                            FocusRingFrame { Content: StandardRichEdit edit } => BTextMeasurer.GetLineHeight(edit.Font),
                             _ => 0,
                         };
                         double lines = (shown.Bottom - row.Bounds.Top) / line;

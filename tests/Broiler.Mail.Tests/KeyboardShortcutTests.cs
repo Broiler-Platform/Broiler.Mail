@@ -157,6 +157,38 @@ public sealed class KeyboardShortcutTests
     }
 
     [Fact]
+    public async Task TheReadersEditorsAreTabStopsInReadingOrderAndAreRingedWhileFocused()
+    {
+        using var fixture = await Fixture.OpenAsync();
+        var stops = MailKeyboardNavigation.TabStops(fixture.InboxContent).ToList();
+        int details = stops.IndexOf(fixture.ReaderDetails);
+        int reply = stops.FindIndex(stop => stop is StandardButton { Text: "Reply" });
+        int text = stops.IndexOf(fixture.ReaderText);
+        Assert.True(stops.IndexOf(fixture.List) < details && details < reply && reply < text, $"list, details {details}, Reply {reply}, text {text}");
+
+        var theme = StandardControlPaint.GetTheme(fixture.ReaderText);
+        bool Ringed(BRect ring) => fixture.Session.RenderFrame().Commands.OfType<BRenderCommand.StrokeRect>()
+            .Any(stroke => stroke.Rect == ring && stroke.Color == theme.FocusRing && stroke.Thickness == theme.FocusRingThickness);
+        double offset = theme.FocusRingOffset;
+        // The header details: just outside the frameless editor, clear of its text.
+        BRect detailsBounds = fixture.ReaderDetails.Bounds;
+        var detailsRing = new BRect(detailsBounds.X - offset, detailsBounds.Y - offset, detailsBounds.Width + 2 * offset, detailsBounds.Height + 2 * offset);
+        // The message text can run past the view; its ring goes around the view, the part on screen.
+        var view = Descendants(fixture.InboxContent).OfType<Broiler.Mail.Application.Preview.ScrollableMessageText>().Single();
+        var textRing = StandardControlPaint.Inset(view.Bounds, offset);
+
+        fixture.Session.SetFocus(fixture.List);
+        Assert.False(Ringed(detailsRing));
+        Assert.False(Ringed(textRing));
+        fixture.Session.SetFocus(fixture.ReaderDetails);
+        Assert.True(Ringed(detailsRing));
+        Assert.False(Ringed(textRing));
+        fixture.Session.SetFocus(fixture.ReaderText);
+        Assert.True(Ringed(textRing));
+        Assert.False(Ringed(detailsRing));
+    }
+
+    [Fact]
     public void ABoundedAreaIsAStopOnlyWhileItScrollsAndNothingInsideTakesFocus()
     {
         var notice = new StandardLabel { Text = string.Join(" ", Enumerable.Repeat("A notice long enough to wrap many times.", 30)), Wrapping = UiTextWrapping.Wrap };
@@ -233,6 +265,7 @@ public sealed class KeyboardShortcutTests
         private UiElement ComposeContent => Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!;
         public StandardListView List => Descendants(InboxContent).OfType<StandardListView>().Single();
         public StandardRichEdit ReaderText => Descendants(InboxContent).OfType<StandardRichEdit>().Single(edit => edit.AccessibleName == "Message text");
+        public StandardRichEdit ReaderDetails => Descendants(InboxContent).OfType<StandardRichEdit>().Single(edit => edit.AccessibleName == "Sender and recipients");
         public StandardRichEdit ComposerBody => Descendants(ComposeContent).OfType<StandardRichEdit>().Single();
         public StandardEdit ComposerTo => (StandardEdit)Descendants(ComposeContent).OfType<StandardLabel>().Single(label => label.Text == "To").Target!;
 

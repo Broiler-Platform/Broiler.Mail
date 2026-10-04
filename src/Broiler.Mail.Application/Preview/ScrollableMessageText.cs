@@ -43,6 +43,7 @@ public sealed class ScrollableMessageText : UiElement
         HorizontalScrollPolicy = RichEditScrollPolicy.Never,
         Wrapping = RichEditWrapping.Wrap,
         BorderThickness = 0,
+        // Its own ring would run around the whole document, mostly scrolled away; RenderCore rings the view.
         FocusRingThickness = 0,
         PaddingX = 0,
         PaddingY = 0,
@@ -134,6 +135,15 @@ public sealed class ScrollableMessageText : UiElement
         _inLayout = true;
         try { return _scroll.Measure(availableSize); }
         finally { _inLayout = false; }
+    }
+
+    protected override void RenderCore(UiRenderContext context)
+    {
+        base.RenderCore(context);
+        // While the text has focus, the ring goes around the part of it on screen, where the scroll view's
+        // own ring would be, over its scrollbar.
+        if (Session?.FocusedElement == _editor)
+            FocusRingFrame.Draw(context, this, StandardControlPaint.Inset(_scroll.Bounds, StandardControlPaint.GetTheme(this).FocusRingOffset));
     }
 
     protected override void ArrangeCore(BRect finalRect)
