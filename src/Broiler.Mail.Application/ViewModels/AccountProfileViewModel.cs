@@ -272,29 +272,21 @@ public sealed class AccountProfileViewModel : SaveViewModel
     // Broiler-Human:        PENDING
     public Task TestConnectionAsync(CancellationToken cancellationToken = default)
     {
-        if (!CanSave) return Task.CompletedTask;
+        if (!CanSave || ProfileToTest(MailProtocol.Imap) is not { } account) return Task.CompletedTask;
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _connectionCancellation = cancellation;
         LastTest = MailProtocol.Imap;
-        var previous = (ConnectionCheck, ConnectionFailure);
-        bool started = false;
         ConnectionCheck = ConnectionCheck.Running;
-        return RunAsync(() =>
-            {
-                var account = RequireSavedProfile();
-                started = true;
-                return _receiver.TestConnectionAsync(account, cancellation.Token);
-            }, () => ConnectionCheck = ConnectionCheck.Passed,
+        return RunAsync(() => _receiver.TestConnectionAsync(account, cancellation.Token), () => ConnectionCheck = ConnectionCheck.Passed,
             "Connecting and authenticating…", "Connected securely and authenticated. No messages were fetched.",
             "Connection test failed", "Connection test canceled.", failure =>
             {
                 if (failure is not null)
                 {
-                    // A canceled test proves nothing either way; a real failure is kept beside the step. A test
-                    // refused before it started (unsaved edits) keeps the result of the saved profile.
+                    // A canceled test proves nothing either way; a real failure is kept beside the step.
                     bool canceled = cancellation.IsCancellationRequested;
-                    (ConnectionCheck, ConnectionFailure) = !started ? previous
-                        : canceled ? (ConnectionCheck.NotRun, null) : (ConnectionCheck.Failed, failure);
+                    ConnectionCheck = canceled ? ConnectionCheck.NotRun : ConnectionCheck.Failed;
+                    ConnectionFailure = canceled ? null : failure;
                 }
                 _connectionCancellation = null;
                 cancellation.Dispose();
@@ -308,18 +300,14 @@ public sealed class AccountProfileViewModel : SaveViewModel
     /// </summary>
     public Task TestOutgoingConnectionAsync(CancellationToken cancellationToken = default)
     {
-        if (!CanSave || _outgoingTester is not { } tester) return Task.CompletedTask;
+        if (!CanSave || _outgoingTester is not { } tester || ProfileToTest(MailProtocol.Smtp) is not { } account) return Task.CompletedTask;
         var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         _connectionCancellation = cancellation;
         LastTest = MailProtocol.Smtp;
-        var previous = (OutgoingCheck, OutgoingFailure, OutgoingFailureKind);
-        bool started = false;
         MailConnectionFailure? kind = null;
         OutgoingCheck = ConnectionCheck.Running;
         return RunAsync(async () =>
             {
-                var account = RequireSavedProfile(MailProtocol.Smtp);
-                started = true;
                 try { await tester.TestConnectionAsync(account, cancellation.Token).ConfigureAwait(false); }
                 catch (MailConnectionException error) { kind = error.Failure; throw; }
             }, () => { ResetOutgoingCheck(); OutgoingCheck = ConnectionCheck.Passed; },
@@ -329,10 +317,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
             {
                 if (failure is not null)
                 {
-                    // As for the connection test: canceled proves nothing, refused-before-start keeps the saved
-                    // profile's result, and a real failure stays beside the outgoing step with its kind.
-                    if (!started) (OutgoingCheck, OutgoingFailure, OutgoingFailureKind) = previous;
-                    else if (cancellation.IsCancellationRequested) ResetOutgoingCheck();
+                    // As for the connection test: canceled proves nothing, and a real failure stays beside the
+                    // outgoing step with its kind.
+                    if (cancellation.IsCancellationRequested) ResetOutgoingCheck();
                     else
                     {
                         OutgoingCheck = ConnectionCheck.Failed;
@@ -351,6 +338,21 @@ public sealed class AccountProfileViewModel : SaveViewModel
     // Broiler-Falsified-If: Cancel pressed after a test finished throws ObjectDisposedException from the disposed token source
     // Broiler-Human:        PENDING
     public void CancelConnectionTest() => _connectionCancellation?.Cancel();
+
+    /// <summary>
+    /// The saved profile a test may use, or null after refusing the test. A test that cannot start, because of
+    /// unsaved or invalid edits or a missing or unsupported server, is no result: the status says what to do
+    /// first instead of reporting a failed test, and the results of the saved profile stand.
+    /// </summary>
+    private AccountProfile? ProfileToTest(MailProtocol protocol)
+    {
+        try { return RequireSavedProfile(protocol); }
+        catch (Exception refusal) when (refusal is InvalidOperationException or ArgumentException)
+        {
+            Refuse(refusal, "The test did not start.");
+            return null;
+        }
+    }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=4CBB0D
     // Broiler-Falsified-If: a form whose host differs from the saved Profile returns Profile, so a password is bound to or tested against details the user has not saved

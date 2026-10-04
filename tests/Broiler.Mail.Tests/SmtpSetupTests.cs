@@ -215,21 +215,39 @@ public sealed class SmtpSetupTests
         using var fixture = new Fixture(profile, credentials, tester, receiver);
         var account = fixture.Account;
         await PassBothAsync(fixture);
+        const string Refusal = "Save your account changes before using the password or testing the connection.";
 
+        // The refusal says what to do first; no test ran, so none is reported as failed beside a passed step.
         fixture.Field("SMTP server (hostname only)").Text = "changed.example.test";
-        await account.TestOutgoingConnectionAsync();
-        fixture.Settle();
+        fixture.Announced.Clear();
+        fixture.Click(fixture.TestSmtp);
         Assert.Equal(1, tester.Calls);
-        Assert.Contains("Save your account changes", account.Status);
+        Assert.Equal((Refusal, FeedbackKind.Error), (account.Status, account.StatusKind));
+        Assert.Equal("The test did not start. Details are below the buttons.", fixture.Footer.Text);
         Assert.Equal(ConnectionCheck.Passed, account.OutgoingCheck);
+        Assert.Equal("Done — Outgoing sign-in tested; no message was sent.", fixture.OutgoingLine);
+        Assert.Equal(["Error: " + Refusal], fixture.Announced);
         fixture.Field("SMTP server (hostname only)").Text = profile.OutgoingServer!.Host;
+
+        // An invalid edit is refused the same way, with its field marked.
+        fixture.Field("SMTP port").Text = "five-eight-seven";
+        fixture.Click(fixture.TestSmtp);
+        Assert.Equal(("SMTP port must be a number between 1 and 65535.", "OutgoingServer.Port"), (account.Status, account.ValidationField));
+        Assert.Equal(ConnectionCheck.Passed, account.OutgoingCheck);
+        fixture.Field("SMTP port").Text = "587";
 
         // A refusal is no test result: once an unrelated change is saved, both results still stand.
         fixture.Field("Display name").Text = "Renamed account";
-        await account.TestConnectionAsync();
-        fixture.Settle();
+        fixture.Announced.Clear();
+        fixture.Click(fixture.Button("Test connection"));
         Assert.Equal(1, receiver.Calls);
-        Assert.Contains("Save your account changes", account.Status);
+        Assert.Equal((Refusal, FeedbackKind.Error), (account.Status, account.StatusKind));
+        Assert.Equal(ConnectionCheck.Passed, account.ConnectionCheck);
+        Assert.DoesNotContain(fixture.StepLines, line => line.Contains("failed", StringComparison.Ordinal));
+        // The same refusal again is announced again, as any command's result is.
+        Assert.Equal(["Error: " + Refusal], fixture.Announced);
+        fixture.Click(fixture.Button("Test connection"));
+        Assert.Equal(["Error: " + Refusal, "Error: " + Refusal], fixture.Announced);
         fixture.Click(fixture.Button("Save account"));
         Assert.Equal("Renamed account", account.Profile!.DisplayName);
         Assert.Equal((ConnectionCheck.Passed, ConnectionCheck.Passed), (account.ConnectionCheck, account.OutgoingCheck));
@@ -331,7 +349,7 @@ public sealed class SmtpSetupTests
     {
         private readonly TestDirectory _directory = new();
 
-        public Fixture(AccountProfile profile, TestCredentialStore credentials, TestOutgoingTester? tester, TestMailReceiver? receiver = null)
+        public Fixture(AccountProfile profile, TestCredentialStore credentials, TestOutgoingTester? tester, TestMailReceiver? receiver = null, BSize? viewport = null)
         {
             Dispatcher = new TestQueueDispatcher();
             receiver ??= new TestMailReceiver();
@@ -340,13 +358,18 @@ public sealed class SmtpSetupTests
                 new(new JsonSettingsStore(_directory.File("settings.json")), Dispatcher, new(), null),
                 new(receiver, Dispatcher), new ComposerViewModel(dispatcher: Dispatcher));
             Shell = new MailShellView(Model);
-            Session = new StandardUiSessionBuilder().WithDispatcher(Dispatcher).Build(new Host());
+            Session = new StandardUiSessionBuilder().WithDispatcher(Dispatcher).Build(new Host(viewport ?? new(1100, 720)));
+            Session.SemanticChanged += (_, e) =>
+            {
+                if (e.Change == UiSemanticChangeKind.StatusAnnounced) Announced.Add(e.Message ?? "");
+            };
             Session.AddRoot(Shell.Window);
             Shell.Navigation.SelectTab("account");
             Keyboard = Shell.CreateKeyboardNavigation(Session);
             Settle();
         }
 
+        public List<string> Announced { get; } = [];
         public TestQueueDispatcher Dispatcher { get; }
         public MailShellViewModel Model { get; }
         public AccountProfileViewModel Account => Model.Account;
@@ -387,9 +410,9 @@ public sealed class SmtpSetupTests
         }
     }
 
-    private sealed class Host : IUiHost
+    private sealed class Host(BSize viewport) : IUiHost
     {
-        public BSize ViewportSize => new(1100, 720);
+        public BSize ViewportSize => viewport;
         public double Scale => 1;
         public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
         public void Invalidate(UiInvalidation invalidation) { }

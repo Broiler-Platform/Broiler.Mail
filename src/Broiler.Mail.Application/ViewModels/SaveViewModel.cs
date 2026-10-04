@@ -84,6 +84,24 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
         }), null, SuccessDisplayTime, Timeout.InfiniteTimeSpan);
     }
 
+    /// <summary>
+    /// Reports an operation refused before it began, such as a test while edits are unsaved. Nothing ran, so
+    /// nothing failed: the status says what to do first, an invalid field is marked, and earlier results stand.
+    /// </summary>
+    protected void Refuse(Exception refusal, string summary)
+    {
+        // Cleared first, as an operation clears it when it starts, so a repeated refusal is announced again
+        // and its field can take focus again.
+        SetStatus("", FeedbackKind.Information);
+        ValidationField = ValidationMessage = null;
+        Changed?.Invoke(this, EventArgs.Empty);
+        SetStatus(refusal.Message, FeedbackKind.Error, summary);
+        var validation = refusal as ConfigurationValidationException;
+        ValidationField = validation?.Field;
+        ValidationMessage = validation?.Message;
+        Changed?.Invoke(this, EventArgs.Empty);
+    }
+
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=80FC04
     // Broiler-Falsified-If: a save whose operation throws still runs its commit action, so the view model shows values that never reached the store
     // Broiler-Human:        PENDING
