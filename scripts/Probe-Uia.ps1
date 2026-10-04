@@ -7,11 +7,11 @@ Publishes the Windows app as NativeAOT (the shipped configuration) unless -Execu
 demo fixtures and reads their UI Automation tree as a screen reader would, through the UIA client in this
 process. Each check prints PASS or FAIL with what it read:
   - disclosure: in the composer (draft-invalid), the "Cc and Bcc" toggle exposes ExpandCollapse with the
-    state the section is in, names the section it opens through ControllerFor, and Expand and Collapse
-    change the state and show or hide the Cc and Bcc fields.
+    state the section is in, names the section it opens through ControllerFor (a part with a name of its
+    own, holding the Cc and Bcc fields), and Expand and Collapse change the state and show or hide the
+    Cc and Bcc fields.
   - draft-error: after Check draft rejected the To address (draft-invalid), the To field reports
-    IsDataValidForForm = false, and its DescribedBy and FullDescription carry the error. The composer
-    reports its errors only in its feedback and marks no field yet, so this check fails until it does.
+    IsDataValidForForm = false, and its DescribedBy and FullDescription carry the error.
   - account-error: after Save account rejected the email address (invalid-setup), the Email address field
     reports IsDataValidForForm = false, and its DescribedBy and FullDescription carry the error.
   - row-names: every message row of the inbox fixture is named with its received date.
@@ -304,8 +304,12 @@ function Test-Check([string]$check) {
                 $targets = @([UiaProbe]::Relation($run.Render, $ButtonTypeId, $toggle.Current.Name, $ControllerForId))
                 $result.read.controllerForExpanded = @($targets | ForEach-Object { "$($_.ControlType) '$($_.Name)' [$($_.Edits -join ', ')]" })
                 if ($targets.Count -ne 1) { $result.findings += "CONTROLLER_FOR: the expanded toggle names $($targets.Count) elements, expected the section's content." }
-                elseif (@($targets[0].Edits) -notcontains 'Cc' -or @($targets[0].Edits) -notcontains 'Bcc') {
-                    $result.findings += 'CONTROLLER_FOR: the element the toggle controls does not hold the Cc and Bcc fields.'
+                else {
+                    if (@($targets[0].Edits) -notcontains 'Cc' -or @($targets[0].Edits) -notcontains 'Bcc') {
+                        $result.findings += 'CONTROLLER_FOR: the element the toggle controls does not hold the Cc and Bcc fields.'
+                    }
+                    # A screen reader that follows the relation reads this name.
+                    if (!$targets[0].Name) { $result.findings += 'CONTROLLER_FOR: the element the toggle controls has no name.' }
                 }
                 $pattern.Collapse(); Start-Sleep -Milliseconds 500
                 $result.read.afterCollapse = "$($pattern.Current.ExpandCollapseState)"

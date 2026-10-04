@@ -54,6 +54,8 @@ public sealed class SettingsView(SettingsViewModel model)
         var height = ConfigurationForm.AddField(window, "Initial window height (480–4320)", model.WindowHeight);
         // Listed from the same table the key handling uses; collapsed so the settings stay short.
         var shortcuts = new FormSection("Keyboard shortcuts", "", collapsible: true, expanded: false);
+        // Named for the toggle that controls it, as the composer's Cc and Bcc are.
+        shortcuts.Content.AccessibleName = "Keyboard shortcuts";
         panel.AddChild(shortcuts);
         foreach (var shortcut in MailShortcuts.All)
             shortcuts.Content.AddChild(new StandardLabel

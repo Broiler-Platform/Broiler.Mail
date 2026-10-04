@@ -111,6 +111,8 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         smtpFields.AddChild(FormSurface.ActionBar(saveSmtpPassword, forgetSmtpPassword, testSmtp));
         ConfigurationForm.AddText(smtpFields, "Forget the SMTP password before removing outgoing setup.");
         var advanced = new FormSection("Sent-copy settings", collapsible: true, expanded: model.SentCopyMode != SentCopyMode.NotConfigured);
+        // Named for the toggle that controls it, as the composer's Cc and Bcc are.
+        advanced.Content.AccessibleName = "Sent-copy settings";
         smtpFields.AddChild(advanced);
         var sentCopy = new StandardComboBox();
         sentCopy.SetItems([new UiComboBoxItem("None", "Not configured — no app copy"),

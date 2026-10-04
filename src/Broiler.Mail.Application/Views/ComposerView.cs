@@ -79,6 +79,8 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var toField = new FormField("To", to);
         panel.Add(toField);
         var copies = new FormSection("Cc and Bcc", "", collapsible: true, expanded: false);
+        // The toggle names this content as the part it controls; a screen reader following it lands on a name.
+        copies.Content.AccessibleName = "Cc and Bcc";
         panel.Add(copies);
         var cc = Field("Visible to all recipients");
         var bcc = Field("Hidden from other recipients");

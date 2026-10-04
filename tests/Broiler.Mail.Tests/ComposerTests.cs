@@ -195,6 +195,27 @@ public sealed class ComposerTests
     }
 
     [Fact]
+    public void EveryDisclosureTogglesAPartNamedForWhatItHolds()
+    {
+        using var directory = new TestDirectory();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, new ImmediateUiDispatcher(), TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), new ImmediateUiDispatcher(), new(), null),
+            new(receiver, new ImmediateUiDispatcher()));
+        using var shell = new MailShellView(model);
+        var sections = Descendants(shell.Window).OfType<FormSection>().Where(section => section.Toggle is not null).ToArray();
+        Assert.Equal(["Cc and Bcc", "Keyboard shortcuts", "Sent-copy settings"], sections.Select(section => section.Content.GetSemanticNode().Name).Order());
+        // A screen reader that follows a toggle's "controls" relation lands on the section's name ("Show Cc and
+        // Bcc" controls "Cc and Bcc"), not on an unnamed pane.
+        foreach (var section in sections)
+        {
+            Assert.Same(section.Content, section.Toggle!.Controls);
+            Assert.EndsWith(" " + section.Content.GetSemanticNode().Name, section.Toggle.Text);
+        }
+    }
+
+    [Fact]
     public void RecipientParserHandlesQuotedNamesAndBccOnlyDrafts()
     {
         var model = new ComposerViewModel();
