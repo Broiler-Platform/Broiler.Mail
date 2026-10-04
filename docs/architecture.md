@@ -163,7 +163,9 @@ The SMTP sign-in test follows the same rules with its own contract,
 slot, connects with implicit TLS or required STARTTLS, authenticates, and sends a
 best-effort QUIT. It never sends MAIL, RCPT, DATA or any other submission command. Its
 failures carry a `MailConnectionFailure` kind with fixed text. Its result is kept in
-memory beside the outgoing checklist step and never changes receiving readiness. See
+memory beside the outgoing checklist step and never changes receiving readiness. A
+test that cannot start, for example because of unsaved edits, is refused with what to
+do first rather than reported as failed, and leaves both results in place. See
 [decision 0006](decisions/0006-non-sending-smtp-test.md).
 
 ## Receiving and text boundaries
@@ -206,7 +208,10 @@ accepts arm64 for future testing; arm64 is not advertised as validated.
 `--demo` uses only an in-memory account and synthetic mail. It does not construct
 the Windows credential adapter or read the default configuration directory.
 Its `send-rejected` fixture offers Send to a synthetic sender that refuses the recipient;
-no demo sender contacts a server or reports acceptance.
+no demo sender contacts a server or reports acceptance. The `smtp-test-failed` and
+`smtp-test-passed` fixtures answer the SMTP sign-in test synthetically and show a saved
+SMTP password by presence only (`ICredentialStore.ContainsAsync`); no demo credential
+lookup returns a secret.
 `--data-directory` supports isolated real configuration tests. The user will run
 live-provider acceptance later using the [included checklist](version-1-acceptance.md).
 Physical multi-monitor and IME language coverage are also recorded as user checks.

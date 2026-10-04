@@ -23,8 +23,9 @@ lockouts on their own.
 3. It connects with implicit TLS (`SslOnConnect`) or required STARTTLS, with
    platform certificate validation. Without STARTTLS, nothing secret is sent.
 4. A server that offers no AUTH (`AuthenticationUnavailable`) or only OAuth
-   mechanisms (`UnsupportedSignIn`) is named for what it is, instead of reporting a
-   wrong password.
+   mechanisms (`UnsupportedSignIn`) is named for what it is before any AUTH command.
+   Without the second check, MailKit would report no compatible mechanism, which
+   reads as a server without sign-in on this port.
 5. It authenticates, then sends a best-effort QUIT within its own budget of at most
    2 seconds (and within the overall deadline). A QUIT that fails or gets no answer
    does not turn a pass into a failure.
@@ -42,7 +43,8 @@ defaults to `Unspecified`, so existing callers are unchanged; the IMAP receiver 
 not classify its failures yet. Messages stay fixed app text: server replies, which
 can echo what was sent, and secrets never reach them. A TLS failure names the
 server name, the certificate, the port and the connection security, because TLS
-against a STARTTLS port fails the same way as an untrusted certificate.
+against a STARTTLS port fails the same way as an untrusted certificate. A handshake
+that the deadline cuts off is a `Timeout`, not a certificate problem.
 
 | Kind | Meaning |
 | --- | --- |
@@ -50,7 +52,7 @@ against a STARTTLS port fails the same way as an untrusted certificate.
 | `UnsupportedSignIn` | OAuth profile, or the server offers no password mechanism |
 | `MissingPassword` | No SMTP password bound to these server details |
 | `CredentialStore` | The protected store could not be read |
-| `Unreachable`, `Timeout` | No connection, or no answer before the deadline |
+| `Unreachable`, `Timeout` | No connection, or no answer before the deadline, including a TLS handshake that is never answered |
 | `TlsVerification`, `TlsUnavailable` | Unverified TLS, or required STARTTLS missing |
 | `AuthenticationUnavailable`, `AuthenticationRejected` | No AUTH offered, or sign-in rejected |
 | `ServerRefused`, `Interrupted` | The server refused a step, or the connection broke |
@@ -66,9 +68,12 @@ and the next-step button never offers it: sending stays optional. Each protocol'
 result is reset only by its own changes. Saving new outgoing server details, or
 saving or forgetting the SMTP password, resets the SMTP result. Saving new incoming
 server details resets the IMAP result. Changing the account's enabled state resets
-both. Adding outgoing mail no longer undoes a passed receiving test. A test refused
-before it starts because of unsaved edits is not a result, so it leaves the saved
-profile's result in place.
+both. Adding outgoing mail no longer undoes a passed receiving test. A test that
+cannot start, because of unsaved or invalid edits, a missing SMTP server or an
+unsupported sign-in, is not a result. It is refused with what to do first ("Save your
+account changes…", with the footer "The test did not start."), never reported as a
+failed test, and the saved profile's results stay in place. This applies to the
+connection test as well.
 
 ## Interface
 
@@ -78,21 +83,24 @@ bar's order is unchanged. It is enabled only when a saved outgoing server exists
 SMTP password is not known to be missing, the SMTP password box is empty (typed text
 is never silently replaced by the saved secret), and nothing else is running. Only
 one test runs at a time. **Cancel test** and Escape stop either test, and focus then
-returns to the button of the test that ran. Progress ("Signing in to the SMTP
-server… No message is sent.") and the result are each announced once; checklist
-changes are silent.
+returns to the button of the test that ran, scrolled into view. Progress ("Signing
+in to the SMTP server… No message is sent.") and the result are each announced once;
+checklist changes and typing are silent.
 
 Demo mode uses a synthetic tester that never opens a connection or reads a
 credential. The `smtp-test-failed` fixture produces a sign-in rejection through the
-ordinary command, and `smtp-test-passed` produces a pass. Every other demo scenario
+ordinary command, and `smtp-test-passed` produces a pass. Both show their SMTP password
+as saved through `ICredentialStore.ContainsAsync`, a presence-only lookup, for the
+fixture's own server only; no demo lookup returns a secret. Every other demo scenario
 refuses the test, as it refuses the IMAP test.
 
 ## Verification and open work
 
 The loopback SMTP fixture gained a connection-test mode that fails the test on any
 command besides EHLO, HELO, STARTTLS, AUTH and QUIT. It also gained servers without
-AUTH, OAuth-only servers, a refused greeting, and stalled or dropped AUTH and QUIT.
-Tests cover TLS and STARTTLS passes with QUIT; every failure kind; the deadline; user
+AUTH, OAuth-only servers, a refused greeting, stalled or dropped AUTH, a stalled
+QUIT, and a TLS handshake that is never answered. Tests cover TLS and STARTTLS passes
+with QUIT; every failure kind; the deadline, including during the TLS handshake; user
 cancellation before connecting, during AUTH, and during QUIT; credential binding and
 protocol isolation; and the account form from saving the SMTP password to a pass
 without any submission.
@@ -100,4 +108,5 @@ without any submission.
 A live check against a real provider remains user-owned
 ([checklist](../version-2-smtp-checklist.md)). A screen-reader speech check of the
 announcements belongs to the open H-01 pass. Classifying IMAP failures with the same
-kinds is later work.
+kinds is later work; the IMAP receiver still reports a TLS handshake cut off by its
+deadline as a verification failure.
