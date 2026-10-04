@@ -84,7 +84,8 @@ public sealed class WindowCaptionTests
                 { ShowInTaskbar = false, Opacity = 0 };
                 window.Shown += (_, _) =>
                 {
-                    // No theme has reached the preview yet; only the creation call can have set the caption.
+                    // The theme given at construction reaches the session only; until ApplyTheme, only the
+                    // creation call can have set the caption.
                     bool opened = DwmCaption.IsDark(window.NativeHandle);
                     window.ApplyTheme(StandardThemeTokens.Light);
                     // Queued after the theme, so it runs once the theme is applied.
