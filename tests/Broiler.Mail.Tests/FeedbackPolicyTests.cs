@@ -321,6 +321,73 @@ public sealed class FeedbackPolicyTests
         content.Dispose();
     }
 
+    [Fact]
+    public void ADraftCheckConfirmationIsAnnouncedOnceAndGoesAwayQuietly()
+    {
+        using var fixture = Fixture.Open();
+        var composer = fixture.Model.Composer;
+        composer.StartNew();
+        composer.Edit("to@example.test", "", "", "Plans", "Body");
+        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Settle();
+        fixture.Announced.Clear();
+
+        fixture.Button("Check draft").Click();
+        fixture.Settle();
+        const string passed = "Draft fields are valid. No mail was sent.";
+        Assert.Equal(["Success: " + passed], fixture.Announced);
+        Assert.Equal(passed, fixture.ComposerStatus.Message);
+
+        // A second check restarts the time the confirmation stays.
+        fixture.Clock.Advance(TimeSpan.FromSeconds(4));
+        fixture.Settle();
+        fixture.Button("Check draft").Click();
+        fixture.Settle();
+        fixture.Clock.Advance(TimeSpan.FromSeconds(4));
+        fixture.Settle();
+        Assert.Equal(FeedbackKind.Success, composer.StatusKind);
+        Assert.Equal(passed, fixture.ComposerStatus.Message);
+
+        fixture.Announced.Clear();
+        fixture.Clock.Advance(SaveViewModel.SuccessDisplayTime);
+        fixture.Settle();
+        Assert.Equal("", composer.Status);
+        Assert.Equal("", fixture.ComposerStatus.Message);
+        Assert.Equal(UiVisibility.Collapsed, fixture.ComposerStatus.Visibility);
+        // Going away is not announced; the footer returns to the draft's storage state.
+        Assert.Empty(fixture.Announced);
+        Assert.Equal(composer.StorageStatus, fixture.Footer.Text);
+    }
+
+    [Fact]
+    public void AFailedDraftCheckStaysAndAnEarlierConfirmationNeverClearsANewerStatus()
+    {
+        using var fixture = Fixture.Open();
+        var composer = fixture.Model.Composer;
+        composer.StartNew();
+        composer.Edit("team.example.test", "", "", "Plans", "Body");
+        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Settle();
+
+        fixture.Button("Check draft").Click();
+        fixture.Clock.Advance(SaveViewModel.SuccessDisplayTime * 2);
+        fixture.Settle();
+        Assert.Equal(FeedbackKind.Error, composer.StatusKind);
+        Assert.Equal("Enter valid email addresses separated by commas.", fixture.ComposerStatus.Message);
+
+        // A passed check is replaced by the retention notice before its time is up; the notice stays.
+        composer.Edit("to@example.test", "", "", "Plans", "Body");
+        fixture.Button("Check draft").Click();
+        fixture.Settle();
+        composer.SetAccount(fixture.Model.Account.Profile! with { DisplayName = "Renamed" });
+        fixture.Settle();
+        string retained = composer.Status;
+        Assert.Contains("retained", retained, StringComparison.Ordinal);
+        fixture.Clock.Advance(SaveViewModel.SuccessDisplayTime);
+        fixture.Settle();
+        Assert.Equal(retained, composer.Status);
+    }
+
     private sealed class FailingSettingsStore : ISettingsStore
     {
         public Task<Broiler.Mail.Core.Settings.ApplicationSettings> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult(new Broiler.Mail.Core.Settings.ApplicationSettings());
@@ -370,6 +437,8 @@ public sealed class FeedbackPolicyTests
         private UiElement Tab(string id) => Shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
         public StandardRichEdit ComposerBody => Descendants(Tab("compose")).OfType<StandardRichEdit>().Single();
         public StandardButton Button(string text) => Descendants(Tab("compose")).OfType<StandardButton>().Single(button => button.Text == text);
+        /// <summary>The composer's line for check results, warnings, and errors; the last of its feedback lines.</summary>
+        public InlineFeedback ComposerStatus => Descendants(Tab("compose")).OfType<InlineFeedback>().Last();
         public InlineFeedback SettingsFeedback => Descendants(Tab("settings")).OfType<InlineFeedback>().Single();
         public StandardLabel Footer => (StandardLabel)Shell.Window.Children[0].Children[0];
 
@@ -392,7 +461,7 @@ public sealed class FeedbackPolicyTests
                 new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null, outgoing) { Clock = clock },
                 new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null) { Clock = clock },
                 new(receiver, dispatcher),
-                new ComposerViewModel(dispatcher: dispatcher, sender: sender));
+                new ComposerViewModel(dispatcher: dispatcher, sender: sender) { Clock = clock });
             var shell = new MailShellView(model);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host());
             session.AddRoot(shell.Window);

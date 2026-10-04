@@ -141,7 +141,24 @@ public sealed class ComposerViewModel : IDisposable
     public string PlainText { get; private set; } = "";
     private string _status = "Save an account, then start a new message or read a message to reply.";
     public FeedbackKind StatusKind { get; private set; }
-    public string Status { get => _status; private set { _status = value; StatusKind = FeedbackKind.Information; } }
+    public string Status
+    {
+        get => _status;
+        private set
+        {
+            _status = value;
+            StatusKind = FeedbackKind.Information;
+            // Any newer status replaces a confirmation that was waiting to go away.
+            _statusVersion++;
+            _successTimer?.Dispose();
+            _successTimer = null;
+        }
+    }
+
+    /// <summary>The clock that times the draft check's confirmation, as <see cref="SaveViewModel.SuccessDisplayTime"/> does for saves.</summary>
+    public TimeProvider Clock { get; init; } = TimeProvider.System;
+    private ITimer? _successTimer;
+    private int _statusVersion;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=5A97FB
     // Broiler-Falsified-If: after the saved account changes its SMTP server, a send still uses the previous AccountProfile
@@ -225,9 +242,32 @@ public sealed class ComposerViewModel : IDisposable
     // Broiler-Human:        PENDING
     public void CheckDraft()
     {
-        try { _ = BuildDraft(); Status = "Draft fields are valid. No mail was sent."; StatusKind = FeedbackKind.Success; }
+        try { _ = BuildDraft(); Status = "Draft fields are valid. No mail was sent."; StatusKind = FeedbackKind.Success; ClearAfterDisplayTime(); }
         catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Status = error.Message; StatusKind = FeedbackKind.Error; }
         Notify();
+    }
+
+    /// <summary>
+    /// A passed check goes away like an Account or Settings confirmation: the checked fields stay
+    /// visible, so nothing is lost. A failed check stays until the next edit.
+    /// </summary>
+    private void ClearAfterDisplayTime()
+    {
+        int version = _statusVersion;
+        _successTimer = Clock.CreateTimer(_ =>
+        {
+            try
+            {
+                _dispatcher.Post(() =>
+                {
+                    // A newer status, even another passed check, has its own timer.
+                    if (_disposed || version != _statusVersion) return;
+                    Status = "";
+                    Notify();
+                });
+            }
+            catch (ObjectDisposedException) { }
+        }, null, SaveViewModel.SuccessDisplayTime, Timeout.InfiniteTimeSpan);
     }
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=70FAA8
@@ -413,5 +453,5 @@ public sealed class ComposerViewModel : IDisposable
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=56EEDB
     // Broiler-Falsified-If: a draft write completing after Dispose still raises Changed on the disposed view model
     // Broiler-Human:        PENDING
-    public void Dispose() { _disposed = true; _journal.Changed -= OnStorageChanged; }
+    public void Dispose() { _disposed = true; _journal.Changed -= OnStorageChanged; _successTimer?.Dispose(); }
 }
