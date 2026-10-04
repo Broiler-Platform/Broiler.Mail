@@ -8,6 +8,8 @@ using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.UI;
 using Broiler.UI.ListView;
+using Broiler.UI.ListView.Standard;
+using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Tests;
 
@@ -215,7 +217,40 @@ public sealed class MessageRowTests
         Assert.EndsWith($"Received: {Dates.Detail(message.ReceivedAt)}", node.Name, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public void ASelectedRowDrawsItsTextInTheSelectionTextColors()
+    {
+        // A system contrast palette draws the selection in the highlight pair, whose text differs from Text.
+        var selectionText = BColor.FromArgb(0xFF, 0x26, 0x3B, 0x50);
+        var palette = StandardThemeTokens.HighContrastDark with { SelectionText = selectionText, SelectionTextMuted = selectionText };
+        Assert.NotEqual(palette.Text, palette.SelectionText);
+        var selected = Message("Broiler team <hello@example.test>", read: false);
+        var other = Message("Someone else <someone@example.test>", read: true) with { Key = selected.Key with { Uid = 2 }, Subject = "Other", ReceivedAt = new DateTimeOffset(2026, 9, 20, 9, 30, 0, TimeSpan.Zero) };
+        var list = new StandardListView { ItemPresenter = new MailMessageItemPresenter(Dates) };
+        list.ApplyTheme(palette);
+        list.SetItems([Item(selected), Item(other)]);
+        list.SelectIndex(0);
+        using var session = new StandardUiSessionBuilder().Build(new Host());
+        session.AddRoot(list);
+
+        var texts = session.RenderFrame().Commands.OfType<BRenderCommand.DrawText>().ToArray();
+        // The selected row's sender, date and subject, and the other row's sender, which stays in Text.
+        string[] selectedTexts = ["Broiler team <hello@example.test>", "Sep 27", "Welcome"];
+        foreach (string text in selectedTexts)
+            Assert.Equal(selectionText, Assert.Single(texts, draw => draw.Text.Text == text).Text.Color);
+        Assert.Equal(palette.Text, Assert.Single(texts, draw => draw.Text.Text == "Someone else <someone@example.test>").Text.Color);
+    }
+
     private static double SubjectSize(BFontStyle font) => Math.Max(10, font.Size - 1);
+
+    private sealed class Host : IUiHost
+    {
+        public BSize ViewportSize => new(600, 200);
+        public double Scale => 1;
+        public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
+        public void Invalidate(UiInvalidation invalidation) { }
+        public void Present(BRenderList renderList) { }
+    }
 
     private static (string Sender, string Date, string Subject) Rendered(MailMessageSummary message, double width, BFontStyle font)
     {

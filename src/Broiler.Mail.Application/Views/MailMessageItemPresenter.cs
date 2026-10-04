@@ -44,23 +44,9 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null)
                 message.IsRead,
                 message);
 
-            var adapted = new UiListItemRenderContext
-            {
-                RenderList = context.RenderList,
-                Bounds = context.Bounds,
-                Item = displayItem,
-                State = context.State,
-                Font = context.Font,
-                Foreground = context.Foreground,
-                SecondaryForeground = context.SecondaryForeground,
-                Background = context.Background,
-                SelectedBackground = context.SelectedBackground,
-                FocusRing = context.FocusRing,
-                Accent = context.Accent,
-                IsHighContrast = context.IsHighContrast,
-            };
-
-            _twoLinePresenter.Render(adapted);
+            // Every color, font and state carries over, including the selected text colors a theme gives the
+            // selection; a member-by-member copy dropped them, and a selected row then drew its text in Text.
+            _twoLinePresenter.Render(context.WithItem(displayItem));
             return;
         }
 
@@ -128,8 +114,9 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null)
         for (int count = 0; count < MinimumSenderCharacters && end < name.Length; count++)
             end += StringInfo.GetNextTextElementLength(name, end);
         string shortest = end >= name.Length ? name : string.Concat(name.AsSpan(0, end), "...");
-        // The presenter never starts the date closer than 20 DIP to the sender's left edge, so a date
-        // that leaves less is pushed past the row's edge instead.
+        // The two-line presenter draws a date whole or not at all: only when it leaves the sender its first
+        // three characters and an ellipsis, and at least 10 DIP. Four characters ask more, so a form chosen
+        // here is always drawn, and an empty one leaves the line to the sender, as the presenter would.
         double needed = Math.Max(BTextMeasurer.MeasureAdvance(shortest, SenderFont(unread, font)), DateMinimumOffset - DateGap);
         double space = SenderSpace(unread, rowWidth);
         BFontStyle dateFont = DateFont(font);
