@@ -167,6 +167,8 @@ public sealed class MeasurementTests
         Assert.Equal(1, root.GetProperty("measureMsP50").GetDouble(), 3);
         Assert.Equal(10, root.GetProperty("renderPresentMsP95").GetDouble(), 3);
         Assert.Equal("900x700", root.GetProperty("previewWindowSize").GetString());
+        Assert.Equal(1, root.GetProperty("previewOpeningZoom").GetDouble());
+        Assert.False(root.TryGetProperty("previewZoom", out _));
         Assert.Equal(1, root.GetProperty("framesDrawingTiles").GetInt32());
         Assert.Equal(4, root.GetProperty("buildMsCachedTilesP50").GetDouble(), 3);
         Assert.Equal(120, root.GetProperty("buildMsDrawingTilesP50").GetDouble(), 3);
@@ -283,6 +285,8 @@ public sealed class MeasurementTests
             Assert.Equal((short.MaxValue, short.MaxValue), ((int, int))await limits.Task.WaitAsync(TimeSpan.FromSeconds(15)));
 
             Assert.Equal(scale, dpiScale);
+            // Named in the title, as the main window names it, so a capture is not taken for a real display.
+            Assert.EndsWith($", simulated {Math.Round(scale * 100)}% scale", preview.Options.Title, StringComparison.Ordinal);
             Assert.Equal(900, size.Width, 1.0);
             Assert.Equal(700, size.Height, 1.0);
             var tile = Assert.Single(cached);
@@ -331,6 +335,7 @@ public sealed class MeasurementTests
             Assert.NotEmpty(phases.RenderPresentMs);
             Assert.All(new[] { phases.DrainMs, phases.MeasureMs, phases.ArrangeMs, phases.RenderListMs },
                 phase => Assert.Equal(samples.BuildMs.Length, phase.Length));
+            Assert.DoesNotContain("simulated", preview.Options.Title, StringComparison.Ordinal);
 
             // A resize draws its frame inside SetWindowPos, outside any paint message. The frame window's WM_PAINT
             // that follows draws nothing, so it must not be taken for that frame's present.

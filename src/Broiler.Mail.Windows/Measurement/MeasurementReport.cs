@@ -70,7 +70,8 @@ internal sealed class MeasurementReport
     {
         Add("previewWindowSize", $"{Math.Round(preview.ClientSize.Width)}x{Math.Round(preview.ClientSize.Height)}");
         Add("previewDpiScale", preview.DpiScale);
-        Add("previewZoom", preview.Zoom);
+        // The zoom the preview opened at: long-html scrolls at it, and preview-zoom starts and ends there.
+        Add("previewOpeningZoom", preview.OpeningZoom);
         // Opening: from the reader's button to the preview's first frame (layout and the first tiles), reported apart.
         Add("openToFirstFrameMs", preview.OpenToFirstFrameMs);
         Add("openFrames", preview.Open.BuildMs.Length);
@@ -170,6 +171,6 @@ internal sealed class MeasurementReport
 /// <summary>The scale the main window rendered at, Windows' own scale for it, and the simulated percent (--scale) if any.</summary>
 internal readonly record struct MeasurementScale(double DpiScale, double SystemDpiScale, int? SimulatedPercent);
 
-/// <summary>The measured HTML preview: its size in DIPs, scale, and zoom, its opening, its tile cache, and what the cache held at the end.</summary>
-internal sealed record PreviewResult(BSize ClientSize, double DpiScale, double Zoom, double OpenToFirstFrameMs, FrameSamples Open,
+/// <summary>The measured HTML preview: its size in DIPs, scale, and opening zoom, its opening, its tile cache, and what the cache held at the end.</summary>
+internal sealed record PreviewResult(BSize ClientSize, double DpiScale, double OpeningZoom, double OpenToFirstFrameMs, FrameSamples Open,
     HtmlTileSnapshot Tiles, long CachedBytes, int CachedTiles);

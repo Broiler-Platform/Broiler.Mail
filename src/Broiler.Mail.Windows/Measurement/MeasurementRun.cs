@@ -51,6 +51,7 @@ internal sealed class MeasurementRun
     private PreviewMeasurement? _preview;
     private HtmlPreviewWindow? _previewWindow;
     private double _openToFirstFrameMs = double.NaN;
+    private double _openingZoom = double.NaN;
     private FrameSamples? _opening;
     private int _steps;
     private int _unpainted;
@@ -275,24 +276,26 @@ internal sealed class MeasurementRun
         while (frames.WaitForFrame(frames.Frames, PreviewQuiet))
             if (deadline.Elapsed > PreviewFrameTimeout) throw new TimeoutException("The HTML preview kept drawing after it opened.");
         _opening = frames.Snapshot();
+        var preview = _previewWindow;
+        OnPreview(() => _openingZoom = preview.Zoom);
         frames.Reset();
         _measured = frames;
-        return _previewWindow;
+        return preview;
     }
 
     private PreviewResult ReadPreview()
     {
         var window = _previewWindow!;
         BSize size = default;
-        double scale = 0, zoom = 0;
+        double scale = 0;
         long cachedBytes = 0;
         int cachedTiles = 0;
         OnPreview(() =>
         {
-            (size, scale, zoom) = (window.ClientSize, window.DpiScale, window.DefaultZoom);
+            (size, scale) = (window.ClientSize, window.DpiScale);
             (cachedBytes, cachedTiles) = (window.HtmlView.Content.CachedTileBytes, window.HtmlView.Content.CachedTileCount);
         });
-        return new PreviewResult(size, scale, zoom, _openToFirstFrameMs, _opening!, _preview!.Tiles.Snapshot(), cachedBytes, cachedTiles);
+        return new PreviewResult(size, scale, _openingZoom, _openToFirstFrameMs, _opening!, _preview!.Tiles.Snapshot(), cachedBytes, cachedTiles);
     }
 
     /// <summary>Closes a preview this run opened and waits until its thread has let it go.</summary>

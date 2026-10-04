@@ -199,7 +199,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         : base(new BWindowOptions
         {
             // The title names the message; it must be set here because the native window does not exist yet.
-            Title = title ?? "Broiler.Mail — HTML preview",
+            Title = TitleAtScale(title ?? "Broiler.Mail — HTML preview", measurement),
             ClientWidth = DefaultClientWidth,
             ClientHeight = DefaultClientHeight,
             OwnsMessageLoop = false,
@@ -670,6 +670,11 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
 
     /// <summary>Windows' scale for the window, or the simulated one a --measure run at --scale renders the preview at.</summary>
     public override double DpiScale => _measurement?.SimulatedScale ?? base.DpiScale;
+
+    /// <summary>Names a simulated scale in the title, as the main window does, so a capture cannot be mistaken for a real display.</summary>
+    private static string TitleAtScale(string title, PreviewMeasurement? measurement) => measurement?.SimulatedScale is { } scale
+        ? $"{title}, simulated {Math.Round(scale * 100).ToString(System.Globalization.CultureInfo.InvariantCulture)}% scale"
+        : title;
 
     protected override void OnNativeWindowMessage(nint hwnd, uint message, nint wParam, nint lParam)
     {
