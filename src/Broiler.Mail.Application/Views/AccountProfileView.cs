@@ -149,11 +149,14 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             testSmtp.Visibility = model.SupportsOutgoingTest ? UiVisibility.Visible : UiVisibility.Collapsed;
             testSmtp.IsEnabled = model.CanTestOutgoing && model.HasSmtpPassword != false && smtpSetup.SelectedIndex == 1 && smtpPassword.Text.Length == 0;
             cancel.IsEnabled = model.CanCancelTest;
-            // Focus goes back to the test that ran, or to Test connection when that one cannot take it.
-            if (!model.CanCancelTest && surface.Session?.FocusedElement == cancel)
-                surface.Session.SetFocus(model.LastTest == MailProtocol.Smtp && testSmtp.CanFocus ? testSmtp : test);
+            bool returnFocus = !model.CanCancelTest && surface.Session?.FocusedElement == cancel;
             cancel.Visibility = model.CanCancelTest ? UiVisibility.Visible : UiVisibility.Collapsed;
             RefreshSetup();
+            // Focus goes back to the test that ran, or to Test connection when that one cannot take it. The SMTP
+            // test sits in the scrolling form, which may have scrolled away from it meanwhile, so it is revealed
+            // once the checklist above it has its new text.
+            if (returnFocus && surface.Session is { } session)
+                FocusNavigation.FocusAndReveal(session, model.LastTest == MailProtocol.Smtp && testSmtp.CanFocus ? testSmtp : test);
         }
         void RefreshSetup()
         {

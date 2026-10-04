@@ -15,6 +15,7 @@ using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel.Standard;
+using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Tests;
@@ -127,6 +128,29 @@ public sealed class SmtpSetupTests
         }
         Assert.Equal(2, tester.Calls);
         Assert.Equal(ConnectionCheck.NotRun, fixture.Account.ConnectionCheck);
+    }
+
+    [Fact]
+    public async Task CancelBringsTheSmtpTestBackIntoViewWithFocus()
+    {
+        var (profile, credentials) = await SavedAccountAsync();
+        var tester = new TestOutgoingTester { Test = token => Task.Delay(Timeout.InfiniteTimeSpan, token) };
+        // A small window: the form scrolls, while the bottom bar with Cancel test stays in place.
+        using var fixture = new Fixture(profile, credentials, tester, viewport: new(640, 480));
+        var cancel = fixture.Button("Cancel test");
+        var scroll = Ancestors(fixture.TestSmtp).OfType<StandardScrollView>().First();
+        Assert.DoesNotContain(scroll, Ancestors(cancel));
+        fixture.Click(fixture.TestSmtp, settle: false);
+        fixture.Session.SetFocus(cancel);
+        // Meanwhile the user scrolls back up to the checklist.
+        scroll.ScrollBy(0, -100_000);
+        fixture.Session.RenderFrame();
+        Assert.False(InView(fixture.TestSmtp, scroll));
+
+        cancel.Click();
+        fixture.Settle();
+        Assert.Same(fixture.TestSmtp, fixture.Session.FocusedElement);
+        Assert.True(InView(fixture.TestSmtp, scroll));
     }
 
     [Fact]
@@ -336,6 +360,14 @@ public sealed class SmtpSetupTests
             new InputEventHeader(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1),
             KeyboardKey.FromName("VirtualKey:" + code), KeyboardKeyTransition.Down, KeyboardModifierState.None, code, 0, 0, false, false,
             Source: InputEventSource.Synthetic));
+
+    private static bool InView(UiElement element, StandardScrollView scroll) =>
+        element.Bounds.Top >= scroll.ContentBounds.Top && element.Bounds.Bottom <= scroll.ContentBounds.Bottom;
+
+    private static IEnumerable<UiElement> Ancestors(UiElement element)
+    {
+        for (var parent = element.Parent; parent is not null; parent = parent.Parent) yield return parent;
+    }
 
     private static IEnumerable<UiElement> Descendants(UiElement root)
     {
