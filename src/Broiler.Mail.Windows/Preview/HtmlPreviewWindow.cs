@@ -219,6 +219,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _host = new WindowsUiHost(this, () => InputHandle);
         _dispatcher = new StandardQueuedUiDispatcher(() => PostToUiThread(DrainDispatcher));
         _session = new StandardUiSessionBuilder().WithDispatcher(_dispatcher).Build(_host);
+        // Nothing in the preview draws a composition, so its window takes no IME while it has focus.
+        _host.TrackFocus(_session);
 
         // The shell's theme surface behind the header; without it, dark-theme text sat on the white window.
         var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock, Background = StandardControlPaint.Surface };
@@ -663,6 +665,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         WindowsTitleBar.ApplyDarkMode(NativeHandle, _dark);
         // Screen readers see the buttons, the document, and each link, as in the main window.
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _root, () => DpiScale);
+        _host.FollowFocus();
         // A measured preview at a simulated scale keeps its DIP size in that scale's pixels, as the main window does.
         if (_measurement?.SimulatedScale is { } scale)
             WindowsScreen.FitClient(NativeHandle, (int)Math.Round(DefaultClientWidth * scale), (int)Math.Round(DefaultClientHeight * scale), centered: true);

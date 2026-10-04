@@ -115,6 +115,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         // on the message the wake-up posts, or before the next frame if no window existed yet.
         _dispatcher = new StandardQueuedUiDispatcher(() => PostToUiThread(DrainDispatcher));
         _session = new StandardUiSessionBuilder().WithDispatcher(_dispatcher).Build(_host);
+        _host.TrackFocus(_session);
         var model = application.CreateViewModel(_dispatcher);
         _model = model;
         _restore = restore;
@@ -326,6 +327,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         base.OnCreated();
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _shell.Window, () => DpiScale);
         _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboard.Handle, () => DpiScale, Invalidate);
+        // The focus was set before the render window existed; its IME state follows it from now on.
+        _host.FollowFocus();
         // Before the first paint, so a dark caption never flashes light.
         WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
         // The window was sized from the option DIPs at the system scale, with a frame for that scale.

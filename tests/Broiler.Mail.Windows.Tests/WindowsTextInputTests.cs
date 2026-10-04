@@ -1,11 +1,16 @@
 using System.Runtime.ExceptionServices;
 using System.Runtime.InteropServices;
 using Broiler.Graphics.Geometry;
+using Broiler.Mail.Infrastructure.Preview;
+using Broiler.Mail.Windows.Preview;
 using Broiler.Mail.Windows.Services;
 using Broiler.UI;
+using Broiler.UI.Button.Standard;
 using Broiler.UI.Edit.Standard;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.ListView.Standard;
 using Broiler.UI.Panel.Standard;
+using Broiler.UI.RichEdit.Standard;
 using static Broiler.Native.Windows.WindowNative;
 
 namespace Broiler.Mail.Windows.Tests;
@@ -30,7 +35,7 @@ public sealed class WindowsTextInputTests
     {
         OnWindowThread(window =>
         {
-            new WindowsTextInput(() => window, () => scale).PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, true));
+            new WindowsTextInput(() => window, () => scale).PublishCaret(new UiTextCaretInfo(new StandardEdit(), Caret, 0, 0, 0, true));
 
             var form = ReadCompositionForm(window);
             Assert.Equal(CfsPoint, form.Style);
@@ -45,12 +50,13 @@ public sealed class WindowsTextInputTests
         {
             double scale = 1.0;
             var input = new WindowsTextInput(() => window, () => scale);
-            input.PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, false));
+            var edit = new StandardEdit();
+            input.PublishCaret(new UiTextCaretInfo(edit, Caret, 0, 0, 0, false));
             Assert.Equal((101, 58), Position(ReadCompositionForm(window)));
 
             // Moving the window to a 200 % monitor changes the scale the host reports, not the host.
             scale = 2.0;
-            input.PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, false));
+            input.PublishCaret(new UiTextCaretInfo(edit, Caret, 0, 0, 0, false));
             Assert.Equal((203, 116), Position(ReadCompositionForm(window)));
         });
     }
@@ -63,10 +69,58 @@ public sealed class WindowsTextInputTests
         int scaleReads = 0;
         var input = new WindowsTextInput(() => 0, () => { scaleReads++; return 1.5; });
         var password = new StandardEdit { IsPassword = true };
-        input.PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, false));
+        input.PublishCaret(new UiTextCaretInfo(new StandardEdit(), Caret, 0, 0, 0, false));
         input.PublishCaret(new UiTextCaretInfo(password, Caret, 0, 0, 0, false));
         input.ClearCaret(password);
+        input.FollowFocus(new StandardPanel());
+        input.FollowFocus(null);
         Assert.Equal(0, scaleReads);
+    }
+
+    [Fact]
+    public void OnlyAWritableEditorDrawsTheComposition()
+    {
+        Assert.True(WindowsTextInput.DrawsComposition(new StandardEdit()));
+        Assert.True(WindowsTextInput.DrawsComposition(new StandardRichEdit()));
+        Assert.False(WindowsTextInput.DrawsComposition(new StandardEdit { IsPassword = true }));
+        Assert.False(WindowsTextInput.DrawsComposition(new StandardEdit { IsReadOnly = true }));
+        Assert.False(WindowsTextInput.DrawsComposition(new StandardEdit { IsEnabled = false }));
+        Assert.False(WindowsTextInput.DrawsComposition(new StandardRichEdit { IsReadOnly = true }));
+        Assert.False(WindowsTextInput.DrawsComposition(new StandardListView()));
+        Assert.False(WindowsTextInput.DrawsComposition(new StandardButton()));
+        Assert.False(WindowsTextInput.DrawsComposition(null));
+    }
+
+    [Fact]
+    public void FocusOnAnythingButAWritableEditorTurnsTheImeOff()
+    {
+        OnWindowThread(window =>
+        {
+            var input = new WindowsTextInput(() => window, () => 1.0);
+            var list = new StandardListView();
+            var reader = new StandardRichEdit { IsReadOnly = true };
+            var body = new StandardRichEdit();
+
+            // Hosting keeps the IME from drawing the composition, so where Broiler.UI draws none it would be
+            // invisible: a list, a button, a read-only reader, or nothing focused at all.
+            input.FollowFocus(list);
+            Assert.False(HasInputContext(window));
+            input.FollowFocus(new StandardButton());
+            Assert.False(HasInputContext(window));
+            input.FollowFocus(null);
+            Assert.False(HasInputContext(window));
+            input.FollowFocus(body);
+            Assert.True(HasInputContext(window));
+            input.FollowFocus(reader);
+            Assert.False(HasInputContext(window));
+            // The read-only reader publishes its caret as it draws; that keeps the IME off.
+            input.PublishCaret(new UiTextCaretInfo(reader, Caret, 0, 0, 0, false));
+            Assert.False(HasInputContext(window));
+            // Focus moving on clears the reader's caret first; the next focus decides.
+            input.ClearCaret(reader);
+            input.FollowFocus(new StandardEdit());
+            Assert.True(HasInputContext(window));
+        });
     }
 
     [Fact]
@@ -120,6 +174,61 @@ public sealed class WindowsTextInputTests
         fixture.Layout();
         Assert.True(fixture.Ui(() => HasInputContext(fixture.Render)));
         AssertWithin(fixture.Ui(() => user.Bounds), fixture.Ui(() => ReadCompositionForm(fixture.Render)), scale);
+    }
+
+    [Fact]
+    public void TheImeIsOnlyOnWhileAWritableEditorHasFocus()
+    {
+        using var fixture = HiddenMailWindow.Start();
+        // The window opens with the tab strip focused, which draws no composition.
+        Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
+        var (to, _) = NativeInputFidelityTests.StartDraft(fixture);
+        Assert.True(fixture.Ui(() => HasInputContext(fixture.Render)));
+
+        var inbox = fixture.Ui(() => fixture.Window.Shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!);
+        var list = fixture.Ui(() => HiddenMailWindow.Descendants(inbox).OfType<StandardListView>().Single());
+        var reader = fixture.Ui(() => HiddenMailWindow.Descendants(inbox).OfType<StandardRichEdit>().Single(editor => editor.AccessibleName == "Message text"));
+        fixture.Ui(() => fixture.Window.Session.SetFocus(list));
+        Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
+        fixture.Ui(() => fixture.Window.Session.SetFocus(reader));
+        fixture.Layout();
+        Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
+
+        // Back in a field of the composer, the IME is on again at once, before the next frame.
+        fixture.Ui(() => fixture.Window.Session.SetFocus(to));
+        Assert.True(fixture.Ui(() => HasInputContext(fixture.Render)));
+        fixture.Ui(() => fixture.Window.Session.SetFocus(fixture.Window.Shell.Navigation));
+        Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
+    }
+
+    [Fact]
+    public async Task TheHtmlPreviewTakesNoImeSinceNothingInItDrawsAComposition()
+    {
+        var result = new TaskCompletionSource<(bool Document, bool PlainText)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<p>Agenda</p>", new HashSet<string>()), "Agenda as text", _ => { })
+                { ShowInTaskbar = false, Opacity = 0 };
+                window.Shown += (_, _) =>
+                {
+                    // The document has focus when the preview opens; its read-only plain text takes none either.
+                    bool document = HasInputContext(window.InputHandle);
+                    window.Session.SetFocus(window.PlainTextView.Editor);
+                    result.TrySetResult((document, HasInputContext(window.InputHandle)));
+                    window.Close();
+                };
+                window.Run();
+            }
+            catch (Exception error) { result.TrySetException(error); }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        var (document, plainText) = await result.Task.WaitAsync(TimeSpan.FromSeconds(30));
+        Assert.False(document);
+        Assert.False(plainText);
     }
 
     [Fact]
