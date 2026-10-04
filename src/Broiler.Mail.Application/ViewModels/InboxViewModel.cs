@@ -147,8 +147,8 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
             _older = page.Older;
             string? reading = cursor is null ? KeepReading(page) : null;
             Status = Messages.Count == 0 ? "The inbox is empty." : SelectedMessage is null
-                ? $"{Messages.Count} messages loaded. Select one to read. Server read/unread flags are unchanged."
-                : $"{Messages.Count} messages loaded. Server read/unread flags are unchanged.";
+                ? $"{Messages.Count} messages loaded. Select one to read. Reading does not mark messages as read on the server."
+                : $"{Messages.Count} messages loaded. Reading does not mark messages as read on the server.";
             if (reading is not null) Status += " " + reading;
             if (Messages.Count >= MaximumLoadedMessages && _older is not null)
                 Status += " Session limit reached (500 messages). Receive mail again to return to the newest page.";
@@ -206,7 +206,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         }, body =>
         {
             Body = body;
-            Status = body.IsHtmlFallback ? "Reading text extracted from HTML. External resources are not loaded." : "Reading plain text. Server flags are unchanged.";
+            Status = body.IsHtmlFallback ? "Reading text extracted from HTML. External resources are not loaded." : "Reading plain text. This does not mark the message as read on the server.";
             if (body.IsTruncated) Status += " Preview limited to 32,000 characters.";
         }, "Loading message…", InboxProblemScope.Message);
     }
