@@ -386,8 +386,9 @@ public sealed class ResponsiveInboxTests
     }
 
     /// <summary>
-    /// A list problem's explanation and its Retry keep the toolbar's inset from the list pane's edges, so
-    /// the accent stripe and the button's border stay clear of the frame drawn around the tabs.
+    /// A list problem's explanation keeps the toolbar's inset from the list pane's edges, so its accent
+    /// stripe stays clear of the frame drawn around the tabs. Its Retry row is laid out like the toolbar:
+    /// the row spans the pane, and Retry sits inside it as Receive mail sits inside the toolbar.
     /// </summary>
     [Theory]
     [InlineData(640)]
@@ -401,21 +402,27 @@ public sealed class ResponsiveInboxTests
         fixture.Session.RenderFrame();
 
         var receive = fixture.Button("Receive mail");
-        double inset = ((StandardToolbar)receive.Parent!).Padding;
+        var toolbar = (StandardToolbar)receive.Parent!;
+        double inset = toolbar.Padding;
         BRect pane = fixture.Split.FirstPane!.Bounds;
         var notice = Descendants(fixture.Content).OfType<InlineFeedback>().First();
         var retry = fixture.Button("Retry receiving");
         var row = retry.Parent!;
         Assert.Equal(FeedbackKind.Error, notice.Kind);
-        foreach (var (name, bounds) in new[] { ("notice", notice.Bounds), ("Retry row", row.Bounds) })
-        {
-            Assert.True(Math.Abs(bounds.Left - (pane.Left + inset)) < 0.5, $"The {name} starts at {bounds.Left}, the list pane at {pane.Left}.");
-            Assert.True(Math.Abs(bounds.Right - (pane.Right - inset)) < 0.5, $"The {name} ends at {bounds.Right}, the list pane at {pane.Right}.");
-        }
+        Assert.True(Math.Abs(notice.Bounds.Left - (pane.Left + inset)) < 0.5, $"The notice starts at {notice.Bounds.Left}, the list pane at {pane.Left}.");
+        Assert.True(Math.Abs(notice.Bounds.Right - (pane.Right - inset)) < 0.5, $"The notice ends at {notice.Bounds.Right}, the list pane at {pane.Right}.");
         Assert.Equal(pane.Top + inset, notice.Bounds.Top, 0.5);
-        Assert.True(fixture.List.Bounds.Top >= row.Bounds.Bottom + inset - 0.5, $"The list starts at {fixture.List.Bounds.Top}, the Retry row ends at {row.Bounds.Bottom}.");
-        // Retry lines up with the first of the toolbar's commands above it.
+
+        // The row spans the pane below the notice's inset, as the toolbar spans the view, and the list follows it.
+        Assert.Equal(toolbar.Bounds.Left, pane.Left, 0.5);
+        Assert.Equal(pane.Left, row.Bounds.Left, 0.5);
+        Assert.Equal(pane.Right, row.Bounds.Right, 0.5);
+        Assert.Equal(notice.Bounds.Bottom + inset, row.Bounds.Top, 0.5);
+        Assert.Equal(row.Bounds.Bottom, fixture.List.Bounds.Top, 0.5);
+        // Retry is inset within its row as Receive mail is within the toolbar, so the two line up.
         Assert.Equal(receive.Bounds.Left, retry.Bounds.Left, 0.5);
+        Assert.Equal(receive.Bounds.Top - toolbar.Bounds.Top, retry.Bounds.Top - row.Bounds.Top, 0.5);
+        Assert.Equal(toolbar.Bounds.Bottom - receive.Bounds.Bottom, row.Bounds.Bottom - retry.Bounds.Bottom, 0.5);
     }
 
     [Fact]

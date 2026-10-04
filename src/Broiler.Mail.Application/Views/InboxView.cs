@@ -112,16 +112,18 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             };
         // The list pane: a notice row (empty inbox, receiving, or a problem with Retry) above the list.
         var listPane = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
-        var listNotice = new StandardPanel { Spacing = 4 };
+        var listNotice = new StandardPanel();
         var listFeedback = new InlineFeedback();
         var listRetry = new StandardButton { Text = "Retry receiving" };
-        var listRetryRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 0, Spacing = 8, PreferredSize = new BSize(0, 36) };
+        // Like the toolbar above it, the Retry row spans the pane and insets its button, so Retry
+        // lines up with Receive mail.
+        var listRetryRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36) };
         listRetryRow.AddChild(listRetry);
-        listNotice.AddChild(listFeedback);
+        // The notice keeps the toolbar's inset, so its accent stays clear of the frame around the pane.
+        listNotice.AddChild(new Inset(listFeedback, toolbar.Padding, toolbar.Padding));
         listNotice.AddChild(listRetryRow);
-        // A long notice at a large text size scrolls instead of leaving the list no room. It keeps the
-        // toolbar's inset, so its accent and Retry stay clear of the frame around the pane.
-        var noticeArea = new BoundedScrollArea(new Inset(listNotice, toolbar.Padding, toolbar.Padding), 0.4, "Inbox notice");
+        // A long notice at a large text size scrolls instead of leaving the list no room.
+        var noticeArea = new BoundedScrollArea(listNotice, 0.4, "Inbox notice");
         listPane.AddChild(noticeArea);
         listPane.SetDock(noticeArea, UiDock.Top);
         listPane.AddChild(list);
