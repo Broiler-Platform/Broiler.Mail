@@ -13,8 +13,9 @@ namespace Broiler.Mail.Tests;
 
 /// <summary>
 /// Each tab's content is laid out at the rectangle the tab view gives it, after resizes too, and a tab
-/// is as it was left once another tab was shown. The shell wraps each tab in <c>TabContent</c>:
-/// the standard tab view measures at the allocated size, but lays out the tabs it hides at no size.
+/// is as it was left once another tab was shown. Since Broiler.UI preview.18 (ADR 0030) the standard tab
+/// view does both itself, so the shell adds each tab's content directly; these tests showed when Mail's
+/// <c>TabContent</c> wrapper could go.
 /// </summary>
 [Collection("UI theme")]
 public sealed class ShellLayoutTests
@@ -60,10 +61,10 @@ public sealed class ShellLayoutTests
     }
 
     /// <summary>
-    /// The tab view arranges each tab it hides at an empty rectangle, which lays a hidden form out at no
-    /// width; <c>TabContent</c> skips that arrange. Coming back must find the tab as it was left:
-    /// the same scroll positions and the same layout. Without the skip, the composer's status area came
-    /// back scrolled to its top at 640x480 with 200 % text.
+    /// Coming back to a tab must find it as it was left: the same scroll positions and the same layout.
+    /// Before Broiler.UI preview.18 the tab view arranged each tab it hid at an empty rectangle, which laid
+    /// a hidden form out at no width, and the composer's status area came back scrolled to its top at
+    /// 640x480 with 200 % text.
     /// </summary>
     [Theory]
     [InlineData(640, 480, 2.0)]
@@ -88,10 +89,6 @@ public sealed class ShellLayoutTests
                 foreach (var scroll in scrolled)
                 {
                     scroll.SetOffset(new BPoint(0, Math.Round((scroll.ExtentSize.Height - scroll.ViewportSize.Height) / 2)));
-                    // Settles the scrolled layout first. An offset change invalidates only the arrange, which
-                    // stops at an ancestor already left arrange-invalid under a valid parent; the compact
-                    // inbox's reader is in that state here, with or without TabContent (Broiler.UI preview.17).
-                    scroll.InvalidateMeasure();
                 }
                 Render(session);
                 var offsets = scrolled.Select(scroll => scroll.Offset).ToArray();
@@ -177,8 +174,8 @@ public sealed class ShellLayoutTests
         Assert.Equal(area.Bottom, bounds.Bottom, 0.5);
         Assert.InRange(bounds.Top, area.Top + 1, area.Top + (area.Height / 2));
 
-        // Measuring again at the arranged size, as TabContent does on every arrange, changes nothing:
-        // the content was already measured at the size it was given.
+        // Measuring again at the arranged size changes nothing: the content was already measured at the
+        // size it was given.
         var before = Layout(content);
         content.InvalidateMeasure();
         content.Measure(bounds.Size);
