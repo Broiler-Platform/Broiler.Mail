@@ -12,7 +12,8 @@ namespace Broiler.Mail.Windows.Tests;
 
 /// <summary>
 /// UI-10: the IME composition window is placed at the caret in physical client pixels. The caret arrives in
-/// device-independent pixels; the input context is read back through IMM32, so the struct layout is checked too.
+/// device-independent pixels; the input context is read back through IMM32, so the order of the style and
+/// position fields in the struct is checked too.
 /// </summary>
 public sealed class WindowsTextInputTests
 {
@@ -54,10 +55,17 @@ public sealed class WindowsTextInputTests
     }
 
     [Fact]
-    public void NoWindowYetLeavesTheInputContextAlone()
+    public void BeforeTheWindowExistsACaretIsIgnored()
     {
-        // Before WM_CREATE the render window handle is 0; publishing a caret then must neither throw nor guess.
-        new WindowsTextInput(() => 0, () => 1.5).PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, false));
+        // Before WM_CREATE the render window handle is 0. A caret then, a password field's included, is ignored:
+        // nothing throws and no position is computed.
+        int scaleReads = 0;
+        var input = new WindowsTextInput(() => 0, () => { scaleReads++; return 1.5; });
+        var password = new StandardEdit { IsPassword = true };
+        input.PublishCaret(new UiTextCaretInfo(new StandardPanel(), Caret, 0, 0, 0, false));
+        input.PublishCaret(new UiTextCaretInfo(password, Caret, 0, 0, 0, false));
+        input.ClearCaret(password);
+        Assert.Equal(0, scaleReads);
     }
 
     [Fact]
@@ -119,6 +127,17 @@ public sealed class WindowsTextInputTests
         using var fixture = HiddenMailWindow.Start();
         var (to, body) = NativeInputFidelityTests.StartDraft(fixture);
         double scale = fixture.Ui(() => fixture.Window.DpiScale);
+        // The frame and the render window share the thread's default input context. A context of the render
+        // window's own shows the position is set through the render window, which holds keyboard focus.
+        nint own = fixture.Ui(() =>
+        {
+            nint context = ImmCreateContext();
+            Assert.NotEqual(0, context);
+            ImmAssociateContext(fixture.Render, context);
+            return context;
+        });
+        Assert.Equal(own, fixture.Ui(() => ContextOf(fixture.Render)));
+        Assert.NotEqual(own, fixture.Ui(() => ContextOf(fixture.Frame)));
 
         // Each frame publishes the focused field's caret; the window's input context must hold it in physical pixels.
         fixture.Type("team@example.test");
@@ -136,6 +155,20 @@ public sealed class WindowsTextInputTests
         var further = fixture.Ui(() => ReadCompositionForm(fixture.Render));
         Assert.True(further.X > inBody.X, "The composition window follows the caret along the line.");
         Assert.Equal(inBody.Y, further.Y);
+
+        // The window keeps the context until it is destroyed; giving it back its default one lets it be freed now.
+        fixture.Ui(() =>
+        {
+            ImmAssociateContextEx(fixture.Render, 0, 0x0010 /* IACE_DEFAULT */);
+            ImmDestroyContext(own);
+        });
+    }
+
+    private static nint ContextOf(nint window)
+    {
+        nint context = ImmGetContext(window);
+        if (context != 0) ImmReleaseContext(window, context);
+        return context;
     }
 
     private static void AssertWithin(BRect field, CompositionForm form, double scale)
@@ -147,13 +180,7 @@ public sealed class WindowsTextInputTests
 
     private static (int X, int Y) Position(CompositionForm form) => (form.X, form.Y);
 
-    private static bool HasInputContext(nint window)
-    {
-        nint context = ImmGetContext(window);
-        if (context == 0) return false;
-        ImmReleaseContext(window, context);
-        return true;
-    }
+    private static bool HasInputContext(nint window) => ContextOf(window) != 0;
 
     private static CompositionForm ReadCompositionForm(nint window)
     {
@@ -194,4 +221,8 @@ public sealed class WindowsTextInputTests
     [DllImport("imm32.dll")] private static extern nint ImmGetContext(nint window);
     [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmReleaseContext(nint window, nint context);
     [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmGetCompositionWindow(nint context, out CompositionForm form);
+    [DllImport("imm32.dll")] private static extern nint ImmCreateContext();
+    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmDestroyContext(nint context);
+    [DllImport("imm32.dll")] private static extern nint ImmAssociateContext(nint window, nint context);
+    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmAssociateContextEx(nint window, nint context, uint flags);
 }
