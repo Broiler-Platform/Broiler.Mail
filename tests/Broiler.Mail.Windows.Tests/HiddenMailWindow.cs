@@ -33,6 +33,9 @@ internal sealed class HiddenMailWindow : IDisposable
                 var app = create();
                 app.InitializeAsync().GetAwaiter().GetResult();
                 using var window = new WindowsMailWindow(app, demo);
+                // Direct2DWindow creates its native windows only by showing, and so activating, them. Until the
+                // line below hides it, the window may hold the focus, and keys typed then would reach it; Graphics
+                // has no option to create a window without activating it.
                 window.Show();
                 ShowWindow(window.NativeHandle, 0); // Keep the native fixture hidden.
                 _ready.SetResult(window);
