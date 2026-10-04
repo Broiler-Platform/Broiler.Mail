@@ -2,9 +2,11 @@ using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
+using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Settings;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
+using Broiler.UI.Forms.Standard;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Standard;
@@ -149,6 +151,79 @@ public sealed class AppearanceTests
         finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
     }
 
+    /// <summary>
+    /// Reduced motion: Mail has no motion for the setting to remove. Even with animation allowed,
+    /// selecting, disclosing, switching tabs, focusing an editor, and re-theming start no animation on
+    /// the host, and a still window draws the same frame however much time passes. The system's request
+    /// still reaches the theme the session's controls read, so a standard transition would be instant.
+    /// </summary>
+    [Fact]
+    public async Task NothingInTheShellMovesOnItsOwnAndReducedMotionReachesTheSessionTheme()
+    {
+        using var directory = new TestDirectory();
+        var account = TestDirectory.Profile();
+        var messages = new[] { 3u, 2u, 1u }.Select(uid => new MailMessageSummary
+        {
+            Key = new(account.Id, "INBOX", 7, uid), Sender = "author@example.test", Subject = $"Message {uid}",
+        }).ToArray();
+        var receiver = new TestMailReceiver
+        {
+            Inbox = (_, _) => Task.FromResult(new MailInboxPage(messages, null)),
+            Body = (key, _) => Task.FromResult(new MailMessageBody(key, "Body text")),
+        };
+        var dispatcher = new TestQueueDispatcher();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        var host = new Host(LightSystem);
+        var clock = new UiClock();
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).WithClock(clock).Build(host);
+        session.AddRoot(shell.Window);
+        try
+        {
+            using var appearance = new AppearanceController(session, model.Settings, host);
+            Assert.False(appearance.Current!.ReducedMotion);
+            void AssertStill(string after)
+            {
+                dispatcher.Drain();
+                var first = session.RenderFrame().Commands.ToArray();
+                // Off any 1 s blink or 1.4 s sweep period, so a timed visual cannot line up again.
+                clock.Elapsed += TimeSpan.FromMilliseconds(730);
+                var later = session.RenderFrame().Commands.ToArray();
+                Assert.True(first.SequenceEqual(later), $"The window changed on its own after {after}.");
+                Assert.Equal(0, host.AnimationStarts);
+            }
+
+            await model.Inbox.ReceiveAsync();
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            await model.Inbox.SelectAsync(messages[1].Key);
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            AssertStill("selecting a message");
+
+            Assert.True(model.Composer.StartNew());
+            shell.Navigation.SelectTab("compose");
+            AssertStill("switching tabs");
+            var compose = shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!;
+            Descendants(compose).OfType<FormSection>().Single(section => section.Toggle is not null).Toggle!.Click();
+            AssertStill("showing Cc and Bcc");
+            session.SetFocus(Descendants(compose).OfType<StandardRichEdit>().Single());
+            AssertStill("focusing the message body");
+            host.Change(DarkSystem);
+            AssertStill("changing to the dark theme");
+
+            host.Change(DarkSystem with { ReducedMotion = true });
+            var theme = StandardControlPaint.GetTheme(session);
+            Assert.True(theme.ReducedMotion);
+            Assert.Equal(TimeSpan.Zero, theme.AnimationDurationNormal);
+            AssertStill("turning on reduced motion");
+        }
+        finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
+    }
+
     private static IEnumerable<UiElement> Descendants(UiElement root)
     {
         yield return root;
@@ -156,9 +231,13 @@ public sealed class AppearanceTests
             foreach (var item in Descendants(child)) yield return item;
     }
 
-    private sealed class Host(UiSystemSettings settings) : IUiHost, IUiSystemSettingsHost
+    private sealed class Host(UiSystemSettings settings) : IUiHost, IUiSystemSettingsHost, IUiAnimationHost
     {
         public UiSystemSettings Settings { get; private set; } = settings;
+        /// <summary>How often anything asked the host for animation frames.</summary>
+        public int AnimationStarts { get; private set; }
+        public void StartAnimation() => AnimationStarts++;
+        public void StopAnimation() { }
         public event EventHandler<UiSystemSettingsChangedEventArgs>? SettingsChanged;
         public void Change(UiSystemSettings settings)
         {
@@ -170,5 +249,12 @@ public sealed class AppearanceTests
         public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
         public void Invalidate(UiInvalidation invalidation) { }
         public void Present(BRenderList renderList) { }
+    }
+
+    /// <summary>The UI clock, moved only by the test.</summary>
+    private sealed class UiClock : IUiClock
+    {
+        public TimeSpan Elapsed { get; set; }
+        public UiTimestamp Now => new(Elapsed);
     }
 }
