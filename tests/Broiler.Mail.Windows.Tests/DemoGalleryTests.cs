@@ -397,7 +397,7 @@ public sealed class DemoGalleryTests
     }
 
     [Fact]
-    public void Load_Error_Keeps_The_Loaded_Messages_And_Offers_Retry_Beside_The_List()
+    public void Load_Error_Keeps_The_Loaded_Messages_And_Offers_Retry_Above_The_List()
     {
         Run(DemoScenario.LoadError, (model, shell) =>
         {
@@ -417,7 +417,7 @@ public sealed class DemoGalleryTests
             Assert.Equal((FeedbackKind.Error, inbox.Problem), (notice.Kind, notice.Message));
             Assert.True(IsAvailable(Button(shell, "inbox", "Retry loading older")));
             Assert.True(IsAvailable(Button(shell, "inbox", "Load older")));
-            Assert.Equal("Older messages could not be loaded. Details and Retry are beside the list.", Footer(shell));
+            Assert.Equal("Older messages could not be loaded. Details and Retry are above the list.", Footer(shell));
         });
     }
 

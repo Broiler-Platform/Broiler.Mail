@@ -40,7 +40,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("smtp-test-failed", DemoScenario.SmtpTestFailed, "SMTP sign-in test rejected by the demo server; no message was sent"),
         ("smtp-test-passed", DemoScenario.SmtpTestPassed, "SMTP sign-in test accepted by the demo server; no message was sent"),
         ("receive-canceled", DemoScenario.ReceiveCanceled, "Receiving canceled over a loaded inbox and open message, with Retry"),
-        ("load-error", DemoScenario.LoadError, "Load older failed; the loaded messages stay, with Retry beside the list"),
+        ("load-error", DemoScenario.LoadError, "Load older failed; the loaded messages stay, with Retry above the list"),
         ("draft-invalid", DemoScenario.DraftInvalid, "Check draft rejected a recipient typed without @; the error stays until the next edit"),
         ("new-mail", DemoScenario.NewMail, "Three new messages arrived above the open one, which keeps its body and is now read; each receive adds more"),
     });

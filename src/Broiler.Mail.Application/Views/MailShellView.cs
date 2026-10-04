@@ -81,12 +81,13 @@ public sealed class MailShellView : IDisposable
                 "compose" => !string.IsNullOrEmpty(model.Composer.Status) && model.Composer.StatusKind == FeedbackKind.Information && !model.Composer.IsBusy
                     ? model.Composer.Status
                     : IsProblem(model.Composer.StorageKind) ? $"The draft is not saved. {DetailsBelow}" : model.Composer.StorageStatus,
-                // The explanation and Retry sit beside the affected pane; the footer only points there.
+                // The explanation and Retry sit in the affected pane, above the list or under the message's
+                // header; the footer only points there.
                 _ => model.Inbox.ProblemScope switch
                 {
                     InboxProblemScope.List when !model.Inbox.ProblemIsCancellation => model.Inbox.ProblemIsOlderPage
-                        ? "Older messages could not be loaded. Details and Retry are beside the list."
-                        : "Mail could not be received. Details and Retry are beside the list.",
+                        ? "Older messages could not be loaded. Details and Retry are above the list."
+                        : "Mail could not be received. Details and Retry are above the list.",
                     InboxProblemScope.Message when !model.Inbox.ProblemIsCancellation => "The message could not be loaded. Details and Retry are beside it.",
                     InboxProblemScope.None => model.Inbox.Status,
                     _ => "Canceled. Retry is available.",

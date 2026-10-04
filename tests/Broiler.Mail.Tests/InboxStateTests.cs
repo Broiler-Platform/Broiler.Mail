@@ -33,7 +33,7 @@ public sealed class InboxStateTests
     }
 
     [Fact]
-    public async Task FailedRefreshKeepsMessagesAndOffersRetryBesideTheList()
+    public async Task FailedRefreshKeepsMessagesAndOffersRetryAboveTheList()
     {
         var account = TestDirectory.Profile();
         var messages = new[] { Message(account, 2), Message(account, 1) };

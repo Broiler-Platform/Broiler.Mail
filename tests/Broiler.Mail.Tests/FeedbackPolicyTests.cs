@@ -688,7 +688,7 @@ public sealed class FeedbackPolicyTests
         fixture.Settle();
 
         Assert.True(inbox.ProblemIsOlderPage);
-        Assert.Equal("Older messages could not be loaded. Details and Retry are beside the list.", fixture.Footer.Text);
+        Assert.Equal("Older messages could not be loaded. Details and Retry are above the list.", fixture.Footer.Text);
         var retry = fixture.Button("Retry loading older", "inbox");
         Assert.True(retry.IsEnabled);
         fixture.Receiver.Inbox = pages;
@@ -711,7 +711,7 @@ public sealed class FeedbackPolicyTests
         fixture.Receiver.Inbox = (_, _) => throw new MailConnectionException("The server did not respond.");
         await fixture.ReceiveAsync();
         Assert.False(inbox.ProblemIsOlderPage);
-        Assert.Equal("Mail could not be received. Details and Retry are beside the list.", fixture.Footer.Text);
+        Assert.Equal("Mail could not be received. Details and Retry are above the list.", fixture.Footer.Text);
         Assert.True(fixture.Button("Retry receiving", "inbox").IsEnabled);
     }
 
