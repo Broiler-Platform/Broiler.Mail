@@ -21,4 +21,8 @@ namespace Broiler.Mail.Core.Services;
 // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=EB3577
 // Broiler-Falsified-If: a MailConnectionException is constructed with text taken from a server response or a saved secret
 // Broiler-Human:        PENDING
-public sealed class MailConnectionException(string message) : Exception(message);
+public sealed class MailConnectionException(string message, MailConnectionFailure failure = MailConnectionFailure.Unspecified) : Exception(message)
+{
+    /// <summary>What kind of problem this is; <see cref="MailConnectionFailure.Unspecified"/> where the caller does not classify it.</summary>
+    public MailConnectionFailure Failure { get; } = failure;
+}

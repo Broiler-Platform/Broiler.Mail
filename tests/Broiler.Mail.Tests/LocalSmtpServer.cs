@@ -10,7 +10,18 @@ using Broiler.Mail.Core.Accounts;
 
 namespace Broiler.Mail.Tests;
 
-public enum SmtpFixtureOutcome { Accept, RejectAuthentication, RejectRecipient, RejectMessage, DropAfterData, StallAfterData, MalformedAfterData }
+public enum SmtpFixtureOutcome
+{
+    Accept, RejectAuthentication, RejectRecipient, RejectMessage, DropAfterData, StallAfterData, MalformedAfterData,
+    /// <summary>Greets with 554 instead of 220, as a server refusing service does.</summary>
+    RefuseGreeting,
+    /// <summary>Receives AUTH and never answers it.</summary>
+    StallAuthentication,
+    /// <summary>Receives AUTH and closes the connection without an answer.</summary>
+    DropOnAuthentication,
+    /// <summary>Accepts the sign-in, then receives QUIT and never answers it.</summary>
+    StallQuit,
+}
 
 /// <summary>Loopback-only SMTP fixture. Records synthetic envelopes and MIME, never authentication payloads.</summary>
 internal sealed class LocalSmtpServer : IAsyncDisposable
@@ -23,10 +34,19 @@ internal sealed class LocalSmtpServer : IAsyncDisposable
     private readonly SmtpFixtureOutcome _outcome;
     private readonly bool _advertiseStartTls;
     private readonly bool _silent;
+    private readonly string? _authMechanisms;
+    private readonly bool _connectionTestOnly;
+
+    /// <param name="authMechanisms">The AUTH mechanisms offered after EHLO; null offers no AUTH at all.</param>
+    /// <param name="connectionTestOnly">
+    /// A sign-in test may only greet, secure the connection, authenticate, and quit. Any other command, such as
+    /// MAIL, RCPT, DATA, BDAT, RSET, NOOP, VRFY, EXPN or ETRN, ends the session with an error that disposal rethrows.
+    /// </param>
     public LocalSmtpServer(TransportSecurity security, SmtpFixtureOutcome outcome = SmtpFixtureOutcome.Accept,
-        bool advertiseStartTls = true, bool silent = false)
+        bool advertiseStartTls = true, bool silent = false, string? authMechanisms = "PLAIN", bool connectionTestOnly = false)
     {
         _security = security; _outcome = outcome; _advertiseStartTls = advertiseStartTls; _silent = silent;
+        _authMechanisms = authMechanisms; _connectionTestOnly = connectionTestOnly;
         using var rsa = RSA.Create(2048);
         var request = new CertificateRequest("CN=localhost", rsa, HashAlgorithmName.SHA256, RSASignaturePadding.Pkcs1);
         var names = new SubjectAlternativeNameBuilder();
@@ -47,6 +67,8 @@ internal sealed class LocalSmtpServer : IAsyncDisposable
     public string? RawMessage { get; private set; }
     public int DataCount { get; private set; }
     public TaskCompletionSource DataReceived { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource AuthenticationReceived { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+    public TaskCompletionSource QuitReceived { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
     private async Task RunAsync()
     {
@@ -57,7 +79,9 @@ internal sealed class LocalSmtpServer : IAsyncDisposable
         {
             if (encrypted) transport = await UpgradeAsync(transport);
             if (_silent) { await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token); return; }
-            using (var greeting = Writer(transport)) await greeting.WriteLineAsync("220 localhost SMTP fixture");
+            using (var greeting = Writer(transport))
+                await greeting.WriteLineAsync(_outcome == SmtpFixtureOutcome.RefuseGreeting ? "554 No service " + Password : "220 localhost SMTP fixture");
+            bool first = true;
             while (true)
             {
                 bool upgrade = false;
@@ -65,18 +89,28 @@ internal sealed class LocalSmtpServer : IAsyncDisposable
                 using var writer = Writer(transport);
                 while (await reader.ReadLineAsync(_lifetime.Token) is { } line)
                 {
+                    // A TLS handshake sent to this plain-text port is no command; the client gives up on its own.
+                    if (first && line.Any(c => c is < ' ' or > '~')) return;
+                    first = false;
                     string command = line.Split(' ', 2)[0].ToUpperInvariant();
                     Commands.Enqueue(command);
+                    if (_connectionTestOnly && command is not ("EHLO" or "HELO" or "STARTTLS" or "AUTH" or "QUIT"))
+                        throw new InvalidOperationException("Submission command during a connection test: " + command);
                     switch (command)
                     {
                         case "EHLO":
-                            await writer.WriteLineAsync("250-localhost");
-                            if (!encrypted && _advertiseStartTls) await writer.WriteLineAsync("250-STARTTLS");
-                            await writer.WriteLineAsync("250 AUTH PLAIN");
+                            var extensions = new List<string> { "localhost" };
+                            if (!encrypted && _advertiseStartTls) extensions.Add("STARTTLS");
+                            if (_authMechanisms is not null) extensions.Add("AUTH " + _authMechanisms);
+                            for (int index = 0; index < extensions.Count; index++)
+                                await writer.WriteLineAsync((index == extensions.Count - 1 ? "250 " : "250-") + extensions[index]);
                             break;
                         case "STARTTLS":
                             await writer.WriteLineAsync("220 Begin TLS"); upgrade = true; break;
                         case "AUTH":
+                            AuthenticationReceived.TrySetResult();
+                            if (_outcome == SmtpFixtureOutcome.StallAuthentication) { await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token); return; }
+                            if (_outcome == SmtpFixtureOutcome.DropOnAuthentication) return;
                             string[] parts = line.Split(' ');
                             string encoded;
                             if (parts.Length == 3) encoded = parts[2];
@@ -114,7 +148,10 @@ internal sealed class LocalSmtpServer : IAsyncDisposable
                             });
                             break;
                         case "RSET": await writer.WriteLineAsync("250 Reset"); break;
-                        case "QUIT": await writer.WriteLineAsync("221 Bye"); return;
+                        case "QUIT":
+                            QuitReceived.TrySetResult();
+                            if (_outcome == SmtpFixtureOutcome.StallQuit) { await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token); return; }
+                            await writer.WriteLineAsync("221 Bye"); return;
                         default: throw new InvalidOperationException("Unexpected fixture command: " + command);
                     }
                     if (upgrade) break;
