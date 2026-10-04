@@ -82,13 +82,20 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   window is created, preserving the entry point's STA thread. Controls are never
   updated by storage continuations.
 - The Windows host implements `IUiClipboardHost` using bounded Unicode clipboard
-  access and `IUiTextInputHost` to place the default IME composition window. Committed
-  text flows through the Graphics WM_CHAR bridge. A per-monitor-v2 manifest and
+  access and `IUiTextInputHost` to place the default IME composition window at the caret,
+  in physical pixels. Hosting's `WindowsInputBridge` subclasses the render window and owns
+  characters, dead keys, surrogate pairs, IME composition, and both wheel axes; the Graphics
+  character and wheel callbacks are not reached while it is attached. Broiler.UI draws the
+  composition inline, but the default IME window is still allowed to show its own copy,
+  because Hosting passes `WM_IME_SETCONTEXT` on unchanged (UI-10). A per-monitor-v2 manifest and
   native resize handling preserve logical sizes, with a 640×480 minimum client area.
 - `MailKeyboardNavigation` adds enabled-control traversal, automatic scrolling to
   focused fields, tab shortcuts, receive, and cancellation. First run opens Account.
   Full OS screen-reader/UI Automation integration remains the version 7 work item.
-  The legacy Graphics input bridge is isolated in the Windows project.
+  The legacy Graphics input adapter is isolated in the Windows project. For the main window's
+  native input it now carries only pointer movement, buttons, and key presses (the measurement
+  harness also synthesizes events through it); the HTML preview window still takes all of its
+  input through it.
 
 ## Verification
 
