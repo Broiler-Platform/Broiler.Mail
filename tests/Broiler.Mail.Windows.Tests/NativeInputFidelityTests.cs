@@ -1,11 +1,15 @@
+using Broiler.Graphics.Geometry;
 using Broiler.Graphics.Text;
+using Broiler.Input.Mouse;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.Views;
 using Broiler.UI;
 using Broiler.UI.Edit.Standard;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.ListView.Standard;
+using Broiler.UI.RichEdit;
 using Broiler.UI.RichEdit.Standard;
+using Broiler.UI.ScrollView;
 using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
 
@@ -38,7 +42,7 @@ public sealed class NativeInputFidelityTests
     }
 
     [Fact]
-    public void AHorizontalWheelOverTheReaderScrollsNothingBecauseEvenAnUnbrokenLineWrapsAtLargeText()
+    public void AHorizontalWheelReachesTheReaderOnceAndIsLeftToItsContainersBecauseEvenAnUnbrokenLineWrapsAtLargeText()
     {
         using var fixture = OpenFixture(DemoScenario.LongMessage);
         var text = Find<ScrollableMessageText>(fixture);
@@ -58,22 +62,80 @@ public sealed class NativeInputFidelityTests
         Assert.Equal(fixture.Ui(() => reader.ViewportSize.Width), fixture.Ui(() => reader.ExtentSize.Width), 3);
         Assert.Equal(fixture.Ui(() => header.ViewportSize.Width), fixture.Ui(() => header.ExtentSize.Width), 3);
 
-        // The reader cannot use a horizontal wheel, and no container around it can either. Scroll the text down
-        // first, so a horizontal wheel turned into a vertical one would show.
+        // Scroll the text down first, so a horizontal wheel turned into a vertical one would show.
         fixture.Post(WmMouseWheel, Wheel(-120), Center(fixture, reader));
         fixture.Settle();
         var before = Offsets();
         Assert.True(before.ReaderY > 0);
+        var wheels = RecordWheels(fixture);
         foreach (var target in new UiElement[] { reader, header })
             foreach (int delta in new[] { 120, -120, 30 })
             {
+                int seen = fixture.Ui(() => wheels.Count);
                 fixture.Post(WmMouseHWheel, Wheel(delta), Center(fixture, target));
                 fixture.Settle();
+
+                // The message arrives as one horizontal wheel, in notches, over the element under the pointer.
+                var input = Assert.Single(fixture.Ui(() => wheels.Skip(seen).ToArray()));
+                Assert.Equal(MouseWheelAxis.Horizontal, input.WheelAxis);
+                Assert.Equal(delta / 120.0, input.WheelDeltaNotches, 6);
+                Assert.True(fixture.Ui(() => IsWithin(fixture.Window.Session.HitTest(input.Position), target)));
+                // The reader cannot use it, and no container around it can either: nothing moves, and the event
+                // stays unhandled all the way up rather than being taken by the reader.
                 Assert.Equal(before, Offsets());
+                Assert.False(fixture.Ui(() => fixture.Window.Session.DispatchInput(input)));
             }
 
         (double ReaderX, double ReaderY, double EditorX, double HeaderX, double HeaderY, double List) Offsets() => fixture.Ui(() =>
             (reader.HorizontalOffset, reader.VerticalOffset, editor.HorizontalScrollOffset, header.HorizontalOffset, header.VerticalOffset, list.VerticalOffset));
+    }
+
+    [Fact]
+    public void AHorizontalWheelScrollsTheReaderSidewaysOncePerMessageWhenItsTextDoesNotWrap()
+    {
+        using var fixture = OpenFixture(DemoScenario.LongMessage);
+        var text = Find<ScrollableMessageText>(fixture);
+        var reader = text.Children.OfType<StandardScrollView>().Single();
+        // Mail's reader always wraps, so nothing in the window scrolls sideways. Unwrapped text in a reader that
+        // may scroll sideways gives the wheel something to move. The text itself does not scroll sideways, so the
+        // wheel must pass from it to the reader around it. The column is at most a line length wide, so a narrow
+        // reader pane leaves room to scroll.
+        fixture.Ui(() =>
+        {
+            text.Editor.Wrapping = RichEditWrapping.NoWrap;
+            reader.Constraint = UiScrollConstraint.None;
+            fixture.Window.Model.Inbox.SplitterFraction = 0.75;
+        });
+        fixture.Layout();
+        double notch = fixture.Ui(() => reader.LineScrollAmount);
+        var (extent, viewport) = fixture.Ui(() => (reader.ExtentSize.Width, reader.ViewportSize.Width));
+        Assert.True(extent - viewport > 8 * notch, "The unwrapped column is much wider than the reader.");
+        // Start in the middle, so no edge stops either direction.
+        Assert.True(fixture.Ui(() => reader.SetOffset(new BPoint(Math.Round((extent - viewport) / 2), 0))));
+        double start = fixture.Ui(() => reader.HorizontalOffset);
+        nint over = Center(fixture, reader);
+
+        var steps = new List<double>();
+        for (int i = 0; i < 4; i++)
+        {
+            fixture.Post(WmMouseHWheel, Wheel(30), over);
+            fixture.Settle();
+            steps.Add(fixture.Ui(() => reader.HorizontalOffset));
+        }
+        // Which way a tilt to the right moves is the open Broiler.UI issue; distance and delivery are checked here.
+        double direction = Math.Sign(steps[0] - start);
+        Assert.NotEqual(0, direction);
+        // Each quarter notch moves a quarter of a line step at once, so each message is delivered exactly once.
+        for (int i = 0; i < steps.Count; i++) Assert.Equal(start + (direction * notch * (i + 1) / 4), steps[i], 6);
+
+        // A whole notch moves as far as the four quarters did, and the opposite tilt moves it back.
+        fixture.Post(WmMouseHWheel, Wheel(120), over);
+        fixture.Settle();
+        Assert.Equal(start + (direction * 2 * notch), fixture.Ui(() => reader.HorizontalOffset), 6);
+        fixture.Post(WmMouseHWheel, Wheel(-120), over);
+        fixture.Settle();
+        Assert.Equal(start + (direction * notch), fixture.Ui(() => reader.HorizontalOffset), 6);
+        Assert.Equal(0, fixture.Ui(() => reader.VerticalOffset));
     }
 
     [Fact]
@@ -180,6 +242,24 @@ public sealed class NativeInputFidelityTests
 
     private static T Find<T>(HiddenMailWindow fixture) where T : UiElement =>
         fixture.Ui(() => HiddenMailWindow.Descendants(fixture.Window.Shell.Window).OfType<T>().Single());
+
+    /// <summary>Collects every wheel event Hosting's bridge dispatches; read the list on the window thread.</summary>
+    private static List<UiInputEvent> RecordWheels(HiddenMailWindow fixture)
+    {
+        var wheels = new List<UiInputEvent>();
+        fixture.Ui(() => fixture.Window.InputBridge!.EventDispatched += input =>
+        {
+            if (input.Kind == UiInputEventKind.PointerWheel) wheels.Add(input);
+        });
+        return wheels;
+    }
+
+    private static bool IsWithin(UiElement? element, UiElement ancestor)
+    {
+        for (var current = element; current is not null; current = current.Parent)
+            if (ReferenceEquals(current, ancestor)) return true;
+        return false;
+    }
 
     private static nint Center(HiddenMailWindow fixture, UiElement element)
     {
