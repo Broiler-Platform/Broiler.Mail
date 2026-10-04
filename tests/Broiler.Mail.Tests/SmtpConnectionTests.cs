@@ -92,7 +92,7 @@ public sealed class SmtpConnectionTests
         var account = Profile(server, TransportSecurity.StartTls);
         var credentials = await Credentials(account);
         var error = await Assert.ThrowsAsync<MailConnectionException>(() => Tester(credentials, server).TestConnectionAsync(account));
-        // An OAuth-only server is not reported as a wrong password.
+        // An OAuth-only server is named as such, not as a server without sign-in on this port.
         Assert.Equal(expected, error.Failure);
         Assert.DoesNotContain("AUTH", server.Commands);
     }
@@ -199,6 +199,24 @@ public sealed class SmtpConnectionTests
         // Generous: slow CI machines must not turn the bound into a flake.
         Assert.InRange(clock.Elapsed, TimeSpan.Zero, TimeSpan.FromMilliseconds(300) + TimeSpan.FromSeconds(3));
         Assert.Empty(server.Commands);
+    }
+
+    [Theory]
+    [InlineData(TransportSecurity.Tls)]
+    [InlineData(TransportSecurity.StartTls)]
+    public async Task AnUnansweredTlsHandshakeTimesOutInsteadOfBlamingTheCertificate(TransportSecurity security)
+    {
+        // A server that accepts the connection (or STARTTLS) and then goes silent, as a filtered or overloaded one does.
+        await using var server = new LocalSmtpServer(security, SmtpFixtureOutcome.StallTlsHandshake, connectionTestOnly: true);
+        var account = Profile(server, security);
+        var credentials = await Credentials(account);
+        var clock = Stopwatch.StartNew();
+        var error = await Assert.ThrowsAsync<MailConnectionException>(() => Tester(credentials, server, TimeSpan.FromMilliseconds(500)).TestConnectionAsync(account));
+        Assert.Equal(MailConnectionFailure.Timeout, error.Failure);
+        Assert.DoesNotContain("certificate", error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.InRange(clock.Elapsed, TimeSpan.Zero, TimeSpan.FromMilliseconds(500) + TimeSpan.FromSeconds(3));
+        Assert.DoesNotContain("AUTH", server.Commands);
+        Assert.Equal(security == TransportSecurity.StartTls, server.Commands.Contains("STARTTLS"));
     }
 
     [Theory]

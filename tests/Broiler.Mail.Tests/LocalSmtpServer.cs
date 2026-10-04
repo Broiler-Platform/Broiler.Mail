@@ -21,6 +21,8 @@ public enum SmtpFixtureOutcome
     DropOnAuthentication,
     /// <summary>Accepts the sign-in, then receives QUIT and never answers it.</summary>
     StallQuit,
+    /// <summary>Accepts the connection, or answers STARTTLS, and never answers the TLS handshake.</summary>
+    StallTlsHandshake,
 }
 
 /// <summary>Loopback-only SMTP fixture. Records synthetic envelopes and MIME, never authentication payloads.</summary>
@@ -77,7 +79,7 @@ internal sealed class LocalSmtpServer : IAsyncDisposable
         bool encrypted = _security == TransportSecurity.Tls;
         try
         {
-            if (encrypted) transport = await UpgradeAsync(transport);
+            if (encrypted) transport = await UpgradeOrStallAsync(transport);
             if (_silent) { await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token); return; }
             using (var greeting = Writer(transport))
                 await greeting.WriteLineAsync(_outcome == SmtpFixtureOutcome.RefuseGreeting ? "554 No service " + Password : "220 localhost SMTP fixture");
@@ -157,10 +159,16 @@ internal sealed class LocalSmtpServer : IAsyncDisposable
                     if (upgrade) break;
                 }
                 if (!upgrade) return;
-                transport = await UpgradeAsync(transport); encrypted = true;
+                transport = await UpgradeOrStallAsync(transport); encrypted = true;
             }
         }
         finally { await transport.DisposeAsync(); }
+    }
+    private async Task<Stream> UpgradeOrStallAsync(Stream stream)
+    {
+        // The client's handshake stays unread until the fixture is disposed.
+        if (_outcome == SmtpFixtureOutcome.StallTlsHandshake) await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token);
+        return await UpgradeAsync(stream);
     }
     private async Task<SslStream> UpgradeAsync(Stream stream)
     {

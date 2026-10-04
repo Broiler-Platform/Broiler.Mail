@@ -69,8 +69,9 @@ public sealed class SmtpConnectionTester : IOutgoingConnectionTester
 
             if (!client.Capabilities.HasFlag(SmtpCapabilities.Authentication))
                 throw Failure(MailConnectionFailure.AuthenticationUnavailable);
-            // MailKit never uses OAuth mechanisms with a password. Without another usable mechanism it would
-            // report a rejected password, so an OAuth-only server is named for what it is.
+            // MailKit never uses OAuth mechanisms with a password. Without another usable mechanism it reports no
+            // compatible mechanism, which would read as a server without sign-in on this port, so an OAuth-only
+            // server is named for what it is.
             if (!client.AuthenticationMechanisms.Any(IsPasswordMechanism))
                 throw Failure(MailConnectionFailure.UnsupportedSignIn);
             await client.AuthenticateAsync(server.UserName, secret, deadline.Token).ConfigureAwait(false);
@@ -104,6 +105,9 @@ public sealed class SmtpConnectionTester : IOutgoingConnectionTester
         // TLS stream reads can surface deadline cancellation as an I/O error instead of OCE.
         IOException or SocketException when (deadlineFired || IsTimeout(error)) => MailConnectionFailure.Timeout,
         OperationCanceledException or TimeoutException => MailConnectionFailure.Timeout,
+        // MailKit wraps a handshake cut off by the deadline as a handshake failure. A server that never answers
+        // the handshake is a reachability problem; blaming its certificate would send the user the wrong way.
+        SslHandshakeException when (deadlineFired || IsTimeout(error)) => MailConnectionFailure.Timeout,
         SslHandshakeException => MailConnectionFailure.TlsVerification,
         // Before the connection is up, only required STARTTLS is refused this way.
         NotSupportedException => connected ? MailConnectionFailure.AuthenticationUnavailable : MailConnectionFailure.TlsUnavailable,
