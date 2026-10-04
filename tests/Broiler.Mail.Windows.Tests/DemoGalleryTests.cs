@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Text;
+using Broiler.Graphics.Windows;
+using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Accounts;
@@ -15,6 +19,7 @@ using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Tests;
@@ -202,6 +207,61 @@ public sealed class DemoGalleryTests
             Assert.Contains("closed the connection", model.Inbox.Problem);
             Assert.True(model.Inbox.CanRetry);
         });
+    }
+
+    /// <summary>
+    /// The reader header of the gallery's reading fixtures, with their own subject, sender, recipient and
+    /// date, as Accept-UI -OpenReader shows them: in the compact reader at 640x480, and at 1100x720 with
+    /// twice the text size. Each row is shown whole, scrolled below the header whole, or cut between two
+    /// lines of its text. With no message text (body-error), a header that scrolls takes the whole reader.
+    /// </summary>
+    [Theory]
+    [InlineData("inbox", 640, 480, 1.0, true)]
+    [InlineData("long-message", 640, 480, 1.0, false)]
+    [InlineData("html-only", 640, 480, 1.0, true)]
+    [InlineData("body-error", 640, 480, 1.0, true)]
+    [InlineData("inbox", 1100, 720, 2.0, false)]
+    [InlineData("long-message", 1100, 720, 2.0, false)]
+    public void Reader_Header_Ends_Between_Its_Rows(string name, int width, int height, double textScale, bool replyShown)
+    {
+        var scenario = DemoOptions.Gallery.Single(item => item.Name == name).Scenario;
+        // The app measures text with DirectWrite, which a renderer registers for the process. The headless
+        // measurer's lines are shorter (60 instead of 64 DIP for a title at 200 %), so the header would end
+        // elsewhere than in the app.
+        using (new Direct2DRenderer()) { }
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            // The app's preview host, which the HTML preview's row needs; nothing is opened.
+            Run(scenario, width, height, new NoPreviewHost(), (model, shell, render) =>
+            {
+                Assert.True(shell.Inbox.OpenSelected());
+                render();
+                var header = Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+                BRect shown = header.Scroll.ContentBounds;
+                string where = $"{name} at {width}x{height}, text {textScale:P0}: the header shows {shown} of {header.Parent!.Bounds}";
+                Assert.Equal(width < 680, Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single().ShowsReaderOnly);
+                if (model.Inbox.Body is null && header.Scroll.HasVerticalScrollbar)
+                    Assert.True(Math.Abs(header.Parent.Bounds.Height - header.Bounds.Height) < 0.5, where);
+                else
+                    foreach (var row in header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0))
+                    {
+                        if (row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5) continue;
+                        double line = row switch
+                        {
+                            StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
+                            StandardRichEdit edit => BTextMeasurer.GetLineHeight(edit.Font),
+                            _ => 0,
+                        };
+                        double lines = (shown.Bottom - row.Bounds.Top) / line;
+                        Assert.True(line > 0 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
+                    }
+                var reply = Descendants(header).OfType<StandardButton>().Single(button => button.Text == "Reply");
+                Assert.True(replyShown == reply.Bounds.Bottom <= shown.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
+            });
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
     }
 
     [Fact]
@@ -474,17 +534,21 @@ public sealed class DemoGalleryTests
 
     private static void Run(DemoScenario scenario, Action<MailShellViewModel> verify) => Run(scenario, (model, _) => verify(model));
 
+    private static void Run(DemoScenario scenario, Action<MailShellViewModel, MailShellView> verify) =>
+        Run(scenario, 640, 480, null, (model, shell, _) => verify(model, shell));
+
     // Mirrors WindowsMailWindow: a queued dispatcher drained on the owning thread, then a rendered frame.
-    // Verification runs before the shell is disposed, because disposal also disables the view models.
-    private static void Run(DemoScenario scenario, Action<MailShellViewModel, MailShellView> verify)
+    // Verification runs before the shell is disposed, because disposal also disables the view models. It
+    // can render again after an action, as the window does.
+    private static void Run(DemoScenario scenario, int width, int height, IHtmlPreviewHost? preview, Action<MailShellViewModel, MailShellView, Action> verify)
     {
-        var options = new DemoOptions(scenario, AppTheme.Light, 640, 480);
+        var options = new DemoOptions(scenario, AppTheme.Light, width, height);
         var application = DemoApplication.Create(options);
         application.InitializeAsync().GetAwaiter().GetResult();
         using var woken = new SemaphoreSlim(0);
         var dispatcher = new StandardQueuedUiDispatcher(() => woken.Release());
         var model = application.CreateViewModel(dispatcher);
-        using var shell = new MailShellView(model, null, DemoApplication.CreateDateFormatter());
+        using var shell = new MailShellView(model, preview, DemoApplication.CreateDateFormatter());
         var driver = DemoScenarioDriver.Start(options, model, shell, dispatcher);
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (!driver.Completion.IsCompleted)
@@ -500,7 +564,23 @@ public sealed class DemoGalleryTests
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new HeadlessHost(options.Width, options.Height));
         session.AddRoot(shell.Window);
         Assert.NotNull(session.RenderFrame());
-        verify(model, shell);
+        verify(model, shell, () =>
+        {
+            dispatcher.Drain();
+            session.RenderFrame();
+            // What the frame's layout posted, as the window drains it before the next frame.
+            dispatcher.Drain();
+            session.RenderFrame();
+        });
+    }
+
+    private sealed class NoPreviewHost : IHtmlPreviewHost
+    {
+        public event EventHandler<HtmlPreviewChange>? Changed { add { } remove { } }
+        public MailMessageKey? Current => null;
+        public Task<string> ShowAsync(MailMessageBody message) => Task.FromResult("");
+        public void Close() { }
+        public void Dispose() { }
     }
 
     private sealed class HeadlessHost(int width, int height) : IUiHost
