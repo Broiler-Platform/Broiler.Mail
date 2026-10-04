@@ -982,6 +982,7 @@ internal sealed class ScrollableHtmlView : UiElement
 internal sealed class HtmlViewElement : UiElement
 {
     public const int DefaultTileHeight = 1024;
+    // The height the document is cut at, in CSS pixels, at 100 % and below; see BudgetHeight.
     public const float MaxBudgetHeight = 32768f;
     // Content the renderer cannot wrap (a long address, say) may run past the page; it scrolls
     // sideways up to this width in CSS pixels and is cut beyond it (24,576 DIPs at the largest zoom).
@@ -1035,6 +1036,15 @@ internal sealed class HtmlViewElement : UiElement
             Invalidate(UiInvalidationKind.Measure | UiInvalidationKind.Render);
         }
     }
+
+    /// <summary>
+    /// The height the document is cut at, in CSS pixels. Zoomed in, the document is laid out that much
+    /// narrower and its text about that much taller, so the budget grows with the zoom: a preview that
+    /// opens at a large system text size shows about as much of a long message as one at 100 % (the
+    /// page margins, which do not shrink, take a little of it). The tiles stay cut in DIPs and bounded
+    /// by the cache, and the whole document is laid out at any zoom.
+    /// </summary>
+    internal static float BudgetHeight(double zoom) => MaxBudgetHeight * (float)Math.Max(1, zoom);
 
     /// <summary>The width the document is laid out at, in CSS pixels: the viewport's width at this zoom.</summary>
     private float LayoutWidth => (float)Math.Max(1, _viewportWidth / _zoom);
@@ -1294,8 +1304,9 @@ internal sealed class HtmlViewElement : UiElement
         }
 
         float rawHeight = Math.Max(100f, maxBottom + 32f);
-        bool isTruncated = rawHeight > MaxBudgetHeight;
-        float contentHeight = isTruncated ? MaxBudgetHeight : rawHeight;
+        float budget = BudgetHeight(_zoom);
+        bool isTruncated = rawHeight > budget;
+        float contentHeight = isTruncated ? budget : rawHeight;
         // The renderer's extent includes words and lines it could not wrap; the boxes do not.
         float actualWidth = _container.ActualSize.Width;
         float extentWidth = actualWidth > width + 0.5f ? Math.Min(actualWidth, Math.Max(width, MaxBudgetWidth)) : width;

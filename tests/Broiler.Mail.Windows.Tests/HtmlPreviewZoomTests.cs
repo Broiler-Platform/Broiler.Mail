@@ -24,9 +24,13 @@ public sealed class HtmlPreviewZoomTests
     private static readonly string TallDocument = string.Concat(Enumerable.Range(1, 60).Select(index => $"<p>Paragraph {index}: a longer line of text that wraps differently once the window becomes narrower than before, so a resize changes how tall the whole document is.</p>"))
         + "<p>Last: <a href='https://example.test/end'>the closing link</a></p>";
 
-    // Long paragraphs: laid out six times narrower (300 % against 50 %), the document passes the render budget.
-    private static readonly string BudgetDocument = string.Concat(Enumerable.Range(1, 70).Select(index =>
-        $"<p>Paragraph {index}: {string.Join(" ", Enumerable.Repeat("readable", 100))}</p>"));
+    // About 37,000 CSS pixels at a 900-DIP width and 100 %, past the 32,768 budget; at 50 % about 22,000.
+    private static readonly string LongDocument = string.Concat(Enumerable.Range(1, 100).Select(index =>
+        $"<h2>Story {index}</h2><p>{string.Join(" ", Enumerable.Repeat("newsletter words that wrap", 75))}</p>"));
+
+    // About 30,000 CSS pixels at 100 %, within the budget, and 38,000 at 150 %, past 32,768.
+    private static readonly string NewsletterDocument = string.Concat(Enumerable.Range(1, 150).Select(index =>
+        $"<h2>Story {index}</h2><p>{string.Join(" ", Enumerable.Repeat("newsletter words that wrap", 30))}</p>"));
 
     [Fact]
     public void ZoomLaysTheDocumentOutAtTheViewportWidthOverTheZoomAndScalesItsHeight()
@@ -197,17 +201,38 @@ public sealed class HtmlPreviewZoomTests
     }
 
     [Fact]
-    public void ZoomingInCanPassTheRenderBudgetAndTheBannerMovesWithTheZoom()
+    public void AZoomedPreviewShowsAsMuchOfALongMessageAsOneAt100PercentAndTheBannerMovesWithTheZoom()
     {
-        var renderer = new PixelRenderer();
-        var view = new HtmlViewElement(BudgetDocument, () => renderer, _ => { });
-        view.Measure(new BSize(900, 600));
-        Assert.False(view.Snapshot!.IsTruncated);
+        // Zoomed in, the document is laid out narrower and its text is taller in CSS pixels; a budget
+        // counted in CSS pixels alone shortened a message at a large text size that fits at 100 %.
+        var newsletter = new HtmlViewElement(NewsletterDocument, () => null, _ => { });
+        newsletter.Measure(new BSize(900, 600));
+        Assert.False(newsletter.Snapshot!.IsTruncated);
+        newsletter.Zoom = 1.5;
+        newsletter.Measure(new BSize(900, 600));
+        Assert.True(newsletter.Snapshot!.UnclampedHeight > HtmlViewElement.MaxBudgetHeight, $"{newsletter.Snapshot.UnclampedHeight}");
+        Assert.False(newsletter.Snapshot.IsTruncated);
 
-        view.Zoom = 3;
+        // A message cut at 100 % is cut at about the same place in its text when zoomed in; at the fixed
+        // budget it lost a third of what was shown at 150 % and two thirds at 300 %.
+        var renderer = new PixelRenderer();
+        var view = new HtmlViewElement(LongDocument, () => renderer, _ => { });
+        int StoriesWithin(float height) => view.Snapshot!.Diagnostics.Count(box => box.TagName == "h2" && box.BorderBox.Bottom <= height);
+        view.Measure(new BSize(900, 600));
+        Assert.True(view.Snapshot!.IsTruncated);
+        int shown = StoriesWithin(view.Snapshot.ContentHeight);
+        foreach (double zoom in new[] { 1.5, 3.0 })
+        {
+            view.Zoom = zoom;
+            view.Measure(new BSize(900, 600));
+            int zoomed = StoriesWithin(view.Snapshot!.ContentHeight);
+            Assert.True(zoomed >= shown * 0.95 && zoomed > StoriesWithin(HtmlViewElement.MaxBudgetHeight),
+                $"{zoomed} stories at {zoom:P0}, {shown} at 100 %, {StoriesWithin(HtmlViewElement.MaxBudgetHeight)} within the fixed budget.");
+        }
+
         BSize size = view.Measure(new BSize(900, 600));
         Assert.True(view.Snapshot!.IsTruncated);
-        double end = HtmlViewElement.MaxBudgetHeight * 3;
+        double end = HtmlViewElement.BudgetHeight(3) * 3;
         Assert.Equal(end, size.Height, 1);
 
         // The banner sits at the cut, at the end of the zoomed page.
@@ -629,22 +654,25 @@ public sealed class HtmlPreviewZoomTests
     [Fact]
     public async Task TheShortenedPreviewNoticeFollowsTheZoomBothWays()
     {
-        await InPreview(BudgetDocument, StandardThemeTokens.Light, window =>
+        await InPreview(LongDocument, StandardThemeTokens.Light, window =>
         {
-            void ZoomAllTheWay(int direction)
+            void Sync()
             {
-                while (direction > 0 ? window.ZoomInButton.IsEnabled : window.ZoomOutButton.IsEnabled) window.StepZoom(direction);
                 window.Session.RenderFrame();
                 window.SyncTruncationNotice();
             }
-            ZoomAllTheWay(-1);
-            Assert.False(window.HtmlView.Snapshot!.IsTruncated);
-            Assert.Equal(UiVisibility.Collapsed, window.TruncationNotice.Visibility);
-            ZoomAllTheWay(1);
+            Sync();
             Assert.True(window.HtmlView.Snapshot!.IsTruncated);
             Assert.Equal(UiVisibility.Visible, window.TruncationNotice.Visibility);
-            ZoomAllTheWay(-1);
+            // Zoomed out, the wider layout fits the whole message within the budget.
+            while (window.ZoomOutButton.IsEnabled) window.StepZoom(-1);
+            Sync();
+            Assert.False(window.HtmlView.Snapshot!.IsTruncated);
             Assert.Equal(UiVisibility.Collapsed, window.TruncationNotice.Visibility);
+            window.ResetZoom();
+            Sync();
+            Assert.True(window.HtmlView.Snapshot!.IsTruncated);
+            Assert.Equal(UiVisibility.Visible, window.TruncationNotice.Visibility);
         });
     }
 
