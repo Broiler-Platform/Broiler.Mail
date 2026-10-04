@@ -13,6 +13,7 @@ using Broiler.Mail.Windows.Measurement;
 using Broiler.Mail.Windows.Preview;
 using Broiler.UI;
 using Broiler.UI.Standard;
+using Broiler.UI.Window;
 
 namespace Broiler.Mail.Windows.Tests;
 
@@ -197,15 +198,23 @@ public sealed class MeasurementTests
         // Two copies of the same fixture, one built as every frame is and one as --detail builds it; then both
         // lay out again at a new size.
         using var plain = SettledShell.Start();
-        using var timed = SettledShell.Start();
+        using var timed = SettledShell.Start(probed: true);
 
         var expected = Commands(plain.Session.RenderFrame());
         var actual = Commands(FramePhaseTimer.Render(timed.Session, Stopwatch.GetTimestamp(), out var phases));
         Assert.Equal(expected, actual);
         Assert.True(phases.Drained <= phases.Measured && phases.Measured <= phases.Arranged);
+        // RenderFrame lays out again whatever the phases left undone. The shell was laid out once, before RenderFrame
+        // asked the host for its render list, and RenderFrame only rendered it: nothing the shell did while it was
+        // measured or arranged asked for layout again, so the phase timers hold all of the frame's layout.
+        var probe = timed.Probe!;
+        Assert.Equal((1, 1, 1), probe.Counts);
+        Assert.Equal((0, 0), probe.LaidOutAfterRenderLists);
 
         plain.Host.ViewportSize = timed.Host.ViewportSize = new BSize(900, 640);
         Assert.Equal(Commands(plain.Session.RenderFrame()), Commands(FramePhaseTimer.Render(timed.Session, Stopwatch.GetTimestamp(), out _)));
+        Assert.Equal((2, 2, 2), probe.Counts);
+        Assert.Equal((1, 1), probe.LaidOutAfterRenderLists);
     }
 
     private static string[] Commands(BRenderList list) => list.Commands.Select(command => command.ToString()).ToArray();
@@ -215,39 +224,20 @@ public sealed class MeasurementTests
     {
         var host = new ResizableHost { ViewportSize = new BSize(800, 600) };
         using var session = new StandardUiSessionBuilder().Build(host);
-        var root = new CountingElement();
+        var root = new LayoutProbe();
         session.AddRoot(root);
 
+        // Measured and arranged before RenderFrame asked the host for its render list, so RenderFrame only rendered.
         FramePhaseTimer.Render(session, Stopwatch.GetTimestamp(), out _);
-        Assert.Equal((1, 1, 1), (root.Measures, root.Arranges, root.Renders));
+        Assert.Equal((1, 1, 1), root.Counts);
+        Assert.Equal((0, 0), root.LaidOutAfterRenderLists);
         Assert.Equal(new BRect(0, 0, 800, 600), root.Arranged);
         FramePhaseTimer.Render(session, Stopwatch.GetTimestamp(), out _);
-        Assert.Equal((1, 1, 2), (root.Measures, root.Arranges, root.Renders));
+        Assert.Equal((1, 1, 2), root.Counts);
         host.ViewportSize = new BSize(640, 480);
         FramePhaseTimer.Render(session, Stopwatch.GetTimestamp(), out _);
-        Assert.Equal((2, 2, 3), (root.Measures, root.Arranges, root.Renders));
-    }
-
-    private sealed class CountingElement : UiElement
-    {
-        public int Measures { get; private set; }
-        public int Arranges { get; private set; }
-        public int Renders { get; private set; }
-        public BRect Arranged { get; private set; }
-
-        protected override BSize MeasureCore(BSize availableSize)
-        {
-            Measures++;
-            return availableSize;
-        }
-
-        protected override void ArrangeCore(BRect finalRect)
-        {
-            Arranges++;
-            Arranged = finalRect;
-        }
-
-        protected override void RenderCore(UiRenderContext context) => Renders++;
+        Assert.Equal((2, 2, 3), root.Counts);
+        Assert.Equal((2, 2), root.LaidOutAfterRenderLists);
     }
 
     [Fact]
@@ -721,18 +711,21 @@ public sealed class MeasurementTests
         // Wakes the test thread for the dispatcher, which outlives Start.
         private readonly SemaphoreSlim _woken;
 
-        private SettledShell(MailShellView shell, UiSession session, ResizableHost host, SemaphoreSlim woken)
+        private SettledShell(MailShellView shell, UiSession session, ResizableHost host, SemaphoreSlim woken, LayoutProbe? probe)
         {
             _shell = shell;
             Session = session;
             Host = host;
             _woken = woken;
+            Probe = probe;
         }
 
         public UiSession Session { get; }
         public ResizableHost Host { get; }
+        /// <summary>With <c>probed</c>, the session's root, which holds the shell and counts its own layout.</summary>
+        public LayoutProbe? Probe { get; }
 
-        public static SettledShell Start()
+        public static SettledShell Start(bool probed = false)
         {
             var options = new DemoOptions(DemoScenario.Inbox, AppTheme.Light, 1100, 720);
             var application = DemoApplication.Create(options);
@@ -753,8 +746,12 @@ public sealed class MeasurementTests
             dispatcher.Drain();
             var host = new ResizableHost { ViewportSize = new BSize(options.Width, options.Height) };
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-            session.AddRoot(shell.Window);
-            return new SettledShell(shell, session, host, woken);
+            // Held by the probe, the window would count as a subwindow and draw a title bar of its own; without one it
+            // lays out and draws as the root does.
+            if (probed) shell.Window.Chrome = UiWindowChrome.None;
+            var probe = probed ? new LayoutProbe(shell.Window) : null;
+            session.AddRoot(probe ?? (UiElement)shell.Window);
+            return new SettledShell(shell, session, host, woken, probe);
         }
 
         public void Dispose()
@@ -765,11 +762,62 @@ public sealed class MeasurementTests
         }
     }
 
+    /// <summary>
+    /// A root, holding at most one element at its own size, that counts how often it is measured, arranged, and rendered,
+    /// and how many render lists its <see cref="ResizableHost"/> had made when it was last measured and arranged:
+    /// RenderFrame makes its list before it lays out. An element that invalidates its layout invalidates every parent's,
+    /// so the counts also show whether the session had layout left to do for anything inside.
+    /// </summary>
+    private sealed class LayoutProbe : UiElement
+    {
+        private int _measures, _arranges, _renders, _measuredAfter, _arrangedAfter;
+
+        public LayoutProbe(UiElement? content = null)
+        {
+            if (content is not null) AddChild(content);
+        }
+
+        public (int Measures, int Arranges, int Renders) Counts => (_measures, _arranges, _renders);
+        public (int Measured, int Arranged) LaidOutAfterRenderLists => (_measuredAfter, _arrangedAfter);
+        public BRect Arranged { get; private set; }
+
+        private int RenderLists => ((ResizableHost)Session!.Host).RenderListsCreated;
+
+        protected override BSize MeasureCore(BSize availableSize)
+        {
+            _measures++;
+            _measuredAfter = RenderLists;
+            foreach (var child in Children) child.Measure(availableSize);
+            return availableSize;
+        }
+
+        protected override void ArrangeCore(BRect finalRect)
+        {
+            _arranges++;
+            _arrangedAfter = RenderLists;
+            Arranged = finalRect;
+            foreach (var child in Children) child.Arrange(finalRect);
+        }
+
+        protected override void RenderCore(UiRenderContext context)
+        {
+            _renders++;
+            foreach (var child in Children) child.Render(context);
+        }
+    }
+
     private sealed class ResizableHost : IUiHost
     {
         public BSize ViewportSize { get; set; }
         public double Scale => 1;
-        public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
+        public int RenderListsCreated { get; private set; }
+
+        public BRenderList CreateRenderList(int capacity = 0)
+        {
+            RenderListsCreated++;
+            return new(capacity);
+        }
+
         public void Invalidate(UiInvalidation invalidation) { }
         public void Present(BRenderList renderList) { }
     }
