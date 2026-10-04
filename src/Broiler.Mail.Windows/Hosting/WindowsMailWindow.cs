@@ -84,17 +84,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Broiler-Falsified-If: a result posted by a background mail operation runs its callback on the posting thread instead of waiting for DrainDispatcher on the window thread
     // Broiler-Human:        PENDING
     public WindowsMailWindow(MailApplication application, DemoOptions? demo = null)
-        : this(application, demo, Plan(application.LoadedSettings, demo))
+        : this(application, demo, WindowRestorePlan.For(application.LoadedSettings, WindowsScreen.WorkAreas(), WindowsScreen.SystemScale()))
     {
-    }
-
-    private static WindowRestorePlan Plan(ApplicationSettings settings, DemoOptions? demo)
-    {
-        var (workAreas, scales) = WindowsScreen.Monitors();
-        double systemScale = WindowsScreen.SystemScale();
-        var plan = WindowRestorePlan.For(settings, workAreas, systemScale, scales);
-        // A simulated demo scale keeps the requested DIP size, so the window starts with that scale's pixels.
-        return demo?.ScalePercent is { } percent ? plan.At(percent / 100.0, systemScale) : plan;
     }
 
     private WindowsMailWindow(MailApplication application, DemoOptions? demo, WindowRestorePlan restore)
@@ -114,7 +105,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
                 SubpixelText: true),
         })
     {
-        // Before Show creates the native window, so its first layout and surface already use it.
+        // Before Show creates the native window, so OnCreated sizes it for this scale.
         _simulatedScale = demo?.ScalePercent / 100.0;
         _host = new WindowsUiHost(this, () => InputHandle);
         // Results posted from any thread, this one included, wait until the window drains them:
@@ -309,6 +300,14 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboard.Handle, () => DpiScale, Invalidate);
         // Before the first paint, so a dark caption never flashes light.
         WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
+        // The window was sized from the option DIPs at the system scale, with a frame for that scale.
+        // On a monitor with another scale it renders at that monitor's scale (Windows sends no
+        // WM_DPICHANGED for a new window) and draws that monitor's frame; a simulated scale need not
+        // be the system's either. Before the window is shown, give it the planned DIP client size at
+        // the scale it has, so a remembered size reopens as it was instead of drifting with every start.
+        double scale = DpiScale;
+        WindowsScreen.FitClient(NativeHandle, (int)Math.Round(_restore.ClientWidth * scale), (int)Math.Round(_restore.ClientHeight * scale),
+            centered: _restore.Left is null);
     }
 
     protected override void OnResized(BSize clientSize, double dpiScale)
