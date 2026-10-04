@@ -8,10 +8,14 @@ using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
+using Broiler.UI.Button.Standard;
 using Broiler.UI.Edit.Standard;
+using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.ListView;
 using Broiler.UI.ListView.Standard;
+using Broiler.UI.Panel;
+using Broiler.UI.Panel.Standard;
 using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Splitter;
 using Broiler.UI.Standard;
@@ -150,6 +154,40 @@ public sealed class KeyboardShortcutTests
         fixture.Session.RenderFrame();
         Assert.False(layout.ShowsReaderOnly);
         Assert.Same(fixture.List, fixture.Session.FocusedElement);
+    }
+
+    [Fact]
+    public void ABoundedAreaIsAStopOnlyWhileItScrollsAndNothingInsideTakesFocus()
+    {
+        var notice = new StandardLabel { Text = string.Join(" ", Enumerable.Repeat("A notice long enough to wrap many times.", 30)), Wrapping = UiTextWrapping.Wrap };
+        var content = new StandardPanel();
+        content.AddChild(notice);
+        var area = new BoundedScrollArea(content, 0.4, "Inbox notice");
+        var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
+        root.AddChild(area);
+        root.SetDock(area, UiDock.Top);
+        using var session = new StandardUiSessionBuilder().Build(new Host(400, 300));
+        session.AddRoot(root);
+        session.RenderFrame();
+
+        // Long read-only text scrolls: the area is the toolkit's keyboard stop, named for a screen reader.
+        Assert.True(area.Scroll.CanFocus);
+        Assert.Equal([area.Scroll], MailKeyboardNavigation.TabStops(root));
+        Assert.Equal("Inbox notice", area.Scroll.GetSemanticNode().Name);
+
+        // A control inside takes the stop instead.
+        var retry = new StandardButton { Text = "Retry receiving" };
+        content.AddChild(retry);
+        session.RenderFrame();
+        Assert.False(area.Scroll.CanFocus);
+        Assert.Equal([retry], MailKeyboardNavigation.TabStops(root));
+
+        // Nothing to scroll, nothing to stop at.
+        content.RemoveChild(retry);
+        notice.Text = "The inbox is empty.";
+        session.RenderFrame();
+        Assert.False(area.Scroll.CanFocus);
+        Assert.Empty(MailKeyboardNavigation.TabStops(root));
     }
 
     [Fact]

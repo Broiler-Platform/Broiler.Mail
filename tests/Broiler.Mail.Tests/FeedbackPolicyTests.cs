@@ -365,6 +365,12 @@ public sealed class FeedbackPolicyTests
         var last = MailKeyboardNavigation.TabStops(content)[^1];
         Assert.IsType<Broiler.UI.ScrollView.Standard.StandardScrollView>(last);
         Assert.Equal("Status and errors", last.GetSemanticNode().Name);
+        // The toolkit's own stop (FocusWhenScrollable): focusable for UI Automation too, and ringed while focused.
+        Assert.True(last.CanFocus);
+        session.SetFocus(last);
+        var theme = StandardControlPaint.GetTheme(last);
+        Assert.Contains(session.RenderFrame().Commands.OfType<BRenderCommand.StrokeRect>(), stroke =>
+            stroke.Rect == StandardControlPaint.Inset(last.Bounds, theme.FocusRingOffset) && stroke.Color == theme.FocusRing && stroke.Thickness == theme.FocusRingThickness);
         content.Dispose();
     }
 
