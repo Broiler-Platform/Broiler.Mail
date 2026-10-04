@@ -12,7 +12,8 @@ scripts/Measure-UI.ps1 -Repeat 3
 
 The script publishes the Windows app as NativeAOT (the shipped configuration), runs every workload
 three times, and writes the JSON reports and `summary.md` to `artifacts/measurements/<timestamp>/`.
-One workload can be run directly:
+Since 4 October it also takes `-Workloads`, `-Scales`, `-Detail`, `-Strict`, and `-Evaluate`; see
+[Harness additions](#harness-additions-4-october-2026). One workload can be run directly:
 
 ```powershell
 Broiler.Mail.Windows.exe --demo large-inbox --measure scroll --report scroll.json
@@ -137,9 +138,11 @@ On the reference machine, for the UI side measured here:
 - no frames while idle;
 - steady interactions (scroll, splitter, typing) allocate ≤ 256 KB per frame.
 
-At the baseline, scroll, select, splitter, typing, and theme met the time target and resize did
-not; only typing and theme met the allocation target. With optimization 1, scroll, splitter, typing,
-and theme meet the allocation target as well; select and resize remain above it.
+At the baseline, scroll, splitter, typing, and theme met the frame-build target; select (9.14 ms
+p95) and resize did not, and every workload but resize met the input-to-frame target. Only typing
+and theme met the allocation target. With optimization 1, scroll, splitter, typing, and theme meet
+the allocation target as well; select and resize remain above it, and select's build p95 (8.73 ms,
+8.4 ms in the published-package run) is still just over 8 ms.
 
 ## Next steps
 
@@ -148,3 +151,65 @@ and theme meet the allocation target as well; select and resize remain above it.
 3. Cover long HTML in the preview window (the `long-html` fixture now provides the document) and
    100 % / 200 % display scales. Tiles below the first were painted from the wrong offset at any scale
    other than 100 % until UI-11 fixed it, so earlier preview observations at 150 % do not apply.
+
+## Harness additions, 4 October 2026
+
+These extend the harness without changing what a default run records: a run without `--detail`
+times each frame as one span exactly as above, and its report keeps every field of the first
+version under the same name (`reportVersion` 2 adds fields only). Numbers in this section come
+from short smoke runs that checked the harness works; they are not a new baseline. The official
+runs are still to be taken on a quiet machine.
+
+**Detail timers (`--detail`, `Measure-UI.ps1 -Detail`).** Each frame is split into draining posted
+UI work, measuring, arranging, and building the render list (the roots are measured and arranged
+first, so `UiSession.RenderFrame` then only renders; the drawn output is the same). Each input's
+dispatch is timed, and so is the host's render-and-present call: the time from the end of the
+frame build until the `WM_PAINT` that built it returns (for resize, until `SetWindowPos` returns).
+That is Direct2D drawing, `EndDraw`, and a vsynced `Present` on the UI thread, CPU wall time that
+can include waiting for a buffer; it is not GPU execution or the moment the frame reaches the
+screen. The report adds p50/p95/p99/max for `dispatchMs`, `drainMs`, `measureMs`, `arrangeMs`,
+`renderListMs`, `renderPresentMs`, and `inputToPresentMs`. The timers cost a little per frame, so
+compare detailed runs only with detailed runs.
+
+**HTML preview workloads.** Both run on the `long-html` fixture, open the reader's HTML preview
+(900×700 DIPs, its default), and report the preview window's frames after it has opened:
+
+| Workload | Sequence |
+| --- | --- |
+| long-html | wheel down to the end of the document and back to the top, three notches (96 DIPs) per input |
+| preview-zoom | Ctrl+Plus to 300 %, Ctrl+Minus to 50 %, and Ctrl+Plus back to the opening zoom, one level per input |
+
+The preview's tile cache counts, only while measured, the tiles found in the cache (hits), tiles
+drawn because they were not (misses), misses for a tile drawn before and evicted since
+(re-rasters), evictions, and tiles discarded by a new layout, width, zoom, or scale. Each drawn
+tile's raster time (Broiler.HTML painting on the preview thread, single-threaded per ADR-0005) and
+upload time (handing the pixels to the renderer) are recorded, with the peak cache size and the
+document's layouts. Frames that drew a tile are reported apart from frames that found every tile
+cached, and opening (from the reader's button to the preview's first frame) is reported on its
+own. The tile counts include the opening's tiles.
+
+At zoom 1 the long newsletter is cut at 32,768 DIPs, 32 tiles, so scrolling down and back draws
+48 tiles: all 32 on the way down, and on the way up the 16 that the 16-tile cache no longer holds,
+with 32 evictions. The smoke runs counted exactly that.
+
+**Simulated scales (`-Scales 100,150,200`).** The script runs each workload once per scale with
+`--scale`, and the summary labels those rows "simulated N %". Mail then lays out, rasterizes, and
+converts input at that scale on this display; in the preview workloads the measured preview takes
+the same scale. Windows' own DPI, the window frame, `WM_DPICHANGED`, and moves between monitors are
+not exercised, so these rows are not real DPI evidence (UI-13's display checks remain open).
+
+**Budgets.** `scripts/ui-budgets.json` holds the proposed targets above: frame build p95 ≤ 8 ms and
+input to frame p95 ≤ 16.7 ms for scroll, select, typing, theme, resize, and splitter; no frames
+while idle; and allocation per frame p50 ≤ 256 KB for scroll, typing, and splitter. The summary
+marks each workload and scale pass or over against the median of its runs. The budgets are
+proposed, not agreed, and not tied to a reference machine. They are report-only: the script exits
+with 1 for a result over budget only with `-Strict`. The preview workloads have no proposed target
+yet. `-Evaluate <directory>` summarizes stored reports, including those of the first version,
+without running the app. Evaluated that way, the published preview.14 reports above put select's
+build p95 (8.4 ms) and resize over the targets.
+
+**Still not measured.** Text-layout call counts: Broiler.Graphics exposes no way to observe the
+active `BTextMeasurer` provider, and Broiler.UI has no layout counters, so counting needs a public
+upstream API rather than reflection into either package. Also GPU execution and present-to-screen
+latency (DXGI statistics in Broiler.Graphics), input through the native message path, and
+correctness checks after each workload.

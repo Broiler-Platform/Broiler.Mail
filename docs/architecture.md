@@ -232,8 +232,12 @@ The `new-mail` fixture keeps a small in-memory server: each later receive adds m
 marks the open one read. Two acceptance-only options build on the demo: `--server-change`
 makes the next new-mail receive delete the open message, push it below the newest page, or
 renumber the inbox (used by `scripts/Accept-Refresh.ps1`), and `--scale` renders the main window
-(not HTML previews) at a simulated display scale named in the window title, at the requested DIP size
-even beyond the screen. Neither changes a Windows setting.
+at a simulated display scale named in the window title, at the requested DIP size even beyond the
+screen. HTML previews keep Windows' scale, except the preview a `long-html` or `preview-zoom`
+measurement opens, which takes the simulated scale at its own 900×700 DIPs. Neither option changes
+a Windows setting. The UI-12 measurement harness (`--measure`, `scripts/Measure-UI.ps1`) is described
+in [the performance baseline](ui-performance-baseline-2026-10-02.md); while it measures the preview,
+the preview's tile cache counts hits, misses, evictions, and raster time, and otherwise counts nothing.
 `--data-directory` supports isolated real configuration tests. The user will run
 live-provider acceptance later using the [included checklist](version-1-acceptance.md).
 Physical multi-monitor and IME language coverage are also recorded as user checks.
