@@ -45,10 +45,19 @@ public sealed class CompositionCommands
     public bool StartNew() => Start(null);
     public bool Respond(CompositionKind kind) => Start(kind);
 
+    /// <summary>
+    /// True while a request starts a draft and before <see cref="Requested"/> has moved focus to it,
+    /// so the composer does not first hand focus on from the start buttons it hides.
+    /// </summary>
+    internal bool IsStarting { get; private set; }
+
     private bool Start(CompositionKind? kind)
     {
         if (kind is null ? !CanCompose : !CanRespond) return false;
-        bool started = kind is null ? _composer.StartNew() : _composer.StartFromMessage(_inbox.Body!, kind.Value);
+        bool started;
+        IsStarting = true;
+        try { started = kind is null ? _composer.StartNew() : _composer.StartFromMessage(_inbox.Body!, kind.Value); }
+        finally { IsStarting = false; }
         if (!started && !_composer.HasDraft) return false;
         // Replies already have recipients, so writing starts in the body; an existing draft resumes there too.
         var focus = started && kind is null or CompositionKind.Forward ? CompositionFocus.Recipients : CompositionFocus.Body;

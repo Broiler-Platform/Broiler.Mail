@@ -58,6 +58,31 @@ public sealed class ReaderReplyTests
     }
 
     [Fact]
+    public async Task TheComposersOwnReplyMovesFocusOnceStraightToTheBody()
+    {
+        using var fixture = await Fixture.OpenAsync();
+        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Session.RenderFrame();
+        var reply = fixture.ComposerButton("Reply");
+        Assert.True(reply.IsEnabled);
+        fixture.Session.SetFocus(reply);
+        var moves = new List<UiElement>();
+        fixture.Session.SemanticChanged += (_, e) =>
+        {
+            if (e.Change == UiSemanticChangeKind.FocusChanged) moves.Add(e.Element);
+        };
+
+        reply.Click();
+        fixture.Dispatcher.Drain();
+        fixture.Session.RenderFrame();
+
+        // The starting row hides as the draft starts. A screen reader hears one move, to where
+        // writing starts, not first the field after the hidden button.
+        Assert.True(fixture.Model.Composer.HasDraft);
+        Assert.Equal([fixture.ComposerBody], moves);
+    }
+
+    [Fact]
     public async Task ReturningToTheInboxResumesFocusOnTheReaderAction()
     {
         using var fixture = await Fixture.OpenAsync();
@@ -157,6 +182,7 @@ public sealed class ReaderReplyTests
         public StandardRichEdit ComposerBody => Descendants(ComposeContent).OfType<StandardRichEdit>().Single();
         public StandardEdit ComposerTo => (StandardEdit)Descendants(ComposeContent).OfType<StandardLabel>().Single(label => label.Text == "To").Target!;
         public StandardButton ReaderButton(string text) => Descendants(InboxContent).OfType<StandardButton>().Single(button => button.Text == text);
+        public StandardButton ComposerButton(string text) => Descendants(ComposeContent).OfType<StandardButton>().Single(button => button.Text == text);
 
         public static async Task<Fixture> OpenAsync(int width = 1100, int height = 720, bool select = true)
         {

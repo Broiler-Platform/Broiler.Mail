@@ -152,8 +152,9 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
                 : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
             // A command that stays disabled once it has finished hands focus on: Discard draft to New
-            // message, an accepted Send to the next enabled action (Save draft). Focus stays while it runs.
-            if (!model.IsBusy && surface.Session is { } session)
+            // message, an accepted Send to the next enabled action (Save draft). Focus stays while it
+            // runs, and a start button hidden by its own request leaves focus to that request.
+            if (!model.IsBusy && !_commands.IsStarting && surface.Session is { } session)
                 FocusNavigation.KeepFocusUsable(session, surface, create);
             updating = false;
         }
