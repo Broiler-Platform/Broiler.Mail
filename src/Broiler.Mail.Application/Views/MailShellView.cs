@@ -45,7 +45,8 @@ public sealed class MailShellView : IDisposable
         Window = new StandardWindow { Title = model.Title };
         Window.ApplyTheme(StandardControlPaint.Theme);
         var layout = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
-        var status = new StandardLabel { Text = model.Status.Replace("&", "&&", StringComparison.Ordinal), Wrapping = UiTextWrapping.Wrap };
+        // Literal: statuses carry addresses and server text, where '&' is a character, not an access key.
+        var status = new StandardLabel { Text = model.Status, Wrapping = UiTextWrapping.Wrap, UseMnemonic = false };
         layout.AddChild(status);
         layout.SetDock(status, UiDock.Bottom);
 
@@ -87,7 +88,7 @@ public sealed class MailShellView : IDisposable
                     _ => "Canceled. Retry is available.",
                 },
             };
-            status.Text = text.Replace("&", "&&", StringComparison.Ordinal);
+            status.Text = text;
         }
         Navigation.SelectionChanged += (_, _) =>
         {

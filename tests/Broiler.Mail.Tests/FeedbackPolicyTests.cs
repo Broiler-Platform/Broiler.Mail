@@ -155,6 +155,20 @@ public sealed class FeedbackPolicyTests
     }
 
     [Fact]
+    public void TheFooterShowsAStatusWithAnAmpersandAsWritten()
+    {
+        // An address may contain '&'. The footer is a literal label: no doubled text, no access key.
+        using var fixture = Fixture.Open(emailAddress: "r&d@example.test");
+        string status = fixture.Model.Inbox.Status;
+        Assert.Contains("r&d@example.test", status);
+
+        Assert.Equal(status, fixture.Footer.Text);
+        Assert.Equal(status, fixture.Footer.DisplayText);
+        Assert.Equal(status, fixture.Footer.GetSemanticNode().Name);
+        Assert.Null(fixture.Footer.EffectiveAccessKey);
+    }
+
+    [Fact]
     public async Task AResultArrivingAfterTheUserMovedOnDoesNotTakeFocusOrTheTab()
     {
         using var fixture = Fixture.Open();
@@ -307,10 +321,13 @@ public sealed class FeedbackPolicyTests
         public InlineFeedback SettingsFeedback => Descendants(Tab("settings")).OfType<InlineFeedback>().Single();
         public StandardLabel Footer => (StandardLabel)Shell.Window.Children[0].Children[0];
 
-        public static Fixture Open(SubmissionStatus sendResult = SubmissionStatus.Accepted)
+        public static Fixture Open(SubmissionStatus sendResult = SubmissionStatus.Accepted, string emailAddress = "test@example.test")
         {
             var directory = new TestDirectory();
-            var account = TestDirectory.Profile() with { OutgoingServer = new() { Host = "smtp.example.test", Port = 465, UserName = "test" } };
+            var account = TestDirectory.Profile() with
+            {
+                EmailAddress = emailAddress, OutgoingServer = new() { Host = "smtp.example.test", Port = 465, UserName = "test" },
+            };
             var messages = new[] { 2u, 1u }.Select(uid => new MailMessageSummary
             {
                 Key = new(account.Id, "INBOX", 7, uid), Sender = "author@example.test", Subject = $"Message {uid}",
