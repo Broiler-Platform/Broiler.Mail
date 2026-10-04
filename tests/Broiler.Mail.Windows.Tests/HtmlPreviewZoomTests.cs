@@ -332,7 +332,7 @@ public sealed class HtmlPreviewZoomTests
             Assert.Equal(view.Content.ContentWidth / 1.5, view.Snapshot!.Width, 1);
             Assert.Equal("150 %", window.ZoomResetButton.Text);
             Assert.False(window.ZoomResetButton.IsEnabled);
-            Assert.Contains("150 %", window.ZoomResetButton.GetSemanticNode().Name);
+            Assert.Equal("150 %, the default zoom", window.ZoomResetButton.GetSemanticNode().Name);
             // The plain text's font already has the text size; it is not enlarged twice.
             Assert.Equal(1, window.PlainTextView.Editor.Zoom);
         });
@@ -411,20 +411,22 @@ public sealed class HtmlPreviewZoomTests
                 Assert.Equal(PreviewZoom.Maximum, window.Zoom);
                 Assert.Same(window.ZoomResetButton, session.FocusedElement);
                 Assert.Equal("300 %", window.ZoomResetButton.Text);
-                Assert.Equal("Reset zoom to 100 %, now 300 %", window.ZoomResetButton.GetSemanticNode().Name);
+                // The name starts with the text the button shows.
+                Assert.Equal("300 %, reset zoom to 100 %", window.ZoomResetButton.GetSemanticNode().Name);
                 window.StepZoom(1);
                 Assert.Equal(PreviewZoom.Maximum, window.Zoom);
             },
             window =>
             {
-                Assert.Equal("Zoom 300 %.", announced[^1]);
-                Assert.Equal(5, announced.Count);
+                // Focus is on the reset button, whose name now holds the level, and a screen reader reads
+                // that; a notification as well would say 300 % twice.
+                Assert.Equal(4, announced.Count);
                 // Past the limit nothing changes, so nothing is said.
                 window.StepZoom(1);
             },
             window =>
             {
-                Assert.Equal(5, announced.Count);
+                Assert.Equal(4, announced.Count);
                 var session = window.Session;
                 window.Dispatch(Key(0x0D)); // Enter on the reset button
                 Assert.Equal(1.0, window.Zoom);
@@ -433,6 +435,12 @@ public sealed class HtmlPreviewZoomTests
                 while (window.ZoomOutButton.IsEnabled) window.ZoomOutButton.Click();
                 Assert.Equal(PreviewZoom.Minimum, window.Zoom);
                 Assert.True(window.ZoomInButton.IsEnabled);
+            },
+            window =>
+            {
+                // With focus on Zoom in, whose name stays, the level is said: once, for the whole burst.
+                Assert.Equal(5, announced.Count);
+                Assert.Equal("Zoom 50 %.", announced[^1]);
             });
     }
 
@@ -458,7 +466,7 @@ public sealed class HtmlPreviewZoomTests
             Assert.Same(window.ZoomResetButton, session.FocusedElement);
             Assert.All(new[] { window.ZoomOutButton, window.ZoomResetButton, window.ZoomInButton },
                 button => Assert.False(string.IsNullOrWhiteSpace(button.GetSemanticNode().Name)));
-            Assert.Equal(["Zoom out", "Reset zoom to 100 %, now 110 %", "Zoom in"],
+            Assert.Equal(["Zoom out", "110 %, reset zoom to 100 %", "Zoom in"],
                 new[] { window.ZoomOutButton, window.ZoomResetButton, window.ZoomInButton }.Select(button => button.GetSemanticNode().Name));
         });
     }
@@ -484,7 +492,7 @@ public sealed class HtmlPreviewZoomTests
                 // Zoomed by the reader: the zoom stays, and only Reset's target moves.
                 Assert.Equal(2.0, window.Zoom);
                 Assert.Equal(1.25, window.DefaultZoom);
-                Assert.Equal("Reset zoom to 125 %, now 200 %", window.ZoomResetButton.GetSemanticNode().Name);
+                Assert.Equal("200 %, reset zoom to 125 %", window.ZoomResetButton.GetSemanticNode().Name);
                 // The plain text (whose font now has 125 %) is drawn at the same 200 %.
                 Assert.Equal(1.6, window.PlainTextView.Editor.Zoom, 6);
                 window.ResetZoom();

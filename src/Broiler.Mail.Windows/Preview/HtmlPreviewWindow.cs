@@ -544,7 +544,10 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     {
         string? message = _zoomAnnouncement;
         _zoomAnnouncement = null;
-        if (message is not null && !IsDisposed) _session.AnnounceStatus(_zoomResetButton, message);
+        // The reset button's name holds the level, and a screen reader reads the focused control's new
+        // name (or the control focus has just moved to) itself; a notification as well would read it twice.
+        if (message is not null && !IsDisposed && _session.FocusedElement != _zoomResetButton)
+            _session.AnnounceStatus(_zoomResetButton, message);
     }
 
     /// <summary>
@@ -578,10 +581,11 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _zoomInButton.IsEnabled = !PreviewZoom.IsAtMaximum(zoom);
         _zoomResetButton.IsEnabled = !atDefault;
         _zoomResetButton.Text = PreviewZoom.Format(zoom);
-        // The button shows the current level; its name also says where it goes.
+        // The button shows the current level; its name starts with that text, as speech input and a
+        // reader comparing the two expect, and then says where it goes.
         _zoomResetButton.AccessibleName = atDefault
-            ? $"Zoom {PreviewZoom.Format(zoom)}, the default"
-            : $"Reset zoom to {PreviewZoom.Format(_defaultZoom)}, now {PreviewZoom.Format(zoom)}";
+            ? $"{PreviewZoom.Format(zoom)}, the default zoom"
+            : $"{PreviewZoom.Format(zoom)}, reset zoom to {PreviewZoom.Format(_defaultZoom)}";
         // A zoom button that has just become unavailable passes focus to one that still works.
         if (_session.FocusedElement is StandardButton { IsEnabled: false } focused
             && (focused == _zoomInButton || focused == _zoomOutButton || focused == _zoomResetButton)
