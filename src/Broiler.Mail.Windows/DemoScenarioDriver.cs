@@ -58,7 +58,9 @@ internal sealed class DemoScenarioDriver
                     yield return inbox.LoadOlderAsync;
                 yield return () => inbox.Messages.Count > 0 ? inbox.SelectAsync(inbox.Messages[0].Key) : Task.CompletedTask;
                 break;
+            // A second receive while reading: it fails, or new mail arrives above the open message.
             case DemoScenario.ReceiveError:
+            case DemoScenario.NewMail:
                 yield return inbox.ReceiveAsync;
                 yield return () => Select(inbox, 55);
                 yield return inbox.ReceiveAsync;

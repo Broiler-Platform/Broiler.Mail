@@ -212,6 +212,10 @@ no demo sender contacts a server or reports acceptance. The `smtp-test-failed` a
 `smtp-test-passed` fixtures answer the SMTP sign-in test synthetically and show a saved
 SMTP password by presence only (`ICredentialStore.ContainsAsync`); no demo credential
 lookup returns a secret.
+The `new-mail` fixture keeps a small in-memory server: each later receive adds messages and
+marks the open one read. The acceptance-only `--server-change` option
+makes the next new-mail receive delete the open message, push it below the newest page, or
+renumber the inbox (used by `scripts/Accept-Refresh.ps1`).
 `--data-directory` supports isolated real configuration tests. The user will run
 live-provider acceptance later using the [included checklist](version-1-acceptance.md).
 Physical multi-monitor and IME language coverage are also recorded as user checks.

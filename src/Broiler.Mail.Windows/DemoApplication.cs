@@ -42,8 +42,8 @@ internal static class DemoApplication
     {
         options ??= new(DemoScenario.Inbox, Interactive: true);
         var store = new DemoStore(options);
-        return new(store, store, new DemoReceiver(options.Scenario, options.Interactive), new DemoSender(options.Scenario), store, CreateDrafts(options.Scenario, store.Profile),
-            outgoingTester: new DemoOutgoingTester(options.Scenario));
+        return new(store, store, new DemoReceiver(options.Scenario, options.Interactive, options.ServerChange), new DemoSender(options.Scenario), store,
+            CreateDrafts(options.Scenario, store.Profile), outgoingTester: new DemoOutgoingTester(options.Scenario));
     }
 
     /// <summary>Dates relative to a fixed moment, zone, and culture, so gallery captures are reproducible.</summary>
@@ -212,16 +212,19 @@ internal static class DemoApplication
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=73E97D
     // Broiler-Human:        PENDING
-    private sealed class DemoReceiver(DemoScenario scenario, bool interactive) : IMailReceiver
+    private sealed class DemoReceiver(DemoScenario scenario, bool interactive, DemoServerChange change) : IMailReceiver
     {
         private const string LongSender = "Maximilian Alexander von Langenstein-Habsburg <maximilian.alexander.von.langenstein-habsburg.office@subdomain.example.test>";
         private const string LongSubject = "Re: Fwd: Agenda, travel arrangements, accessibility requirements, and the revised budget spreadsheet for the cross-team planning workshop in Zürich";
         private int _receives;
+        // Only the new-mail fixture's server changes between receives; the others stay as recorded.
+        private readonly DemoMailbox? _mailbox = scenario == DemoScenario.NewMail ? new(change) : null;
 
         private int Total => scenario switch { DemoScenario.Empty => 0, DemoScenario.LargeInbox => 500, _ => 55 };
         // The interactive demo shows its busy states; gallery fixtures settle immediately.
         private TimeSpan Latency(int milliseconds) => interactive ? TimeSpan.FromMilliseconds(milliseconds) : TimeSpan.Zero;
-        private string Subject(uint uid) => uid == 55 ? (scenario == DemoScenario.LongMessage ? LongSubject : "Welcome to Broiler.Mail")
+        private string Subject(uint uid) => uid > DemoMailbox.InitialCount && scenario == DemoScenario.NewMail ? $"New message {uid}"
+            : uid == 55 ? (scenario == DemoScenario.LongMessage ? LongSubject : "Welcome to Broiler.Mail")
             : uid == 54 ? (scenario == DemoScenario.LongHtml ? "Long HTML newsletter" : "HTML-only mail — text preview")
             : uid == 53 && scenario == DemoScenario.LongHtml ? "Short HTML note" : $"Sample message {uid}";
 
@@ -263,6 +266,13 @@ internal static class DemoApplication
                 await Task.Delay(Timeout.Infinite, cancellationToken);
             if (scenario == DemoScenario.LoadError && older is not null)
                 throw new MailConnectionException("The demo server did not respond while loading older messages. Check the connection, then retry.");
+            // Dates follow the UID, so rows that were already listed keep their dates while mail arrives.
+            if (_mailbox is not null)
+                return _mailbox.GetInbox(account.Id, maximumCount, older, (key, isRead) => new MailMessageSummary
+                {
+                    Key = key, Sender = "Broiler team <hello@example.test>", Subject = Subject(key.Uid),
+                    ReceivedAt = Newest.AddMinutes((int)key.Uid - (int)DemoMailbox.InitialCount), IsRead = isRead,
+                });
             int total = Total;
             if (total == 0) return new([], null);
             int end = older?.NextIndex ?? total - 1;
@@ -286,6 +296,11 @@ internal static class DemoApplication
             await Task.Delay(Latency(300), cancellationToken);
             if (scenario == DemoScenario.BodyError && message.Uid == 55)
                 throw new MailConnectionException("The demo server closed the connection while sending this message.");
+            if (_mailbox is not null)
+            {
+                if (!_mailbox.Contains(message)) throw new MailConnectionException("This message is no longer on the demo server. Receive mail to update the inbox.");
+                _mailbox.Opened(message);
+            }
             var composition = new MailCompositionSource
             {
                 From = ["hello@example.test"], To = [account.EmailAddress],
