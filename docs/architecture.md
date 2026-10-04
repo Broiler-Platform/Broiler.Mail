@@ -172,14 +172,17 @@ No HTML is rendered and no resource URLs are followed. The decoder returns a lab
 fallback and a truncation flag, with at most 32,000 text characters. The version 1
 receiver leaves `HtmlText` null. Header display fields are limited to 512 characters.
 
-The Broiler.UI scroll view measures content without width constraints. A small
-application-owned content wrapper supplies the reading pane width to the standard
-label, so long text wraps and scrolls. Account/settings forms use the same viewport
-constraint. `TabContent` remeasures content during arrange because the pinned
-Broiler tab control initially measures using a 320×220 preferred size, even when
-arranged into a larger window. This avoids narrow-column text in the real shell.
-Literal ampersands are escaped at the label boundary to avoid Broiler.UI access-key
-interpretation.
+The reader and the account and settings forms scroll in standard scroll views that
+constrain content to the viewport width (`UiScrollConstraint.ConstrainWidth`), so long
+text wraps and scrolls vertically. The standard tab view measures each tab's content
+at the size it allocates, but it arranges every hidden tab at an empty rectangle, which
+lays a hidden form out at no width and lost the composer status area's scroll position.
+`TabContent` wraps each tab and skips that arrange.
+Two Mail layouts remain because Broiler.UI has no minimum or maximum size:
+`BoundedScrollArea` caps the message header and the inbox notice at a share of the
+height, and `FillLastStack` gives the composer body the remaining height above a
+minimum. Labels that show addresses, subjects, server text, or the footer status set
+`UseMnemonic = false`, so an `&` is shown as written, not read as an access key.
 
 ## Distribution and acceptance
 
