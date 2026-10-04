@@ -8,6 +8,9 @@ Each run opens one demo fixture, waits for it to settle, and then:
   - captures a screenshot (PrintWindow) for visual review of clipping, overlap, and hierarchy;
   - reads the UI Automation tree and reports unnamed interactive controls, controls cut off by the
     window edge (outside any scroll view), and interactive controls that overlap each other;
+  - with -OpenReader, opens the selected message with Read message (in a compact window the reader
+    then replaces the list), runs the same UI Automation checks on it, reports a button cut at the
+    bottom edge of the message header, captures it as <run>-reader.png, and goes Back to inbox;
   - walks Tab through the window and reports a missing, stuck, unnamed, or off-screen focus;
   - closes the window and checks the exit code and that nothing was written to stderr.
 Input is posted to the window's render child, so the run does not take keyboard focus from other
@@ -33,7 +36,9 @@ param(
     [ValidateScript({ $_ -eq 0 -or ($_ -ge 100 -and $_ -le 225) })]
     [int]$TextScale = 0,
     # Render with the theme's high-contrast palette (--contrast high).
-    [switch]$HighContrast
+    [switch]$HighContrast,
+    # Also open the selected message (Read message), and check and capture the reader before the Tab walk.
+    [switch]$OpenReader
 )
 
 $ErrorActionPreference = 'Stop'
@@ -216,6 +221,37 @@ public static class Acceptance
     }
 
     public static string Label(AcceptanceNode node) { return node == null ? "(none)" : Describe(node); }
+
+    /// <summary>Buttons the message header's bottom edge cuts: the header ends inside their row.</summary>
+    public static List<string> HeaderCuts(List<AcceptanceNode> nodes)
+    {
+        var findings = new List<string>();
+        for (int h = 0; h < nodes.Count; h++)
+        {
+            var header = nodes[h];
+            if (header.Name != "Message header" || header.Offscreen || header.Bounds.IsEmpty) continue;
+            double edge = header.Bounds.Bottom;
+            for (int i = 0; i < nodes.Count; i++)
+            {
+                var n = nodes[i];
+                if (n.Type != "ControlType.Button" || n.Bounds.IsEmpty || !IsAncestor(nodes, h, i)) continue;
+                if (n.Bounds.Top < edge - 1 && n.Bounds.Bottom > edge + 1)
+                    findings.Add("HEADER_CUT: " + Describe(n) + " is cut at the bottom of the message header (" + n.Bounds + ", header " + header.Bounds + ").");
+            }
+        }
+        return findings;
+    }
+
+    public static bool Invoke(IntPtr hwnd, string name)
+    {
+        var root = AutomationElement.FromHandle(hwnd);
+        var found = root.FindFirst(TreeScope.Descendants, new AndCondition(
+            new PropertyCondition(AutomationElement.NameProperty, name),
+            new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.Button)));
+        if (found == null || !found.Current.IsEnabled) return false;
+        ((InvokePattern)found.GetCurrentPattern(InvokePattern.Pattern)).Invoke();
+        return true;
+    }
 }
 '@
 
@@ -280,6 +316,22 @@ function Invoke-Checks([string]$scenario, $process, [string]$stderr, $result) {
     $result.elements = $nodes.Count
     $result.findings += @([Acceptance]::Check($nodes, $client))
 
+    # The reader as the message opens, before Tab can scroll its header to a focused button. Back to inbox
+    # then returns a compact window to the list, so the Tab walk covers the same window as without it.
+    if ($OpenReader) {
+        if ([Acceptance]::Invoke($render, 'Read message')) {
+            Start-Sleep -Milliseconds 1200
+            $result.readerScreenshot = "$name-reader.png"
+            Save-Screenshot $window (Join-Path $Output $result.readerScreenshot)
+            $readerNodes = [Acceptance]::Snapshot($render, 4000)
+            $result.readerElements = $readerNodes.Count
+            $result.findings += @([Acceptance]::Check($readerNodes, $client) | ForEach-Object { "READER_$_" })
+            $result.findings += @([Acceptance]::HeaderCuts($readerNodes))
+            if ([Acceptance]::Invoke($render, 'Back to inbox')) { Start-Sleep -Milliseconds 800 }
+        }
+        else { $result.findings += 'READER: there is no enabled Read message button to open the reader with.' }
+    }
+
     # Tab walk: each step must land on a named, visible element, and focus must keep moving.
     $first = $null; $previous = $null
     for ($step = 1; $step -le $TabSteps; $step++) {
@@ -343,7 +395,7 @@ $lines.Add("- Packages: $packages")
 $lines.Add("- Executable: $Executable")
 $lines.Add("- SDK: $(dotnet --version); OS: $($os.Caption) $($os.Version); architecture: $env:PROCESSOR_ARCHITECTURE")
 $textScaleNote = if ($TextScale -gt 0) { "$TextScale % (fixed with --text-scale)" } else { 'system setting' }
-$lines.Add("- Text scale: $textScaleNote; high-contrast palette forced: $([bool]$HighContrast)")
+$lines.Add("- Text scale: $textScaleNote; high-contrast palette forced: $([bool]$HighContrast); reader opened: $([bool]$OpenReader)")
 $lines.Add("- Display scale: $scales; monitors: $([Acceptance]::GetSystemMetrics(80)); high contrast on: $([System.Windows.Forms.SystemInformation]::HighContrast)")
 $lines.Add("- Method: published executable, demo fixtures (fixed clock and data), posted keyboard input, UI Automation, PrintWindow screenshots")
 $lines.Add('')
@@ -356,7 +408,9 @@ foreach ($r in $results) {
     $cycle = if ($r.tabCycle) { $r.tabCycle } else { '-' }
     $summary = if ($r.findings.Count -eq 0) { 'none' } else { ($r.findings | ForEach-Object { ($_ -split ':')[0] } | Group-Object | ForEach-Object { "$($_.Name) x$($_.Count)" }) -join ', ' }
     if ($r.note) { $summary = "$summary; $($r.note)" }
-    $lines.Add("| $($r.scenario) | $($r.size) | $($r.theme) | $($r.elements) | $cycle | $summary | [$($r.screenshot)]($($r.screenshot)) |")
+    $shots = "[$($r.screenshot)]($($r.screenshot))"
+    if ($r.readerScreenshot) { $shots = "$shots, [$($r.readerScreenshot)]($($r.readerScreenshot))" }
+    $lines.Add("| $($r.scenario) | $($r.size) | $($r.theme) | $($r.elements) | $cycle | $summary | $shots |")
 }
 $lines.Add('')
 $lines.Add('## Findings')
