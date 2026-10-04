@@ -31,8 +31,16 @@ The native preview host (`WindowsHtmlPreviewHost`, `HtmlPreviewWindow`) hosts
   and `ImageLoad` events intercept and block external/remote stylesheets and images.
 - Resource policy denies local file and loopback references; this is not an OS restriction
   on a compromised renderer, which still shares the mail process's privileges.
-- Raster snapshots are bounded to Direct2D texture limits (clamped height up to 8192 px)
-  and encoded via `Broiler.Media.Image.Managed` codecs.
+- Raster snapshots are bounded: the document is cut at 32,768 CSS pixels tall (and content
+  that cannot wrap at 8,192 wide), it is drawn in 1,024-DIP tiles of at most 8 M pixels and
+  8,192 pixels a side, and the tile cache holds at most 16 tiles and 256 MB. Images are
+  decoded via `Broiler.Media.Image.Managed` codecs.
+- Tiles are rastered by the preview window's own thread alone. Broiler.HTML's parallel raster
+  made that STA thread wait in a way that dispatched input and UI Automation calls in the
+  middle of a tile (NativeAOT), so it is switched off for the preview.
+- Zoom (50–300 %) is a page zoom: the document is laid out at the viewport's width over the
+  zoom and drawn larger, so text still wraps to the window. A preview opens at the system text
+  size and follows it until the reader zooms; the zoom also enlarges the plain-text view.
 
 ## Inline images and remote resources
 
