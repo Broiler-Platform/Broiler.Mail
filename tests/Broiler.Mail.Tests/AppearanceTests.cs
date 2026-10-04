@@ -108,6 +108,86 @@ public sealed class AppearanceTests
         finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
     }
 
+    /// <summary>
+    /// A default button is filled with the accent and strokes its focus ring inside that fill. Where the palette's
+    /// ring is the accent, or too close to it, the button rings itself in its label color, so keyboard focus on
+    /// Save account (and Send, Save settings) stays visible; other buttons keep the palette's ring.
+    /// </summary>
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    [InlineData("HighContrastLight")]
+    [InlineData("HighContrastDark")]
+    [InlineData("SystemDusk")]
+    [InlineData("SystemDesert")]
+    [InlineData("RingStandsOut")]
+    public void AKeyboardFocusedDefaultButtonShowsItsRingOnItsOwnFill(string name)
+    {
+        var palette = Palette(name);
+        using var directory = new TestDirectory();
+        var dispatcher = new TestQueueDispatcher();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        var host = new Host(LightSystem with { ContrastPreference = UiContrastPreference.More });
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+        session.AddRoot(shell.Window);
+        try
+        {
+            using var appearance = new AppearanceController(session, model.Settings, host, _ => palette);
+            Assert.Same(palette, appearance.Current);
+            shell.Navigation.SelectTab("account");
+            var account = shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;
+            var save = Descendants(account).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Save account");
+            var test = Descendants(account).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Test connection");
+            Assert.True(save.IsDefault && save.IsEnabled);
+            session.SetFocus(save);
+            Assert.True(session.IsFocusVisible);
+
+            var commands = session.RenderFrame().Commands.ToArray();
+            var fill = commands.OfType<BRenderCommand.FillRoundedRect>().Last(command => command.Rect == save.Bounds).Color;
+            var ring = commands.OfType<BRenderCommand.StrokeRoundedRect>().Single(command => command.Rect == StandardControlPaint.Inset(save.Bounds, 2)).Color;
+            Assert.Equal(palette.Accent, fill);
+            // Visible on the fill drawn, and on the hovered and pressed fills.
+            foreach (var drawn in new[] { fill, save.HoverBackground, save.PressedBackground })
+                Assert.True(StandardContrast.Ratio(ring, drawn) >= StandardContrast.AaLargeOrUi, $"{name}: ring {ring} on {drawn}");
+            // A palette whose ring already stands out keeps it, and buttons on the window color always do.
+            Assert.Equal(name == "RingStandsOut" ? palette.FocusRing : palette.OnAccent, ring);
+            Assert.Equal(palette.FocusRing, test.FocusRing);
+        }
+        finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
+    }
+
+    /// <summary>The palettes the default-button ring is checked in; the system ones are shaped like Hosting's.</summary>
+    private static StandardThemeTokens Palette(string name) => name switch
+    {
+        "Light" => StandardThemeTokens.Light,
+        "Dark" => StandardThemeTokens.Dark,
+        "HighContrastLight" => StandardThemeTokens.HighContrastLight,
+        "HighContrastDark" => StandardThemeTokens.HighContrastDark,
+        // Windows' Dusk and Desert contrast themes as WindowsTheme.CreateHighContrastTheme maps them: the accent,
+        // the states and the focus ring are all Highlight.
+        "SystemDusk" => SystemPalette(StandardThemeTokens.HighContrastDark, BColor.FromArgb(0xFF, 0x2D, 0x32, 0x36), BColor.White,
+            BColor.FromArgb(0xFF, 0xA1, 0xBF, 0xDE), BColor.FromArgb(0xFF, 0x21, 0x2D, 0x3B)),
+        "SystemDesert" => SystemPalette(StandardThemeTokens.HighContrastLight, BColor.FromArgb(0xFF, 0xFF, 0xFA, 0xEF), BColor.FromArgb(0xFF, 0x3D, 0x3D, 0x3D),
+            BColor.FromArgb(0xFF, 0x90, 0x39, 0x09), BColor.FromArgb(0xFF, 0xFF, 0xF5, 0xE3)),
+        "RingStandsOut" => StandardThemeTokens.Light with { FocusRing = BColor.Black, AccentHover = StandardThemeTokens.Light.Accent, AccentPressed = StandardThemeTokens.Light.Accent },
+        _ => throw new ArgumentOutOfRangeException(nameof(name)),
+    };
+
+    private static StandardThemeTokens SystemPalette(StandardThemeTokens preset, BColor window, BColor text, BColor highlight, BColor highlightText) => preset with
+    {
+        Name = "HighContrastSystem", Surface = window, SurfaceAlt = window, SurfaceDisabled = window, Text = text, TextMuted = text,
+        Border = text, BorderStrong = text, Accent = highlight, AccentHover = highlight, AccentPressed = highlight, AccentSoft = highlight,
+        OnAccent = highlightText, SelectionText = highlightText, SelectionTextMuted = highlightText,
+        StateFill = highlight, StateText = highlightText, FocusRing = highlight,
+    };
+
     [Fact]
     public async Task SavedPreferenceAndSystemChangesRethemeTheLiveShellWithoutLosingText()
     {

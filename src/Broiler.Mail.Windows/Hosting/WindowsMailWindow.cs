@@ -281,7 +281,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     {
         _recorder?.MarkInput();
         long started = Stopwatch.GetTimestamp();
-        StandardThemeController.Apply(_session, tokens);
+        AppearanceController.Theme(_session, tokens);
         WindowsTitleBar.ApplyDarkMode(NativeHandle, tokens.IsDark);
         Invalidate();
         _recorder?.EndDispatch(started);
