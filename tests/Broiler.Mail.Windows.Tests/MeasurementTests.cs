@@ -14,7 +14,7 @@ using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Tests;
 
-/// <summary>UI-12: the measurement harness's recorder, report, phase timer, and preview hooks.</summary>
+/// <summary>UI-12: the measurement harness's recorder, report, phase timer, preview hooks, and summary script.</summary>
 [Collection("UI theme")]
 public sealed class MeasurementTests
 {
@@ -328,6 +328,101 @@ public sealed class MeasurementTests
 
     [DllImport("user32.dll", EntryPoint = "SendMessageW")]
     private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
+
+    [Fact]
+    public void The_Summary_Compares_Medians_With_The_Proposed_Budgets_And_Fails_Only_When_Strict()
+    {
+        string directory = Path.Combine(Path.GetTempPath(), "Broiler.Mail.Measurements", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(directory);
+        try
+        {
+            WriteReport(directory, "idle-1", "idle", null, frames: 0, buildP95: null, inputP95: null, allocationP50: null);
+            // The lower median of two runs: 5 ms, within 8 ms, although the other run took 9.
+            WriteReport(directory, "scroll-1", "scroll", 200, frames: 300, buildP95: 5, inputP95: 6, allocationP50: 300);
+            WriteReport(directory, "scroll-2", "scroll", 200, frames: 300, buildP95: 9, inputP95: 7, allocationP50: 310);
+            WriteReport(directory, "resize-1", "resize", null, frames: 30, buildP95: 15, inputP95: 18, allocationP50: 400);
+            WriteReport(directory, "long-html-1", "long-html", null, frames: 600, buildP95: 110, inputP95: 112, allocationP50: 4);
+
+            var (exitCode, output) = RunSummary("-Evaluate", directory);
+            Assert.True(exitCode == 0, output);
+            using var summary = JsonDocument.Parse(File.ReadAllText(Path.Combine(directory, "summary.json")));
+            var verdicts = summary.RootElement.GetProperty("verdicts").EnumerateArray()
+                .ToDictionary(item => $"{item.GetProperty("workload").GetString()}/{item.GetProperty("field").GetString()}",
+                    item => (item.GetProperty("result").GetString(), item.GetProperty("scale").GetString()));
+            Assert.Equal(("pass", "system 150 %"), verdicts["idle/frames"]);
+            Assert.Equal(("pass", "simulated 200 %"), verdicts["scroll/buildMsP95"]);
+            Assert.Equal(("over", "simulated 200 %"), verdicts["scroll/allocatedKbPerFrameP50"]);
+            Assert.Equal("over", verdicts["resize/buildMsP95"].Item1);
+            Assert.Equal("over", verdicts["resize/inputToFrameMsP95"].Item1);
+            // The preview workloads have no proposed target.
+            Assert.DoesNotContain(verdicts.Keys, key => key.StartsWith("long-html/", StringComparison.Ordinal));
+            Assert.Equal(3, summary.RootElement.GetProperty("budgets").GetProperty("over").GetInt32());
+            string markdown = File.ReadAllText(Path.Combine(directory, "summary.md"));
+            Assert.Contains("| scroll | simulated 200 % | 300 |", markdown);
+            Assert.Contains("not real DPI results", markdown);
+            Assert.Contains("long-html: No target is proposed", markdown);
+
+            Assert.Equal(1, RunSummary("-Evaluate", directory, "-Strict").ExitCode);
+            Assert.Equal(0, RunSummary("-Evaluate", directory, "-Strict", "-Workloads", "idle,long-html").ExitCode);
+        }
+        finally { Directory.Delete(directory, recursive: true); }
+    }
+
+    private static void WriteReport(string directory, string name, string workload, int? simulated, int frames, double? buildP95, double? inputP95, double? allocationP50)
+    {
+        using var stream = File.Create(Path.Combine(directory, name + ".json"));
+        using var writer = new Utf8JsonWriter(stream);
+        writer.WriteStartObject();
+        writer.WriteNumber("reportVersion", 2);
+        writer.WriteString("workload", workload);
+        writer.WriteString("theme", "light");
+        writer.WriteString("windowSize", "1100x720");
+        writer.WriteNumber("dpiScale", simulated is { } percent ? percent / 100.0 : 1.5);
+        if (simulated is { } simulatedPercent) writer.WriteNumber("simulatedScalePercent", simulatedPercent);
+        else writer.WriteNull("simulatedScalePercent");
+        writer.WriteBoolean("detail", false);
+        writer.WriteString("build", "Release, NativeAOT");
+        writer.WriteString("machine", "test");
+        writer.WriteNumber("startupFirstFrameMs", 230);
+        writer.WriteNumber("startupInteractiveMs", 250);
+        writer.WriteNumber("steps", frames);
+        writer.WriteNumber("frames", frames);
+        foreach (var (field, value) in new[] { ("buildMsP50", buildP95 / 2), ("buildMsP95", buildP95), ("buildMsP99", buildP95),
+            ("inputToFrameMsP95", inputP95), ("allocatedKbPerFrameP50", allocationP50), ("workingSetMb", (double?)70) })
+        {
+            if (value is { } number) writer.WriteNumber(field, number);
+            else writer.WriteNull(field);
+        }
+        writer.WriteEndObject();
+    }
+
+    private static (int ExitCode, string Output) RunSummary(params string[] arguments)
+    {
+        var start = new ProcessStartInfo("powershell.exe")
+        {
+            UseShellExecute = false,
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            CreateNoWindow = true,
+        };
+        foreach (string argument in new[] { "-NoProfile", "-NonInteractive", "-ExecutionPolicy", "Bypass", "-File", ScriptPath() }.Concat(arguments))
+            start.ArgumentList.Add(argument);
+        using var process = Process.Start(start)!;
+        var output = process.StandardOutput.ReadToEndAsync();
+        var error = process.StandardError.ReadToEndAsync();
+        Assert.True(process.WaitForExit(60_000), "Measure-UI.ps1 did not finish.");
+        return (process.ExitCode, output.Result + error.Result);
+    }
+
+    private static string ScriptPath()
+    {
+        for (var directory = new DirectoryInfo(AppContext.BaseDirectory); directory is not null; directory = directory.Parent)
+        {
+            string candidate = Path.Combine(directory.FullName, "scripts", "Measure-UI.ps1");
+            if (File.Exists(candidate)) return candidate;
+        }
+        throw new FileNotFoundException("scripts/Measure-UI.ps1 was not found above the test output.");
+    }
 
     /// <summary>The inbox fixture, settled as the demo prepares it, in a headless session of its own.</summary>
     private sealed class SettledShell : IDisposable

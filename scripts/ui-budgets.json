@@ -1,0 +1,39 @@
+{
+  "status": "proposed",
+  "source": "docs/ui-performance-baseline-2026-10-02.md, Proposed targets",
+  "note": "Proposed targets for the UI side of a frame, not yet agreed and not tied to a reference machine. Measure-UI.ps1 reports them; only -Strict turns a result over budget into a failure.",
+  "budgets": [
+    {
+      "name": "Frame build p95",
+      "field": "buildMsP95",
+      "max": 8,
+      "unit": "ms",
+      "workloads": [ "scroll", "select", "type", "theme", "resize", "splitter" ]
+    },
+    {
+      "name": "Input to frame p95",
+      "field": "inputToFrameMsP95",
+      "max": 16.7,
+      "unit": "ms",
+      "workloads": [ "scroll", "select", "type", "theme", "resize", "splitter" ]
+    },
+    {
+      "name": "Frames while idle",
+      "field": "frames",
+      "max": 0,
+      "unit": "frames",
+      "workloads": [ "idle" ]
+    },
+    {
+      "name": "Allocation per frame p50 (steady interaction)",
+      "field": "allocatedKbPerFrameP50",
+      "max": 256,
+      "unit": "KB",
+      "workloads": [ "scroll", "type", "splitter" ]
+    }
+  ],
+  "untargeted": {
+    "long-html": "No target is proposed for the HTML preview yet: its frames draw tiles on the preview thread.",
+    "preview-zoom": "No target is proposed for the HTML preview yet: each zoom lays the document out again and draws its tiles on the preview thread."
+  }
+}
