@@ -106,26 +106,30 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     }
 
     /// <summary>
-    /// The tab stop after <paramref name="from"/> in document order (before it for a negative
+    /// The tab stop after <paramref name="from"/> in Tab order (before it for a negative
     /// <paramref name="direction"/>), for a control that is not a stop itself, such as a button that
-    /// disabled itself. Null when <paramref name="from"/> is not in <paramref name="scope"/> or no stop follows.
+    /// disabled itself: its place is where it would be among <see cref="TabStops"/>, by
+    /// <see cref="UiElement.TabIndex"/> and then document order. Null when <paramref name="from"/> is
+    /// not in <paramref name="scope"/> or no stop follows.
     /// </summary>
     internal static UiElement? NextTabStop(UiElement scope, UiElement from, int direction)
     {
-        var stops = TabStops(scope).ToHashSet();
         // Every element, shown or not, so a control that was just hidden still has its place.
-        var order = Everything(scope).ToList();
-        int position = order.IndexOf(from);
-        if (position < 0) return null;
-        var following = direction > 0 ? order.Skip(position + 1) : order.Take(position).Reverse();
-        return following.FirstOrDefault(stops.Contains);
+        var position = new Dictionary<UiElement, int>(ReferenceEqualityComparer.Instance);
+        foreach (var element in AllDescendants(scope)) position[element] = position.Count;
+        if (!position.TryGetValue(from, out int place)) return null;
+        // TabStops is sorted by TabIndex, then document position, so the neighbour is the first stop
+        // past that key in the direction of travel.
+        int Compare(UiElement stop) => stop.TabIndex != from.TabIndex ? stop.TabIndex.CompareTo(from.TabIndex) : position[stop].CompareTo(place);
+        var stops = TabStops(scope);
+        return direction > 0 ? stops.FirstOrDefault(stop => Compare(stop) > 0) : stops.LastOrDefault(stop => Compare(stop) < 0);
     }
 
-    private static IEnumerable<UiElement> Everything(UiElement element)
+    private static IEnumerable<UiElement> AllDescendants(UiElement element)
     {
         yield return element;
         foreach (var child in element.Children)
-            foreach (var descendant in Everything(child)) yield return descendant;
+            foreach (var descendant in AllDescendants(child)) yield return descendant;
     }
 
     /// <summary>

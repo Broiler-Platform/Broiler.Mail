@@ -660,6 +660,24 @@ public sealed class FeedbackPolicyTests
         fixture.Model.Inbox.Cancel();
     }
 
+    [Fact]
+    public void TabFromAControlThatIsNoLongerAStopFollowsTabOrder()
+    {
+        using var fixture = Fixture.Open();
+        fixture.Model.Composer.StartNew();
+        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Settle();
+        var check = fixture.Button("Check draft");
+        var save = fixture.Button("Save draft");
+        // Save draft goes last in Tab order; the other actions keep their order (Send, Check draft, Discard draft).
+        save.TabIndex = 1;
+        fixture.Session.SetFocus(check);
+        check.IsEnabled = false;
+
+        fixture.Shell.CreateKeyboardNavigation(fixture.Session).MoveFocus(1);
+        Assert.Same(fixture.Button("Discard draft"), fixture.Session.FocusedElement);
+    }
+
     private sealed class FailingSettingsStore : ISettingsStore
     {
         public Task<Broiler.Mail.Core.Settings.ApplicationSettings> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult(new Broiler.Mail.Core.Settings.ApplicationSettings());
