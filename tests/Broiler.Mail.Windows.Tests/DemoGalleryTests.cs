@@ -61,12 +61,41 @@ public sealed class DemoGalleryTests
     {
         foreach (var (name, workload, _) in DemoOptions.Workloads)
         {
-            Assert.True(DemoOptions.TryParse(["--demo", "large-inbox", "--measure", name, "--report", "out.json"], out var options));
+            string fixture = DemoOptions.MeasuresPreview(workload) ? "long-html" : "large-inbox";
+            Assert.True(DemoOptions.TryParse(["--demo", fixture, "--measure", name, "--report", "out.json"], out var options));
             Assert.Equal(workload, options!.Measure);
             Assert.True(System.IO.Path.IsPathFullyQualified(options.Report!));
+            Assert.False(options.Detail);
         }
         Assert.Equal(Enum.GetValues<Measurement.MeasureWorkload>().Order(), DemoOptions.Workloads.Select(item => item.Workload).Order());
     }
+
+    [Theory]
+    [InlineData("--demo long-html --measure long-html", true)]
+    [InlineData("--demo long-html --measure preview-zoom --scale 200", true)]
+    [InlineData("--demo html-only --measure long-html", false)]
+    [InlineData("--demo inbox --measure preview-zoom", false)]
+    public void Preview_Workloads_Need_The_Long_Html_Fixture(string args, bool valid) =>
+        Assert.Equal(valid, DemoOptions.TryParse(args.Split(' '), out _));
+
+    [Theory]
+    [InlineData("--demo inbox --measure scroll --detail", true)]
+    [InlineData("--demo inbox --measure scroll --detail --report out.json", true)]
+    [InlineData("--demo inbox --detail --measure resize --scale 150", true)]
+    [InlineData("--demo inbox --measure scroll", false)]
+    public void Detail_Is_A_Switch_For_A_Measurement(string args, bool detail)
+    {
+        Assert.True(DemoOptions.TryParse(args.Split(' '), out var options));
+        Assert.Equal(detail, options!.Detail);
+    }
+
+    [Theory]
+    [InlineData("--demo inbox --detail")]
+    [InlineData("--demo --measure scroll --detail")]
+    [InlineData("--demo inbox --measure scroll --detail --detail")]
+    [InlineData("--demo inbox --measure scroll --detail on")]
+    public void Detail_Needs_A_Measurement_And_Takes_No_Value(string args) =>
+        Assert.False(DemoOptions.TryParse(args.Split(' '), out _));
 
     [Fact]
     public void Percentiles_Use_The_Nearest_Rank()

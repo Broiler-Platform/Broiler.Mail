@@ -40,6 +40,7 @@ using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Preview;
 using Broiler.Mail.Windows.Hosting;
+using Broiler.Mail.Windows.Measurement;
 using Broiler.Media;
 using Broiler.Media.Image.Managed;
 using Broiler.UI;
@@ -117,6 +118,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private bool _allowRemoteImages;
     private bool _initialShownRaised;
     private CancellationTokenSource? _imageLoadCts;
+    // UI-12: a --measure run's recorder and tile counters, and the simulated scale it renders the preview at.
+    private readonly PreviewMeasurement? _measurement;
+    private const int DefaultClientWidth = 900, DefaultClientHeight = 700;
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
     // Broiler-Human:        PENDING
@@ -137,6 +141,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     public HtmlPreviewDocument Document => _document;
 
     internal void Post(Action action) => PostToUiThread(action);
+    /// <summary>UI-12: queues <paramref name="action"/> to the preview's thread; false once the window is closing.</summary>
+    internal bool RunOnUiThread(Action action) => PostToUiThread(action);
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=0; Fingerprint=2829D7
     // Broiler-Falsified-If: a CloseWindow call from the preview host's thread runs Close on that thread instead of queuing it to the preview window's own thread
     // Broiler-Human:        PENDING
@@ -188,13 +194,14 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         string? rawHtml = null,
         IReadOnlyDictionary<string, MailEmbeddedImage>? embeddedImages = null,
         StandardThemeTokens? theme = null,
-        string? title = null)
+        string? title = null,
+        PreviewMeasurement? measurement = null)
         : base(new BWindowOptions
         {
             // The title names the message; it must be set here because the native window does not exist yet.
-            Title = title ?? "Broiler.Mail — HTML preview",
-            ClientWidth = 900,
-            ClientHeight = 700,
+            Title = TitleAtScale(title ?? "Broiler.Mail — HTML preview", measurement),
+            ClientWidth = DefaultClientWidth,
+            ClientHeight = DefaultClientHeight,
             OwnsMessageLoop = false,
             RenderOptions = new BRenderOptions(
                 Antialias: true,
@@ -207,6 +214,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _openExternal = openExternal;
         _rawHtml = rawHtml;
         _embeddedImages = embeddedImages;
+        _measurement = measurement;
 
         _host = new WindowsUiHost(this, () => InputHandle);
         _dispatcher = new StandardQueuedUiDispatcher(() => PostToUiThread(DrainDispatcher));
@@ -276,6 +284,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         // Only links the policy would open get a keyboard target; the others do nothing when clicked either.
         _htmlView = new ScrollableHtmlView(_document.Html, () => Renderer, target => OpenLink(target, userInitiated: true), () => DpiScale,
             target => HtmlPreviewPolicy.TryExternalLink(target, out var uri) && _document.ExternalLinks.Contains(uri!.AbsoluteUri));
+        _htmlView.Content.Statistics = measurement?.Tiles;
         content.AddChild(_htmlView);
 
         root.AddChild(content);
@@ -654,14 +663,43 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         WindowsTitleBar.ApplyDarkMode(NativeHandle, _dark);
         // Screen readers see the buttons, the document, and each link, as in the main window.
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _root, () => DpiScale);
+        // A measured preview at a simulated scale keeps its DIP size in that scale's pixels, as the main window does.
+        if (_measurement?.SimulatedScale is { } scale)
+            WindowsScreen.FitClient(NativeHandle, (int)Math.Round(DefaultClientWidth * scale), (int)Math.Round(DefaultClientHeight * scale), centered: true);
+    }
+
+    /// <summary>Windows' scale for the window, or the simulated one a --measure run at --scale renders the preview at.</summary>
+    public override double DpiScale => _measurement?.SimulatedScale ?? base.DpiScale;
+
+    /// <summary>Names a simulated scale in the title, as the main window does, so a capture cannot be mistaken for a real display.</summary>
+    private static string TitleAtScale(string title, PreviewMeasurement? measurement) => measurement?.SimulatedScale is { } scale
+        ? $"{title}, simulated {Math.Round(scale * 100).ToString(System.Globalization.CultureInfo.InvariantCulture)}% scale"
+        : title;
+
+    protected override void OnNativeWindowMessage(nint hwnd, uint message, nint wParam, nint lParam)
+    {
+        // WM_GETMINMAXINFO: a simulated scale gets its pixels even beyond the real desktop, as the main window does.
+        if (message == 0x0024 && hwnd == NativeHandle && _measurement?.SimulatedScale is not null)
+            WindowsScreen.LiftMaximumTrackSize(lParam);
     }
 
     protected override BRenderList? BuildRenderList(BSize clientSize)
     {
+        var recorder = _measurement?.Frames;
+        var started = recorder?.BeginFrame();
+        int tilesBefore = recorder is null ? 0 : _measurement!.Tiles.Misses;
         _host.Update(clientSize, DpiScale);
         DrainDispatcher();
-        BRenderList? frame = _session.RenderFrame();
+        FramePhases? phases = null;
+        BRenderList? frame;
+        if (recorder is { Detail: true })
+        {
+            frame = FramePhaseTimer.Render(_session, Stopwatch.GetTimestamp(), out var timed);
+            phases = timed;
+        }
+        else frame = _session.RenderFrame();
         SyncTruncationNotice();
+        if (started is { } begin) recorder!.EndFrame(begin, phases, _measurement!.Tiles.Misses - tilesBefore);
         return frame;
     }
 
@@ -714,6 +752,16 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-Human:        PENDING
     protected override void OnTextInput(BTextInputEventArgs e) => Dispatch(_input.FromText(e));
 
+    /// <summary>UI-12: dispatches an input a --measure run synthesized, marked for the frame that shows it.</summary>
+    internal void DispatchMeasured(UiInputEvent input)
+    {
+        var recorder = _measurement?.Frames;
+        recorder?.MarkInput();
+        long started = Stopwatch.GetTimestamp();
+        Dispatch(input);
+        recorder?.EndDispatch(started);
+    }
+
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=17558C
     // Broiler-Falsified-If: an input event the UI session reports as handled leaves the window without an invalidation, so the frame on screen stays stale
     // Broiler-Human:        PENDING
@@ -757,6 +805,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             if (result == 0) return unchecked((int)message.WParam);
             TranslateMessage(ref message);
             DispatchMessage(ref message);
+            // --measure --detail: the render window's WM_PAINT has rendered and presented the frame it built; the
+            // frame window's own WM_PAINT draws nothing.
+            if (message.Message == 0x000F && message.Hwnd == RenderNativeHandle && _measurement?.Frames is { Detail: true } recorder) recorder.EndPaint();
         }
     }
 
@@ -1066,6 +1117,8 @@ internal sealed class HtmlViewElement : UiElement
     }
 
     public HtmlLayoutSnapshot? Snapshot => _layoutSnapshot;
+    /// <summary>UI-12: counts the tile cache's work while a --measure run watches it; null otherwise.</summary>
+    internal HtmlTileStatistics? Statistics { get; set; }
     /// <summary>One focusable target per link the preview would open, in document order.</summary>
     internal IReadOnlyList<HtmlLinkTarget> LinkTargets => _linkTargets;
     public int CachedTileCount => _tiles.Count;
@@ -1136,6 +1189,7 @@ internal sealed class HtmlViewElement : UiElement
         if (_layoutSnapshot is not null && Math.Abs(_layoutSnapshot.Width - width) <= 0.5f) return;
         InvalidateTiles();
         _layoutSnapshot = CalculateLayout(width);
+        Statistics?.LaidOut(_layoutSnapshot.LayoutDurationTicks);
         RebuildLinkTargets();
     }
 
@@ -1248,6 +1302,7 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-Human:        PENDING
     private void InvalidateTiles()
     {
+        Statistics?.Discarded(_tiles.Count);
         var renderer = _rendererProvider();
         foreach (var entry in _tiles.Values)
         {
@@ -1364,6 +1419,7 @@ internal sealed class HtmlViewElement : UiElement
         {
             _lruTiles.Remove(key);
             _lruTiles.AddFirst(key);
+            Statistics?.Hit();
             return;
         }
 
@@ -1384,10 +1440,15 @@ internal sealed class HtmlViewElement : UiElement
             {
                 _cachedTileBytes -= (long)evicted.PixelWidth * evicted.PixelHeight * BytesPerPixel;
                 if (evicted.Handle.IsValid) renderer.ReleaseImage(evicted.Handle);
+                Statistics?.Evicted();
             }
         }
 
+        // Timed only while measured.
+        var statistics = Statistics;
+        long started = statistics is null ? 0 : Stopwatch.GetTimestamp();
         using var bitmap = PaintTile(tileTop / _zoom, tileScale * _zoom, pixelW, pixelH, tileLeft / _zoom);
+        long painted = statistics is null ? 0 : Stopwatch.GetTimestamp();
 
         // The renderer keeps RGBA pixels. Encoding a PNG for it to decode straight back cost far more
         // than painting the tile; the pixels are identical either way.
@@ -1396,6 +1457,7 @@ internal sealed class HtmlViewElement : UiElement
         _tiles[key] = (handle, pixelW, pixelH, tileW, tileH);
         _lruTiles.AddFirst(key);
         _cachedTileBytes += tileBytes;
+        statistics?.Drawn(key, painted - started, Stopwatch.GetTimestamp() - painted, _cachedTileBytes);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=98C950

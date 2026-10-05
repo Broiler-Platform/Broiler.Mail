@@ -138,6 +138,15 @@ internal static unsafe class WindowsScreen
         limits->ptMaxTrackSize = new POINT { X = short.MaxValue, Y = short.MaxValue };
     }
 
+    /// <summary>
+    /// Lifts the maximum track size (WM_GETMINMAXINFO) of a window at a simulated scale, as <see cref="SimulatedTrackSize"/>
+    /// does, for a window without a minimum size of its own: Windows' minimum stays.
+    /// </summary>
+    public static void LiftMaximumTrackSize(nint minMaxInfo)
+    {
+        if (minMaxInfo != 0) ((MINMAXINFO*)minMaxInfo)->ptMaxTrackSize = new POINT { X = short.MaxValue, Y = short.MaxValue };
+    }
+
     /// <summary>Sends WM_DPICHANGED with a suggested outer rectangle in this process's memory, as Windows does.</summary>
     public static void SendDpiChanged(nint window, uint dpi, PixelRect suggested)
     {
