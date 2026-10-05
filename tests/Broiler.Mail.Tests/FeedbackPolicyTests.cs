@@ -765,6 +765,7 @@ public sealed class FeedbackPolicyTests
         {
             _directory = directory; Dispatcher = dispatcher; Receiver = receiver; Sender = sender; Clock = clock;
             Model = model; Shell = shell; Session = session;
+            ComposerStatus = Descendants(Tab("compose")).OfType<InlineFeedback>().Last();
             session.SemanticChanged += (_, e) =>
             {
                 if (e.Change == UiSemanticChangeKind.StatusAnnounced) Announced.Add(e.Message ?? "");
@@ -782,8 +783,11 @@ public sealed class FeedbackPolicyTests
         public UiElement Tab(string id) => Shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
         public StandardRichEdit ComposerBody => Descendants(Tab("compose")).OfType<StandardRichEdit>().Single();
         public StandardButton Button(string text, string tab = "compose") => Descendants(Tab(tab)).OfType<StandardButton>().Single(button => button.Text == text);
-        /// <summary>The composer's line for check results, warnings, and errors; the last of its feedback lines.</summary>
-        public InlineFeedback ComposerStatus => Descendants(Tab("compose")).OfType<InlineFeedback>().Last();
+        /// <summary>
+        /// The composer's line for check results, warnings, and errors: the last of its feedback lines as
+        /// they are created. Errors and warnings move to the top, so it is found before there are any.
+        /// </summary>
+        public InlineFeedback ComposerStatus { get; }
         public StandardEdit Field(string tab, string label) =>
             Descendants(Tab(tab)).OfType<FormField>().Where(field => field.Label.Text.StartsWith(label, StringComparison.Ordinal)).Select(field => field.Control).OfType<StandardEdit>().Single();
         public InlineFeedback SettingsFeedback => Descendants(Tab("settings")).OfType<InlineFeedback>().Single();

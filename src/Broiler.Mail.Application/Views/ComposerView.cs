@@ -151,12 +151,22 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             status.Set(model.IsBusy ? model.SubmissionState == DraftSubmissionState.Editing ? "Updating draft…" : ""
                 : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
+            ShowProblemsFirst();
             // A command that stays disabled once it has finished hands focus on: Discard draft to New
             // message, an accepted Send to the next enabled action (Save draft). Focus stays while it
             // runs, and a start button hidden by its own request leaves focus to that request.
             if (!model.IsBusy && !_commands.IsStarting && surface.Session is { } session)
                 FocusNavigation.KeepFocusUsable(session, surface, create);
             updating = false;
+        }
+        void ShowProblemsFirst()
+        {
+            // The area is capped and scrolls at a large text size, so it starts with errors, then
+            // warnings, then the other lines in their usual order: a hint or a success above an error
+            // would push the error out of view. Moving a line keeps its text, so it is not announced again.
+            var lines = new[] { submission, sendHint, sentCopy, storage, status }.OrderBy(line => line.Message.Length == 0 ? 2
+                : line.Kind switch { FeedbackKind.Error => 0, FeedbackKind.Warning => 1, _ => 2 }).ToArray();
+            for (int index = 0; index < lines.Length; index++) feedback.MoveChild(lines[index], index);
         }
         void ShowCopiesSummary()
         {

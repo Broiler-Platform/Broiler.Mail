@@ -491,7 +491,8 @@ public sealed class DemoGalleryTests
             Assert.Equal(FeedbackKind.Error, composer.StatusKind);
             Assert.Equal("Enter valid email addresses separated by commas.", composer.Status);
             Assert.True(composer.CanEdit);
-            var status = Descendants(Tab(shell, "compose")).OfType<InlineFeedback>().Last();
+            // The error is the first line below the buttons, above the send hint.
+            var status = Descendants(Tab(shell, "compose")).OfType<InlineFeedback>().First(line => line.Message.Length > 0);
             Assert.Equal((FeedbackKind.Error, composer.Status), (status.Kind, status.Message));
             foreach (var action in new[] { "Check draft", "Save draft", "Discard draft" })
                 Assert.True(IsAvailable(Button(shell, "compose", action)), action);

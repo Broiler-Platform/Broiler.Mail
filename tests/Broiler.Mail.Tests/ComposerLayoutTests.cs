@@ -152,6 +152,53 @@ public sealed class ComposerLayoutTests
         Assert.DoesNotContain("Saving", fixture.SenderLine.Text);
     }
 
+    /// <summary>
+    /// The feedback below the buttons is capped and scrolls at a large text size, so it starts with a
+    /// problem: a recipient error is shown above the hint that sending is unavailable, which keeps its
+    /// text below it. Moving the lines does not announce them again. Without a problem, the lines keep
+    /// their usual order.
+    /// </summary>
+    [Fact]
+    public void AnErrorIsShownAboveAHintInTheCappedFeedbackArea()
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
+        try
+        {
+            using var fixture = new Fixture(640, 480);
+            var announced = new List<string>();
+            fixture.Session.SemanticChanged += (_, e) =>
+            {
+                if (e.Change == UiSemanticChangeKind.StatusAnnounced) announced.Add(e.Message ?? "");
+            };
+            Assert.True(fixture.Composer.StartNew());
+            fixture.Composer.Edit("team.example.test", "", "", "Plans", "Body");
+            fixture.Render();
+            const string hint = "Sending is not available in this mode.";
+            Assert.Equal([(FeedbackKind.Information, hint)], fixture.Feedback.Select(line => (line.Kind, line.Message)));
+            announced.Clear();
+
+            fixture.Button("Check draft").Click();
+            fixture.Render();
+            string error = fixture.Composer.Status;
+            Assert.Equal(FeedbackKind.Error, fixture.Composer.StatusKind);
+            Assert.Equal([(FeedbackKind.Error, error), (FeedbackKind.Information, hint)], fixture.Feedback.Select(line => (line.Kind, line.Message)));
+            Assert.Equal(["Error: " + error], announced);
+            var area = fixture.Surface.Children.OfType<FormViewport>().Last().Scroll;
+            BRect shown = fixture.Feedback.First().Bounds;
+            Assert.True(area.HasVerticalScrollbar, "The feedback fits its area; the text is not large enough.");
+            Assert.Equal(area.ContentBounds.Top, shown.Top, 0.5);
+            Assert.True(shown.Bottom <= fixture.Feedback.Last().Bounds.Top + 0.5, $"The error is at {shown}, the hint at {fixture.Feedback.Last().Bounds}.");
+
+            // A passed check is a result, not a problem: it stays below the hint, as before.
+            fixture.Composer.Edit("team@example.test", "", "", "Plans", "Body");
+            fixture.Button("Check draft").Click();
+            fixture.Render();
+            Assert.Equal([(FeedbackKind.Information, hint), (FeedbackKind.Success, fixture.Composer.Status)], fixture.Feedback.Select(line => (line.Kind, line.Message)));
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
     [Fact]
     public void StartingRowGivesWayWhileADraftExistsAndReturnsAfterDiscard()
     {
