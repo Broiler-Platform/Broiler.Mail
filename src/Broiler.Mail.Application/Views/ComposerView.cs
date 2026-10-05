@@ -28,6 +28,7 @@ using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.RichEdit.Standard;
+using Broiler.UI.ScrollView;
 using Broiler.UI.Standard;
 using Broiler.UI.Toolbar;
 using Broiler.UI.Toolbar.Standard;
@@ -107,6 +108,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(send, check, save, discard), feedback));
         Guid? shown = null;
         bool updating = false;
+        var problemsShown = new HashSet<(InlineFeedback, string)>();
         void Refresh()
         {
             if (panel.IsDisposed) return;
@@ -164,10 +166,16 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             // The area is capped and scrolls at a large text size, so it starts with errors, then
             // warnings, then the other lines in their usual order: a hint or a success above an error
             // would push the error out of view. Moving a line keeps its text, so it is not announced again.
-            var lines = new[] { submission, sendHint, sentCopy, storage, status }.OrderBy(line => line.Message.Length == 0 ? 2
-                : line.Kind switch { FeedbackKind.Error => 0, FeedbackKind.Warning => 1, _ => 2 }).ToArray();
+            var lines = new[] { submission, sendHint, sentCopy, storage, status }.OrderBy(Rank).ToArray();
             for (int index = 0; index < lines.Length; index++) feedback.MoveChild(lines[index], index);
+            // The area may have been scrolled down to a line below, so a new problem is brought into view
+            // at its top, once and without moving focus; scrolling it afterwards is left to the user.
+            var problems = lines.Where(line => Rank(line) < 2).Select(line => (line, line.Message)).ToHashSet();
+            if (!problems.IsSubsetOf(problemsShown) && feedback.Parent is UiScrollView area) area.ScrollToStart();
+            problemsShown = problems;
         }
+        static int Rank(InlineFeedback line) => line.Message.Length == 0 ? 2
+            : line.Kind switch { FeedbackKind.Error => 0, FeedbackKind.Warning => 1, _ => 2 };
         void ShowCopiesSummary()
         {
             // The summary stands in for collapsed fields; expanded, the fields show the same thing.
