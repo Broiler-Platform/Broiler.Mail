@@ -46,11 +46,13 @@ public sealed class MailShellView : IDisposable
         Window.ApplyTheme(StandardControlPaint.Theme);
         var layout = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
         // Literal: statuses carry addresses and server text, where '&' is a character, not an access key.
-        var status = new StandardLabel { Text = model.Status, Wrapping = UiTextWrapping.Wrap, UseMnemonic = false };
-        layout.AddChild(status);
-        layout.SetDock(status, UiDock.Bottom);
-
+        var status = Footer = new StandardLabel { Text = model.Status, Wrapping = UiTextWrapping.Wrap, UseMnemonic = false };
         Navigation = new StandardTabView();
+        // Clear of the window's edges, and starting where the tab names do.
+        var footer = new Inset(status, Navigation.HeaderPaddingX, FooterPadding);
+        layout.AddChild(footer);
+        layout.SetDock(footer, UiDock.Bottom);
+
         Inbox = new InboxView(model.Inbox, htmlPreview, dates, model.Compose, model.Settings);
         var inboxContent = new TabContent(Inbox.CreateContent());
         Navigation.AddTab("inbox", "Inbox", inboxContent);
@@ -75,20 +77,14 @@ public sealed class MailShellView : IDisposable
                     : "Save your account details, then save a password and test the connection.",
                 "settings" => IsProblem(model.Settings.StatusKind) ? $"{model.Settings.StatusSummary} {DetailsBelow}"
                     : string.IsNullOrEmpty(model.Settings.Status) ? "Saved appearance and inbox spacing apply immediately. The window reopens at its last size and position." : model.Settings.Status,
-                // Informational composer messages appear only here; the composer shows the others inline.
+                // Informational composer messages appear only here; the composer shows the others inline,
+                // and the footer points to a problem there as the other forms do.
                 "compose" => !string.IsNullOrEmpty(model.Composer.Status) && model.Composer.StatusKind == FeedbackKind.Information && !model.Composer.IsBusy
                     ? model.Composer.Status
-                    : IsProblem(model.Composer.StorageKind) ? $"The draft is not saved. {DetailsBelow}" : model.Composer.StorageStatus,
-                // The explanation and Retry sit beside the affected pane; the footer only points there.
-                _ => model.Inbox.ProblemScope switch
-                {
-                    InboxProblemScope.List when !model.Inbox.ProblemIsCancellation => model.Inbox.ProblemIsOlderPage
-                        ? "Older messages could not be loaded. Details and Retry are beside the list."
-                        : "Mail could not be received. Details and Retry are beside the list.",
-                    InboxProblemScope.Message when !model.Inbox.ProblemIsCancellation => "The message could not be loaded. Details and Retry are beside it.",
-                    InboxProblemScope.None => model.Inbox.Status,
-                    _ => "Canceled. Retry is available.",
-                },
+                    : IsProblem(model.Composer.StorageKind) ? $"The draft is not saved. {DetailsBelow}"
+                    : IsProblem(model.Composer.StatusKind) && !string.IsNullOrEmpty(model.Composer.Status) ? $"The draft has a problem. {DetailsBelow}"
+                    : model.Composer.StorageStatus,
+                _ => InboxStatus(model.Inbox, Inbox),
             };
             status.Text = text;
         }
@@ -110,6 +106,14 @@ public sealed class MailShellView : IDisposable
             if (session is not null && target is not null) FocusNavigation.FocusAndReveal(session, target);
         };
         model.Inbox.Changed += (_, _) => RefreshStatus();
+        // Opening a message, Back, or a resize hides or shows a pane. A resize does so during layout,
+        // after the footer was laid out, so the new text waits until after that frame and is laid out
+        // in the next one.
+        Inbox.PanesChanged += (_, _) =>
+        {
+            if (Window.Session is { } session) session.Dispatcher.Post(RefreshStatus);
+            else RefreshStatus();
+        };
         model.Account.Changed += (_, _) => RefreshStatus();
         model.Settings.Changed += (_, _) => RefreshStatus();
         model.Composer.Changed += (_, _) => RefreshStatus();
@@ -122,11 +126,43 @@ public sealed class MailShellView : IDisposable
 
     private const string DetailsBelow = "Details are below the buttons.";
 
+    /// <summary>The space above and below the footer's text.</summary>
+    public const double FooterPadding = 4;
+
     private static bool IsProblem(FeedbackKind kind) => kind is FeedbackKind.Error or FeedbackKind.Warning;
+
+    /// <summary>
+    /// The inbox's status or, for a problem, a pointer to its explanation and Retry, which sit in the
+    /// affected pane: above the list, or under the message's header. While compact mode hides that
+    /// pane, the footer says how to show it instead, naming the reader's way back by its label. So
+    /// does the status of a message the compact list selected without showing it. At the session limit,
+    /// which is explained above the list, the compact reader's footer likewise points there instead of
+    /// giving the reading status, so it is no longer than that status. A message problem, in the reader,
+    /// comes first.
+    /// </summary>
+    private static string InboxStatus(InboxViewModel inbox, InboxView view)
+    {
+        bool paneShown = view.ShowsPaneOf(inbox.ProblemScope);
+        return (inbox.ProblemScope, inbox.ProblemIsCancellation, paneShown) switch
+        {
+            (InboxProblemScope.None, _, _) => inbox.SessionLimitNotice is not null && !view.ShowsPaneOf(InboxProblemScope.List)
+                ? $"Session limit reached. Use {InboxView.BackText} to see the details."
+                : inbox.StatusIsAboutMessage && !view.ShowsPaneOf(InboxProblemScope.Message) ? "Message selected. Open it to read." : inbox.Status,
+            (_, true, true) => "Canceled. Retry is available.",
+            (InboxProblemScope.Message, true, false) => "Canceled. Open the message to retry.",
+            (_, true, false) => $"Canceled. Use {InboxView.BackText} to retry.",
+            (InboxProblemScope.Message, false, true) => "The message could not be loaded. Details and Retry are below its date.",
+            (InboxProblemScope.Message, false, false) => "The message could not be loaded. Open it to see the details and Retry.",
+            _ => (inbox.ProblemIsOlderPage ? "Older messages could not be loaded. " : "Mail could not be received. ")
+                + (paneShown ? "Details and Retry are above the list." : $"Use {InboxView.BackText} to see the details and Retry."),
+        };
+    }
 
     public StandardWindow Window { get; }
     public StandardTabView Navigation { get; }
     public InboxView Inbox { get; }
+    /// <summary>The status line below the tabs.</summary>
+    public StandardLabel Footer { get; }
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=A9E9EB
     // Broiler-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
     // Broiler-Human:        PENDING

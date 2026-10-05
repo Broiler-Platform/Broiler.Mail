@@ -1,7 +1,8 @@
 # Broiler.Mail roadmap
 
 Current implementation and acceptance status for every roadmap is consolidated in
-the [4 October audit](roadmap-status-2026-10-04.md). The version scopes below remain
+the [5 October status](roadmap-status-2026-10-05.md), which updates the
+[4 October audit](roadmap-status-2026-10-04.md). The version scopes below remain
 the product plan; historical component observations are not current package claims.
 
 Status: version 1 implementation is complete and packaged for Windows x64.

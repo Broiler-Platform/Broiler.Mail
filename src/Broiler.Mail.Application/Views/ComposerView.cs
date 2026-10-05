@@ -28,6 +28,7 @@ using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.RichEdit.Standard;
+using Broiler.UI.ScrollView;
 using Broiler.UI.Standard;
 using Broiler.UI.Toolbar;
 using Broiler.UI.Toolbar.Standard;
@@ -75,13 +76,17 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         // Validate rather than truncate: imported recipients and prefixed subjects must remain intact.
         StandardEdit Field(string placeholder) => new() { MaxLength = int.MaxValue, PlaceholderText = placeholder };
         var to = Field("name@example.com, another@example.com");
-        panel.Add(new FormField("To", to));
+        var toField = new FormField("To", to);
+        panel.Add(toField);
         var copies = new FormSection("Cc and Bcc", "", collapsible: true, expanded: false);
         panel.Add(copies);
         var cc = Field("Visible to all recipients");
         var bcc = Field("Hidden from other recipients");
-        copies.Content.AddChild(new FormField("Cc", cc));
-        copies.Content.AddChild(new FormField("Bcc", bcc));
+        var ccField = new FormField("Cc", cc);
+        var bccField = new FormField("Bcc", bcc);
+        copies.Content.AddChild(ccField);
+        copies.Content.AddChild(bccField);
+        var recipientFields = new[] { ("To", toField), ("Cc", ccField), ("Bcc", bccField) };
         var subject = Field("");
         panel.Add(new FormField("Subject", subject));
         var body = new StandardRichEdit { AcceptsReturn = true, PreferredSize = new BSize(520, 120), PlaceholderText = "Write your message. Only plain text is kept." };
@@ -106,7 +111,9 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         feedback.AddChild(storage); feedback.AddChild(status);
         var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(send, check, save, discard), feedback));
         Guid? shown = null;
+        string? markedField = null;
         bool updating = false;
+        var problemsShown = new HashSet<(InlineFeedback, string)>();
         void Refresh()
         {
             if (panel.IsDisposed) return;
@@ -151,6 +158,20 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             status.Set(model.IsBusy ? model.SubmissionState == DraftSubmissionState.Editing ? "Updating draft…" : ""
                 : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
+            ShowProblemsFirst();
+            // A refused recipient field carries the error itself, as the account form's fields do: it shows the error
+            // and reports Invalid, with the error in its name. As there, the field (Cc and Bcc shown first) takes focus
+            // and is scrolled into view, but only while the user is still on the form.
+            foreach (var (name, field) in recipientFields) field.SetError(model.InvalidField == name ? model.Status : null);
+            if (model.InvalidField is { } refused && refused != markedField
+                && surface.Session is { } revealSession && FocusNavigation.MayTakeFocus(revealSession, surface))
+            {
+                // Cc and Bcc are shown first, and their summary gives way to them, so the field is scrolled to where
+                // it ends up.
+                if (refused != "To") { copies.IsExpanded = true; ShowCopiesSummary(); }
+                surface.Reveal(recipientFields.Single(pair => pair.Item1 == refused).Item2);
+            }
+            markedField = model.InvalidField;
             // A command that stays disabled once it has finished hands focus on: Discard draft to New
             // message, an accepted Send to the next enabled action (Save draft). Focus stays while it
             // runs, and a start button hidden by its own request leaves focus to that request.
@@ -158,6 +179,21 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
                 FocusNavigation.KeepFocusUsable(session, surface, create);
             updating = false;
         }
+        void ShowProblemsFirst()
+        {
+            // The area is capped and scrolls at a large text size, so it starts with errors, then
+            // warnings, then the other lines in their usual order: a hint or a success above an error
+            // would push the error out of view. Moving a line keeps its text, so it is not announced again.
+            var lines = new[] { submission, sendHint, sentCopy, storage, status }.OrderBy(Rank).ToArray();
+            for (int index = 0; index < lines.Length; index++) feedback.MoveChild(lines[index], index);
+            // The area may have been scrolled down to a line below, so a new problem is brought into view
+            // at its top, once and without moving focus; scrolling it afterwards is left to the user.
+            var problems = lines.Where(line => Rank(line) < 2).Select(line => (line, line.Message)).ToHashSet();
+            if (!problems.IsSubsetOf(problemsShown) && feedback.Parent is UiScrollView area) area.ScrollToStart();
+            problemsShown = problems;
+        }
+        static int Rank(InlineFeedback line) => line.Message.Length == 0 ? 2
+            : line.Kind switch { FeedbackKind.Error => 0, FeedbackKind.Warning => 1, _ => 2 };
         void ShowCopiesSummary()
         {
             // The summary stands in for collapsed fields; expanded, the fields show the same thing.

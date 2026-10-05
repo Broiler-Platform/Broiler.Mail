@@ -2,8 +2,12 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading;
+using System.Threading.Tasks;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Text;
+using Broiler.Graphics.Windows;
+using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Accounts;
@@ -15,6 +19,8 @@ using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.RichEdit.Standard;
+using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Tests;
@@ -167,14 +173,24 @@ public sealed class DemoGalleryTests
     }
 
     [Fact]
-    public void Large_Inbox_Loads_The_Session_Limit_Without_Duplicates()
+    public void Large_Inbox_Loads_The_Session_Limit_Without_Duplicates_And_Explains_It()
     {
-        Run(DemoScenario.LargeInbox, model =>
+        Run(DemoScenario.LargeInbox, (model, shell) =>
         {
             Assert.Equal(InboxViewModel.MaximumLoadedMessages, model.Inbox.Messages.Count);
             Assert.Equal(model.Inbox.Messages.Count, model.Inbox.Messages.Select(message => message.Key).Distinct().Count());
             Assert.False(model.Inbox.CanLoadOlder);
             Assert.Equal(model.Inbox.Messages[0].Key, model.Inbox.Body?.Key);
+            // Older mail is left on the server, so the notice above the list says why Load older is
+            // unavailable, although the newest message was read since.
+            Assert.False(Button(shell, "inbox", "Load older").IsEnabled);
+            var notice = Descendants(Tab(shell, "inbox")).OfType<InlineFeedback>().First();
+            Assert.Equal((FeedbackKind.Information, "Session limit reached (500 messages). Older ones cannot be loaded in this session. Receive mail to start again."),
+                (notice.Kind, notice.Message));
+            Assert.True(IsAvailable(Button(shell, "inbox", "Receive mail")));
+            // The newest row is unread and every third row from it is read, as in the captures of the
+            // 500-message mailbox.
+            Assert.Equal(Enumerable.Range(0, InboxViewModel.MaximumLoadedMessages).Select(row => row % 3 == 2), model.Inbox.Messages.Select(message => message.IsRead));
         });
     }
 
@@ -202,6 +218,203 @@ public sealed class DemoGalleryTests
             Assert.Contains("closed the connection", model.Inbox.Problem);
             Assert.True(model.Inbox.CanRetry);
         });
+    }
+
+    /// <summary>
+    /// Beside the list, the footer points to the explanation and Retry loading below the message's date,
+    /// where the reader shows them, as the compact reader does. They are part of the message header, above
+    /// the line that ends it, and are read with it, so the footer does not say they are below the header.
+    /// </summary>
+    [Fact]
+    public void Body_Error_Footer_Points_Below_The_Date()
+    {
+        Run(DemoScenario.BodyError, 1100, 720, null, (_, shell, render) =>
+        {
+            render();
+            Assert.Equal("The message could not be loaded. Details and Retry are below its date.", Footer(shell));
+            var date = Descendants(Tab(shell, "inbox")).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received ", StringComparison.Ordinal));
+            var retry = Button(shell, "inbox", "Retry loading");
+            Assert.True(IsAvailable(retry));
+            Assert.True(retry.Bounds.Top >= date.Bounds.Bottom - 0.5, $"Retry loading is at {retry.Bounds}, the date at {date.Bounds}.");
+            var header = Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+            Assert.True(retry.IsDescendantOf(header), "Retry loading is outside the message header.");
+            Assert.True(retry.Bounds.Bottom <= Descendants(Tab(shell, "inbox")).OfType<Divider>().Single().Bounds.Top + 0.5, $"Retry loading is at {retry.Bounds}, below the line.");
+        });
+    }
+
+    /// <summary>
+    /// The reader header of the gallery's reading fixtures, with their own subject, sender, recipient and
+    /// date, as Accept-UI -OpenReader shows them: in the compact reader at 640x480, and at 1100x720 with
+    /// twice the text size. Each row is shown whole, scrolled below the header whole, or cut between two
+    /// lines of its text, and the date line wraps only after "Received" or after its separator, never
+    /// inside the date, as it did at 700 wide with twice the text size. With no message text
+    /// (body-error), a header that scrolls takes all the reader that the line below it leaves. Beside the
+    /// list, Reply, Reply all and Forward are on screen whole below the header, whatever it shows, where
+    /// they fit on one row with the subject's first line and six lines of text; just wider than the compact
+    /// reader at twice the text size, where they wrapped and left the text less than a line, they end the
+    /// header, as in the compact reader. Their row is never flush with the line that separates the header
+    /// from the message text, as it was in html-only's scrolling compact header. The text keeps at least
+    /// the given number of lines: the compact reader at 640x480 with twice the text size keeps two, after
+    /// Back to inbox and its inset. So does the large inbox at the session limit, whose footer points to
+    /// the explanation above the hidden list instead of adding it to the reading status.
+    /// </summary>
+    [Theory]
+    [InlineData("inbox", 640, 480, 1.0, false, true, 5)]
+    [InlineData("long-message", 640, 480, 1.0, false, false, 8)]
+    [InlineData("html-only", 640, 480, 1.0, false, true, 6)]
+    [InlineData("long-html", 640, 480, 1.0, false, true, 6)]
+    [InlineData("body-error", 640, 480, 1.0, false, true, 0)]
+    [InlineData("large-inbox", 640, 480, 1.0, false, true, 5)]
+    [InlineData("inbox", 640, 480, 2.0, false, false, 2)]
+    [InlineData("large-inbox", 640, 480, 2.0, false, false, 2)]
+    [InlineData("inbox", 700, 480, 2.0, false, false, 2)]
+    [InlineData("long-message", 700, 520, 2.0, false, false, 3)]
+    [InlineData("inbox", 1100, 720, 2.0, true, true, 5)]
+    [InlineData("long-message", 1100, 720, 2.0, true, true, 5)]
+    [InlineData("html-only", 1100, 720, 2.0, true, true, 6)]
+    public void Reader_Header_Ends_Between_Its_Rows(string name, int width, int height, double textScale, bool pinned, bool replyShown, int textLines)
+    {
+        var scenario = DemoOptions.Gallery.Single(item => item.Name == name).Scenario;
+        // The app measures text with DirectWrite, which a renderer registers for the process. The headless
+        // measurer's lines are shorter (60 instead of 64 DIP for a title at 200 %), so the header would end
+        // elsewhere than in the app.
+        using (new Direct2DRenderer()) { }
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            // The app's preview host, which the HTML preview's row needs; nothing is opened.
+            Run(scenario, width, height, new NoPreviewHost(), (model, shell, render) =>
+            {
+                Assert.True(shell.Inbox.OpenSelected());
+                render();
+                var header = Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+                BRect shown = header.Scroll.ContentBounds;
+                string where = $"{name} at {width}x{height}, text {textScale:P0}: the header shows {shown} of {header.AvailableHeight}";
+                Assert.Equal(width < 680, Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single().ShowsReaderOnly);
+                // Only the large inbox is at the session limit; its compact reader's footer points to the explanation.
+                Assert.Equal(name == "large-inbox", model.Inbox.SessionLimitNotice is not null);
+                if (model.Inbox.SessionLimitNotice is not null)
+                    Assert.Equal($"Session limit reached. Use {InboxView.BackText} to see the details.", Footer(shell));
+                if (model.Inbox.Body is null && header.Scroll.HasVerticalScrollbar)
+                    Assert.True(Math.Abs(header.AvailableHeight - header.Bounds.Height) < 0.5, where);
+                else
+                    foreach (var row in header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0))
+                    {
+                        // The date line wraps only after "Received" or after its separator, which ends the date:
+                        // no line starts with the separator, where it would read as a bullet, or ends inside the
+                        // date ("10:00" above "AM · Unread on server"). The read state is one phrase, so a header
+                        // cut between lines shows it whole.
+                        if (row is StandardLabel date && date.Text.StartsWith("Received ", StringComparison.Ordinal))
+                        {
+                            string[] dateLines = WrappedLines(date).ToArray();
+                            Assert.True(dateLines.SkipLast(1).All(text => text == "Received" || text.EndsWith('\u00B7')),
+                                $"{where}: the date line wraps as '{string.Join("' / '", dateLines)}'.");
+                        }
+                        if (row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5) continue;
+                        double line = row switch
+                        {
+                            StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
+                            StandardRichEdit edit => BTextMeasurer.GetLineHeight(edit.Font),
+                            _ => 0,
+                        };
+                        double lines = (shown.Bottom - row.Bounds.Top) / line;
+                        Assert.True(line > 0 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
+                    }
+                var reader = Tab(shell, "inbox");
+                var divider = Descendants(reader).OfType<Divider>().Single().Bounds;
+                var reply = Descendants(reader).OfType<StandardButton>().Single(button => button.Text == "Reply");
+                bool inHeader = reply.IsDescendantOf(header);
+                Assert.True(pinned != inHeader, $"{where}: Reply is {(inHeader ? "in" : "below")} the header.");
+                bool onScreen = inHeader ? reply.Bounds.Bottom <= shown.Bottom + 0.5
+                    : reply.Bounds.Top >= header.Bounds.Bottom - 0.5 && reply.Bounds.Bottom <= divider.Top + 0.5;
+                Assert.True(replyShown == onScreen, $"{where}: Reply is at {reply.Bounds}, the line at {divider}.");
+                // Shown, their row keeps a gap of 4 DIP from the line, as below the header; the compact
+                // header that scrolled left it flush with the line.
+                const double gap = 4;
+                if (replyShown)
+                    Assert.True(divider.Top - reply.Parent!.Bounds.Bottom >= gap - 0.5, $"{where}: Reply's row ends at {reply.Parent.Bounds.Bottom}, the line at {divider}.");
+                Assert.True(divider.Top >= header.Bounds.Bottom - 0.5, $"{where}: the line is at {divider}.");
+                var text = Descendants(reader).OfType<ScrollableMessageText>().Single();
+                Assert.Equal(divider.Bottom, text.Bounds.Top, 0.5);
+                // The text keeps its lines and their margins. Only where the header scrolls and ends with Reply's
+                // row may the gap below that row narrow the margin below the lines, by that gap at most.
+                bool endsWithReply = inHeader && header.Scroll.HasVerticalScrollbar && Math.Abs(shown.Bottom - reply.Parent!.Bounds.Bottom - gap) < 0.5;
+                Assert.True(text.Bounds.Height >= text.HeightOfLines(textLines) - (endsWithReply ? gap : 0) - 0.5, $"{where}: the text has {text.Bounds.Height}, less than {textLines} lines.");
+                // Beside the list, the subject's first line is whole.
+                if (width >= 680)
+                {
+                    var subject = Descendants(header).OfType<StandardLabel>().First(label => label.Visibility == UiVisibility.Visible && label.Bounds.Height > 0);
+                    Assert.True(shown.Bottom >= subject.Bounds.Top + BTextMeasurer.GetLineHeight(subject.Font) - 0.5, $"{where}: the subject at {subject.Bounds} is cut.");
+                }
+            });
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>
+    /// The inbox notice of the gallery's list problems, with their own explanations and DirectWrite's
+    /// metrics, at the sizes of the 200 % captures. The explanation shows the given number of whole lines,
+    /// all of them or cut between two, never inside one, and Retry is whole right below it, so the footer's
+    /// pointer to it holds: in the 640x480 captures and for load-error at 1100x720, Retry was cut or out of view.
+    /// </summary>
+    [Theory]
+    [InlineData("receive-error", 640, 480, 1)]
+    [InlineData("receive-canceled", 640, 480, 1)]
+    [InlineData("load-error", 640, 480, 1)]
+    [InlineData("receive-error", 1100, 720, 6)]
+    [InlineData("receive-canceled", 1100, 720, 2)]
+    [InlineData("load-error", 1100, 720, 4)]
+    public void Inbox_Notice_Ends_Between_Its_Lines_And_Keeps_Retry_In_View(string name, int width, int height, int lines)
+    {
+        var scenario = DemoOptions.Gallery.Single(item => item.Name == name).Scenario;
+        using (new Direct2DRenderer()) { }
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
+        try
+        {
+            Run(scenario, width, height, null, (model, shell, render) =>
+            {
+                // The app's window is compact before the fixture chooses a message, so it shows the list.
+                shell.Inbox.GoBackToList();
+                render();
+                Assert.NotNull(model.Inbox.ListProblem);
+                var notice = Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Inbox notice");
+                BRect shown = notice.Scroll.ContentBounds;
+                string where = $"{name} at {width}x{height}, text 200 %: the notice shows {shown} of {notice.AvailableHeight}";
+                var label = Descendants(notice).OfType<StandardLabel>().Single();
+                double line = BTextMeasurer.GetLineHeight(label.Font);
+                double shownLines = (Math.Min(shown.Bottom, label.Bounds.Bottom) - label.Bounds.Top) / line;
+                Assert.True(Math.Abs(shownLines - lines) < 0.01, $"{where}: the explanation at {label.Bounds} shows {shownLines} lines of {line}.");
+                var retry = Descendants(Tab(shell, "inbox")).OfType<StandardButton>().Single(button => button.Text is "Retry receiving" or "Retry loading older");
+                BRect row = retry.Parent!.Bounds;
+                Assert.Equal(notice.Bounds.Bottom, row.Top, 0.5);
+                Assert.True(row.Top <= retry.Bounds.Top && retry.Bounds.Bottom <= row.Bottom, $"{where}: Retry is at {retry.Bounds} in its row at {row}.");
+                // No scroll view clips it: it is on screen, not scrolled out of the notice.
+                for (var parent = retry.Parent; parent is not null; parent = parent.Parent)
+                    if (parent is StandardScrollView scroll)
+                        Assert.True(retry.Bounds.Top >= scroll.ContentBounds.Top - 0.5 && retry.Bounds.Bottom <= scroll.ContentBounds.Bottom + 0.5, $"{where}: Retry at {retry.Bounds} is out of {scroll.ContentBounds}.");
+                Assert.EndsWith(model.Inbox.ProblemIsCancellation ? "Retry is available." : "Details and Retry are above the list.", Footer(shell), StringComparison.Ordinal);
+            });
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>The lines a wrapping label shows at its width: it breaks only at spaces.</summary>
+    private static IEnumerable<string> WrappedLines(StandardLabel label)
+    {
+        string current = "";
+        foreach (string word in label.Text.Split(' '))
+        {
+            string candidate = current.Length == 0 ? word : current + " " + word;
+            if (current.Length > 0 && BTextMeasurer.MeasureAdvance(candidate, label.Font) > label.Bounds.Width)
+            {
+                yield return current;
+                candidate = word;
+            }
+            current = candidate;
+        }
+        if (current.Length > 0) yield return current;
     }
 
     [Fact]
@@ -397,7 +610,7 @@ public sealed class DemoGalleryTests
     }
 
     [Fact]
-    public void Load_Error_Keeps_The_Loaded_Messages_And_Offers_Retry_Beside_The_List()
+    public void Load_Error_Keeps_The_Loaded_Messages_And_Offers_Retry_Above_The_List()
     {
         Run(DemoScenario.LoadError, (model, shell) =>
         {
@@ -417,7 +630,7 @@ public sealed class DemoGalleryTests
             Assert.Equal((FeedbackKind.Error, inbox.Problem), (notice.Kind, notice.Message));
             Assert.True(IsAvailable(Button(shell, "inbox", "Retry loading older")));
             Assert.True(IsAvailable(Button(shell, "inbox", "Load older")));
-            Assert.Equal("Older messages could not be loaded. Details and Retry are beside the list.", Footer(shell));
+            Assert.Equal("Older messages could not be loaded. Details and Retry are above the list.", Footer(shell));
         });
     }
 
@@ -431,8 +644,13 @@ public sealed class DemoGalleryTests
             Assert.Equal(FeedbackKind.Error, composer.StatusKind);
             Assert.Equal("Enter valid email addresses separated by commas.", composer.Status);
             Assert.True(composer.CanEdit);
-            var status = Descendants(Tab(shell, "compose")).OfType<InlineFeedback>().Last();
+            // The error is the first line below the buttons, above the send hint.
+            var status = Descendants(Tab(shell, "compose")).OfType<InlineFeedback>().First(line => line.Message.Length > 0);
             Assert.Equal((FeedbackKind.Error, composer.Status), (status.Kind, status.Message));
+            // The To field carries the error too, and reports Invalid with it.
+            var to = Descendants(Tab(shell, "compose")).OfType<FormField>().Single(field => field.Label.Text == "To");
+            Assert.Equal(composer.Status, to.Error);
+            Assert.True(to.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
             foreach (var action in new[] { "Check draft", "Save draft", "Discard draft" })
                 Assert.True(IsAvailable(Button(shell, "compose", action)), action);
             // The demo never sends; the send hint says so instead of the error.
@@ -456,7 +674,7 @@ public sealed class DemoGalleryTests
     private static StandardButton Button(MailShellView shell, string tab, string text) =>
         Descendants(Tab(shell, tab)).OfType<StandardButton>().Single(button => button.Text == text);
 
-    private static string Footer(MailShellView shell) => ((StandardLabel)shell.Window.Children[0].Children[0]).Text;
+    private static string Footer(MailShellView shell) => shell.Footer.Text;
 
     private static bool IsAvailable(StandardButton button)
     {
@@ -474,17 +692,21 @@ public sealed class DemoGalleryTests
 
     private static void Run(DemoScenario scenario, Action<MailShellViewModel> verify) => Run(scenario, (model, _) => verify(model));
 
+    private static void Run(DemoScenario scenario, Action<MailShellViewModel, MailShellView> verify) =>
+        Run(scenario, 640, 480, null, (model, shell, _) => verify(model, shell));
+
     // Mirrors WindowsMailWindow: a queued dispatcher drained on the owning thread, then a rendered frame.
-    // Verification runs before the shell is disposed, because disposal also disables the view models.
-    private static void Run(DemoScenario scenario, Action<MailShellViewModel, MailShellView> verify)
+    // Verification runs before the shell is disposed, because disposal also disables the view models. It
+    // can render again after an action, as the window does.
+    private static void Run(DemoScenario scenario, int width, int height, IHtmlPreviewHost? preview, Action<MailShellViewModel, MailShellView, Action> verify)
     {
-        var options = new DemoOptions(scenario, AppTheme.Light, 640, 480);
+        var options = new DemoOptions(scenario, AppTheme.Light, width, height);
         var application = DemoApplication.Create(options);
         application.InitializeAsync().GetAwaiter().GetResult();
         using var woken = new SemaphoreSlim(0);
         var dispatcher = new StandardQueuedUiDispatcher(() => woken.Release());
         var model = application.CreateViewModel(dispatcher);
-        using var shell = new MailShellView(model, null, DemoApplication.CreateDateFormatter());
+        using var shell = new MailShellView(model, preview, DemoApplication.CreateDateFormatter());
         var driver = DemoScenarioDriver.Start(options, model, shell, dispatcher);
         var deadline = DateTime.UtcNow.AddSeconds(30);
         while (!driver.Completion.IsCompleted)
@@ -500,7 +722,23 @@ public sealed class DemoGalleryTests
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new HeadlessHost(options.Width, options.Height));
         session.AddRoot(shell.Window);
         Assert.NotNull(session.RenderFrame());
-        verify(model, shell);
+        verify(model, shell, () =>
+        {
+            dispatcher.Drain();
+            session.RenderFrame();
+            // What the frame's layout posted, as the window drains it before the next frame.
+            dispatcher.Drain();
+            session.RenderFrame();
+        });
+    }
+
+    private sealed class NoPreviewHost : IHtmlPreviewHost
+    {
+        public event EventHandler<HtmlPreviewChange>? Changed { add { } remove { } }
+        public MailMessageKey? Current => null;
+        public Task<string> ShowAsync(MailMessageBody message) => Task.FromResult("");
+        public void Close() { }
+        public void Dispose() { }
     }
 
     private sealed class HeadlessHost(int width, int height) : IUiHost

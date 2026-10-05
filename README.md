@@ -21,10 +21,12 @@ reading/composing flows, accessibility, and smoothness, with
 [native screenshot evidence](docs/ux-review-2026-09-30/README.md) and a
 [shared Broiler component roadmap](docs/broiler-experience-components-roadmap.md).
 
-See the [consolidated roadmap audit, 4 October](docs/roadmap-status-2026-10-04.md)
+See the [roadmap status of 5 October](docs/roadmap-status-2026-10-05.md)
 for the current status of every roadmap, remaining work, and validation evidence.
 The [detailed UI implementation roadmap](docs/ui-implementation-roadmap.md) splits
 the remaining interface work into tracked packages, delivery slices, and native acceptance checks.
+Checks that need a person, particular hardware, or Windows settings are listed in the
+[manual UI acceptance checklist](docs/ui-manual-acceptance-checklist.md).
 
 The first three milestones are:
 
@@ -43,7 +45,9 @@ Install the .NET 10 SDK. The native application currently targets Windows.
 Dependencies restore from NuGet.org, including Broiler.UI **0.1.0-preview.17** and
 its shared forms package, plus Broiler.Hosting **0.1.0-preview.5** for Windows,
 Linux, and the Android API probe. Sibling Broiler checkouts and a local package feed are
-not required. See the [C-04 implementation notes](docs/c04-forms/README.md)
+not required. The next update, to Broiler.UI 0.1.0-preview.18 and Broiler.Hosting
+0.1.0-preview.7, waits for those packages to be published (see the roadmap status).
+See the [C-04 implementation notes](docs/c04-forms/README.md)
 for validation evidence and remaining accessibility checks.
 
 ```powershell
@@ -58,8 +62,28 @@ Preview the complete UI with synthetic messages, without saved accounts or netwo
 dotnet run --project src/Broiler.Mail.Windows --no-build -c Release -- --demo
 ```
 
-For reproducible UI review, name a prepared scenario, for example
-`--demo send-unknown --theme dark --size 640x480`. `--help` lists the scenarios.
+For reproducible UI review, name a prepared fixture, for example
+`--demo send-unknown --theme dark --size 640x480`. A named fixture opens synthetic state
+with a fixed clock, names itself in the window title, and uses no network or saved data.
+`--help` describes each of the 22 fixtures:
+
+- Inbox: `inbox`, `empty`, `long-message`, `large-inbox`, `receive-error`, `receive-canceled`,
+  `load-error`, `body-error`, `html-only`, `long-html`, `new-mail`.
+- Account: `invalid-setup`, `test-canceled`, `smtp-test-failed`, `smtp-test-passed`.
+- Settings: `save-error`.
+- Compose: `large-draft`, `draft-invalid`, `draft-conflict`, `send-rejected`, `send-unknown`,
+  `sent-copy-failed`.
+
+Further demo options are `--theme light|dark|system`, `--size <width>x<height>` (640x480 to
+7680x4320), `--text-scale <100-225>` (a system text size for the app alone; the Windows setting is
+unchanged), `--contrast high` (the theme's high-contrast palette, as an active Windows contrast
+theme selects it), and `--measure <workload>` with `--report <file.json>` and `--detail` for the
+UI-12 measurements. Two options exist only for acceptance scripts; they simulate conditions and are
+not settings. `--scale <100-300>` renders the main window at a simulated display scale, named in the
+title; Windows' own scale is unchanged, and HTML preview windows keep it except in the preview
+measurements. `--server-change vanish|outside|renumber`, with `new-mail` only, makes the next
+receive delete the open message on the demo server, push it below the newest page, or renumber
+the inbox.
 
 Create a NativeAOT ZIP and SHA-256 checksum with PowerShell 7 and the Visual Studio
 C++ desktop build tools (including the Windows SDK), on the matching Windows architecture:
@@ -92,10 +116,13 @@ Ctrl+1/2/3/4 selects Inbox/Account/Settings/Compose; Ctrl+Tab cycles tabs. F5 re
 Ctrl+N starts a message, Ctrl+R / Ctrl+Shift+R / Ctrl+F reply, reply to all, and forward, Escape
 goes back from a narrow-window reader or cancels, Alt+Left goes back, and Enter on a selected inbox
 message opens it. Shortcuts need their exact modifiers, so AltGr characters type normally.
-Settings lists every shortcut. Text fields
+Settings lists every shortcut. In the HTML preview window, Ctrl+= (or Ctrl+Plus), Ctrl+- and
+Ctrl+0 zoom in, zoom out, and reset, on the main keys or the number pad; Ctrl+wheel also zooms,
+and Escape closes the preview. Text fields
 support the Windows clipboard; password fields cannot copy or cut their contents.
 The Windows host declares per-monitor DPI awareness and positions the default IME
-composition window at the caret. Minimum client size is 640×480 logical pixels.
+composition window at the caret; the IME is off while a password field has the caret.
+Minimum client size is 640×480 logical pixels.
 
 ## Set up and test an account
 
@@ -136,8 +163,15 @@ that option and saving removes the outgoing configuration while retaining IMAP.
 In the outgoing section, enter **SMTP password / app password** and choose **Save
 SMTP password** after saving the account. It uses a separate, server-bound Windows
 Credential Manager slot, even when your provider uses the same password for IMAP
-and SMTP. The field clears after saving. The **Test connection** action remains
-IMAP-only; SMTP authentication occurs when you send.
+and SMTP. The field clears after saving.
+
+**Test connection** checks IMAP. **Test SMTP sign-in**, beside the SMTP password
+buttons, is available once the SMTP password is saved and the SMTP password box is
+empty. It signs in over TLS or required STARTTLS and then quits without sending a
+message, so a pass proves the sign-in only, not delivery
+([decision 0006](docs/decisions/0006-non-sending-smtp-test.md)). **Cancel test** or
+Escape stops it, and it has a 20-second deadline. A test pressed with unsaved account
+changes does not start and says what to do first. The result is not saved.
 
 Use **Forget SMTP password** before removing SMTP setup or resetting the profile.
 Changing the outgoing host, port, username, TLS mode, or authentication requires
@@ -218,9 +252,19 @@ extraction with simplified formatting. Images, scripts, styles, external resourc
 and clickable links are not rendered. Attachment-only mail has an explicit empty
 text state. Reading and network work run away from the UI thread.
 
+For a message with HTML, **Open HTML preview** shows it rendered by Broiler.HTML in a
+separate window ([renderer security gate](docs/html-renderer-security.md)). The preview
+opens at the system text size and zooms from 50 to 300 % with **Zoom out**, the level
+button (which resets to the default), **Zoom in**, Ctrl+= / Ctrl+- / Ctrl+0, or
+Ctrl+wheel. Until you zoom, it follows changes of the text size; after a reset it follows
+them again. The same zoom applies to the plain-text view (**Show plain text**). It is not
+saved: every preview opens at the default. Content that cannot wrap, such as a long
+unbroken address, scrolls sideways.
+
 Current limits: 50 headers per page, 500 loaded headers per session, 2 MiB per raw
 message including attachments, and a 32,000-character text preview. Larger messages
-show an error; long text shows a truncation notice. Bodies are fetched only on
+show an error; long text shows a truncation notice. At the session limit, an information
+notice above the list says so. Bodies are fetched only on
 selection, and only the selected decoded body is retained. Attachments can be part
 of the bounded MIME download but cannot be opened or saved. Mail is held in memory
 and must be received again after restart.
@@ -238,8 +282,44 @@ dotnet test Broiler.Mail.slnx --no-restore -c Release
 
 The IMAP and SMTP tests use loopback-only TLS fixtures. The Windows tests create/update/read/
 delete synthetic credentials under random account IDs and clean up in `finally`
-blocks; they never enumerate or access existing user credentials. The headless
+blocks; they never enumerate or access existing user credentials. Some Windows tests
+show a window briefly. The headless
 `--smoke-test` does not access credentials or make network connections.
+
+## UI acceptance and measurement scripts
+
+Each script publishes the app as NativeAOT unless `-Executable` names a build, runs demo
+fixtures, and writes its results and `summary.md` to `-Output` (by default a dated folder under
+`artifacts/`). Accept-UI and Accept-Refresh post input to the demo window, so they do not take
+keyboard focus from other applications, although each window shows briefly; their summaries
+name the revision, packages, and display scale.
+
+- `scripts/Accept-UI.ps1` runs every fixture that `--help` lists at 640×480, 1100×720, and
+  1920×1080 in light and dark (132 runs). Each run saves a screenshot, checks the UI
+  Automation tree for unnamed, cut-off, or overlapping controls, walks Tab, and checks the
+  exit code and stderr. `-Scenarios`, `-Sizes`, `-Themes`, `-TabSteps`, and
+  `-SettleMilliseconds` narrow or slow a run; `-TextScale <100-225>` and `-HighContrast` pass
+  `--text-scale` and `--contrast high`; `-OpenReader` also opens the selected message, checks
+  the reader, and saves `<run>-reader.png`.
+- `scripts/Accept-Refresh.ps1` runs `new-mail` with each `--server-change` variant
+  (`-Variants kept,vanish,outside,renumber`, `-Size`, `-Theme`) and checks that a receive keeps
+  the selected row, the list position, and the reader, or explains why the open message closed
+  or left the newest page. It also checks the Reply focus round trip. With Broiler.Hosting
+  preview.5, the round trip through UI Automation tab selection still ends on the tab
+  (`RETURN_FOCUS_AUTOMATION`).
+- `scripts/Measure-UI.ps1` runs the UI-12 workloads (`idle`, `scroll`, `select`, `type`,
+  `theme`, `resize`, `splitter`, `long-html`, `preview-zoom`) `-Repeat` times (default 3) and
+  compares them with the proposed budgets in `scripts/ui-budgets.json` (`-Budgets`). `-Workloads`
+  selects workloads; `-Scales 100,200` runs them at simulated render scales, which are not real
+  DPI evidence; `-Detail` adds phase timers; `-Theme` and `-Size` set the window. Budgets are
+  report-only: `-Strict` exits with 1 when a result is over budget or has no data. `-Evaluate
+  <folder>` summarizes stored reports without running the app. Leave the machine otherwise
+  idle while it measures.
+
+Results and their limits are recorded in the UI acceptance records of
+[2 October](docs/ui-acceptance-2026-10-02.md) and [5 October](docs/ui-acceptance-2026-10-05.md),
+and in the [performance baseline](docs/ui-performance-baseline-2026-10-02.md) and the
+[5 October performance record](docs/ui-performance-2026-10-05.md).
 
 ## Projects
 
@@ -247,11 +327,11 @@ blocks; they never enumerate or access existing user credentials. The headless
 | --- | --- |
 | `Broiler.Mail.Core` | Account/settings/message models and service interfaces; no UI or platform dependencies. |
 | `Broiler.Mail.Application` | Broiler.UI views, configuration workflows, application composition, and preview boundary. |
-| `Broiler.Mail.Infrastructure` | Versioned JSON persistence, IMAP reading and Sent-copy append, SMTP sending, MIME handling, and text extraction. |
-| `Broiler.Mail.Windows` | Entry point, dependency wiring, Direct2D host, and Windows Credential Manager adapter. |
+| `Broiler.Mail.Infrastructure` | Versioned JSON persistence, IMAP reading and Sent-copy append, SMTP sending and the non-sending sign-in test, MIME handling, and text extraction. |
+| `Broiler.Mail.Windows` | Entry point, dependency wiring, Direct2D host, HTML preview window, demo gallery, UI-12 measurement harness, and Windows Credential Manager adapter. |
 | `Broiler.Mail.Linux` | X11/EGL project foundation and prerequisite diagnostics; interactive hosting is pending. See [Linux build notes](docs/linux-host.md). |
 | `Broiler.Mail.Tests` | Persistence, configuration/credential/inbox workflows, MIME fixtures, and controlled IMAP/TLS tests. |
-| `Broiler.Mail.Windows.Tests` | Native credential storage and window-close draft-save tests. |
+| `Broiler.Mail.Windows.Tests` | Native credential storage, window-close draft saving, posted native input and IME messages, DPI changes and window geometry, HTML preview and zoom, demo gallery, and measurement tests. |
 
 Package versions are pinned centrally in `Directory.Packages.props`. Shared compiler
 settings live in `Directory.Build.props` and SDK selection lives in `global.json`.
@@ -282,13 +362,16 @@ in Windows Credential Manager afterward.
 
 Version 2 adds SMTP outgoing mail configuration, the plain-text composer with
 reply and forward threading, durable draft recovery, secure SMTP submission with
-configurable Sent-copy handling, and HTML preview with a plain-text toggle
-and bounded inline images. OAuth enum values describe future configuration only.
+configurable Sent-copy handling, and HTML preview with a plain-text toggle,
+page zoom, and bounded inline images. The Account tab also tests the SMTP sign-in
+without sending. OAuth enum values describe future configuration only.
 The current HTML preview runs inside the mail process; OS process isolation remains
 an open [security gate](docs/html-renderer-security.md). Passing preview fixtures
 does not establish containment of a compromised renderer. Live-provider testing
 remains with the user using the [SMTP checklist](docs/version-2-smtp-checklist.md).
-Full screen-reader/UI Automation integration remains a later milestone.
+The UI Automation tree is checked automatically; a screen-reader pass (H-01) and the
+other checks in the [manual UI acceptance checklist](docs/ui-manual-acceptance-checklist.md)
+remain.
 
 See [architecture and implementation notes](docs/architecture.md) for dependency
 boundaries, security policies, and roadmap progress.

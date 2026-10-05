@@ -206,7 +206,7 @@ public sealed class InboxWorkflowTests
         var text = Descendants(content).OfType<ScrollableMessageText>().Single();
         Assert.Contains("Hello & welcome", text.Text);
         Assert.Contains("Text extracted from HTML", text.Text);
-        Assert.Contains(Descendants(content).OfType<StandardLabel>(), label => label.DisplayText.Contains("Unread on server", StringComparison.Ordinal));
+        Assert.Contains(Descendants(content).OfType<StandardLabel>(), label => label.DisplayText.Contains("Unread\u00A0on\u00A0server", StringComparison.Ordinal));
         Assert.True(Descendants(content).OfType<StandardButton>().Single(button => button.Text == "Receive mail").IsEnabled);
     }
 

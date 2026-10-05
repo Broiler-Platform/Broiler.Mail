@@ -148,12 +148,19 @@ public sealed class ComposerViewModel : IDisposable
         {
             _status = value;
             StatusKind = FeedbackKind.Information;
+            InvalidField = null;
             // Any newer status replaces a confirmation that was waiting to go away.
             _statusVersion++;
             _successTimer?.Dispose();
             _successTimer = null;
         }
     }
+
+    /// <summary>
+    /// The recipient field ("To", "Cc" or "Bcc") a draft check or a send refused, whose error <see cref="Status"/>
+    /// reports; null otherwise. Any newer status clears it, an edit included.
+    /// </summary>
+    public string? InvalidField { get; private set; }
 
     /// <summary>The clock that times the draft check's confirmation, as <see cref="SaveViewModel.SuccessDisplayTime"/> does for saves.</summary>
     public TimeProvider Clock { get; init; } = TimeProvider.System;
@@ -243,8 +250,32 @@ public sealed class ComposerViewModel : IDisposable
     public void CheckDraft()
     {
         try { _ = BuildDraft(); Status = "Draft fields are valid. No mail was sent."; StatusKind = FeedbackKind.Success; ClearAfterDisplayTime(); }
-        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Status = error.Message; StatusKind = FeedbackKind.Error; }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Refuse(error); }
         Notify();
+    }
+
+    /// <summary>Reports why <see cref="BuildDraft"/> refused the draft, and in which recipient field, if one.</summary>
+    private void Refuse(Exception error)
+    {
+        Status = error.Message;
+        StatusKind = FeedbackKind.Error;
+        InvalidField = error is ArgumentException ? RefusedRecipientField() : null;
+    }
+
+    /// <summary>
+    /// The recipient field <see cref="BuildDraft"/> stopped at, checked in its order: the first one whose text
+    /// does not parse, or To when no field names anyone. The other refusals (more than 100 recipients across
+    /// the fields, a parsed address the transport rules still refuse, the subject, the body) mark no field.
+    /// </summary>
+    private string? RefusedRecipientField()
+    {
+        int recipients = 0;
+        foreach (var (field, text) in new[] { ("To", To), ("Cc", Cc), ("Bcc", Bcc) })
+        {
+            try { recipients += MailComposition.ParseRecipients(text).Count; }
+            catch (ArgumentException) { return field; }
+        }
+        return recipients == 0 ? "To" : null;
     }
 
     /// <summary>
@@ -330,7 +361,7 @@ public sealed class ComposerViewModel : IDisposable
         if (!CanSend) return;
         MailDraft draft;
         try { draft = BuildDraft(); }
-        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Status = error.Message; StatusKind = FeedbackKind.Error; Notify(); return; }
+        catch (Exception error) when (error is ArgumentException or InvalidOperationException) { Refuse(error); Notify(); return; }
         var account = _account!;
         draft = draft with { SubmissionDate = DateTimeOffset.UtcNow };
         _seed = _seed! with { SubmissionDate = draft.SubmissionDate };

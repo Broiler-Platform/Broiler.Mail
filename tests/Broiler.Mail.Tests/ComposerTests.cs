@@ -5,9 +5,11 @@ using Broiler.Graphics.Windowing;
 using Broiler.Input.Keyboard;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
+using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
+using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Mail;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
@@ -130,6 +132,62 @@ public sealed class ComposerTests
         model.CheckDraft();
         Assert.Equal(to, model.To); Assert.Equal(subject, model.Subject); Assert.Equal(body, model.PlainText);
         Assert.True(model.HasDraft);
+    }
+
+    /// <summary>
+    /// A draft refused for one recipient field marks that field, as the account form marks its fields: the field
+    /// shows the error and reports Invalid with it, for a screen reader and not only on the status line.
+    /// Refusals of the whole draft mark none, and the next edit clears the mark.
+    /// </summary>
+    [Theory]
+    [InlineData("team.example.test", "", "", "Plans", "To")]
+    [InlineData("", "", "", "Plans", "To")]
+    [InlineData("to@example.test", "copy.example.test", "", "Plans", "Cc")]
+    [InlineData("to@example.test", "", "hidden.example.test", "Plans", "Bcc")]
+    [InlineData("to@example.test", "", "", "Injected\nSubject", null)]
+    public async Task ARefusedRecipientFieldCarriesTheErrorForAssistiveTechnology(string to, string cc, string bcc, string subject, string? refused)
+    {
+        var account = TestDirectory.Profile() with { OutgoingServer = new() { Host = "smtp.example.test", Port = 587, UserName = "test" } };
+        using var inbox = new InboxViewModel(new TestMailReceiver(), new ImmediateUiDispatcher());
+        inbox.SetAccount(account);
+        var sender = new CountingSender();
+        // Queued, so a draft write finishing on its own thread cannot refresh the view in the middle of a step.
+        var composer = new ComposerViewModel(dispatcher: new TestQueueDispatcher(), sender: sender);
+        composer.SetAccount(account);
+        Assert.True(composer.StartNew());
+        composer.Edit(to, cc, bcc, subject, "Body");
+        using var view = new ComposerView(composer, inbox).CreateContent();
+        var fields = Descendants(view).OfType<FormField>().Where(field => field.Label.Text is "To" or "Cc" or "Bcc").ToDictionary(field => field.Label.Text);
+
+        composer.CheckDraft();
+        Assert.Equal(FeedbackKind.Error, composer.StatusKind);
+        Assert.Equal(refused, composer.InvalidField);
+        foreach (var (name, field) in fields)
+        {
+            bool marked = name == refused;
+            Assert.Equal(marked ? composer.Status : "", field.Error);
+            var node = field.GetSemanticNode();
+            Assert.Equal(marked, node.State.HasFlag(UiSemanticState.Invalid));
+            Assert.Equal(marked, node.Name.Contains(composer.Status, StringComparison.Ordinal));
+        }
+        if (refused is null) return;
+
+        // An edit clears the mark; sending is then refused the same way, before the sender is asked.
+        composer.Edit(to, cc, bcc, subject, "Body edited");
+        Assert.Null(composer.InvalidField);
+        Assert.All(fields.Values, field => Assert.Equal("", field.Error));
+        Assert.True(composer.CanSend);
+        await composer.SendAsync();
+        Assert.Equal(0, sender.Calls);
+        Assert.Equal(refused, composer.InvalidField);
+        Assert.Equal(composer.Status, fields[refused].Error);
+
+        // Typing in the field clears its mark, and the draft's.
+        var edit = (StandardEdit)fields[refused].Control;
+        edit.Text += " ";
+        Assert.Null(composer.InvalidField);
+        Assert.Equal("", fields[refused].Error);
+        Assert.False(fields[refused].GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
     }
 
     [Fact]
@@ -257,6 +315,16 @@ public sealed class ComposerTests
     }
 
     private static StandardButton Button(UiElement root, string text) => Descendants(root).OfType<StandardButton>().Single(button => button.Text == text);
+
+    private sealed class CountingSender : IMailSender
+    {
+        public int Calls { get; private set; }
+        public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(new SendResult(SubmissionStatus.Rejected, null));
+        }
+    }
     private static async Task DiscardUsingButton(UiElement view, ComposerViewModel composer)
     {
         var discarded = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

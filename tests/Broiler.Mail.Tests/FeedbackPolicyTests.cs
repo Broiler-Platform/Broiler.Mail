@@ -69,6 +69,52 @@ public sealed class FeedbackPolicyTests
         Assert.StartsWith("Error: The server did not respond.", Assert.Single(fixture.Announced.Skip(1)));
     }
 
+    /// <summary>
+    /// The page that reaches the session limit is announced with its count, and then the notice that
+    /// explains why Load older is now unavailable, once. Moving through the messages afterwards is
+    /// silent: that notice stays as it is.
+    /// </summary>
+    [Fact]
+    public async Task ReachingTheSessionLimitIsAnnouncedOnceAfterTheCount()
+    {
+        using var fixture = Fixture.Open();
+        var inbox = fixture.Model.Inbox;
+        var account = fixture.Model.Account.Profile!;
+        const int total = InboxViewModel.MaximumLoadedMessages + InboxViewModel.PageSize;
+        fixture.Receiver.Inbox = (cursor, _) =>
+        {
+            int end = cursor?.NextIndex ?? total - 1;
+            int start = end - InboxViewModel.PageSize + 1;
+            var page = Enumerable.Range(start + 1, InboxViewModel.PageSize).Reverse().Select(uid => new MailMessageSummary
+            {
+                Key = new(account.Id, "INBOX", 7, (uint)uid), Sender = "author@example.test", Subject = $"Message {uid}",
+            }).ToArray();
+            return Task.FromResult(new MailInboxPage(page, start == 0 ? null : new(account.Id, 7, total + 1, total, start - 1)));
+        };
+        await fixture.ReceiveAsync();
+        while (inbox.Messages.Count < InboxViewModel.MaximumLoadedMessages - InboxViewModel.PageSize)
+        {
+            await inbox.LoadOlderAsync();
+            fixture.Settle();
+        }
+
+        fixture.Announced.Clear();
+        await inbox.LoadOlderAsync();
+        fixture.Settle();
+        Assert.False(inbox.CanLoadOlder);
+        Assert.Equal(["Progress: Loading older messages…", "500 messages loaded.",
+            "Information: Session limit reached (500 messages). Older ones cannot be loaded in this session. Receive mail to start again."], fixture.Announced);
+
+        fixture.Announced.Clear();
+        foreach (var message in inbox.Messages.Take(5))
+        {
+            await inbox.SelectAsync(message.Key);
+            fixture.Settle();
+        }
+        Assert.Equal(inbox.Messages[4].Key, inbox.Body?.Key);
+        Assert.Empty(fixture.Announced);
+    }
+
     [Fact]
     public async Task SendingAnnouncesEachOutcomeOnceWithoutARepeatedBusyLine()
     {
@@ -375,6 +421,8 @@ public sealed class FeedbackPolicyTests
         fixture.Settle();
         Assert.Equal(FeedbackKind.Error, composer.StatusKind);
         Assert.Equal("Enter valid email addresses separated by commas.", fixture.ComposerStatus.Message);
+        // The footer points to the problem, as the account and settings forms do.
+        Assert.Equal("The draft has a problem. Details are below the buttons.", fixture.Footer.Text);
 
         // A passed check is replaced by the retention notice before its time is up; the notice stays.
         composer.Edit("to@example.test", "", "", "Plans", "Body");
@@ -400,7 +448,8 @@ public sealed class FeedbackPolicyTests
             foreach (string outcome in new[]
             {
                 "settings validation", "account validation in a collapsed section", "account section collapsed",
-                "composer copies collapsed", "composer check failed", "account test canceled", "account SMTP test found no password",
+                "composer copies collapsed", "composer check failed", "composer check failed in collapsed Cc", "composer check failed without a field",
+                "account test canceled", "account SMTP test found no password",
                 "inbox receive canceled", "inbox retry succeeded", "inbox load older reached the last page",
                 "inbox load older reached the last page in the reader",
                 "composer draft discarded", "composer send accepted", "background results while typing",
@@ -494,13 +543,33 @@ public sealed class FeedbackPolicyTests
                 expected = Copies().Toggle!;
                 break;
             case "composer check failed":
-                // The error names no field, so focus stays on the command and the error is announced.
+                // The error names To, so To takes focus, as a refused account or settings field does.
                 model.Composer.StartNew();
                 model.Composer.Edit("team.example.test", "", "", "Plans", "Body");
+                Show(tab = "compose");
+                Press(fixture.Button("Check draft"));
+                Assert.Equal(FeedbackKind.Error, model.Composer.StatusKind);
+                expected = fixture.Field(tab, "To");
+                break;
+            case "composer check failed in collapsed Cc":
+                model.Composer.StartNew();
+                model.Composer.Edit("to@example.test", "copy.example.test", "", "Plans", "Body");
+                Show(tab = "compose");
+                Assert.False(Copies().IsExpanded);
+                Press(fixture.Button("Check draft"));
+                Assert.True(Copies().IsExpanded);
+                expected = fixture.Field(tab, "Cc");
+                break;
+            case "composer check failed without a field":
+                // The error is about the subject, which names no recipient field: focus stays on the command and
+                // the error is announced.
+                model.Composer.StartNew();
+                model.Composer.Edit("to@example.test", "", "", new string('x', MailComposition.MaximumSubjectLength + 1), "Body");
                 Show(tab = "compose");
                 expected = fixture.Button("Check draft");
                 Press((StandardButton)expected);
                 Assert.Equal(FeedbackKind.Error, model.Composer.StatusKind);
+                Assert.Null(model.Composer.InvalidField);
                 break;
             case "account test canceled":
                 fixture.Receiver.Test = token => Task.Delay(Timeout.InfiniteTimeSpan, token);
@@ -688,7 +757,7 @@ public sealed class FeedbackPolicyTests
         fixture.Settle();
 
         Assert.True(inbox.ProblemIsOlderPage);
-        Assert.Equal("Older messages could not be loaded. Details and Retry are beside the list.", fixture.Footer.Text);
+        Assert.Equal("Older messages could not be loaded. Details and Retry are above the list.", fixture.Footer.Text);
         var retry = fixture.Button("Retry loading older", "inbox");
         Assert.True(retry.IsEnabled);
         fixture.Receiver.Inbox = pages;
@@ -711,7 +780,7 @@ public sealed class FeedbackPolicyTests
         fixture.Receiver.Inbox = (_, _) => throw new MailConnectionException("The server did not respond.");
         await fixture.ReceiveAsync();
         Assert.False(inbox.ProblemIsOlderPage);
-        Assert.Equal("Mail could not be received. Details and Retry are beside the list.", fixture.Footer.Text);
+        Assert.Equal("Mail could not be received. Details and Retry are above the list.", fixture.Footer.Text);
         Assert.True(fixture.Button("Retry receiving", "inbox").IsEnabled);
     }
 
@@ -765,6 +834,7 @@ public sealed class FeedbackPolicyTests
         {
             _directory = directory; Dispatcher = dispatcher; Receiver = receiver; Sender = sender; Clock = clock;
             Model = model; Shell = shell; Session = session;
+            ComposerStatus = Descendants(Tab("compose")).OfType<InlineFeedback>().Last();
             session.SemanticChanged += (_, e) =>
             {
                 if (e.Change == UiSemanticChangeKind.StatusAnnounced) Announced.Add(e.Message ?? "");
@@ -782,12 +852,15 @@ public sealed class FeedbackPolicyTests
         public UiElement Tab(string id) => Shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
         public StandardRichEdit ComposerBody => Descendants(Tab("compose")).OfType<StandardRichEdit>().Single();
         public StandardButton Button(string text, string tab = "compose") => Descendants(Tab(tab)).OfType<StandardButton>().Single(button => button.Text == text);
-        /// <summary>The composer's line for check results, warnings, and errors; the last of its feedback lines.</summary>
-        public InlineFeedback ComposerStatus => Descendants(Tab("compose")).OfType<InlineFeedback>().Last();
+        /// <summary>
+        /// The composer's line for check results, warnings, and errors: the last of its feedback lines as
+        /// they are created. Errors and warnings move to the top, so it is found before there are any.
+        /// </summary>
+        public InlineFeedback ComposerStatus { get; }
         public StandardEdit Field(string tab, string label) =>
             Descendants(Tab(tab)).OfType<FormField>().Where(field => field.Label.Text.StartsWith(label, StringComparison.Ordinal)).Select(field => field.Control).OfType<StandardEdit>().Single();
         public InlineFeedback SettingsFeedback => Descendants(Tab("settings")).OfType<InlineFeedback>().Single();
-        public StandardLabel Footer => (StandardLabel)Shell.Window.Children[0].Children[0];
+        public StandardLabel Footer => Shell.Footer;
 
         public static Fixture Open(SubmissionStatus sendResult = SubmissionStatus.Accepted, string emailAddress = "test@example.test",
             TestOutgoingTester? outgoing = null, double width = 1100, double height = 720)

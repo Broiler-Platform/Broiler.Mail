@@ -1,5 +1,7 @@
 # Consolidated roadmap status — 4 October 2026
 
+**Current status:** see the [5 October status](roadmap-status-2026-10-05.md), which supersedes this document after the UI round of 4–5 October; this audit remains the baseline.
+
 Audited implementation: `d7d78d4ef4edce17c933c39707dbe175b66b09a3` (clean checkout before this documentation update). This report reconciles the product, experience, shared-component, platform, and UI roadmaps, plus the 2 October A1–A8 backlog. It supersedes older **current-status** claims, while preserving their historical investigation and acceptance records.
 
 **Subsequent implementation, 4 October:** UI-01 inbox density selection is now

@@ -1,4 +1,5 @@
 using Broiler.UI;
+using Broiler.UI.ListView;
 using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.TabView;
 
@@ -55,6 +56,13 @@ internal static class FocusNavigation
     {
         // Layout first so newly selected tabs have useful bounds. Then reveal off-screen form fields.
         session.RenderFrame();
+        // A list shows its focus on the selected row, which new mail or scrolling may have moved out of
+        // view: bring that row back, or the focus would be invisible.
+        if (element is UiListView list && list.SelectedIndex >= 0)
+        {
+            list.EnsureSelectedVisible();
+            session.RenderFrame();
+        }
         for (var parent = element.Parent; parent is not null; parent = parent.Parent)
         {
             if (parent is not StandardScrollView scroll) continue;

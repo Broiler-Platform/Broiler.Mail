@@ -121,7 +121,11 @@ public sealed class ReaderReplyTests
         // Literal text: an ampersand is shown once, never turned into an access key.
         Assert.Equal("Plans & budget", subject.DisplayText);
         Assert.Equal(StandardControlPaint.Theme.FontTitle, subject.Font);
-        var meta = labels.Single(label => label.Text.Contains("Unread on server", StringComparison.Ordinal));
+        // The separator ends the date, after a non-breaking space, and the read state is one phrase joined by
+        // non-breaking spaces: a line, and a header that ends between lines, may end after the separator, but
+        // not on "Unread on", and no line starts with the separator.
+        var meta = labels.Single(label => label.Text.StartsWith("Received ", StringComparison.Ordinal));
+        Assert.EndsWith("\u00A0· Unread\u00A0on\u00A0server", meta.Text, StringComparison.Ordinal);
         Assert.Equal(StandardControlPaint.Theme.TextMuted, meta.Foreground);
 
         var details = Descendants(inbox).OfType<StandardRichEdit>().First(editor => editor.GetPlainText().StartsWith("From:", StringComparison.Ordinal));

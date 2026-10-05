@@ -17,6 +17,7 @@
 
 using System;
 using Broiler.Graphics.Geometry;
+using Broiler.Graphics.Text;
 using Broiler.UI;
 using Broiler.UI.RichEdit;
 using Broiler.UI.RichEdit.Standard;
@@ -52,13 +53,15 @@ public sealed class ScrollableMessageText : UiElement
     {
         Constraint = UiScrollConstraint.ConstrainWidth,
     };
+    // Above and below the text, inside the scroll view.
+    private const double VerticalMargin = 8;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A24DF7
     // Broiler-Human:        PENDING
     public ScrollableMessageText()
     {
         // Margins and a bounded line length come from the column; the scroll view still spans the pane.
-        _scroll.AddChild(new ReadingColumn(_editor, verticalMargin: 8));
+        _scroll.AddChild(new ReadingColumn(_editor, VerticalMargin));
         AddChild(_scroll);
         // Only the reader moves the place; the scroll view also clamps its offset while it lays out,
         // and a hidden view's extent and viewport come from a layout at no size at all.
@@ -69,6 +72,12 @@ public sealed class ScrollableMessageText : UiElement
     }
 
     public StandardRichEdit Editor => _editor;
+
+    /// <summary>
+    /// The height that shows <paramref name="lines"/> lines of text at the text's font size, which
+    /// follows the system text size, with the margins above and below the text. Zoom is not included.
+    /// </summary>
+    public double HeightOfLines(int lines) => (lines * BTextMeasurer.GetLineHeight(_editor.Font)) + (2 * VerticalMargin);
 
     // The relative place in the text as last shown, and the one a zoom keeps until the next layout.
     private double _readFraction;

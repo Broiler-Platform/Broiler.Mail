@@ -78,6 +78,8 @@ public sealed class ComposerLayoutTests
     {
         using var fixture = new Fixture(1100, 720);
         Assert.True(fixture.Composer.StartNew());
+        // Addressed, so the draft check below passes: a refused check takes focus to the field it names.
+        ((Broiler.UI.Edit.Standard.StandardEdit)Descendants(fixture.Surface).OfType<FormField>().Single(field => field.Label.Text == "To").Control).Text = "team@example.test";
         fixture.Render();
         // Text that was there before typing, such as a recovered draft, is not part of the history.
         const string loaded = "Dear all,\n";
@@ -92,6 +94,7 @@ public sealed class ComposerLayoutTests
         // Everything that refreshes the composer while the user writes.
         fixture.Dispatcher.DrainUntil(() => fixture.Composer.StorageKind != FeedbackKind.Progress);
         fixture.Composer.CheckDraft();
+        Assert.Equal(FeedbackKind.Success, fixture.Composer.StatusKind);
         fixture.Composer.SetAccount(fixture.Account with { DisplayName = "Renamed" });
         await fixture.Inbox.ReceiveAsync();
         fixture.Dispatcher.DrainUntil(() => !fixture.Inbox.IsBusy);
@@ -150,6 +153,73 @@ public sealed class ComposerLayoutTests
         // The save state is read live, but the label follows only when the posted notification is drained.
         fixture.Dispatcher.DrainUntil(() => fixture.Composer.StorageKind != FeedbackKind.Progress && fixture.SenderLine.Text.Contains(fixture.Composer.StorageStatus));
         Assert.DoesNotContain("Saving", fixture.SenderLine.Text);
+    }
+
+    /// <summary>
+    /// The feedback below the buttons is capped and scrolls at a large text size, so it starts with a
+    /// problem: a recipient error is shown above the hint that sending is unavailable, which keeps its
+    /// text below it. Moving the lines does not announce them again. Without a problem, the lines keep
+    /// their usual order. An area scrolled down to a line below, such as a passed check's result, brings a
+    /// new problem into view, where it was put out of view before.
+    /// </summary>
+    [Fact]
+    public void AnErrorIsShownAboveAHintInTheCappedFeedbackArea()
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
+        try
+        {
+            using var fixture = new Fixture(640, 480);
+            var announced = new List<string>();
+            fixture.Session.SemanticChanged += (_, e) =>
+            {
+                if (e.Change == UiSemanticChangeKind.StatusAnnounced) announced.Add(e.Message ?? "");
+            };
+            Assert.True(fixture.Composer.StartNew());
+            fixture.Composer.Edit("team.example.test", "", "", "Plans", "Body");
+            fixture.Render();
+            const string hint = "Sending is not available in this mode.";
+            Assert.Equal([(FeedbackKind.Information, hint)], fixture.Feedback.Select(line => (line.Kind, line.Message)));
+            announced.Clear();
+
+            fixture.Button("Check draft").Click();
+            fixture.Render();
+            string error = fixture.Composer.Status;
+            Assert.Equal(FeedbackKind.Error, fixture.Composer.StatusKind);
+            Assert.Equal([(FeedbackKind.Error, error), (FeedbackKind.Information, hint)], fixture.Feedback.Select(line => (line.Kind, line.Message)));
+            Assert.Equal(["Error: " + error], announced);
+            var area = fixture.Surface.Children.OfType<FormViewport>().Last().Scroll;
+            BRect shown = fixture.Feedback.First().Bounds;
+            Assert.True(area.HasVerticalScrollbar, "The feedback fits its area; the text is not large enough.");
+            Assert.Equal(area.ContentBounds.Top, shown.Top, 0.5);
+            Assert.True(shown.Bottom <= fixture.Feedback.Last().Bounds.Top + 0.5, $"The error is at {shown}, the hint at {fixture.Feedback.Last().Bounds}.");
+
+            // A passed check is a result, not a problem: it stays below the hint, as before.
+            fixture.Composer.Edit("team@example.test", "", "", "Plans", "Body");
+            fixture.Button("Check draft").Click();
+            fixture.Render();
+            Assert.Equal([(FeedbackKind.Information, hint), (FeedbackKind.Success, fixture.Composer.Status)], fixture.Feedback.Select(line => (line.Kind, line.Message)));
+
+            // Scrolled down to read that result, the area shows a new problem, which comes first, by scrolling
+            // to its top, without moving focus; once shown, the user may scroll it away again.
+            Assert.True(area.HasVerticalScrollbar, "The feedback fits its area; the text is not large enough.");
+            Assert.True(area.ScrollToEnd());
+            fixture.Render();
+            var focused = fixture.Session.FocusedElement;
+            fixture.Composer.Edit("team.example.test", "", "", "Plans", "Body");
+            fixture.Button("Check draft").Click();
+            fixture.Render();
+            var problem = fixture.Feedback.First();
+            Assert.Equal((FeedbackKind.Error, error), (problem.Kind, problem.Message));
+            Assert.True(problem.Bounds.Top >= area.ContentBounds.Top - 0.5 && problem.Bounds.Bottom <= area.ContentBounds.Bottom + 0.5,
+                $"The error is at {problem.Bounds}, the area shows {area.ContentBounds}.");
+            Assert.Same(focused, fixture.Session.FocusedElement);
+            Assert.True(area.ScrollToEnd());
+            fixture.Button("Check draft").Click();
+            fixture.Render();
+            Assert.True(area.VerticalOffset > 0, "The same error was brought into view again.");
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
     }
 
     [Fact]

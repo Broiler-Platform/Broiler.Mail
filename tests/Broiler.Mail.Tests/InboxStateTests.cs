@@ -10,6 +10,7 @@ using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
+using Broiler.UI.Label.Standard;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.Standard;
 
@@ -32,8 +33,73 @@ public sealed class InboxStateTests
         Assert.Equal(InboxProblemScope.None, fixture.Model.ProblemScope);
     }
 
+    /// <summary>
+    /// Once received, an empty inbox has nothing to select: the reader says that the inbox is empty, as
+    /// the list does, and offers Receive mail to check again, not the wording for an inbox never received.
+    /// While a receive runs, it does not ask for Receive mail, which is unavailable then.
+    /// </summary>
     [Fact]
-    public async Task FailedRefreshKeepsMessagesAndOffersRetryBesideTheList()
+    public async Task TheReaderAgreesWithTheListAboutAnEmptyInbox()
+    {
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)));
+        Assert.Equal("Receive mail to load your inbox.", fixture.Reader.Text);
+        await fixture.ReceiveAsync();
+
+        Assert.Equal("The inbox is empty.", fixture.ListFeedback.Message);
+        Assert.Equal("The inbox is empty.", fixture.ReaderHeading.Text);
+        Assert.Equal("Use Receive mail to check for new messages.", fixture.Reader.Text);
+        Assert.True(fixture.Button("Receive mail").IsEnabled);
+
+        // While it checks again, Receive mail is unavailable and the list shows the progress, so the reader
+        // does not ask for it; nor while the first receive runs.
+        var pending = new TaskCompletionSource<MailInboxPage>();
+        fixture.Receiver.Inbox = (_, token) => pending.Task.WaitAsync(token);
+        var receiving = fixture.Model.ReceiveAsync();
+        fixture.Render();
+        Assert.True(fixture.Model.IsLoadingList);
+        Assert.Equal(FeedbackKind.Progress, fixture.ListFeedback.Kind);
+        Assert.False(fixture.Button("Receive mail").IsEnabled);
+        Assert.Equal("The inbox is empty.", fixture.ReaderHeading.Text);
+        Assert.Equal("", fixture.Reader.Text);
+        pending.SetResult(new MailInboxPage([], null));
+        fixture.Settle();
+        await receiving;
+        Assert.Equal("Use Receive mail to check for new messages.", fixture.Reader.Text);
+
+        using var first = new Fixture(token => new TaskCompletionSource<MailInboxPage>().Task.WaitAsync(token));
+        _ = first.Model.ReceiveAsync();
+        first.Render();
+        Assert.True(first.Model.IsLoadingList);
+        Assert.Equal("", first.Reader.Text);
+        first.Model.Cancel();
+        first.Settle();
+    }
+
+    /// <summary>
+    /// Without a message, the heading is the reader header's only row: the empty date line and the HTML
+    /// preview's empty row take no room, so the line below the header is as far below the heading as the
+    /// header's top is above it, before the first receive and in an empty inbox alike. The empty date
+    /// line used to leave a blank line between "The inbox is empty." and the line.
+    /// </summary>
+    [Fact]
+    public async Task WithoutAMessageTheReaderHeaderEndsBelowItsHeading()
+    {
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)));
+        AssertHeadingIsTheOnlyRow("Select a message to read.");
+        await fixture.ReceiveAsync();
+        AssertHeadingIsTheOnlyRow("The inbox is empty.");
+
+        void AssertHeadingIsTheOnlyRow(string heading)
+        {
+            BRect title = fixture.ReaderHeading.Bounds, header = fixture.Header.Bounds, line = fixture.Divider.Bounds;
+            Assert.Equal(heading, fixture.ReaderHeading.Text);
+            Assert.True(title.Height > 0, $"The heading is at {title}.");
+            Assert.Equal(title.Top - header.Top, line.Top - title.Bottom, 0.5);
+        }
+    }
+
+    [Fact]
+    public async Task FailedRefreshKeepsMessagesAndOffersRetryAboveTheList()
     {
         var account = TestDirectory.Profile();
         var messages = new[] { Message(account, 2), Message(account, 1) };
@@ -128,6 +194,221 @@ public sealed class InboxStateTests
         Assert.Equal("", fixture.MessageFeedback.Message);
     }
 
+    /// <summary>
+    /// A list problem (a failed or canceled receive, or a failed Load older) stays while a message is
+    /// read: the rows are still from an earlier receive, so its notice and Retry stay above the list,
+    /// also beside a message that fails to load. While a message loads, the list's Retry keeps its name
+    /// (it was named Retry receiving after a failed Load older meanwhile). Each Retry repeats its own
+    /// pane's operation, and a new page replaces both problems.
+    /// </summary>
+    [Theory]
+    [InlineData("receive-error", "Retry receiving")]
+    [InlineData("receive-canceled", "Retry receiving")]
+    [InlineData("load-error", "Retry loading older")]
+    public async Task ReadingAMessageKeepsTheListProblemAndItsRetry(string problem, string retryText)
+    {
+        var account = TestDirectory.Profile();
+        MailMessageSummary[] newest = [Message(account, 3), Message(account, 2)];
+        bool broken = true;
+        TaskCompletionSource<MailMessageBody>? pendingBody = null;
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account,
+            key => pendingBody is { } pending ? pending.Task
+                : key.Uid == 2 && broken ? throw new MailConnectionException("Broken message.") : Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")));
+        // The newest page, then one older page, the last.
+        Func<MailInboxCursor?, CancellationToken, Task<MailInboxPage>> working = (cursor, _) => Task.FromResult(cursor is null
+            ? new MailInboxPage(newest, new(account.Id, 7, 4, 3, 2)) : new MailInboxPage([Message(account, 1)], null));
+        fixture.Receiver.Inbox = working;
+        await fixture.ReceiveAsync();
+        int pages = 0;
+        fixture.Receiver.Inbox = problem switch
+        {
+            "receive-error" => (_, _) => throw new MailConnectionException("The server did not respond."),
+            "receive-canceled" => (_, token) => new TaskCompletionSource<MailInboxPage>().Task.WaitAsync(token),
+            _ => (cursor, token) => cursor is null ? working(cursor, token) : throw new MailConnectionException("The server did not respond."),
+        };
+        var failing = problem == "load-error" ? fixture.Model.LoadOlderAsync() : fixture.Model.ReceiveAsync();
+        if (problem == "receive-canceled") fixture.Model.Cancel();
+        fixture.Settle();
+        await failing;
+        var listProblem = fixture.Model.ListProblem;
+        Assert.NotNull(listProblem);
+        var notice = (fixture.ListFeedback.Kind, fixture.ListFeedback.Message);
+        Assert.Equal(listProblem.Text, notice.Message);
+        var listRetry = fixture.Button(retryText);
+        Assert.True(fixture.IsShown(listRetry) && listRetry.IsEnabled);
+
+        // Reading a message keeps the list's explanation and its Retry.
+        await fixture.Model.SelectAsync(newest[0].Key);
+        fixture.Settle();
+        Assert.Equal("Body 3", fixture.Reader.Text);
+        Assert.Same(listProblem, fixture.Model.ListProblem);
+        Assert.Equal(InboxProblemScope.List, fixture.Model.ProblemScope);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        Assert.True(fixture.IsShown(listRetry) && listRetry.IsEnabled);
+
+        // While a message loads, the list's Retry keeps its name, unavailable until the message has loaded.
+        pendingBody = new TaskCompletionSource<MailMessageBody>();
+        var loading = fixture.Model.SelectAsync(newest[0].Key);
+        fixture.Render();
+        Assert.True(fixture.Model.IsLoadingMessage);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        Assert.Equal(retryText, listRetry.Text);
+        Assert.True(fixture.IsShown(listRetry) && !listRetry.IsEnabled);
+        pendingBody.SetResult(new MailMessageBody(newest[0].Key, "Body 3"));
+        pendingBody = null;
+        fixture.Settle();
+        await loading;
+        Assert.Equal(retryText, listRetry.Text);
+        Assert.True(listRetry.IsEnabled);
+
+        // A message that fails to load explains why under its header; the list's problem stays above the list.
+        await fixture.Model.SelectAsync(newest[1].Key);
+        fixture.Settle();
+        Assert.Equal(InboxProblemScope.Message, fixture.Model.ProblemScope);
+        Assert.Equal("Broken message.", fixture.MessageFeedback.Message);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        var messageRetry = fixture.Button("Retry loading");
+        Assert.True(fixture.IsShown(messageRetry) && messageRetry.IsEnabled);
+        Assert.True(fixture.IsShown(listRetry) && listRetry.IsEnabled);
+
+        // Retry loading repeats only the message.
+        broken = false;
+        fixture.Receiver.Inbox = (cursor, token) => { pages++; return working(cursor, token); };
+        messageRetry.Click();
+        fixture.Settle();
+        Assert.Equal("Body 2", fixture.Reader.Text);
+        Assert.Equal(0, pages);
+        Assert.Null(fixture.Model.MessageProblem);
+        Assert.Same(listProblem, fixture.Model.ListProblem);
+        Assert.False(fixture.IsShown(messageRetry));
+
+        // The list's Retry repeats its page, which replaces the problem.
+        listRetry.Click();
+        fixture.Settle();
+        Assert.Equal(1, pages);
+        Assert.Equal(InboxProblemScope.None, fixture.Model.ProblemScope);
+        Assert.Equal("", fixture.ListFeedback.Message);
+        Assert.False(fixture.IsShown(listRetry));
+        Assert.Equal(problem == "load-error" ? 3 : 2, fixture.Model.Messages.Count);
+    }
+
+    /// <summary>
+    /// At the session limit with older mail on the server, Load older is unavailable; the notice above
+    /// the list says why and how to go on. Reading a message replaces the status, not that notice, so it
+    /// stays while a message loads and is read, until Receive mail returns to the newest page. The status,
+    /// which the footer shows, does not repeat it. A mailbox loaded completely has nothing older and no notice.
+    /// </summary>
+    [Theory]
+    [InlineData(600, true)]
+    [InlineData(500, false)]
+    public async Task TheSessionLimitStaysExplainedAboveTheListWhileAMessageIsRead(int total, bool limited)
+    {
+        const string limit = "Session limit reached (500 messages). Older ones cannot be loaded in this session. Receive mail to start again.";
+        var account = TestDirectory.Profile();
+        TaskCompletionSource<MailMessageBody>? pendingBody = null;
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account,
+            key => pendingBody?.Task ?? Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")));
+        fixture.Receiver.Inbox = NewestFirst(account, total);
+        await fixture.ReceiveAsync();
+        Assert.Equal("", fixture.ListFeedback.Message);
+        var older = fixture.Button("Load older");
+        while (fixture.Model.CanLoadOlder)
+        {
+            await fixture.Model.LoadOlderAsync();
+            fixture.Settle();
+        }
+        Assert.Equal(InboxViewModel.MaximumLoadedMessages, fixture.Model.Messages.Count);
+        Assert.False(older.IsEnabled);
+        if (!limited)
+        {
+            Assert.Null(fixture.Model.SessionLimitNotice);
+            Assert.Equal("", fixture.ListFeedback.Message);
+            return;
+        }
+        Assert.Equal(limit, fixture.Model.SessionLimitNotice);
+        var notice = (FeedbackKind.Information, limit);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        Assert.True(fixture.IsShown(fixture.ListFeedback));
+        Assert.DoesNotContain("Session limit", fixture.Model.Status);
+
+        // While the newest message loads and once it is read, the notice stays and Load older stays unavailable.
+        pendingBody = new TaskCompletionSource<MailMessageBody>();
+        var loading = fixture.Model.SelectAsync(fixture.Model.Messages[0].Key);
+        fixture.Render();
+        Assert.True(fixture.Model.IsLoadingMessage);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        pendingBody.SetResult(new MailMessageBody(fixture.Model.Messages[0].Key, $"Body {total}"));
+        pendingBody = null;
+        fixture.Settle();
+        await loading;
+        Assert.Equal($"Body {total}", fixture.Reader.Text);
+        Assert.StartsWith("Reading plain text.", fixture.Model.Status);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        Assert.False(older.IsEnabled);
+
+        // Receive mail returns to the newest page, where Load older is available again.
+        await fixture.ReceiveAsync();
+        Assert.Equal(InboxViewModel.PageSize, fixture.Model.Messages.Count);
+        Assert.Null(fixture.Model.SessionLimitNotice);
+        Assert.Equal("", fixture.ListFeedback.Message);
+        Assert.True(older.IsEnabled);
+    }
+
+    /// <summary>
+    /// A receive that fails or is canceled at the session limit leaves the 500 rows and the limit: the
+    /// notice keeps explaining it after the problem, so Load older is not unavailable without a reason.
+    /// Retry receiving returns to the newest page, which ends both.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AReceiveProblemAtTheSessionLimitKeepsTheLimitExplained(bool canceled)
+    {
+        const string limit = "Session limit reached (500 messages). Older ones cannot be loaded in this session. Receive mail to start again.";
+        var account = TestDirectory.Profile();
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account);
+        var pages = fixture.Receiver.Inbox = NewestFirst(account, InboxViewModel.MaximumLoadedMessages + InboxViewModel.PageSize);
+        await fixture.ReceiveAsync();
+        while (fixture.Model.CanLoadOlder)
+        {
+            await fixture.Model.LoadOlderAsync();
+            fixture.Settle();
+        }
+        Assert.Equal(limit, fixture.ListFeedback.Message);
+
+        fixture.Receiver.Inbox = canceled ? (_, token) => new TaskCompletionSource<MailInboxPage>().Task.WaitAsync(token)
+            : (_, _) => throw new MailConnectionException("The server did not respond.");
+        var receiving = fixture.Model.ReceiveAsync();
+        if (canceled) fixture.Model.Cancel();
+        fixture.Settle();
+        await receiving;
+        var problem = fixture.Model.ListProblem;
+        Assert.NotNull(problem);
+        Assert.Equal(InboxViewModel.MaximumLoadedMessages, fixture.Model.Messages.Count);
+        var older = fixture.Button("Load older");
+        Assert.False(older.IsEnabled);
+        Assert.Equal((canceled ? FeedbackKind.Information : FeedbackKind.Error, $"{problem.Text} {limit}"), (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        var retry = fixture.Button("Retry receiving");
+        Assert.True(fixture.IsShown(retry) && retry.IsEnabled);
+
+        fixture.Receiver.Inbox = pages;
+        retry.Click();
+        fixture.Settle();
+        Assert.Null(fixture.Model.ListProblem);
+        Assert.Equal(InboxViewModel.PageSize, fixture.Model.Messages.Count);
+        Assert.Equal("", fixture.ListFeedback.Message);
+        Assert.True(older.IsEnabled);
+    }
+
+    /// <summary>Pages of the newest messages first, as the server numbers them; the last page has no older cursor.</summary>
+    private static Func<MailInboxCursor?, CancellationToken, Task<MailInboxPage>> NewestFirst(AccountProfile account, int total) => (cursor, _) =>
+    {
+        int end = cursor?.NextIndex ?? total - 1;
+        int start = Math.Max(0, end - InboxViewModel.PageSize + 1);
+        var messages = Enumerable.Range(start + 1, end - start + 1).Reverse().Select(uid => Message(account, (uint)uid)).ToArray();
+        return Task.FromResult(new MailInboxPage(messages, start == 0 ? null : new(account.Id, 7, (uint)total + 1, total, start - 1)));
+    };
+
     private static MailMessageSummary Message(AccountProfile account, uint uid) => new()
     { Key = new(account.Id, "INBOX", 7, uid), Sender = "sender@example.test", Subject = $"Subject {uid}" };
 
@@ -145,7 +426,7 @@ public sealed class InboxStateTests
         public Fixture(Func<CancellationToken, Task<MailInboxPage>> inbox, AccountProfile? account = null, Func<MailMessageKey, Task<MailMessageBody>>? body = null)
         {
             Dispatcher = new TestQueueDispatcher();
-            var receiver = new TestMailReceiver { Inbox = (_, token) => inbox(token) };
+            var receiver = Receiver = new TestMailReceiver { Inbox = (_, token) => inbox(token) };
             if (body is not null) receiver.Body = (key, _) => body(key);
             Model = new InboxViewModel(receiver, Dispatcher);
             Model.SetAccount(account ?? TestDirectory.Profile());
@@ -156,11 +437,17 @@ public sealed class InboxStateTests
         }
 
         public TestQueueDispatcher Dispatcher { get; }
+        public TestMailReceiver Receiver { get; }
         public InboxViewModel Model { get; }
         public UiSession Session { get; }
         public InlineFeedback ListFeedback => Descendants(_content).OfType<InlineFeedback>().First();
         public InlineFeedback MessageFeedback => Descendants(_content).OfType<InlineFeedback>().Skip(1).First();
         public ScrollableMessageText Reader => Descendants(_content).OfType<ScrollableMessageText>().Single();
+        /// <summary>The reader's heading: the subject, or what to do without a message.</summary>
+        public StandardLabel ReaderHeading => Descendants(_content).OfType<StandardLabel>().Single(label => label.TextStyle == StandardTextStyle.Title);
+        public BoundedScrollArea Header => Descendants(_content).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+        /// <summary>The line between the reader's header and the message text.</summary>
+        public Divider Divider => Descendants(_content).OfType<Divider>().Single();
         public StandardButton Button(string text) => Descendants(_content).OfType<StandardButton>().Single(button => button.Text == text);
 
         public bool IsShown(UiElement element)

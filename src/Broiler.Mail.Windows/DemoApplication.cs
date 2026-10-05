@@ -220,7 +220,8 @@ internal static class DemoApplication
         // Only the new-mail fixture's server changes between receives; the others stay as recorded.
         private readonly DemoMailbox? _mailbox = scenario == DemoScenario.NewMail ? new(change) : null;
 
-        private int Total => scenario switch { DemoScenario.Empty => 0, DemoScenario.LargeInbox => 500, _ => 55 };
+        // The large inbox holds more than a session loads, so its fixture ends at the session limit with older mail left.
+        private int Total => scenario switch { DemoScenario.Empty => 0, DemoScenario.LargeInbox => 600, _ => 55 };
         // The interactive demo shows its busy states; gallery fixtures settle immediately.
         private TimeSpan Latency(int milliseconds) => interactive ? TimeSpan.FromMilliseconds(milliseconds) : TimeSpan.Zero;
         private string Subject(uint uid) => uid > DemoMailbox.InitialCount && scenario == DemoScenario.NewMail ? $"New message {uid}"
@@ -284,7 +285,9 @@ internal static class DemoApplication
                 Subject = Subject((uint)uid),
                 // Spread a large inbox over several days so rows show times, dates, and older years.
                 ReceivedAt = Newest.AddMinutes((uid - total) * (total > 55 ? 180 : 1)),
-                IsRead = uid % 3 == 0,
+                // The large inbox counts from its newest row, so its rows keep the read states they had
+                // when it held 500 messages: every third, starting with the third.
+                IsRead = (scenario == DemoScenario.LargeInbox ? total - uid + 1 : uid) % 3 == 0,
             }).ToArray();
             return new(messages, start == 0 ? null : new(account.Id, 1, (uint)total + 1, total, start - 1));
         }

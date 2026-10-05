@@ -1,5 +1,6 @@
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Text;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
@@ -120,6 +121,43 @@ public sealed class ShellLayoutTests
         }
     }
 
+    /// <summary>
+    /// The footer's text starts where the tab names do and stays clear of the window's bottom edge. At
+    /// the minimum size with doubled text it wraps inside that inset and is still shown whole.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 480, 2.0)]
+    [InlineData(1100, 720, 1.0)]
+    public async Task TheFooterIsInsetFromTheWindowsEdgesAndShownWhole(int width, int height, double textScale)
+    {
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var fixture = await Fixture.OpenAsync(width, height);
+            var shell = fixture.Shell;
+            Render(fixture.Session);
+            var footer = shell.Footer;
+            BRect area = shell.Window.ChromeLayout.Content;
+            BRect text = footer.Bounds;
+            string where = $"at {width}x{height}, text {textScale:P0}: the footer is at {text} in {area}";
+
+            // The tab names start this far into the tab view, which spans the window.
+            Assert.Equal(area.Left, shell.Navigation.Bounds.Left, 0.5);
+            Assert.Equal(area.Left + shell.Navigation.HeaderPaddingX, text.Left, 0.5);
+            Assert.Equal(area.Right - shell.Navigation.HeaderPaddingX, text.Right, 0.5);
+            Assert.Equal(area.Bottom - MailShellView.FooterPadding, text.Bottom, 0.5);
+            Assert.True(shell.Navigation.Bounds.Bottom <= text.Top - MailShellView.FooterPadding + 0.5, where);
+            // Shown whole: the text has the height it asked for at that width.
+            Assert.True(text.Height >= footer.DesiredSize.Height - 0.5, where);
+            if (width == 640)
+                Assert.True(BTextMeasurer.MeasureAdvance(footer.Text, footer.Font) > text.Width, $"{where}; '{footer.Text}' does not wrap.");
+        }
+        finally
+        {
+            StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        }
+    }
+
     private static void Render(UiSession session)
     {
         session.RenderFrame();
@@ -150,10 +188,28 @@ public sealed class ShellLayoutTests
         for (int index = 0; index < before.Length; index++)
             Assert.True(before[index] == after[index], $"{where}: {before[index].Element} was at {before[index].Bounds}, but {after[index].Bounds} once measured at the arranged size.");
 
-        // The height caps hold against the height the content was given.
+        // The height caps hold against the height the content was given: for the reader's header, the
+        // height its commands below leave. An area passes its share only to show its whole content or to
+        // end below a row of buttons and the gap after it, and the rows it shows leave the rest its minimum
+        // (the margin below the last row and that gap are not rows), or, if it keeps lines whole, to show
+        // its first line.
         foreach (var capped in Descendants(content).OfType<BoundedScrollArea>().Where(element => element.Bounds.Height > 0))
-            Assert.True(capped.Bounds.Height <= (capped.Parent!.Bounds.Height * capped.MaximumFraction) + 1,
-                $"{where}: {capped.Scroll.AccessibleName} is {capped.Bounds.Height} of {capped.Parent.Bounds.Height}.");
+        {
+            double available = capped.AvailableHeight;
+            double share = available * capped.MaximumFraction;
+            string what = $"{where}: {capped.Scroll.AccessibleName} is {capped.Bounds.Height} of {available}";
+            if (capped.Bounds.Height <= share + 1) continue;
+            var rows = capped.Rows?.Invoke().ToArray() ?? [];
+            Assert.True(rows.Length > 0 && capped.MinimumRemaining is not null, $"{what}, past its share without rows or a minimum.");
+            bool whole = !capped.Scroll.HasVerticalScrollbar;
+            if (capped.KeepsLinesWhole && rows[0].LineHeight > 0 && Math.Abs(rows[0].Start + rows[0].LineHeight - capped.Bounds.Height) < 0.5) continue;
+            // Below a row of buttons, and the gap between it and the next row.
+            var buttons = rows.Where((row, index) => row.Grows
+                && Math.Abs((index + 1 < rows.Length ? rows[index + 1].Start : row.End) - capped.Bounds.Height) < 0.5).ToArray();
+            Assert.True(whole || buttons.Length > 0, $"{what}, past its share but not below a row of buttons.");
+            double rowsEnd = whole ? rows[^1].End : buttons[0].End;
+            Assert.True(rowsEnd <= Math.Max(share, available - capped.MinimumRemaining!()) + 0.5, $"{what}; its rows end at {rowsEnd}.");
+        }
     }
 
     private static (string Element, BRect Bounds)[] Layout(UiElement root) =>
