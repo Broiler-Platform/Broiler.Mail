@@ -159,9 +159,9 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
                 : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
             ShowProblemsFirst();
-            // A refused recipient field carries the error itself, as the account form's fields do: it reports Invalid,
-            // and its description starts with the error. As there, the field (Cc and Bcc shown first) takes focus and
-            // is scrolled into view, but only while the user is still on the form.
+            // A refused recipient field carries the error itself, as the account form's fields do: it shows the error
+            // and reports Invalid, with the error in its name. As there, the field (Cc and Bcc shown first) takes focus
+            // and is scrolled into view, but only while the user is still on the form.
             foreach (var (name, field) in recipientFields) field.SetError(model.InvalidField == name ? model.Status : null);
             if (model.InvalidField is { } refused && refused != markedField
                 && surface.Session is { } revealSession && FocusNavigation.MayTakeFocus(revealSession, surface))
