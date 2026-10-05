@@ -36,6 +36,7 @@ public sealed class InboxStateTests
     /// <summary>
     /// Once received, an empty inbox has nothing to select: the reader says that the inbox is empty, as
     /// the list does, and offers Receive mail to check again, not the wording for an inbox never received.
+    /// While a receive runs, it does not ask for Receive mail, which is unavailable then.
     /// </summary>
     [Fact]
     public async Task TheReaderAgreesWithTheListAboutAnEmptyInbox()
@@ -48,6 +49,30 @@ public sealed class InboxStateTests
         Assert.Equal("The inbox is empty.", fixture.ReaderHeading.Text);
         Assert.Equal("Use Receive mail to check for new messages.", fixture.Reader.Text);
         Assert.True(fixture.Button("Receive mail").IsEnabled);
+
+        // While it checks again, Receive mail is unavailable and the list shows the progress, so the reader
+        // does not ask for it; nor while the first receive runs.
+        var pending = new TaskCompletionSource<MailInboxPage>();
+        fixture.Receiver.Inbox = (_, token) => pending.Task.WaitAsync(token);
+        var receiving = fixture.Model.ReceiveAsync();
+        fixture.Render();
+        Assert.True(fixture.Model.IsLoadingList);
+        Assert.Equal(FeedbackKind.Progress, fixture.ListFeedback.Kind);
+        Assert.False(fixture.Button("Receive mail").IsEnabled);
+        Assert.Equal("The inbox is empty.", fixture.ReaderHeading.Text);
+        Assert.Equal("", fixture.Reader.Text);
+        pending.SetResult(new MailInboxPage([], null));
+        fixture.Settle();
+        await receiving;
+        Assert.Equal("Use Receive mail to check for new messages.", fixture.Reader.Text);
+
+        using var first = new Fixture(token => new TaskCompletionSource<MailInboxPage>().Task.WaitAsync(token));
+        _ = first.Model.ReceiveAsync();
+        first.Render();
+        Assert.True(first.Model.IsLoadingList);
+        Assert.Equal("", first.Reader.Text);
+        first.Model.Cancel();
+        first.Settle();
     }
 
     [Fact]

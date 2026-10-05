@@ -304,8 +304,11 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             reply.IsEnabled = replyAll.IsEnabled = forward.IsEnabled = commands?.CanRespond == true;
             ShowStates();
             var body = model.Body;
+            // While a page loads, the list notice shows its progress and Receive mail is unavailable, so the
+            // reader of an empty list does not ask for it.
             string reader = body is null ? (model.SelectedMessage is null
-                ? (empty ? "Use Receive mail to check for new messages." : model.Messages.Count == 0 ? "Receive mail to load your inbox." : "Choose a message from the inbox list.")
+                ? (model.Messages.Count > 0 ? "Choose a message from the inbox list." : model.IsLoadingList ? ""
+                    : empty ? "Use Receive mail to check for new messages." : "Receive mail to load your inbox.")
                 : (model.IsLoadingMessage ? "Loading message body…" : ""))
                 : (body.IsHtmlFallback ? "Text extracted from HTML (formatting omitted).\n\n" : "") + body.PlainText +
                   (body.IsTruncated ? "\n\n[Preview limited to 32,000 characters.]" : "");
