@@ -17,6 +17,7 @@ using Broiler.UI.ListView.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.RichEdit.Standard;
+using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Splitter;
 using Broiler.UI.Standard;
 
@@ -134,6 +135,47 @@ public sealed class KeyboardShortcutTests
 
     private static bool RowShows(UiListView list, int index) =>
         list.GetItemSemanticNode(index) is { } row && !list.Bounds.Intersect(row.Bounds).IsEmpty;
+
+    [Theory]
+    [InlineData("account")]
+    [InlineData("settings")]
+    [InlineData("compose")]
+    public async Task TabAndShiftTabScrollAFieldInWithRoomForItsRing(string tab)
+    {
+        // A short window, so each form scrolls and Mail's own Tab handling brings the fields in.
+        using var fixture = await Fixture.OpenAsync(width: 640, height: 300);
+        if (tab == "compose") fixture.Model.Compose.StartNew();
+        fixture.Shell.Navigation.SelectTab(tab);
+        fixture.Session.RenderFrame();
+        var stops = MailKeyboardNavigation.TabStops(fixture.Shell.Navigation.SelectedTab!.Content!);
+        // An edit strokes its 2 DIP ring centred on its bounds, so 1 DIP of it lies outside them. A fixed
+        // value rather than the form's inset, so Mail notices if the room goes away.
+        const double ringOutside = 1;
+        var cut = new List<string>();
+        bool scrolled = false;
+        foreach (var modifiers in new[] { KeyboardModifierState.None, KeyboardModifierState.Shift })
+        {
+            fixture.Session.SetFocus(fixture.Shell.Navigation);
+            for (int step = 0; step <= stops.Count; step++)
+            {
+                Assert.True(fixture.Keyboard.Handle(Key(0x09, modifiers)));
+                var focused = fixture.Session.FocusedElement!;
+                for (var parent = focused.Parent; parent is not null; parent = parent.Parent)
+                {
+                    if (parent is not StandardScrollView { HasVerticalScrollbar: true } scroll) continue;
+                    scrolled = true;
+                    double above = focused.Bounds.Top - scroll.ContentBounds.Top;
+                    double below = scroll.ContentBounds.Bottom - focused.Bounds.Bottom;
+                    // A control taller than the view, such as the message body, keeps only its top in view.
+                    bool fits = focused.Bounds.Height + (2 * ringOutside) <= scroll.ContentBounds.Height;
+                    if (above < ringOutside - 0.01 || (fits && below < ringOutside - 0.01))
+                        cut.Add($"{modifiers} {focused.GetType().Name} {focused.Bounds} in {scroll.ContentBounds}");
+                }
+            }
+        }
+        Assert.True(scrolled, $"Nothing in the {tab} tab scrolled; the window is not short enough.");
+        Assert.True(cut.Count == 0, string.Join(Environment.NewLine, cut));
+    }
 
     [Fact]
     public async Task AltLeftLeavesTheCompactReaderAndOtherwisePassesThrough()

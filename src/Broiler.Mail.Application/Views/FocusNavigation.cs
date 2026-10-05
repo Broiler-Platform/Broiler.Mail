@@ -68,8 +68,10 @@ internal static class FocusNavigation
         for (var parent = element.Parent; parent is not null; parent = parent.Parent)
         {
             if (parent is not StandardScrollView scroll) continue;
-            double above = element.Bounds.Top - scroll.ContentBounds.Top;
-            double below = element.Bounds.Bottom - scroll.ContentBounds.Bottom;
+            // Keep the room a form leaves above and below its content, so a field brought in at an
+            // edge shows its ring whole, as the toolkit's own MakeVisible does.
+            double above = element.Bounds.Top - (scroll.ContentBounds.Top + scroll.VerticalContentInset);
+            double below = element.Bounds.Bottom - (scroll.ContentBounds.Bottom - scroll.VerticalContentInset);
             // A control taller than the viewport, such as the body editor, keeps its top in view.
             double delta = above < 0 ? above : below > 0 ? Math.Min(below, above) : 0;
             if (delta != 0) { scroll.ScrollBy(0, delta); session.RenderFrame(); }
