@@ -241,6 +241,35 @@ public sealed class MessageRowTests
         Assert.Equal(palette.Text, Assert.Single(texts, draw => draw.Text.Text == "Someone else <someone@example.test>").Text.Color);
     }
 
+    /// <summary>
+    /// Dark's accent is a fill, too close to its selection fill for the unread dot (2.76:1, where a mark needs
+    /// 3:1), so a selected unread row draws the dot in the theme's accent text, the list's shade of the accent
+    /// for marks; the message row hands it on to the two-line row it draws. An unselected row keeps the accent.
+    /// </summary>
+    [Fact]
+    public void ASelectedUnreadRowInDarkDrawsItsDotInTheAccentText()
+    {
+        var palette = StandardThemeTokens.Dark;
+        Assert.NotEqual(palette.Accent, palette.AccentText);
+        var selected = Message("Broiler team <hello@example.test>", read: false);
+        var other = Message("Someone else <someone@example.test>", read: false) with { Key = selected.Key with { Uid = 2 }, Subject = "Other" };
+        var list = new StandardListView { ItemPresenter = new MailMessageItemPresenter(Dates) };
+        list.ApplyTheme(palette);
+        list.SetItems([Item(selected), Item(other)]);
+        list.SelectIndex(0);
+        using var session = new StandardUiSessionBuilder().Build(new Host());
+        session.AddRoot(list);
+
+        // The dot is a 6 DIP square before the sender, one per unread row, in row order.
+        var dots = session.RenderFrame().Commands.OfType<BRenderCommand.FillRect>()
+            .Where(fill => fill.Rect.Width == 6 && fill.Rect.Height == 6).OrderBy(fill => fill.Rect.Top).ToArray();
+        Assert.Equal(2, dots.Length);
+        Assert.Equal(palette.AccentText, dots[0].Color);
+        Assert.True(StandardContrast.Ratio(dots[0].Color, list.SelectedBackground) >= StandardContrast.AaLargeOrUi,
+            $"The dot is {dots[0].Color} on {list.SelectedBackground}.");
+        Assert.Equal(palette.Accent, dots[1].Color);
+    }
+
     private static double SubjectSize(BFontStyle font) => Math.Max(10, font.Size - 1);
 
     private sealed class Host : IUiHost
