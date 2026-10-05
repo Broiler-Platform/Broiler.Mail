@@ -15,6 +15,9 @@ process. Each check prints PASS or FAIL with what it read:
   - account-error: after Save account rejected the email address (invalid-setup), the Email address field
     reports IsDataValidForForm = false, and its DescribedBy and FullDescription carry the error.
   - row-names: every message row of the inbox fixture is named with its received date.
+  - row-validity: every message row and every tab item of the inbox fixture reports IsDataValidForForm = true
+    and IsRequiredForForm = false. UIA reports a value a provider leaves unanswered as false, which screen
+    readers announce as invalid on every row and tab; Hosting preview.7 answers valid.
   - runtime-ids: in new-mail, each row keeps its runtime ID after F5 brings new mail above it, and the new
     rows get IDs no other row had.
 Properties the managed UIA client does not know (IsDataValidForForm, DescribedBy, FullDescription) are read
@@ -26,8 +29,8 @@ briefly. Every demo process this script starts is closed, or killed if it does n
 param(
     [string]$Executable,
     [string]$Output,
-    [ValidateSet('disclosure', 'draft-error', 'account-error', 'row-names', 'runtime-ids')]
-    [string[]]$Checks = @('disclosure', 'draft-error', 'account-error', 'row-names', 'runtime-ids'),
+    [ValidateSet('disclosure', 'draft-error', 'account-error', 'row-names', 'row-validity', 'runtime-ids')]
+    [string[]]$Checks = @('disclosure', 'draft-error', 'account-error', 'row-names', 'row-validity', 'runtime-ids'),
     [string]$Size = '1100x720',
     [ValidateRange(500, 20000)]
     [int]$SettleMilliseconds = 2500
@@ -100,6 +103,14 @@ public sealed class FormState
     public object IsRequiredForForm;
     public string FullDescription;
     public string[] DescribedBy = new string[0];
+}
+
+/// <summary>The form properties of one element of a control type, such as a list row or a tab item.</summary>
+public sealed class FormItem
+{
+    public string Name;
+    public object IsDataValidForForm;
+    public object IsRequiredForForm;
 }
 
 /// <summary>An element another one names through a relation property, such as ControllerFor, with the fields inside it.</summary>
@@ -182,6 +193,27 @@ public static class UiaProbe
         return state;
     }
 
+    /// <summary>The form properties of every element with the UIA control type id <paramref name="controlType"/>.</summary>
+    public static FormItem[] FormItems(IntPtr render, int controlType)
+    {
+        var items = new List<FormItem>();
+        var automation = (IProbeAutomation)new CUIAutomationClass();
+        IProbeElementArray all = automation.ElementFromHandle(render).FindAll(4 /* TreeScope_Descendants */, automation.CreateTrueCondition());
+        for (int i = 0; i < all.Length; i++)
+        {
+            IProbeElement element = all.GetElement(i);
+            object type = element.GetCurrentPropertyValue(ControlTypeId);
+            if (!(type is int) || (int)type != controlType) continue;
+            items.Add(new FormItem
+            {
+                Name = element.GetCurrentPropertyValue(NameId) as string ?? "",
+                IsDataValidForForm = element.GetCurrentPropertyValue(IsDataValidForFormId),
+                IsRequiredForForm = element.GetCurrentPropertyValue(IsRequiredForFormId),
+            });
+        }
+        return items.ToArray();
+    }
+
     /// <summary>The elements a relation property names. The COM client hands them over as an element array.</summary>
     static List<IProbeElement> Elements(object value)
     {
@@ -237,6 +269,8 @@ public static class UiaProbe
 
 $EditTypeId = 50004
 $ButtonTypeId = 50000
+$ListItemTypeId = 50007
+$TabItemTypeId = 50019
 $ControllerForId = 30104
 
 function Start-Fixture([string]$fixture, [string]$name) {
@@ -349,6 +383,22 @@ function Test-Check([string]$check) {
                 if ($rows.Count -eq 0) { $result.findings += 'ROWS: the list exposes no rows.' }
                 $unnamed = @($rows | Where-Object { $_.Current.Name -notmatch ', Received: \S' })
                 if ($unnamed.Count -gt 0) { $result.findings += "ROW_NAME: $($unnamed.Count) of $($rows.Count) rows have no received date in their name, such as '$($unnamed[0].Current.Name)'." }
+            }
+            'row-validity' {
+                $run = Start-Fixture 'inbox' $check
+                foreach ($kind in @(@{ Name = 'rows'; Type = $ListItemTypeId }, @{ Name = 'tabs'; Type = $TabItemTypeId })) {
+                    $items = @([UiaProbe]::FormItems($run.Render, $kind.Type))
+                    $result.read[$kind.Name] = $items.Count
+                    if ($items.Count -eq 0) { $result.findings += "$($kind.Name.ToUpperInvariant()): the window exposes no $($kind.Name)."; continue }
+                    # UIA hands over an unanswered property as false, so anything but true is a finding.
+                    $invalid = @($items | Where-Object { $_.IsDataValidForForm -ne $true })
+                    $required = @($items | Where-Object { $_.IsRequiredForForm -ne $false })
+                    $result.read["$($kind.Name)Invalid"] = $invalid.Count
+                    $result.read["$($kind.Name)Required"] = $required.Count
+                    if ($invalid.Count -gt 0) { $result.findings += "VALID: $($invalid.Count) of $($items.Count) $($kind.Name) report IsDataValidForForm = $($invalid[0].IsDataValidForForm), such as '$($invalid[0].Name)'." }
+                    if ($required.Count -gt 0) { $result.findings += "REQUIRED: $($required.Count) of $($items.Count) $($kind.Name) report IsRequiredForForm = $($required[0].IsRequiredForForm), such as '$($required[0].Name)'." }
+                }
+                $result.read.tabNames = @([UiaProbe]::FormItems($run.Render, $TabItemTypeId) | ForEach-Object { $_.Name })
             }
             'runtime-ids' {
                 $run = Start-Fixture 'new-mail' $check
