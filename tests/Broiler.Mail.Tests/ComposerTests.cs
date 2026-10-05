@@ -136,8 +136,9 @@ public sealed class ComposerTests
 
     /// <summary>
     /// A draft refused for one recipient field marks that field, as the account form marks its fields: the field
-    /// shows the error and reports Invalid with it, for a screen reader and not only on the status line.
-    /// Refusals of the whole draft mark none, and the next edit clears the mark.
+    /// shows the error and reports Invalid with the error in its name, and its edit, which takes focus, reports
+    /// Invalid with a description that starts with the error, for a screen reader on the field and not only on the
+    /// status line. Refusals of the whole draft mark none, and the next edit clears the mark.
     /// </summary>
     [Theory]
     [InlineData("team.example.test", "", "", "Plans", "To")]
@@ -166,6 +167,10 @@ public sealed class ComposerTests
         {
             bool marked = name == refused;
             Assert.Equal(marked ? composer.Status : "", field.Error);
+            Assert.Equal(marked, field.Control.ErrorMessage is not null);
+            var control = field.Control.GetSemanticNode();
+            Assert.Equal(marked, control.State.HasFlag(UiSemanticState.Invalid));
+            Assert.Equal(marked, control.Description?.StartsWith("Error: " + composer.Status, StringComparison.Ordinal) == true);
             var node = field.GetSemanticNode();
             Assert.Equal(marked, node.State.HasFlag(UiSemanticState.Invalid));
             Assert.Equal(marked, node.Name.Contains(composer.Status, StringComparison.Ordinal));
@@ -183,11 +188,78 @@ public sealed class ComposerTests
         Assert.Equal(composer.Status, fields[refused].Error);
 
         // Typing in the field clears its mark, and the draft's.
+        string error = fields[refused].Error;
         var edit = (StandardEdit)fields[refused].Control;
         edit.Text += " ";
         Assert.Null(composer.InvalidField);
         Assert.Equal("", fields[refused].Error);
+        Assert.False(edit.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
+        Assert.False(edit.GetSemanticNode().Description?.Contains(error, StringComparison.Ordinal) == true);
         Assert.False(fields[refused].GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
+    }
+
+    [Fact]
+    public void EveryDisclosureTogglesAPartNamedForWhatItHolds()
+    {
+        using var directory = new TestDirectory();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, new ImmediateUiDispatcher(), TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), new ImmediateUiDispatcher(), new(), null),
+            new(receiver, new ImmediateUiDispatcher()));
+        using var shell = new MailShellView(model);
+        var expected = new Dictionary<string, string>
+        {
+            ["Cc and Bcc"] = "Cc and Bcc fields",
+            ["Keyboard shortcuts"] = "Keyboard shortcut list",
+            ["Sent-copy settings"] = "Sent-copy handling and folder",
+        };
+        var sections = Descendants(shell.Window).OfType<FormSection>().Where(section => section.Toggle is not null).ToArray();
+        Assert.Equal(expected.Keys.Order(), sections.Select(section => section.GetSemanticNode().Name).Order());
+        // A screen reader that follows a toggle's "controls" relation lands on a name ("Show Cc and Bcc" controls
+        // "Cc and Bcc fields"), not on an unnamed pane. The section around the content is a group with the
+        // section's title, so the content says what it holds instead of repeating the title on the way into a field.
+        foreach (var section in sections)
+        {
+            Assert.Same(section.Content, section.Toggle!.Controls);
+            string title = section.GetSemanticNode().Name;
+            Assert.Equal(expected[title], section.Content.GetSemanticNode().Name);
+            Assert.NotEqual(title, section.Content.GetSemanticNode().Name, StringComparer.OrdinalIgnoreCase);
+        }
+    }
+
+    /// <summary>
+    /// Each disclosure says Show or Hide in sentence case, as every other command does ("Show plain text", "Save
+    /// settings"), rather than "Show " and the section's title; abbreviations and the Sent folder's name keep their capitals.
+    /// </summary>
+    [Fact]
+    public void EveryDisclosureToggleSaysShowOrHideInSentenceCase()
+    {
+        using var directory = new TestDirectory();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, new ImmediateUiDispatcher(), TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), new ImmediateUiDispatcher(), new(), null),
+            new(receiver, new ImmediateUiDispatcher()));
+        using var shell = new MailShellView(model);
+        var expected = new Dictionary<string, (string Show, string Hide)>
+        {
+            ["Cc and Bcc"] = ("Show Cc and Bcc", "Hide Cc and Bcc"),
+            ["Keyboard shortcuts"] = ("Show keyboard shortcuts", "Hide keyboard shortcuts"),
+            ["Sent-copy settings"] = ("Show Sent-copy settings", "Hide Sent-copy settings"),
+        };
+        var sections = Descendants(shell.Window).OfType<FormSection>().Where(section => section.Toggle is not null).ToArray();
+        Assert.Equal(expected.Keys.Order(), sections.Select(section => section.GetSemanticNode().Name).Order());
+        foreach (var section in sections)
+        {
+            var (show, hide) = expected[section.GetSemanticNode().Name];
+            section.Collapse();
+            Assert.Equal(show, section.Toggle!.Text);
+            Assert.Equal(show, section.Toggle.GetSemanticNode().Name);
+            section.Expand();
+            Assert.Equal(hide, section.Toggle.Text);
+            Assert.Equal(hide, section.Toggle.GetSemanticNode().Name);
+        }
     }
 
     [Fact]

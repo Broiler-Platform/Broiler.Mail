@@ -22,6 +22,8 @@ public sealed class BoundedScrollArea : UiElement
         _content = content;
         MaximumFraction = maximumFraction;
         _scroll.AccessibleName = name;
+        // A keyboard stop of its own, with a focus ring, while it scrolls and nothing inside can take focus.
+        _scroll.FocusWhenScrollable = true;
         _scroll.AddChild(content);
         AddChild(_scroll);
     }

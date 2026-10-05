@@ -180,6 +180,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             AccessibleName = "Sender and recipients",
             Background = StandardControlPaint.Surface, Foreground = StandardControlPaint.Text,
         };
+        // Frameless so it lines up with the subject; the frame rings it outside the text while it has focus.
+        var detailsFrame = new FocusRingFrame(details);
         var meta = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Role = StandardLabelRole.Muted };
         // The reader's rows of commands are framed strips like the toolbar, and inset their buttons as it does.
         var replyActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36) };
@@ -199,7 +201,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var backRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
         backRow.AddChild(back);
         var headerStack = new StandardPanel { Spacing = 4 };
-        foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, replyActions, previewActions }) headerStack.AddChild(element);
+        foreach (var element in new UiElement[] { backRow, subjectLine, detailsFrame, meta, messageFeedback, messageRetryRow, replyActions, previewActions }) headerStack.AddChild(element);
         // A long subject or many recipients at a large text size scroll within the header, so the
         // message text keeps most of the pane. The header ends between its rows or lines of text, not
         // inside one: while the text keeps a few lines it grows to show the whole header, or the next
@@ -252,7 +254,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
                 double lineHeight = child switch
                 {
                     StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
-                    StandardRichEdit edit => BTextMeasurer.GetLineHeight(edit.Font),
+                    FocusRingFrame { Content: StandardRichEdit edit } => BTextMeasurer.GetLineHeight(edit.Font),
                     _ => 0,
                 };
                 if (height > 0) yield return (top, top + height, buttonRows.Contains(child), lineHeight);
@@ -301,7 +303,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
                 : empty ? "The inbox is empty." : "Select a message to read.";
             string detailText = item is null ? "" : string.Join("\n", HeaderDetails(item, model.Body is { } loaded && loaded.Key == item.Key ? loaded.Composition : null));
             if (detailText != details.GetPlainText()) details.SetPlainText(detailText);
-            details.Visibility = item is null ? UiVisibility.Collapsed : UiVisibility.Visible;
+            detailsFrame.Visibility = item is null ? UiVisibility.Collapsed : UiVisibility.Visible;
             // The date with its time and the separator that ends it is one phrase, and the read state another
             // (non-breaking spaces), so a line, and a header that ends between lines, may end after "Received"
             // or after the separator, but never inside the date ("10:00" above "AM") or on "Unread on", and no

@@ -64,8 +64,14 @@ public sealed class InboxDensityTests
 
             var labels = Descendants(shell.Window).OfType<StandardLabel>().Where(label => label.Target is not null).ToList();
             var choice = Assert.IsType<StandardComboBox>(labels.Single(label => label.Text == "Inbox row spacing").Target);
-            Assert.True(choice.PreferredSize.Height >= BTextMeasurer.GetLineHeight(choice.Font) + 12);
-            Assert.True(choice.ItemHeight >= BTextMeasurer.GetLineHeight(choice.Font) + 8);
+            // Mail leaves the size to the toolkit, which sizes the box and its rows from the font: as tall
+            // as the default box (32) and row (28) leave around a default line, around a line of this font.
+            Assert.Equal(new StandardComboBox().PreferredSize, choice.PreferredSize);
+            double line = BTextMeasurer.GetLineHeight(choice.Font), defaultLine = BTextMeasurer.GetLineHeight(BFontStyle.Default);
+            choice.Measure(new BSize(400, double.PositiveInfinity));
+            Assert.True(choice.DesiredSize.Height >= Math.Max(32, line + 32 - defaultLine) - 0.5, $"The box is {choice.DesiredSize.Height} DIP for a {line} DIP line.");
+            Assert.True(choice.ItemHeight >= Math.Max(28, line + 28 - defaultLine) - 0.5, $"A row is {choice.ItemHeight} DIP for a {line} DIP line.");
+            if (textScale > 1) Assert.True(choice.DesiredSize.Height > 32 && choice.ItemHeight > 28);
             var save = Descendants(shell.Window).OfType<StandardButton>().Single(button => button.Text == "Save settings");
             choice.SelectedIndex = 1;
             Assert.Equal(UiDensity.Comfortable, list.Density); // Editing is not saving.

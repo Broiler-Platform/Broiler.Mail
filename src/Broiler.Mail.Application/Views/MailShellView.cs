@@ -54,15 +54,15 @@ public sealed class MailShellView : IDisposable
         layout.SetDock(footer, UiDock.Bottom);
 
         Inbox = new InboxView(model.Inbox, htmlPreview, dates, model.Compose, model.Settings);
-        var inboxContent = new TabContent(Inbox.CreateContent());
+        var inboxContent = Inbox.CreateContent();
         Navigation.AddTab("inbox", "Inbox", inboxContent);
         var account = new AccountProfileView(model.Account);
-        Navigation.AddTab("account", "Account", new TabContent(account.CreateContent()));
+        Navigation.AddTab("account", "Account", account.CreateContent());
         // The setup checklist ends in the inbox, receiving for the first time.
         account.InboxRequested += (_, _) => { Navigation.SelectTab("inbox"); _ = model.Inbox.ReceiveAsync(); };
-        Navigation.AddTab("settings", "Settings", new TabContent(new SettingsView(model.Settings).CreateContent()));
+        Navigation.AddTab("settings", "Settings", new SettingsView(model.Settings).CreateContent());
         var composer = new ComposerView(model.Composer, model.Inbox, model.Compose);
-        Navigation.AddTab("compose", "Compose", new TabContent(composer.CreateContent()));
+        Navigation.AddTab("compose", "Compose", composer.CreateContent());
         if (model.Account.Profile is null) Navigation.SelectTab("account");
         if (model.Composer.HasDraft || model.Composer.HasLoadError) Navigation.SelectTab("compose");
         void RefreshStatus()

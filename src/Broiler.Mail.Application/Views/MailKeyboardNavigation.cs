@@ -19,7 +19,6 @@ using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
 using Broiler.UI;
 using Broiler.UI.ListView.Standard;
-using Broiler.UI.ScrollView.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
@@ -145,21 +144,10 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     // Broiler-Human:        PENDING
     private void Reveal(UiElement element) => FocusNavigation.Reveal(session, element);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=A40427
-    // Broiler-Falsified-If: a disabled edit, button or combo box is reported focusable
-    // Broiler-Human:        PENDING
-    private static bool Scrolls(StandardScrollView scroll) =>
-        scroll.ExtentSize.Height > scroll.ViewportSize.Height + 0.5 || scroll.ExtentSize.Width > scroll.ViewportSize.Width + 0.5;
-
-    private static bool IsTabStop(UiElement element) => element switch
-    {
-        _ when element.CanFocus && element.IsTabStop => true,
-        // A scroll view of read-only content is a stop so the keyboard can scroll it, but only while it
-        // has something to scroll: a form's short feedback area otherwise took focus invisibly, with
-        // nothing for a screen reader to announce.
-        StandardScrollView scroll => Scrolls(scroll) && !Descendants(scroll).Skip(1).Any(item => item.CanFocus),
-        _ => false,
-    };
+    // A scroll view of read-only content is a stop through StandardScrollView.FocusWhenScrollable, which
+    // Mail sets on its named read-only areas: only while it has something to scroll, so a form's short
+    // feedback area never takes focus invisibly with nothing for a screen reader to announce.
+    private static bool IsTabStop(UiElement element) => element.CanFocus && element.IsTabStop;
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=7860E1
     // Broiler-Falsified-If: an element inside a collapsed panel is returned

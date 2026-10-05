@@ -23,6 +23,10 @@ them as checks this run did not perform.
 #>
 param(
     [string]$Executable,
+    # The Broiler package versions the executable was built from, for the summary, when they are not the ones in
+    # Directory.Packages.props: for example a build with -p:BroilerUiVersion=... overrides. Without it the summary
+    # lists Directory.Packages.props, and says so when -Executable was given rather than published by this run.
+    [string]$Packages,
     [string]$Output,
     [string[]]$Scenarios,
     [string[]]$Sizes = @('640x480', '1100x720', '1920x1080'),
@@ -35,17 +39,29 @@ param(
     # The system text size in percent for every run (--text-scale); 0 uses the system's own setting.
     [ValidateScript({ $_ -eq 0 -or ($_ -ge 100 -and $_ -le 225) })]
     [int]$TextScale = 0,
-    # Render with the theme's high-contrast palette (--contrast high).
+    # Render as if Windows high contrast were on (--contrast): 'high' uses the theme's high-contrast preset, as
+    # earlier acceptance runs did; a Windows 11 contrast theme's name uses the palette its colors give, built as
+    # for the system's own contrast colors. The system's settings are not changed.
+    [ValidateSet('high', 'aquatic', 'desert', 'dusk', 'night-sky')]
+    [string]$Contrast,
+    # The same as -Contrast high.
     [switch]$HighContrast,
     # Also open the selected message (Read message), and check and capture the reader before the Tab walk.
     [switch]$OpenReader
 )
 
 $ErrorActionPreference = 'Stop'
+# ValidateSet takes any letter case; the app takes its names in lower case only.
+if ($Contrast) { $Contrast = $Contrast.ToLowerInvariant() }
+if ($HighContrast) {
+    if ($Contrast -and $Contrast -ne 'high') { throw "-HighContrast is -Contrast high; it cannot be combined with -Contrast $Contrast." }
+    $Contrast = 'high'
+}
 $repository = Split-Path -Parent $PSScriptRoot
 if (!$Output) { $Output = Join-Path $repository ("artifacts/acceptance/" + (Get-Date -Format 'yyyy-MM-dd-HHmm')) }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 
+$publishedHere = !$Executable
 if (!$Executable) {
     # NativeAOT publishing locates the C++ toolchain through vswhere.
     $installer = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer'
@@ -271,10 +287,10 @@ function Save-Screenshot([IntPtr]$handle, [string]$path) {
 function Invoke-Run([string]$scenario, [string]$size, [string]$theme) {
     $name = "$scenario-$size-$theme"
     $stdout = Join-Path $Output "$name.out.txt"; $stderr = Join-Path $Output "$name.err.txt"
-    $result = [ordered]@{ scenario = $scenario; size = $size; theme = $theme; findings = @(); tab = @(); screenshot = "$name.png" }
+    $result = [ordered]@{ scenario = $scenario; size = $size; theme = $theme; contrast = $Contrast; findings = @(); tab = @(); screenshot = "$name.png" }
     $arguments = @('--demo', $scenario, '--theme', $theme, '--size', $size)
     if ($TextScale -gt 0) { $arguments += @('--text-scale', "$TextScale") }
-    if ($HighContrast) { $arguments += @('--contrast', 'high') }
+    if ($Contrast) { $arguments += @('--contrast', $Contrast) }
     $process = Start-Process -FilePath $Executable -PassThru -WindowStyle Normal -RedirectStandardOutput $stdout -RedirectStandardError $stderr `
         -ArgumentList $arguments
     $null = $process.Handle
@@ -381,9 +397,12 @@ $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Output
 # What the results apply to.
 $revision = (git -C $repository rev-parse --short HEAD) 2>$null
 if ((git -C $repository status --porcelain) 2>$null) { $revision = "$revision plus uncommitted changes" }
-$props = [xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Packages.props') -Raw)
-$packages = ($props.Project.PropertyGroup.ChildNodes | Where-Object { $_.Name -like 'Broiler*Version' } |
-    ForEach-Object { "$($_.Name -replace 'Version$', '') $($_.InnerText)" }) -join ', '
+if (!$Packages) {
+    $props = [xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Packages.props') -Raw)
+    $Packages = ($props.Project.PropertyGroup.ChildNodes | Where-Object { $_.Name -like 'Broiler*Version' } |
+        ForEach-Object { "$($_.Name -replace 'Version$', '') $($_.InnerText)" }) -join ', '
+    if (!$publishedHere) { $Packages += ' (Directory.Packages.props; the executable was given, not published by this run)' }
+}
 $os = (Get-CimInstance Win32_OperatingSystem)
 $scales = ($results | Where-Object { $_.dpiScale } | ForEach-Object { $_.dpiScale } | Sort-Object -Unique) -join ', '
 
@@ -391,11 +410,18 @@ $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add("# UI acceptance run, $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
 $lines.Add('')
 $lines.Add("- Revision: $revision")
-$lines.Add("- Packages: $packages")
+$lines.Add("- Packages: $Packages")
 $lines.Add("- Executable: $Executable")
 $lines.Add("- SDK: $(dotnet --version); OS: $($os.Caption) $($os.Version); architecture: $env:PROCESSOR_ARCHITECTURE")
 $textScaleNote = if ($TextScale -gt 0) { "$TextScale % (fixed with --text-scale)" } else { 'system setting' }
-$lines.Add("- Text scale: $textScaleNote; high-contrast palette forced: $([bool]$HighContrast); reader opened: $([bool]$OpenReader)")
+# The contrast themes by the names Windows 11 gives them in Settings.
+$contrastThemes = @{ 'aquatic' = 'Aquatic'; 'desert' = 'Desert'; 'dusk' = 'Dusk'; 'night-sky' = 'Night sky' }
+$contrastNote = switch ($Contrast) {
+    '' { 'no' }
+    'high' { 'the theme''s preset (--contrast high)' }
+    default { "the colors of the Windows 11 contrast theme $($contrastThemes[$Contrast]) (--contrast $Contrast)" }
+}
+$lines.Add("- Text scale: $textScaleNote; high-contrast palette forced: $contrastNote; reader opened: $([bool]$OpenReader)")
 $lines.Add("- Display scale: $scales; monitors: $([Acceptance]::GetSystemMetrics(80)); high contrast on: $([System.Windows.Forms.SystemInformation]::HighContrast)")
 $lines.Add("- Method: published executable, demo fixtures (fixed clock and data), posted keyboard input, UI Automation, PrintWindow screenshots")
 $lines.Add('')

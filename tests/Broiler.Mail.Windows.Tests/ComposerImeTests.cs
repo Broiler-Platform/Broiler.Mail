@@ -56,7 +56,8 @@ public sealed class ComposerImeTests
             fixture.Layout();
             AssertComposing(fixture, body, "にほん", "Hi ");
 
-            // The IME converts, then commits. Windows follows the commit with a WM_CHAR copy of each character.
+            // The IME converts, then commits. Hosting draws the composition inline and keeps the commit from
+            // DefWindowProc, so Windows makes no WM_CHAR copies of it: the commit alone types the text.
             ime.Composition = "日本";
             fixture.Post(WmImeComposition, 0, (nint)GcsCompStr);
             fixture.Settle();
@@ -64,8 +65,6 @@ public sealed class ComposerImeTests
             ime.Composition = "";
             ime.Result = "日本";
             fixture.Post(WmImeComposition, 0, (nint)GcsResultStr);
-            fixture.Post(WmChar, '日', 1);
-            fixture.Post(WmChar, '本', 1);
             fixture.Post(WmImeEndComposition, 0, 0);
             fixture.Type("!");
 
@@ -108,6 +107,32 @@ public sealed class ComposerImeTests
             Assert.Equal("Hi!", fixture.Ui(() => composer.PlainText));
         }
         finally { store.Release(); }
+    }
+
+    [Fact]
+    public void ACharacterTypedRightAfterACommitIsTypedEvenWhenItMatchesTheCommit()
+    {
+        var store = new GatedDraftStore();
+        store.Release();
+        using var fixture = StartWith(store);
+        var ime = new ImeStrings();
+        var (body, composer) = StartTyping(fixture, ime);
+        Assert.True(fixture.Ui(() => fixture.Window.InputBridge!.DrawsCompositionInline));
+        fixture.Type("Hi ");
+
+        fixture.Post(WmImeStartComposition, 0, 0);
+        ime.Composition = "日本";
+        fixture.Post(WmImeComposition, 0, (nint)GcsCompStr);
+        ime.Composition = "";
+        ime.Result = "日本";
+        fixture.Post(WmImeComposition, 0, (nint)GcsResultStr);
+        fixture.Post(WmImeEndComposition, 0, 0);
+        // The next key, at once and the same as the commit's first character: no copy is expected, so none is dropped.
+        fixture.Post(WmChar, '日', 1);
+        fixture.Settle();
+
+        Assert.Equal("Hi 日本日", fixture.Ui(() => body.GetPlainText()));
+        Assert.Equal("Hi 日本日", fixture.Ui(() => composer.PlainText));
     }
 
     private static HiddenMailWindow StartWith(IDraftStore store) => HiddenMailWindow.Start(() =>

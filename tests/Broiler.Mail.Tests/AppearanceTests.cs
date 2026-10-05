@@ -1,5 +1,9 @@
+using Broiler.Graphics.Color;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Input;
+using Broiler.Input.Keyboard;
+using Broiler.Input.Mouse;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
@@ -44,6 +48,192 @@ public sealed class AppearanceTests
         Assert.True(tokens.ReducedMotion);
         Assert.True(AppearancePolicy.Resolve(preference, LightSystem with { ReducedMotion = true }).ReducedMotion);
     }
+
+    [Theory]
+    [InlineData(AppTheme.Light)]
+    [InlineData(AppTheme.Dark)]
+    [InlineData(AppTheme.System)]
+    public void SystemHighContrastUsesTheSystemsOwnPaletteWhereTheHostHasOne(AppTheme preference)
+    {
+        var system = DarkSystem with { ContrastPreference = UiContrastPreference.More, TextScale = 1.5, ReducedMotion = true };
+        // A palette shaped like Hosting's: the selection's text differs from the window text.
+        var palette = StandardThemeTokens.HighContrastDark with { Name = "HighContrastSystem", SelectionText = BColor.FromArgb(0xFF, 0x26, 0x3B, 0x50) };
+        UiSystemSettings? asked = null;
+
+        var tokens = AppearancePolicy.Resolve(preference, system, settings => { asked = settings; return palette; });
+
+        // It wins over the saved choice, and is built for the whole of the system's settings (text scale and motion).
+        Assert.Same(palette, tokens);
+        Assert.Equal(system, asked);
+        // A host that cannot read its colors keeps the theme's preset, as before.
+        Assert.Equal(StandardThemeTokens.Select(system), AppearancePolicy.Resolve(preference, system, _ => null));
+        // Without high contrast the system palette is not even asked for.
+        Assert.Equal(AppearancePolicy.Resolve(preference, LightSystem),
+            AppearancePolicy.Resolve(preference, LightSystem, _ => throw new InvalidOperationException("Asked without high contrast.")));
+    }
+
+    [Fact]
+    public void TheLiveShellTakesTheSystemContrastPaletteAndFollowsItsColors()
+    {
+        using var directory = new TestDirectory();
+        var dispatcher = new TestQueueDispatcher();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        var host = new Host(LightSystem);
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+        session.AddRoot(shell.Window);
+        try
+        {
+            var first = StandardThemeTokens.HighContrastDark with { Name = "HighContrastSystem", SelectionText = BColor.FromArgb(0xFF, 0x26, 0x3B, 0x50) };
+            var system = first;
+            using var appearance = new AppearanceController(session, model.Settings, host, _ => system);
+            Assert.Equal(StandardThemeTokens.Light, appearance.Current);
+
+            host.Change(LightSystem with { ContrastPreference = UiContrastPreference.More });
+            Assert.Same(first, appearance.Current);
+            Assert.Same(first, StandardControlPaint.GetTheme(session));
+            var list = Descendants(shell.Window).OfType<Broiler.UI.ListView.Standard.StandardListView>().Single();
+            Assert.Equal(first.SelectionText, list.SelectedForeground);
+
+            // Another contrast theme changes only the colors; the host asks for the palette again.
+            var second = first with { Surface = BColor.FromArgb(0xFF, 0x2D, 0x32, 0x36), SelectionText = BColor.FromArgb(0xFF, 0x21, 0x2D, 0x3B) };
+            system = second;
+            appearance.Apply();
+            Assert.Same(second, appearance.Current);
+            Assert.Equal(second.SelectionText, list.SelectedForeground);
+        }
+        finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
+    }
+
+    /// <summary>
+    /// A button strokes its focus ring inside the fill it draws in its state: the accent on a default button, the
+    /// state fill while the pointer rests on a secondary one, the pressed fills while Space holds either down. Where
+    /// the palette's ring does not stand out from that fill (3:1), Broiler.UI draws it in the label color drawn on it
+    /// (ADR 0032), so keyboard focus on Save account (and Send, Save settings) and on Test connection stays visible in
+    /// every state; on the window color a button keeps the palette's ring.
+    /// </summary>
+    [Theory]
+    [InlineData("Light")]
+    [InlineData("Dark")]
+    [InlineData("HighContrastLight")]
+    [InlineData("HighContrastDark")]
+    [InlineData("SystemDusk")]
+    [InlineData("SystemDesert")]
+    [InlineData("RingStandsOut")]
+    public void AKeyboardFocusedButtonShowsItsRingOnTheFillOfEachState(string name)
+    {
+        var palette = Palette(name);
+        using var directory = new TestDirectory();
+        var dispatcher = new TestQueueDispatcher();
+        var receiver = new TestMailReceiver();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, TestDirectory.Profile(), null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        var host = new Host(LightSystem with { ContrastPreference = UiContrastPreference.More });
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+        session.AddRoot(shell.Window);
+        try
+        {
+            using var appearance = new AppearanceController(session, model.Settings, host, _ => palette);
+            Assert.Same(palette, appearance.Current);
+            shell.Navigation.SelectTab("account");
+            var account = shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;
+            var save = Descendants(account).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Save account");
+            var test = Descendants(account).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Test connection");
+            Assert.True(save.IsDefault && save.IsEnabled && !test.IsDefault && test.IsEnabled);
+            session.RenderFrame();
+
+            foreach (var (button, fills, labels) in new[]
+            {
+                (save, new[] { palette.Accent, palette.AccentHover, palette.AccentPressed }, new[] { palette.OnAccent, palette.OnAccent, palette.OnAccent }),
+                (test, new[] { palette.Surface, palette.StateFill, palette.SurfaceDisabled }, new[] { palette.Text, palette.StateText, palette.Text }),
+            })
+            {
+                // Pressed last: the test never lets go of Space, which would save the account or start a test.
+                foreach (var state in new[] { ButtonState.Rest, ButtonState.Hovered, ButtonState.Pressed })
+                {
+                    var drawn = Drawn(session, button, state);
+                    string where = $"{name}, {button.Text}, {state}";
+                    Assert.True(drawn.Fill == fills[(int)state], $"{where}: fill {drawn.Fill}, expected {fills[(int)state]}");
+                    Assert.True(drawn.Label == labels[(int)state], $"{where}: label {drawn.Label}, expected {labels[(int)state]}");
+                    // The palette's ring where it stands out from the fill, the label's color where it does not.
+                    var expected = StandardContrast.Ratio(palette.FocusRing, drawn.Fill) >= StandardContrast.AaLargeOrUi ? palette.FocusRing : drawn.Label;
+                    Assert.True(drawn.Ring == expected, $"{where}: ring {drawn.Ring}, expected {expected}");
+                    Assert.True(StandardContrast.Ratio(drawn.Ring, drawn.Fill) >= StandardContrast.AaLargeOrUi, $"{where}: ring {drawn.Ring} on {drawn.Fill}");
+                    if (state == ButtonState.Rest)
+                        // A default button at rest takes its label's color unless the palette's ring stands out on the
+                        // accent; a button on the window color keeps the palette's ring.
+                        Assert.Equal(button == test || name == "RingStandsOut" ? palette.FocusRing : palette.OnAccent, drawn.Ring);
+                }
+            }
+        }
+        finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
+    }
+
+    private enum ButtonState { Rest, Hovered, Pressed }
+
+    /// <summary>
+    /// Puts <paramref name="button"/> into <paramref name="state"/> with its keyboard focus shown, as a user does: a key
+    /// press shows the focus (hovered: while the pointer rests on the button), or Space is held down. Returns the fill,
+    /// label and focus ring it then draws, read from a rendered frame.
+    /// </summary>
+    private static (BColor Fill, BColor Label, BColor Ring) Drawn(UiSession session, Broiler.UI.Button.Standard.StandardButton button, ButtonState state)
+    {
+        if (state == ButtonState.Hovered)
+            session.DispatchInput(UiInputEvent.FromMouseMove(new MouseMoveEvent(Header(),
+                InputPoint.ClientDeviceIndependentPixels(button.Bounds.Left + (button.Bounds.Width / 2), button.Bounds.Top + (button.Bounds.Height / 2)),
+                MouseButtons.None, InputEventSource.Synthetic)));
+        session.SetFocus(button);
+        // Shift does nothing on a button but counts as keyboard use; Space holds the button down until it is let go.
+        int key = state == ButtonState.Pressed ? 0x20 : 0x10;
+        session.DispatchInput(UiInputEvent.FromKeyboardKey(new KeyboardKeyEvent(Header(), KeyboardKey.FromName("VirtualKey:" + key),
+            KeyboardKeyTransition.Down, KeyboardModifierState.None, key, 0, 0, false, false, Source: InputEventSource.Synthetic)));
+        Assert.True(session.IsFocusVisible);
+        Assert.Equal(state == ButtonState.Pressed, button.IsPressed);
+
+        var commands = session.RenderFrame().Commands.ToArray();
+        var fill = commands.OfType<BRenderCommand.FillRoundedRect>().Last(command => command.Rect == button.Bounds).Color;
+        var label = commands.OfType<BRenderCommand.DrawText>().Last(command => command.Text.Text == button.Text).Text.Color;
+        var ring = commands.OfType<BRenderCommand.StrokeRoundedRect>().Single(command => command.Rect == StandardControlPaint.Inset(button.Bounds, 2)).Color;
+        return (fill, label, ring);
+    }
+
+    private static InputEventHeader Header() => new(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1);
+
+    /// <summary>The palettes the button rings are checked in; the system ones are shaped like Hosting's.</summary>
+    private static StandardThemeTokens Palette(string name) => name switch
+    {
+        "Light" => StandardThemeTokens.Light,
+        "Dark" => StandardThemeTokens.Dark,
+        "HighContrastLight" => StandardThemeTokens.HighContrastLight,
+        "HighContrastDark" => StandardThemeTokens.HighContrastDark,
+        // Windows' Dusk and Desert contrast themes as WindowsTheme.CreateHighContrastTheme maps them: the accent,
+        // the states and the focus ring are all Highlight.
+        "SystemDusk" => SystemPalette(StandardThemeTokens.HighContrastDark, BColor.FromArgb(0xFF, 0x2D, 0x32, 0x36), BColor.White,
+            BColor.FromArgb(0xFF, 0xA1, 0xBF, 0xDE), BColor.FromArgb(0xFF, 0x21, 0x2D, 0x3B)),
+        "SystemDesert" => SystemPalette(StandardThemeTokens.HighContrastLight, BColor.FromArgb(0xFF, 0xFF, 0xFA, 0xEF), BColor.FromArgb(0xFF, 0x3D, 0x3D, 0x3D),
+            BColor.FromArgb(0xFF, 0x90, 0x39, 0x09), BColor.FromArgb(0xFF, 0xFF, 0xF5, 0xE3)),
+        "RingStandsOut" => StandardThemeTokens.Light with { FocusRing = BColor.Black, AccentHover = StandardThemeTokens.Light.Accent, AccentPressed = StandardThemeTokens.Light.Accent },
+        _ => throw new ArgumentOutOfRangeException(nameof(name)),
+    };
+
+    private static StandardThemeTokens SystemPalette(StandardThemeTokens preset, BColor window, BColor text, BColor highlight, BColor highlightText) => preset with
+    {
+        Name = "HighContrastSystem", Surface = window, SurfaceAlt = window, SurfaceDisabled = window, Text = text, TextMuted = text,
+        Border = text, BorderStrong = text, Accent = highlight, AccentHover = highlight, AccentPressed = highlight, AccentSoft = highlight,
+        OnAccent = highlightText, SelectionText = highlightText, SelectionTextMuted = highlightText,
+        StateFill = highlight, StateText = highlightText, FocusRing = highlight,
+    };
 
     [Fact]
     public async Task SavedPreferenceAndSystemChangesRethemeTheLiveShellWithoutLosingText()

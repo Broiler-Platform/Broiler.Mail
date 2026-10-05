@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.Text;
 using Broiler.Input.Mouse;
@@ -199,6 +200,66 @@ public sealed class NativeInputFidelityTests
         Assert.Equal("😀a🎉b", fixture.Ui(() => fixture.Window.Model.Composer.To));
         Assert.Equal("😀a🎉b", fixture.Ui(() => fixture.Window.Model.Composer.PlainText));
     }
+
+    /// <summary>
+    /// Alt+F and Alt+Space arrive as WM_SYSCHAR. Hosting preview.7 passes them on to the window procedure as menu
+    /// keys (SC_KEYMENU) instead of typing them, so the composer body and the draft stay as they were; a WM_CHAR
+    /// still types. The test keeps the menu request from both windows, so no window menu opens and nothing beeps.
+    /// </summary>
+    [Fact]
+    public void AnAltChordTypesNothingIntoTheComposerBody()
+    {
+        using var fixture = HiddenMailWindow.Start();
+        var (_, body) = StartDraft(fixture);
+        fixture.Ui(() => fixture.Window.Session.SetFocus(body));
+        fixture.Type("Hi");
+        var menuKeys = new List<nint>();
+        SubclassProc keepMenuKeys = (window, message, wParam, lParam, id, data) =>
+        {
+            // WM_SYSCOMMAND with SC_KEYMENU: the low four bits are Windows' own.
+            if (message == WmSysCommand && (wParam & 0xFFF0) == ScKeyMenu) { menuKeys.Add(lParam); return 0; }
+            return DefSubclassProc(window, message, wParam, lParam);
+        };
+        Assert.True(fixture.Ui(() => SetWindowSubclass(fixture.Frame, keepMenuKeys, 0x4D41, 0) && SetWindowSubclass(fixture.Render, keepMenuKeys, 0x4D41, 0)));
+        try
+        {
+            fixture.Post(WmSysChar, 'f', AltDownContext);
+            fixture.Post(WmSysChar, ' ', AltDownContext);
+            fixture.Settle();
+
+            Assert.Equal("Hi", fixture.Ui(() => body.GetPlainText()));
+            Assert.Equal("Hi", fixture.Ui(() => fixture.Window.Model.Composer.PlainText));
+            // Both went on to the window procedure, which asked for the keyboard menu.
+            Assert.Equal(new nint[] { 'f', ' ' }, fixture.Ui(() => menuKeys.ToArray()));
+
+            fixture.Type("!");
+            Assert.Equal("Hi!", fixture.Ui(() => body.GetPlainText()));
+        }
+        finally
+        {
+            fixture.Ui(() => RemoveWindowSubclass(fixture.Frame, keepMenuKeys, 0x4D41) & RemoveWindowSubclass(fixture.Render, keepMenuKeys, 0x4D41));
+            GC.KeepAlive(keepMenuKeys);
+        }
+    }
+
+    private const uint WmSysChar = 0x0106;
+    private const uint WmSysCommand = 0x0112;
+    private const nint ScKeyMenu = 0xF100;
+    // The context code of a key message: repeat count 1, and bit 29 set while Alt is down.
+    private const nint AltDownContext = 0x20000001;
+
+    private delegate nint SubclassProc(nint window, uint message, nint wParam, nint lParam, nuint id, nuint data);
+
+    [DllImport("comctl32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowSubclass(nint window, SubclassProc procedure, nuint id, nuint data);
+
+    [DllImport("comctl32.dll")]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool RemoveWindowSubclass(nint window, SubclassProc procedure, nuint id);
+
+    [DllImport("comctl32.dll")]
+    private static extern nint DefSubclassProc(nint window, uint message, nint wParam, nint lParam);
 
     private static HiddenMailWindow OpenFixture(DemoScenario scenario)
     {

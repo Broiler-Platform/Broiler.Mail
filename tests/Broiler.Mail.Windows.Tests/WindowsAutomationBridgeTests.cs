@@ -4,6 +4,7 @@ using System.Linq;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Hosting.Windows.Accessibility;
+using Broiler.Native.Windows.Accessibility;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.ComboBox;
@@ -397,7 +398,12 @@ public sealed class WindowsAutomationBridgeTests
         session.SetFocus(edit);
         var focusedPeer = bridge.GetFocus();
         Assert.NotNull(focusedPeer);
-        Assert.Equal((int)edit.SemanticId, focusedPeer.GetRuntimeId()?[2]);
+        Assert.Same(bridge.GetOrCreatePeer(edit), focusedPeer);
+        // A runtime ID is [UiaAppendRuntimeId (3), n]: UIA prefixes the window's part, so clients read [42, hwnd, 4, n].
+        var runtimeId = focusedPeer.GetRuntimeId();
+        Assert.NotNull(runtimeId);
+        Assert.Equal(2, runtimeId.Length);
+        Assert.Equal(3, runtimeId[0]);
 
         // Focus list view and select item 1
         listView.SelectIndex(1);

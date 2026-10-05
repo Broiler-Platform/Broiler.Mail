@@ -18,7 +18,8 @@ request yet), stacked on `main`
   runs used `4c36950`, and `12ceded` adds one composer fix (UI-08), checked with the full suite and
   a native recheck of the composer fixtures.
 - **Adoption branch:** `claude/ui-09-upstream-adoption` (code verified at `e870135`, 38 commits
-  above `4c36950`; it will be rebased onto `12ceded`). It pins Broiler.UI 0.1.0-preview.18,
+  above `4c36950`, since rebased onto the acceptance branch; see the
+  [adoption record](ui-upstream-adoption-2026-10-05.md)). It pins Broiler.UI 0.1.0-preview.18,
   Broiler.Hosting 0.1.0-preview.7, and Broiler.Native 0.1.0-preview.7. Native preview.7 is on
   NuGet; UI preview.18 and Hosting preview.7 are not published yet. The branch was verified only
   with local packs: Broiler.UI `0.1.0-preview.18-local.7` from its local

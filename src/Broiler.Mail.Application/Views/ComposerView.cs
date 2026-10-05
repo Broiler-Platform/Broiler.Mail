@@ -78,7 +78,15 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var to = Field("name@example.com, another@example.com");
         var toField = new FormField("To", to);
         panel.Add(toField);
-        var copies = new FormSection("Cc and Bcc", "", collapsible: true, expanded: false);
+        var copies = new FormSection("Cc and Bcc", "", collapsible: true, expanded: false)
+        {
+            // Abbreviations keep their capitals in the sentence-case toggle.
+            ShowText = "Show Cc and Bcc", HideText = "Hide Cc and Bcc",
+        };
+        // The toggle names this content as the part it controls; a screen reader following it lands on a name. The
+        // section around it is already a group called "Cc and Bcc", so the content says what it holds instead of
+        // repeating that on the way into a field.
+        copies.Content.AccessibleName = "Cc and Bcc fields";
         panel.Add(copies);
         var cc = Field("Visible to all recipients");
         var bcc = Field("Hidden from other recipients");
@@ -160,8 +168,9 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
             ShowProblemsFirst();
             // A refused recipient field carries the error itself, as the account form's fields do: it shows the error
-            // and reports Invalid, with the error in its name. As there, the field (Cc and Bcc shown first) takes focus
-            // and is scrolled into view, but only while the user is still on the form.
+            // and reports Invalid with the error in its name, and its edit, which takes focus, reports Invalid with a
+            // description that starts with the error. As there, the field (Cc and Bcc shown first) takes focus and is
+            // scrolled into view, but only while the user is still on the form.
             foreach (var (name, field) in recipientFields) field.SetError(model.InvalidField == name ? model.Status : null);
             if (model.InvalidField is { } refused && refused != markedField
                 && surface.Session is { } revealSession && FocusNavigation.MayTakeFocus(revealSession, surface))

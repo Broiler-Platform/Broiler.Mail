@@ -32,8 +32,26 @@ internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandl
     private readonly WindowsClipboard _clipboard = new(() => window.NativeHandle);
     private readonly WindowsTextInput _textInput = new(inputHandle, () => window.DpiScale);
     private UiSystemSettings _settings = MailSystemSettings.Query();
+    private UiSession? _session;
 
     public UiSystemSettings Settings => _settings;
+
+    /// <summary>
+    /// Lets the IME follow <paramref name="session"/>'s focus: off while the focus draws no composition, such as
+    /// a list or a button, which publish no caret. The native window may not exist yet; <see cref="FollowFocus"/>
+    /// applies the focus set before it did.
+    /// </summary>
+    public void TrackFocus(UiSession session)
+    {
+        _session = session;
+        session.SemanticChanged += (_, e) =>
+        {
+            if (e.Change == UiSemanticChangeKind.FocusChanged) FollowFocus();
+        };
+    }
+
+    /// <summary>Turns the IME on or off for the tracked session's current focus.</summary>
+    public void FollowFocus() => _textInput.FollowFocus(_session?.FocusedElement);
 
     public event EventHandler<UiSystemSettingsChangedEventArgs>? SettingsChanged;
 

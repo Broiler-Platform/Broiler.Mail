@@ -58,13 +58,17 @@ internal static class ConfigurationForm
     }
 
     /// <summary>
-    /// Names a form's feedback area. When long feedback scrolls, the area is a tab stop so the keyboard
-    /// can scroll it, and a screen reader then announces this name instead of nothing.
+    /// Names a form's feedback area and makes it a keyboard stop of its own while long feedback scrolls
+    /// (<see cref="Broiler.UI.ScrollView.Standard.StandardScrollView.FocusWhenScrollable"/>), so the keyboard
+    /// can scroll it, it shows a focus ring, and a screen reader announces this name instead of nothing.
     /// </summary>
     public static FormSurface NameFeedback(FormSurface surface)
     {
         if (surface.Children.OfType<FormViewport>().LastOrDefault() is { } feedback && feedback != surface.Content)
+        {
             feedback.Scroll.AccessibleName = "Status and errors";
+            feedback.Scroll.FocusWhenScrollable = true;
+        }
         return surface;
     }
 

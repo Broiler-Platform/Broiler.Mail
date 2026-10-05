@@ -1406,7 +1406,7 @@ public sealed class ResponsiveInboxTests
             double line = row switch
             {
                 StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
-                StandardRichEdit edit => BTextMeasurer.GetLineHeight(edit.Font),
+                FocusRingFrame { Content: StandardRichEdit edit } => BTextMeasurer.GetLineHeight(edit.Font),
                 _ => 0,
             };
             // The header ends between lines at the line height it is given, which is the text's.

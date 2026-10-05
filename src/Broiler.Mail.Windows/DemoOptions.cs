@@ -1,4 +1,5 @@
 using System.Globalization;
+using Broiler.Hosting.Windows;
 using Broiler.Mail.Core.Settings;
 using Broiler.Mail.Windows.Measurement;
 
@@ -17,7 +18,7 @@ internal enum DemoServerChange { None, Vanish, Outside, Renumber }
 /// <summary>Interactive: plain <c>--demo</c>, where the user drives the synthetic inbox. Otherwise the named fixture is prepared on start.</summary>
 internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTheme.System, int Width = 1100, int Height = 720, bool Interactive = false,
     MeasureWorkload? Measure = null, string? Report = null, int? TextScalePercent = null, bool HighContrast = false,
-    DemoServerChange ServerChange = DemoServerChange.None, int? ScalePercent = null, bool Detail = false)
+    DemoServerChange ServerChange = DemoServerChange.None, int? ScalePercent = null, bool Detail = false, string? ContrastTheme = null)
 {
     internal static IReadOnlyList<(string Name, DemoScenario Scenario, string Description)> Gallery { get; } = Array.AsReadOnly(new[]
     {
@@ -45,11 +46,28 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("new-mail", DemoScenario.NewMail, "Three new messages arrived above the open one, which keeps its body and is now read; each receive adds more"),
     });
 
-    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--text-scale <100-225>] [--contrast high] [--measure <workload> [--report <file.json>] [--detail]] [--scale <100-300>] [--server-change vanish|outside|renumber]";
+    internal const string Usage = "--demo [<scenario>] [--theme light|dark|system] [--size <width>x<height>] [--text-scale <100-225>] [--contrast high|aquatic|desert|dusk|night-sky] [--measure <workload> [--report <file.json>] [--detail]] [--scale <100-300>] [--server-change vanish|outside|renumber]";
+
+    /// <summary>
+    /// The Windows 11 contrast themes --contrast can simulate, by the name the option takes. Their palette is
+    /// built as for the system's own contrast colors; --contrast high keeps the theme's preset instead.
+    /// </summary>
+    internal static IReadOnlyList<(string Name, WindowsSystemColors Colors)> ContrastThemes { get; } = Array.AsReadOnly(new[]
+    {
+        ("aquatic", WindowsSystemColors.Aquatic),
+        ("desert", WindowsSystemColors.Desert),
+        ("dusk", WindowsSystemColors.Dusk),
+        ("night-sky", WindowsSystemColors.NightSky),
+    });
+
+    /// <summary>The colors of the simulated contrast theme, or null for none or for the preset (--contrast high).</summary>
+    internal WindowsSystemColors? ContrastColors =>
+        ContrastThemes.Where(theme => theme.Name == ContrastTheme).Select(theme => (WindowsSystemColors?)theme.Colors).FirstOrDefault();
 
     /// <summary>Options for acceptance scripts only. They simulate conditions; they are not settings a user would choose.</summary>
     internal static IReadOnlyList<(string Name, string Description)> AcceptanceOptions { get; } = Array.AsReadOnly(new[]
     {
+        ("--contrast high|aquatic|desert|dusk|night-sky", "Renders as if Windows high contrast were on; the system's settings are unchanged. high uses the theme's own high-contrast preset. aquatic, desert, dusk and night-sky use the palette built from the colors of the Windows 11 contrast theme of that name (Aquatic, Desert, Dusk, Night sky), as it is built from the system's own contrast colors."),
         ("--scale <100-300>", "Renders the main window at a simulated display scale in percent, named in the window title, at the requested size in DIPs even if that is larger than the screen. HTML previews keep Windows' own scale, except the one a long-html or preview-zoom measurement opens; Windows' own scale is unchanged."),
         ("--server-change vanish|outside|renumber", "With new-mail only: the next receive deletes the open message on the server, pushes it below the newest page, or renumbers the inbox."),
     });
@@ -112,6 +130,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         string? report = null;
         int? textScale = null;
         bool highContrast = false;
+        string? contrastTheme = null;
         var serverChange = DemoServerChange.None;
         int? scale = null;
         bool detail = false;
@@ -153,8 +172,14 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
                 if (!int.TryParse(value, NumberStyles.None, CultureInfo.InvariantCulture, out int percent) || percent is < 100 or > 225) return false;
                 textScale = percent;
             }
-            // The theme's high-contrast palette, as an active Windows contrast theme selects it.
-            else if (flag == "--contrast" && value == "high") highContrast = true;
+            // High contrast as if a Windows contrast theme were on: the theme's high-contrast preset (high), or the
+            // palette a Windows 11 contrast theme's colors give, built as for the system's own contrast colors.
+            else if (flag == "--contrast")
+            {
+                if (value != "high" && !ContrastThemes.Any(theme => theme.Name == value)) return false;
+                highContrast = true;
+                contrastTheme = value == "high" ? null : value;
+            }
             // A render scale in percent for checks on a single monitor; Windows' own scale is unchanged.
             else if (flag == "--scale")
             {
@@ -177,7 +202,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         if (measure is { } workload && MeasuresPreview(workload) && scenario != DemoScenario.LongHtml) return false;
         // Only the new-mail fixture has a server that changes between receives.
         if (serverChange != DemoServerChange.None && scenario != DemoScenario.NewMail) return false;
-        options = new(scenario, theme, width, height, interactive, measure, report, textScale, highContrast, serverChange, scale, detail);
+        options = new(scenario, theme, width, height, interactive, measure, report, textScale, highContrast, serverChange, scale, detail, contrastTheme);
         return true;
     }
 }

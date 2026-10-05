@@ -12,10 +12,16 @@ namespace Broiler.Mail.Application.Views;
 /// </summary>
 public static class AppearancePolicy
 {
-    public static StandardThemeTokens Resolve(AppTheme preference, UiSystemSettings system)
+    /// <param name="highContrast">
+    /// The palette of the system's own contrast colors for the given settings, or null where the host
+    /// has none. A platform host supplies it (on Windows, the user's contrast theme); without it, or
+    /// when it returns null, high contrast uses the theme's high-contrast preset.
+    /// </param>
+    public static StandardThemeTokens Resolve(AppTheme preference, UiSystemSettings system,
+        Func<UiSystemSettings, StandardThemeTokens?>? highContrast = null)
     {
         if (system.ContrastPreference == UiContrastPreference.More)
-            return StandardThemeTokens.Select(system);
+            return highContrast?.Invoke(system) ?? StandardThemeTokens.Select(system);
         bool dark = preference switch
         {
             AppTheme.Dark => true,

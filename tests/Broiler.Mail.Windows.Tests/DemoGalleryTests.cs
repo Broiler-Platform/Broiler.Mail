@@ -127,6 +127,57 @@ public sealed class DemoGalleryTests
         Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--contrast", "low"], out _));
     }
 
+    [Theory]
+    [InlineData("high", null)]
+    [InlineData("aquatic", "aquatic")]
+    [InlineData("desert", "desert")]
+    [InlineData("dusk", "dusk")]
+    [InlineData("night-sky", "night-sky")]
+    public void Contrast_Option_Picks_The_Preset_Or_A_Windows_Contrast_Theme(string value, string? theme)
+    {
+        Assert.True(DemoOptions.TryParse(["--demo", "inbox", "--contrast", value], out var options));
+        Assert.True(options!.HighContrast);
+        Assert.Equal(theme, options.ContrastTheme);
+        Broiler.Hosting.Windows.WindowsSystemColors? expected = value switch
+        {
+            "aquatic" => Broiler.Hosting.Windows.WindowsSystemColors.Aquatic,
+            "desert" => Broiler.Hosting.Windows.WindowsSystemColors.Desert,
+            "dusk" => Broiler.Hosting.Windows.WindowsSystemColors.Dusk,
+            "night-sky" => Broiler.Hosting.Windows.WindowsSystemColors.NightSky,
+            _ => null,
+        };
+        Assert.Equal(expected, options.ContrastColors);
+        // Given once, and only with a known name.
+        Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--contrast", value, "--contrast", "high"], out _));
+        Assert.True(DemoOptions.TryParse(["--demo", "inbox"], out var none));
+        Assert.False(none!.HighContrast);
+        Assert.Null(none.ContrastColors);
+        foreach (var invalid in new[] { "Dusk", "nightsky", "aquatic ", "" })
+            Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--contrast", invalid], out _));
+    }
+
+    /// <summary>
+    /// --help explains each --contrast value among the acceptance-only options: high is the theme's preset, the
+    /// others simulate the Windows 11 contrast theme they name, which Windows calls Aquatic, Desert, Dusk and Night sky.
+    /// </summary>
+    [Fact]
+    public void Help_Explains_Every_Contrast_Value()
+    {
+        using var output = new System.IO.StringWriter();
+        Program.WriteHelp(output);
+        string[] lines = output.ToString().Split(Environment.NewLine);
+        int acceptance = Array.FindIndex(lines, line => line.StartsWith("Acceptance-only", StringComparison.Ordinal));
+        Assert.True(acceptance >= 0);
+        string option = "--contrast high|" + string.Join("|", DemoOptions.ContrastThemes.Select(theme => theme.Name));
+        Assert.Contains(option, DemoOptions.Usage, StringComparison.Ordinal);
+        int index = Array.FindIndex(lines, acceptance, line => line.Trim() == option);
+        Assert.True(index > acceptance, $"No '{option}' among the acceptance-only options.");
+        string description = lines[index + 1];
+        Assert.Contains("high uses the theme's own high-contrast preset", description, StringComparison.Ordinal);
+        foreach (string name in new[] { "Aquatic", "Desert", "Dusk", "Night sky" })
+            Assert.Contains(name, description, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Every_Gallery_Scenario_Has_One_Unique_Name()
     {
@@ -315,7 +366,7 @@ public sealed class DemoGalleryTests
                         double line = row switch
                         {
                             StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
-                            StandardRichEdit edit => BTextMeasurer.GetLineHeight(edit.Font),
+                            FocusRingFrame { Content: StandardRichEdit edit } => BTextMeasurer.GetLineHeight(edit.Font),
                             _ => 0,
                         };
                         double lines = (shown.Bottom - row.Bounds.Top) / line;
@@ -647,9 +698,11 @@ public sealed class DemoGalleryTests
             // The error is the first line below the buttons, above the send hint.
             var status = Descendants(Tab(shell, "compose")).OfType<InlineFeedback>().First(line => line.Message.Length > 0);
             Assert.Equal((FeedbackKind.Error, composer.Status), (status.Kind, status.Message));
-            // The To field carries the error too, and reports Invalid with it.
+            // The To field carries the error too, so a screen reader on the field hears it.
             var to = Descendants(Tab(shell, "compose")).OfType<FormField>().Single(field => field.Label.Text == "To");
             Assert.Equal(composer.Status, to.Error);
+            Assert.True(to.Control.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
+            Assert.StartsWith("Error: " + composer.Status, to.Control.GetSemanticNode().Description);
             Assert.True(to.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
             foreach (var action in new[] { "Check draft", "Save draft", "Discard draft" })
                 Assert.True(IsAvailable(Button(shell, "compose", action)), action);

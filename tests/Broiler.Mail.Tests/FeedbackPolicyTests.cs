@@ -365,7 +365,49 @@ public sealed class FeedbackPolicyTests
         var last = MailKeyboardNavigation.TabStops(content)[^1];
         Assert.IsType<Broiler.UI.ScrollView.Standard.StandardScrollView>(last);
         Assert.Equal("Status and errors", last.GetSemanticNode().Name);
+        // The toolkit's own stop (FocusWhenScrollable): focusable for UI Automation too, and ringed while focused.
+        Assert.True(last.CanFocus);
+        session.SetFocus(last);
+        var theme = StandardControlPaint.GetTheme(last);
+        Assert.Contains(session.RenderFrame().Commands.OfType<BRenderCommand.StrokeRect>(), stroke =>
+            stroke.Rect == StandardControlPaint.Inset(last.Bounds, theme.FocusRingOffset) && stroke.Color == theme.FocusRing && stroke.Thickness == theme.FocusRingThickness);
         content.Dispose();
+    }
+
+    /// <summary>
+    /// The account form's 'Status and errors' area is the last stop of its page. When it stops scrolling while it has
+    /// focus, Broiler.UI hands the focus on (ADR 0032); with nothing after it on the page, that is the action before
+    /// it, not the tab strip or a control of a hidden tab.
+    /// </summary>
+    [Fact]
+    public async Task AFocusedStatusAreaThatStopsScrollingHandsFocusToItsOwnForm()
+    {
+        var tester = new TestOutgoingTester();
+        using var fixture = Fixture.Open(outgoing: tester, width: 640, height: 480);
+        var account = fixture.Model.Account;
+        fixture.Model.Composer.StartNew();
+        fixture.Shell.Navigation.SelectTab("account");
+        fixture.Settle();
+        string detail = string.Join(" ", Enumerable.Repeat("The SMTP server closed the connection before it answered the sign-in.", 12));
+        tester.Test = _ => throw new MailConnectionException(detail, MailConnectionFailure.Unspecified);
+        await account.TestOutgoingConnectionAsync();
+        fixture.Settle();
+        var page = fixture.Tab("account");
+        var area = Descendants(page).OfType<Broiler.UI.ScrollView.Standard.StandardScrollView>().Single(view => view.GetSemanticNode().Name == "Status and errors");
+        Assert.True(area.CanFocus);
+        var stops = MailKeyboardNavigation.TabStops(page);
+        Assert.Same(area, stops[^1]);
+        fixture.Session.SetFocus(area);
+
+        tester.Test = _ => Task.CompletedTask;
+        await account.TestOutgoingConnectionAsync();
+        fixture.Settle();
+        fixture.Dispatcher.Drain();
+        Assert.False(area.CanFocus);
+        // The stop before it on the same page, which the user stays on.
+        Assert.Same(stops[^2], fixture.Session.FocusedElement);
+        Assert.Same(fixture.Button("Test connection", "account"), fixture.Session.FocusedElement);
+        Assert.Equal("account", fixture.Shell.Navigation.SelectedTab?.Id);
     }
 
     [Fact]

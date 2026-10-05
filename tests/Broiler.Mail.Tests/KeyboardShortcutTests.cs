@@ -8,11 +8,16 @@ using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
+using Broiler.UI.Button.Standard;
 using Broiler.UI.Edit.Standard;
+using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.ListView;
 using Broiler.UI.ListView.Standard;
+using Broiler.UI.Panel;
+using Broiler.UI.Panel.Standard;
 using Broiler.UI.RichEdit.Standard;
+using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Splitter;
 using Broiler.UI.Standard;
 
@@ -131,6 +136,47 @@ public sealed class KeyboardShortcutTests
     private static bool RowShows(UiListView list, int index) =>
         list.GetItemSemanticNode(index) is { } row && !list.Bounds.Intersect(row.Bounds).IsEmpty;
 
+    [Theory]
+    [InlineData("account")]
+    [InlineData("settings")]
+    [InlineData("compose")]
+    public async Task TabAndShiftTabScrollAFieldInWithRoomForItsRing(string tab)
+    {
+        // A short window, so each form scrolls and Mail's own Tab handling brings the fields in.
+        using var fixture = await Fixture.OpenAsync(width: 640, height: 300);
+        if (tab == "compose") fixture.Model.Compose.StartNew();
+        fixture.Shell.Navigation.SelectTab(tab);
+        fixture.Session.RenderFrame();
+        var stops = MailKeyboardNavigation.TabStops(fixture.Shell.Navigation.SelectedTab!.Content!);
+        // An edit strokes its 2 DIP ring centered on its bounds, so 1 DIP of it lies outside them. A fixed
+        // value rather than the form's inset, so Mail notices if the room goes away.
+        const double ringOutside = 1;
+        var cut = new List<string>();
+        bool scrolled = false;
+        foreach (var modifiers in new[] { KeyboardModifierState.None, KeyboardModifierState.Shift })
+        {
+            fixture.Session.SetFocus(fixture.Shell.Navigation);
+            for (int step = 0; step <= stops.Count; step++)
+            {
+                Assert.True(fixture.Keyboard.Handle(Key(0x09, modifiers)));
+                var focused = fixture.Session.FocusedElement!;
+                for (var parent = focused.Parent; parent is not null; parent = parent.Parent)
+                {
+                    if (parent is not StandardScrollView { HasVerticalScrollbar: true } scroll) continue;
+                    scrolled = true;
+                    double above = focused.Bounds.Top - scroll.ContentBounds.Top;
+                    double below = scroll.ContentBounds.Bottom - focused.Bounds.Bottom;
+                    // A control taller than the view, such as the message body, keeps only its top in view.
+                    bool fits = focused.Bounds.Height + (2 * ringOutside) <= scroll.ContentBounds.Height;
+                    if (above < ringOutside - 0.01 || (fits && below < ringOutside - 0.01))
+                        cut.Add($"{modifiers} {focused.GetType().Name} {focused.Bounds} in {scroll.ContentBounds}");
+                }
+            }
+        }
+        Assert.True(scrolled, $"Nothing in the {tab} tab scrolled; the window is not short enough.");
+        Assert.True(cut.Count == 0, string.Join(Environment.NewLine, cut));
+    }
+
     [Fact]
     public async Task AltLeftLeavesTheCompactReaderAndOtherwisePassesThrough()
     {
@@ -150,6 +196,103 @@ public sealed class KeyboardShortcutTests
         fixture.Session.RenderFrame();
         Assert.False(layout.ShowsReaderOnly);
         Assert.Same(fixture.List, fixture.Session.FocusedElement);
+    }
+
+    [Fact]
+    public async Task TheReadersEditorsAreTabStopsInReadingOrderAndAreRingedWhileFocused()
+    {
+        using var fixture = await Fixture.OpenAsync();
+        var stops = MailKeyboardNavigation.TabStops(fixture.InboxContent).ToList();
+        int details = stops.IndexOf(fixture.ReaderDetails);
+        int reply = stops.FindIndex(stop => stop is StandardButton { Text: "Reply" });
+        int text = stops.IndexOf(fixture.ReaderText);
+        Assert.True(stops.IndexOf(fixture.List) < details && details < reply && reply < text, $"list, details {details}, Reply {reply}, text {text}");
+
+        var theme = StandardControlPaint.GetTheme(fixture.ReaderText);
+        bool Ringed(BRect ring) => fixture.Session.RenderFrame().Commands.OfType<BRenderCommand.StrokeRect>()
+            .Any(stroke => stroke.Rect == ring && stroke.Color == theme.FocusRing && stroke.Thickness == theme.FocusRingThickness);
+        double offset = theme.FocusRingOffset;
+        // The header details: just outside the frameless editor, clear of its text.
+        BRect detailsBounds = fixture.ReaderDetails.Bounds;
+        var detailsRing = new BRect(detailsBounds.X - offset, detailsBounds.Y - offset, detailsBounds.Width + 2 * offset, detailsBounds.Height + 2 * offset);
+        // The message text can run past the view; its ring goes around the view, the part on screen.
+        var view = Descendants(fixture.InboxContent).OfType<Broiler.Mail.Application.Preview.ScrollableMessageText>().Single();
+        var textRing = StandardControlPaint.Inset(view.Bounds, offset);
+
+        fixture.Session.SetFocus(fixture.List);
+        Assert.False(Ringed(detailsRing));
+        Assert.False(Ringed(textRing));
+        fixture.Session.SetFocus(fixture.ReaderDetails);
+        Assert.True(Ringed(detailsRing));
+        Assert.False(Ringed(textRing));
+        fixture.Session.SetFocus(fixture.ReaderText);
+        Assert.True(Ringed(textRing));
+        Assert.False(Ringed(detailsRing));
+    }
+
+    [Fact]
+    public void ABoundedAreaIsAStopOnlyWhileItScrollsAndNothingInsideTakesFocus()
+    {
+        var notice = new StandardLabel { Text = string.Join(" ", Enumerable.Repeat("A notice long enough to wrap many times.", 30)), Wrapping = UiTextWrapping.Wrap };
+        var content = new StandardPanel();
+        content.AddChild(notice);
+        var area = new BoundedScrollArea(content, 0.4, "Inbox notice");
+        var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
+        root.AddChild(area);
+        root.SetDock(area, UiDock.Top);
+        using var session = new StandardUiSessionBuilder().Build(new Host(400, 300));
+        session.AddRoot(root);
+        session.RenderFrame();
+
+        // Long read-only text scrolls: the area is the toolkit's keyboard stop, named for a screen reader.
+        Assert.True(area.Scroll.CanFocus);
+        Assert.Equal([area.Scroll], MailKeyboardNavigation.TabStops(root));
+        Assert.Equal("Inbox notice", area.Scroll.GetSemanticNode().Name);
+
+        // A control inside takes the stop instead.
+        var retry = new StandardButton { Text = "Retry receiving" };
+        content.AddChild(retry);
+        session.RenderFrame();
+        Assert.False(area.Scroll.CanFocus);
+        Assert.Equal([retry], MailKeyboardNavigation.TabStops(root));
+
+        // Nothing to scroll, nothing to stop at.
+        content.RemoveChild(retry);
+        notice.Text = "The inbox is empty.";
+        session.RenderFrame();
+        Assert.False(area.Scroll.CanFocus);
+        Assert.Empty(MailKeyboardNavigation.TabStops(root));
+    }
+
+    /// <summary>
+    /// A focused area that stops scrolling is no stop any more. Broiler.UI hands its focus to the next stop when the
+    /// area is next drawn (ADR 0032), through the session's dispatcher, so Mail needs no rule of its own for the
+    /// inbox notice, the message header or a form's status area.
+    /// </summary>
+    [Fact]
+    public void AFocusedBoundedAreaThatStopsScrollingHandsFocusOn()
+    {
+        var notice = new StandardLabel { Text = string.Join(" ", Enumerable.Repeat("A notice long enough to wrap many times.", 30)), Wrapping = UiTextWrapping.Wrap };
+        var content = new StandardPanel();
+        content.AddChild(notice);
+        var area = new BoundedScrollArea(content, 0.4, "Inbox notice");
+        var receive = new StandardButton { Text = "Receive" };
+        var root = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
+        root.AddChild(area);
+        root.SetDock(area, UiDock.Top);
+        root.AddChild(receive);
+        var dispatcher = new TestQueueDispatcher();
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(400, 300));
+        session.AddRoot(root);
+        session.RenderFrame();
+        session.SetFocus(area.Scroll);
+        Assert.Same(area.Scroll, session.FocusedElement);
+
+        notice.Text = "The inbox is empty.";
+        session.RenderFrame();
+        dispatcher.Drain();
+        Assert.False(area.Scroll.CanFocus);
+        Assert.Same(receive, session.FocusedElement);
     }
 
     [Fact]
@@ -195,6 +338,7 @@ public sealed class KeyboardShortcutTests
         private UiElement ComposeContent => Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!;
         public StandardListView List => Descendants(InboxContent).OfType<StandardListView>().Single();
         public StandardRichEdit ReaderText => Descendants(InboxContent).OfType<StandardRichEdit>().Single(edit => edit.AccessibleName == "Message text");
+        public StandardRichEdit ReaderDetails => Descendants(InboxContent).OfType<StandardRichEdit>().Single(edit => edit.AccessibleName == "Sender and recipients");
         public StandardRichEdit ComposerBody => Descendants(ComposeContent).OfType<StandardRichEdit>().Single();
         public StandardEdit ComposerTo => (StandardEdit)Descendants(ComposeContent).OfType<StandardLabel>().Single(label => label.Text == "To").Target!;
 
