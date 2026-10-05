@@ -664,22 +664,25 @@ public sealed class ResponsiveInboxTests
     /// so the footer's "Details and Retry are above the list" holds. Before, at 640x480 with twice the text
     /// size, the notice cut through a line and through Retry, and then hid Retry, which a failed receive
     /// at 640x480 now shows below one whole line; in a pane as short as at 640x320, that line is whole
-    /// too, past the share that would cut it.
+    /// too, past the share that would cut it. How many lines an explanation takes is the platform's fonts'
+    /// to say, so whether the notice scrolls follows the lines it was laid out in: a failed Load older at
+    /// 1100x720 with twice the text size takes eight lines with Segoe UI and is shown whole, and ten with
+    /// Linux's DejaVu Sans, which would leave the list less than two rows, so it scrolls there.
     /// </summary>
     [Theory]
-    [InlineData(640, 480, 1.0, "receive-error", false)]
-    [InlineData(640, 480, 1.0, "receive-canceled", false)]
-    [InlineData(640, 480, 1.0, "load-error", false)]
-    [InlineData(640, 480, 2.0, "receive-error", true)]
-    [InlineData(640, 480, 2.0, "receive-canceled", false)]
-    [InlineData(640, 480, 2.0, "load-error", true)]
-    [InlineData(640, 450, 2.0, "receive-canceled", false)]
-    [InlineData(640, 320, 2.0, "receive-error", true)]
-    [InlineData(1100, 720, 2.0, "receive-error", false)]
-    [InlineData(1100, 720, 2.0, "receive-canceled", false)]
-    [InlineData(1100, 720, 2.0, "load-error", false)]
-    [InlineData(1100, 560, 2.0, "receive-error", true)]
-    public async Task TheInboxNoticeEndsBetweenItsLinesAndKeepsRetryInView(int width, int height, double textScale, string problem, bool scrolls)
+    [InlineData(640, 480, 1.0, "receive-error")]
+    [InlineData(640, 480, 1.0, "receive-canceled")]
+    [InlineData(640, 480, 1.0, "load-error")]
+    [InlineData(640, 480, 2.0, "receive-error")]
+    [InlineData(640, 480, 2.0, "receive-canceled")]
+    [InlineData(640, 480, 2.0, "load-error")]
+    [InlineData(640, 450, 2.0, "receive-canceled")]
+    [InlineData(640, 320, 2.0, "receive-error")]
+    [InlineData(1100, 720, 2.0, "receive-error")]
+    [InlineData(1100, 720, 2.0, "receive-canceled")]
+    [InlineData(1100, 720, 2.0, "load-error")]
+    [InlineData(1100, 560, 2.0, "receive-error")]
+    public async Task TheInboxNoticeEndsBetweenItsLinesAndKeepsRetryInView(int width, int height, double textScale, string problem)
     {
         StandardThemeTokens previous = StandardControlPaint.Theme;
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
@@ -711,7 +714,12 @@ public sealed class ResponsiveInboxTests
             string where = $"At {width}x{height}, text {textScale:P0}, {problem}: the notice shows {shown} of {available}";
             Assert.False(fixture.Layout.ShowsReaderOnly);
             var label = AssertNoticeEndsBetweenRows(notice, where);
-            Assert.True(scrolls == notice.Scroll.HasVerticalScrollbar, $"{where}: the notice {(scrolls ? "does not scroll" : "scrolls")}.");
+            // Past its share, the notice shows its whole explanation where that leaves the list two rows (the margin
+            // below the last line is not a line), and scrolls otherwise.
+            double share = available * 0.4;
+            double lines = label.Bounds.Bottom - shown.Top;
+            bool scrolls = lines > share + 0.5 && available - lines < (2 * fixture.List.EffectiveItemHeight) - 0.5;
+            Assert.True(scrolls == notice.Scroll.HasVerticalScrollbar, $"{where}: the notice {(scrolls ? "does not scroll" : "scrolls")}; its lines end at {lines}.");
 
             // Retry's row is whole right below what the notice shows, and the list follows it.
             var retry = fixture.Button(problem == "load-error" ? "Retry loading older" : "Retry receiving");
@@ -721,15 +729,9 @@ public sealed class ResponsiveInboxTests
             Assert.True(row.Top <= retry.Bounds.Top && retry.Bounds.Bottom <= row.Bottom && row.Height >= retry.Bounds.Height, $"{where}: Retry is at {retry.Bounds} in its row at {row}.");
             Assert.Equal(row.Bottom, fixture.List.Bounds.Top, 0.5);
 
-            // Past its share, the notice shows its whole explanation and leaves the list two rows (the margin
-            // below the last line is not a line), or else only its first line, which the share would cut.
-            double share = available * 0.4;
-            if (notice.Bounds.Height > share + 0.5)
-            {
-                double line = BTextMeasurer.GetLineHeight(label.Font);
-                if (scrolls) Assert.Equal(label.Bounds.Top + line, shown.Bottom, 0.5);
-                else Assert.True(available - (label.Bounds.Bottom - shown.Top) >= (2 * fixture.List.EffectiveItemHeight) - 0.5, $"{where}; the list has {fixture.List.Bounds.Height}.");
-            }
+            // A notice that scrolls passes its share only to show its first line, which the share would cut.
+            if (scrolls && notice.Bounds.Height > share + 0.5)
+                Assert.Equal(label.Bounds.Top + BTextMeasurer.GetLineHeight(label.Font), shown.Bottom, 0.5);
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
@@ -808,7 +810,10 @@ public sealed class ResponsiveInboxTests
     /// <summary>
     /// A message whose text could not be loaded has nothing below its header, so the header may take
     /// the reader: opened in a short compact window, the problem and Retry are on screen, not scrolled
-    /// away above an empty text area. Once the text arrives, the header is bounded again.
+    /// away above an empty text area. Once the text arrives, the header is bounded again. How many lines
+    /// the long subject takes is the platform's fonts' to say: five with Segoe UI, and six with Linux's
+    /// DejaVu Sans, which push Retry's row past the reader at 640x400. There the window is made as much
+    /// taller as that row needs, which still leaves the header's share far too short for it.
     /// </summary>
     [Fact]
     public async Task WithoutMessageTextTheCompactReaderShowsTheProblemAndRetry()
@@ -829,9 +834,13 @@ public sealed class ResponsiveInboxTests
         Assert.Equal(InboxProblemScope.Message, fixture.Model.ProblemScope);
 
         var header = Descendants(fixture.Content).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
-        BRect shown = header.Scroll.ContentBounds;
         var problem = Descendants(header).OfType<InlineFeedback>().Single();
         var retry = fixture.Button("Retry loading");
+        // Where the subject's lines push Retry's row past the reader, the window is as much taller.
+        double past = retry.Parent!.Bounds.Bottom - header.Bounds.Top - header.AvailableHeight;
+        if (past > 0) fixture.Resize(640, 400 + (int)Math.Ceiling(past));
+        Assert.True(retry.Parent.Bounds.Bottom - header.Bounds.Top > header.AvailableHeight * 0.45, $"Retry's row at {retry.Parent.Bounds} fits the header's share of {header.AvailableHeight}; the window is not short enough.");
+        BRect shown = header.Scroll.ContentBounds;
         foreach (var (name, bounds) in new[] { ("The problem", problem.Bounds), ("Retry loading", retry.Bounds) })
             Assert.True(bounds.Height > 0 && bounds.Top >= shown.Top - 0.5 && bounds.Bottom <= shown.Bottom + 0.5, $"{name} is at {bounds}, the header shows {shown}.");
 
@@ -859,30 +868,34 @@ public sealed class ResponsiveInboxTests
     /// or 1100x500 with twice the text size, they end the header, as in the compact reader, which has no
     /// height to spare for them: at 700x480, pinned on two rows, they left the subject less than a line and
     /// the text less than one. Beside the list the subject's first line and two lines of text are always
-    /// shown. A line across the reader separates the header from the message text.
+    /// shown. A line across the reader separates the header from the message text. How the rows wrap, and
+    /// the height the shell's footer leaves the reader, are the platform's fonts' to say, so whether the
+    /// header scrolls follows the rows it was laid out in: at 1100x680 with twice the text size, Linux's
+    /// DejaVu Sans wraps the footer onto a second line, and in the shorter reader the date line passes the
+    /// share it fits with Segoe UI.
     /// </summary>
     [Theory]
-    [InlineData(640, 480, 1.0, "plain", false, true, false)]
-    [InlineData(640, 480, 1.0, "html", false, true, true)]
-    [InlineData(640, 480, 1.0, "long", false, false, true)]
-    [InlineData(640, 520, 1.0, "plain", false, true, false)]
-    [InlineData(640, 540, 1.0, "plain", false, true, false)]
-    [InlineData(640, 640, 1.0, "long", false, true, false)]
-    [InlineData(640, 552, 1.25, "html", false, true, true)]
-    [InlineData(640, 480, 2.0, "plain", false, false, true)]
-    [InlineData(640, 640, 2.0, "long", false, false, true)]
-    [InlineData(700, 480, 2.0, "plain", false, false, true)]
-    [InlineData(700, 520, 2.0, "long", false, false, true)]
-    [InlineData(700, 1000, 2.0, "plain", false, true, false)]
-    [InlineData(1100, 720, 1.0, "plain", true, true, false)]
-    [InlineData(1100, 720, 1.0, "longer", true, true, false)]
-    [InlineData(1100, 720, 2.0, "plain", true, true, false)]
-    [InlineData(1100, 720, 2.0, "long", true, true, true)]
-    [InlineData(1100, 680, 2.0, "plain", true, true, false)]
-    [InlineData(1100, 740, 2.0, "plain", true, true, false)]
-    [InlineData(1100, 640, 2.0, "plain", true, true, true)]
-    [InlineData(1100, 500, 2.0, "plain", false, false, true)]
-    public async Task TheReaderHeaderEndsBetweenItsRows(int width, int height, double textScale, string message, bool pinned, bool replyShown, bool scrolls)
+    [InlineData(640, 480, 1.0, "plain", false, true)]
+    [InlineData(640, 480, 1.0, "html", false, true)]
+    [InlineData(640, 480, 1.0, "long", false, false)]
+    [InlineData(640, 520, 1.0, "plain", false, true)]
+    [InlineData(640, 540, 1.0, "plain", false, true)]
+    [InlineData(640, 640, 1.0, "long", false, true)]
+    [InlineData(640, 552, 1.25, "html", false, true)]
+    [InlineData(640, 480, 2.0, "plain", false, false)]
+    [InlineData(640, 640, 2.0, "long", false, false)]
+    [InlineData(700, 480, 2.0, "plain", false, false)]
+    [InlineData(700, 520, 2.0, "long", false, false)]
+    [InlineData(700, 1000, 2.0, "plain", false, true)]
+    [InlineData(1100, 720, 1.0, "plain", true, true)]
+    [InlineData(1100, 720, 1.0, "longer", true, true)]
+    [InlineData(1100, 720, 2.0, "plain", true, true)]
+    [InlineData(1100, 720, 2.0, "long", true, true)]
+    [InlineData(1100, 680, 2.0, "plain", true, true)]
+    [InlineData(1100, 740, 2.0, "plain", true, true)]
+    [InlineData(1100, 640, 2.0, "plain", true, true)]
+    [InlineData(1100, 500, 2.0, "plain", false, false)]
+    public async Task TheReaderHeaderEndsBetweenItsRows(int width, int height, double textScale, string message, bool pinned, bool replyShown)
     {
         StandardThemeTokens previous = StandardControlPaint.Theme;
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
@@ -896,7 +909,11 @@ public sealed class ResponsiveInboxTests
             string where = $"At {width}x{height}, text {textScale:P0}, {message} message, the header shows {shown} of {available} in {reader.Pane.Bounds}";
             Assert.Equal(width < 680, reader.Layout.ShowsReaderOnly);
             AssertEndsBetweenRows(header, where);
-            Assert.True(scrolls == header.Scroll.HasVerticalScrollbar, $"{where}: the header {(scrolls ? "does not scroll" : "scrolls")}.");
+            // Past its share, the header shows all its rows where that leaves the text six lines (the margin below
+            // the last row is not a row), and scrolls otherwise.
+            double rows = HeaderRows(header).Max(row => row.Bounds.Bottom) - shown.Top;
+            bool scrolls = rows > share + 0.5 && available - rows < reader.Text.HeightOfLines(6) - 0.5;
+            Assert.True(scrolls == header.Scroll.HasVerticalScrollbar, $"{where}: the header {(scrolls ? "does not scroll" : "scrolls")}; its rows end at {rows}.");
 
             // Beside the list, the commands are below the header where they fit; otherwise, and in the
             // compact reader, they end it.
@@ -1231,6 +1248,12 @@ public sealed class ResponsiveInboxTests
             Session.RenderFrame();
         }
 
+        public void Resize(int width, int height)
+        {
+            _host.Height = height;
+            Resize(width);
+        }
+
         public void Key(int code)
         {
             Session.DispatchInput(KeyEvent(code));
@@ -1420,7 +1443,8 @@ public sealed class ResponsiveInboxTests
     private sealed class Host(int width, int height) : IUiHost
     {
         public int Width { get; set; } = width;
-        public BSize ViewportSize => new(Width, height);
+        public int Height { get; set; } = height;
+        public BSize ViewportSize => new(Width, Height);
         public double Scale => 1;
         public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
         public void Invalidate(UiInvalidation invalidation) { }
