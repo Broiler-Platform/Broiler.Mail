@@ -31,8 +31,29 @@ The native preview host (`WindowsHtmlPreviewHost`, `HtmlPreviewWindow`) hosts
   and `ImageLoad` events intercept and block external/remote stylesheets and images.
 - Resource policy denies local file and loopback references; this is not an OS restriction
   on a compromised renderer, which still shares the mail process's privileges.
-- Raster snapshots are bounded to Direct2D texture limits (clamped height up to 8192 px)
-  and encoded via `Broiler.Media.Image.Managed` codecs.
+- Raster snapshots are bounded: the document is cut at 32,768 CSS pixels tall at 100 % and
+  below, and at that many times the zoom above it (zoomed in, the narrower layout makes the
+  same text that much taller), and content that cannot wrap is cut at 8,192 CSS pixels wide.
+  It is drawn in tiles 1,024 DIPs tall and as wide as the page, or, for a page wider than the
+  window, as wide as the window, so a wide page keeps the display scale and only the columns
+  in view are drawn. A tile has at most 8 M pixels and 8,192 pixels a side, and the tile cache
+  holds at most 16 tiles and 256 MB. Images are decoded via `Broiler.Media.Image.Managed`
+  codecs.
+- Tiles are rastered by the preview window's own thread alone. Broiler.HTML's parallel raster
+  made that STA thread wait in a way that dispatched input and UI Automation calls in the
+  middle of a tile (NativeAOT). It is switched off for the whole process:
+  `TileParallelReplay.MaxDegreeOfParallelism = 1`, and the process environment variable
+  `BROILER_RASTER_THREADS=1`, because Broiler.HTML's band raster has no public setting.
+  Broiler.Graphics' own software rasterizer (`BCanvas`) reads the same variable, and processes
+  Mail starts, such as the browser a link opens in, inherit it. The cost was measured on the
+  `long-html` newsletter at 200 % (1,776 x 2,048-pixel tiles, 16 cores): 110–120 ms a tile
+  against 54–65 ms in parallel, so a zoom step, which draws every visible tile again, takes
+  about twice as long. A public sequential raster, or one that does not block the UI thread
+  with a message-pumping wait, is requested from Broiler.HTML; with it, the setting can move
+  from the process to the preview's container.
+- Zoom (50–300 %) is a page zoom: the document is laid out at the viewport's width over the
+  zoom and drawn larger, so text still wraps to the window. A preview opens at the system text
+  size and follows it until the reader zooms; the zoom also enlarges the plain-text view.
 
 ## Inline images and remote resources
 

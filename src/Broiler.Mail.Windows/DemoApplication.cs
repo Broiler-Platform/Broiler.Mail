@@ -318,8 +318,13 @@ internal static class DemoApplication
                         "image/png",
                         Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg=="))
                 };
+                // A table, and an address too long to wrap: zoomed in, the table reflows and the address
+                // scrolls sideways.
                 return new(message, "Hello & welcome!\n\nThis sample demonstrates the labeled text fallback for HTML-only mail.\n\nSelect Open HTML preview to view formatted HTML.",
-                    "<h1>Hello &amp; welcome!</h1><p>This sample demonstrates the <b>HTML reading mode</b> with isolated rendering.</p><p><img src=\"cid:demo-logo@example.test\" alt=\"Demo dot\"></p><p>Links like <a href=\"https://example.test\">example.test</a> open in your default browser.</p>")
+                    "<h1>Hello &amp; welcome!</h1><p>This sample demonstrates the <b>HTML reading mode</b> with isolated rendering.</p><p><img src=\"cid:demo-logo@example.test\" alt=\"Demo dot\"></p><p>Links like <a href=\"https://example.test\">example.test</a> open in your default browser.</p>" +
+                    "<h2>This week</h2><table><tr><th>Day</th><th>Session</th><th>Room</th></tr><tr><td>Monday</td><td>Keyboard and screen readers</td><td>North hall</td></tr>" +
+                    "<tr><td>Wednesday</td><td>Text size and zoom</td><td>South hall</td></tr></table>" +
+                    "<p>Full programme: <a href=\"https://example.test/newsletters/2026/october/programme_and_rooms_for_the_week\">https://example.test/newsletters/2026/october/programme_and_rooms_for_the_week</a></p>")
                 {
                     IsHtmlFallback = true,
                     Composition = composition,

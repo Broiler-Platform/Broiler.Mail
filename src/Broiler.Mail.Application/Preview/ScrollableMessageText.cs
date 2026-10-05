@@ -60,9 +60,43 @@ public sealed class ScrollableMessageText : UiElement
         // Margins and a bounded line length come from the column; the scroll view still spans the pane.
         _scroll.AddChild(new ReadingColumn(_editor, verticalMargin: 8));
         AddChild(_scroll);
+        // Only the reader moves the place; the scroll view also clamps its offset while it lays out,
+        // and a hidden view's extent and viewport come from a layout at no size at all.
+        _scroll.OffsetChanged += (_, _) =>
+        {
+            if (!_inLayout && _shown) _readFraction = ReadFraction();
+        };
     }
 
     public StandardRichEdit Editor => _editor;
+
+    // The relative place in the text as last shown, and the one a zoom keeps until the next layout.
+    private double _readFraction;
+    private double? _zoomFraction;
+    private bool _inLayout;
+    private bool _shown;
+
+    /// <summary>
+    /// How large the text is drawn on top of its font's size; 1 is the font's size. The reader stays
+    /// at the same relative place in the text, also through a zoom while the view is hidden.
+    /// </summary>
+    public double Zoom
+    {
+        get => _editor.Zoom;
+        set
+        {
+            double before = _editor.Zoom;
+            _editor.Zoom = value;
+            if (_editor.Zoom == before) return;
+            _zoomFraction ??= _readFraction;
+        }
+    }
+
+    private double ReadFraction()
+    {
+        double range = _scroll.ExtentSize.Height - _scroll.ViewportSize.Height;
+        return range > 0 ? _scroll.VerticalOffset / range : 0;
+    }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=050DA5
     // Broiler-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
@@ -75,12 +109,42 @@ public sealed class ScrollableMessageText : UiElement
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=AB27B5
     // Broiler-Human:        PENDING
-    public void ScrollToStart() => _scroll.ScrollToStart();
+    public void ScrollToStart()
+    {
+        // The start wins over a place a zoom still has to restore.
+        _zoomFraction = null;
+        _readFraction = 0;
+        _scroll.ScrollToStart();
+    }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=884914
     // Broiler-Falsified-If: an infinite available width reaches the label as its wrap width, so long message lines never wrap
     // Broiler-Human:        PENDING
-    protected override BSize MeasureCore(BSize availableSize) => _scroll.Measure(availableSize);
+    protected override BSize MeasureCore(BSize availableSize)
+    {
+        _inLayout = true;
+        try { return _scroll.Measure(availableSize); }
+        finally { _inLayout = false; }
+    }
 
-    protected override void ArrangeCore(BRect finalRect) => _scroll.Arrange(finalRect);
+    protected override void ArrangeCore(BRect finalRect)
+    {
+        _inLayout = true;
+        try
+        {
+            _scroll.Arrange(finalRect);
+            // A hidden view keeps the place until it is shown and laid out at the new zoom.
+            _shown = !finalRect.IsEmpty;
+            if (!_shown) return;
+            if (_zoomFraction is { } fraction)
+            {
+                _zoomFraction = null;
+                double range = _scroll.ExtentSize.Height - _scroll.ViewportSize.Height;
+                if (range > 0 && _scroll.SetOffset(new BPoint(_scroll.HorizontalOffset, Math.Round(fraction * range))))
+                    _scroll.Arrange(finalRect);
+            }
+            _readFraction = ReadFraction();
+        }
+        finally { _inLayout = false; }
+    }
 }

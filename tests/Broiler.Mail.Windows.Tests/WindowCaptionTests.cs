@@ -79,7 +79,7 @@ public sealed class WindowCaptionTests
         {
             try
             {
-                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<p>Agenda</p>", new HashSet<string>()), "Agenda as text", _ => { }, dark: true)
+                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<p>Agenda</p>", new HashSet<string>()), "Agenda as text", _ => { }, theme: StandardThemeTokens.Dark)
                 { ShowInTaskbar = false, Opacity = 0 };
                 window.Shown += (_, _) =>
                 {
