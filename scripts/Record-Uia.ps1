@@ -8,19 +8,22 @@ Publishes the Windows app as NativeAOT (the shipped configuration) unless -Execu
 or more short walks on demo fixtures and prints, step by step, the UI Automation events a screen reader
 would be given:
   - FocusChanged: what gets focus, with its control type, name and help text, 'IsDataValidForForm=False'
-    when it reports that, and its FullDescription (a form field's error comes first in it). Focus is read
-    through the UIA COM client, from the element the event names. List rows and tab items answer valid
-    (Hosting preview.7), so only a refused field is marked;
-  - Notification: the text and kind the app announces (status, progress, results);
+    when it reports that, and its FullDescription (a form field's error comes first in it). List rows and
+    tab items answer valid (Hosting preview.7), so only a refused field is marked;
   - ElementSelected: the row or tab that became selected;
-  - property changes of ExpandCollapseState and ToggleState (managed UIA client) and of IsDataValidForForm
-    (UIA COM client, which knows that property).
+  - Notification: the text and kind the app announces (status, progress, results);
+  - property changes of ExpandCollapseState and ToggleState (managed UIA client) and of IsDataValidForForm.
+Focus, selection and IsDataValidForForm are recorded through one UIA COM client, as screen readers listen,
+and read from the element each event names. Every line is stamped when its callback is entered, before it
+reads any property from the app, and each step's lines are printed in that order, so the transcript shows
+the order of FocusChanged and ElementSelected as that client was told.
 Walks:
-  - inbox (inbox fixture): Tab through the window, select a row through UI Automation, move down the list
-    with the arrow key, and receive with F5. The row is selected through the managed (UIA2) client, for
-    which UIAutomationCore first calls SetFocus on the row; that focuses the list without selecting, so the
-    transcript first names the row selected before. A COM client, as screen readers use, does not hear that
-    (Broiler.Hosting README, Focus).
+  - inbox (inbox fixture): Tab through the window, select the second row through the managed (UIA2) client,
+    select the third through the COM client, move down the list with the arrow key, and receive with F5.
+    For a UIA2 Select, UIAutomationCore first calls SetFocus on the row; that focuses the list without
+    selecting, so the transcript first names the row selected before. A COM client's Select reaches the app
+    as Select alone: ElementSelected on the new row, then one FocusChanged on it (Broiler.Hosting README,
+    Focus).
   - composer (draft-invalid fixture, where Check draft has rejected the To address): show and hide Cc and
     Bcc through ExpandCollapse, type into To so the error goes, and run Check draft again so it comes back.
 Input is posted to the window's render child or given through UI Automation patterns, so the walk does not
@@ -68,9 +71,13 @@ using System.Threading;
 using System.Windows.Automation;
 
 // The UIA COM client, declared up to the members the recorder calls; placeholder slots keep the vtable order of
-// UIAutomationClient.h. IsDataValidForForm and FullDescription need it: the managed client has no identifiers for them.
+// UIAutomationClient.h. Focus and selection are recorded through it, as a screen reader hears them; IsDataValidForForm
+// and FullDescription need it too: the managed client has no identifiers for them.
 [ComImport, Guid("ff48dba4-60ef-4201-aa87-54103eef594e")]
 public class CUIAutomationRecorderClass { }
+
+[ComImport, Guid("352ffba8-0973-437c-a61f-f64cafd81df9"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderCondition { }
 
 [ComImport, Guid("30cbe57d-d9d0-452a-ab13-7ac5ac4825ee"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 public interface IRecorderAutomation
@@ -80,10 +87,13 @@ public interface IRecorderAutomation
     void ElementFromPoint(); void GetFocusedElement(); void GetRootElementBuildCache(); void ElementFromHandleBuildCache();
     void ElementFromPointBuildCache(); void GetFocusedElementBuildCache(); void CreateTreeWalker(); void ControlViewWalker();
     void ContentViewWalker(); void RawViewWalker(); void RawViewCondition(); void ControlViewCondition(); void ContentViewCondition();
-    void CreateCacheRequest(); void CreateTrueCondition(); void CreateFalseCondition(); void CreatePropertyCondition();
+    void CreateCacheRequest();
+    IRecorderCondition CreateTrueCondition();
+    void CreateFalseCondition(); void CreatePropertyCondition();
     void CreatePropertyConditionEx(); void CreateAndCondition(); void CreateAndConditionFromArray(); void CreateAndConditionFromNativeArray();
     void CreateOrCondition(); void CreateOrConditionFromArray(); void CreateOrConditionFromNativeArray(); void CreateNotCondition();
-    void AddAutomationEventHandler(); void RemoveAutomationEventHandler();
+    void AddAutomationEventHandler(int eventId, IRecorderElement element, int scope, IntPtr cacheRequest, IRecorderEventHandler handler);
+    void RemoveAutomationEventHandler();
     void AddPropertyChangedEventHandlerNativeArray(IRecorderElement element, int scope, IntPtr cacheRequest, IRecorderPropertyHandler handler,
         [MarshalAs(UnmanagedType.LPArray, SizeParamIndex = 5)] int[] properties, int count);
     void AddPropertyChangedEventHandler(); void RemovePropertyChangedEventHandler(); void AddStructureChangedEventHandler();
@@ -93,26 +103,41 @@ public interface IRecorderAutomation
     void RemoveAllEventHandlers();
 }
 
+[ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderElement
+{
+    void SetFocus(); void GetRuntimeId(); void FindFirst();
+    IRecorderElementArray FindAll(int scope, IRecorderCondition condition);
+    void FindFirstBuildCache(); void FindAllBuildCache(); void BuildUpdatedCache();
+    [return: MarshalAs(UnmanagedType.Struct)] object GetCurrentPropertyValue(int propertyId);
+    void GetCurrentPropertyValueEx(); void GetCachedPropertyValue(); void GetCachedPropertyValueEx(); void GetCurrentPatternAs();
+    void GetCachedPatternAs();
+    [return: MarshalAs(UnmanagedType.IUnknown)] object GetCurrentPattern(int patternId);
+}
+
+[ComImport, Guid("14314595-b4bc-4055-95f2-58f2e42c9855"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderElementArray
+{
+    int Length { get; }
+    IRecorderElement GetElement(int index);
+}
+
+[ComImport, Guid("a8efa66a-0fda-421a-9194-38021f3578ea"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderSelectionItem
+{
+    void Select();
+}
+
 [ComImport, Guid("c270f6b5-5c69-4290-9745-7a7f97169468"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
 public interface IRecorderFocusHandler
 {
     void HandleFocusChangedEvent(IRecorderElement sender);
 }
 
-// Focus is recorded through the COM client, so the form properties read are the focused element's own, not those of
-// whatever has focus by the time a managed handler would ask.
-[ComVisible(true), ClassInterface(ClassInterfaceType.None)]
-public sealed class RecorderFocusHandler : IRecorderFocusHandler
+[ComImport, Guid("146c3c17-f12e-4e22-8c27-f894b9b79c69"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
+public interface IRecorderEventHandler
 {
-    public void HandleFocusChangedEvent(IRecorderElement sender) { UiaRecorder.OnFocus(sender); }
-}
-
-[ComImport, Guid("d22108aa-8ac5-49a5-837b-37bbb3d7591e"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-public interface IRecorderElement
-{
-    void SetFocus(); void GetRuntimeId(); void FindFirst(); void FindAll(); void FindFirstBuildCache(); void FindAllBuildCache();
-    void BuildUpdatedCache();
-    [return: MarshalAs(UnmanagedType.Struct)] object GetCurrentPropertyValue(int propertyId);
+    void HandleAutomationEvent(IRecorderElement sender, int eventId);
 }
 
 [ComImport, Guid("40cd37d4-c756-4b0c-8c6f-bddfeeb13b50"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
@@ -121,14 +146,29 @@ public interface IRecorderPropertyHandler
     void HandlePropertyChangedEvent(IRecorderElement sender, int propertyId, [In, MarshalAs(UnmanagedType.Struct)] object newValue);
 }
 
+// Focus and selection come through the same COM client, so their order is the order that client is told, and the
+// properties read are the named element's own, not those of whatever has focus by the time a handler would ask.
+[ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+public sealed class RecorderFocusHandler : IRecorderFocusHandler
+{
+    public void HandleFocusChangedEvent(IRecorderElement sender) { UiaRecorder.OnFocus(UiaRecorder.Now(), sender); }
+}
+
+[ComVisible(true), ClassInterface(ClassInterfaceType.None)]
+public sealed class RecorderEventHandler : IRecorderEventHandler
+{
+    public void HandleAutomationEvent(IRecorderElement sender, int eventId) { UiaRecorder.OnSelected(UiaRecorder.Now(), sender); }
+}
+
 [ComVisible(true), ClassInterface(ClassInterfaceType.None)]
 public sealed class RecorderPropertyHandler : IRecorderPropertyHandler
 {
     public void HandlePropertyChangedEvent(IRecorderElement sender, int propertyId, object newValue)
     {
+        double at = UiaRecorder.Now();
         string name = "";
         try { name = sender.GetCurrentPropertyValue(30005) as string ?? ""; } catch (COMException) { }
-        UiaRecorder.Add("PropertyChanged IsDataValidForForm = " + newValue + " on '" + name + "'");
+        UiaRecorder.Add(at, "PropertyChanged IsDataValidForForm = " + newValue + " on '" + name + "'");
     }
 }
 
@@ -137,21 +177,37 @@ public static class UiaRecorder
     [DllImport("user32.dll")] public static extern IntPtr FindWindowEx(IntPtr parent, IntPtr after, string cls, string title);
     [DllImport("user32.dll", EntryPoint = "PostMessageW")] public static extern bool PostMessage(IntPtr h, uint m, IntPtr w, IntPtr l);
 
-    static readonly ConcurrentQueue<string> Lines = new ConcurrentQueue<string>();
+    const int ElementSelectedEventId = 20012, SelectionItemPatternId = 10010, ListItemTypeId = 50007, ListTypeId = 50008;
+
+    sealed class Line { public double At; public long Order; public string Text; }
+
+    static readonly ConcurrentQueue<Line> Lines = new ConcurrentQueue<Line>();
     static readonly Stopwatch Clock = new Stopwatch();
+    static long _order;
     static int _processId;
     static IRecorderAutomation _com;
     static RecorderPropertyHandler _comHandler;
     static RecorderFocusHandler _comFocus;
+    static RecorderEventHandler _comSelected;
 
-    public static void Add(string line) { Lines.Enqueue(string.Format("{0,7:0.000}s  {1}", Clock.Elapsed.TotalSeconds, line)); }
+    /// <summary>The time a callback is entered, taken before it reads any property: those are calls into the app.</summary>
+    public static double Now() { return Clock.Elapsed.TotalSeconds; }
 
+    public static void Add(double at, string line)
+    {
+        Lines.Enqueue(new Line { At = at, Order = Interlocked.Increment(ref _order), Text = line });
+    }
+
+    /// <summary>The lines recorded since the last call, in the order their callbacks were entered.</summary>
     public static string[] Drain()
     {
-        var drained = new List<string>();
-        string line;
+        var drained = new List<Line>();
+        Line line;
         while (Lines.TryDequeue(out line)) drained.Add(line);
-        return drained.ToArray();
+        drained.Sort((a, b) => a.At != b.At ? a.At.CompareTo(b.At) : a.Order.CompareTo(b.Order));
+        var text = new List<string>();
+        foreach (var item in drained) text.Add(string.Format("{0,8:0.0000}s  {1}", item.At, item.Text));
+        return text.ToArray();
     }
 
     public static string Describe(AutomationElement element)
@@ -167,35 +223,57 @@ public static class UiaRecorder
         catch (ElementNotAvailableException) { return "(gone)"; }
     }
 
+    /// <summary>The control type, name and help text of an element the COM client hands over; null for another process's.</summary>
+    static string Describe(IRecorderElement element)
+    {
+        object process = element.GetCurrentPropertyValue(30002 /* ProcessId */);
+        if (!(process is int) || (int)process != _processId) return null;
+        object type = element.GetCurrentPropertyValue(30003 /* ControlType */);
+        ControlType controlType = type is int ? ControlType.LookupById((int)type) : null;
+        string text = (controlType != null ? controlType.ProgrammaticName.Replace("ControlType.", "") : "" + type) +
+            " '" + (element.GetCurrentPropertyValue(30005 /* Name */) as string) + "'";
+        string help = element.GetCurrentPropertyValue(30013 /* HelpText */) as string;
+        if (!string.IsNullOrEmpty(help)) text += " help '" + help + "'";
+        return text;
+    }
+
+    /// <summary>Runs <paramref name="action"/> on a thread of its own in the multithreaded apartment, where the COM client lives.</summary>
+    static void InMta(Action action)
+    {
+        Exception failure = null;
+        var thread = new Thread(() => { try { action(); } catch (Exception error) { failure = error; } });
+        thread.SetApartmentState(ApartmentState.MTA);
+        thread.Start();
+        thread.Join();
+        if (failure != null) throw new InvalidOperationException(failure.Message, failure);
+    }
+
     public static void Start(IntPtr render, int processId)
     {
         _processId = processId;
         Clock.Restart();
         AutomationElement root = AutomationElement.FromHandle(render);
-        Automation.AddAutomationEventHandler(SelectionItemPattern.ElementSelectedEvent, root, TreeScope.Subtree, OnSelected);
         Automation.AddAutomationEventHandler(AutomationElement.NotificationEvent, root, TreeScope.Subtree, OnNotification);
         Automation.AddAutomationPropertyChangedEventHandler(root, TreeScope.Subtree, OnProperty,
             ExpandCollapsePattern.ExpandCollapseStateProperty, TogglePattern.ToggleStateProperty);
         // The COM client registers from a thread of its own in the multithreaded apartment, so its callbacks need
         // no message loop on this thread.
-        Exception failure = null;
-        var thread = new Thread(() =>
+        try
         {
-            try
+            InMta(() =>
             {
                 _com = (IRecorderAutomation)new CUIAutomationRecorderClass();
                 _comFocus = new RecorderFocusHandler();
                 _com.AddFocusChangedEventHandler(IntPtr.Zero, _comFocus);
+                IRecorderElement window = _com.ElementFromHandle(render);
+                _comSelected = new RecorderEventHandler();
+                _com.AddAutomationEventHandler(ElementSelectedEventId, window, 7 /* TreeScope_Subtree */, IntPtr.Zero, _comSelected);
                 _comHandler = new RecorderPropertyHandler();
-                _com.AddPropertyChangedEventHandlerNativeArray(_com.ElementFromHandle(render), 7 /* TreeScope_Subtree */, IntPtr.Zero,
+                _com.AddPropertyChangedEventHandlerNativeArray(window, 7 /* TreeScope_Subtree */, IntPtr.Zero,
                     _comHandler, new[] { 30103 /* IsDataValidForForm */ }, 1);
-            }
-            catch (Exception error) { failure = error; }
-        });
-        thread.SetApartmentState(ApartmentState.MTA);
-        thread.Start();
-        thread.Join();
-        if (failure != null) Add("(focus and IsDataValidForForm changes are not recorded: " + failure.Message + ")");
+            });
+        }
+        catch (Exception error) { Add(Now(), "(focus, selection and IsDataValidForForm changes are not recorded: " + error.Message + ")"); }
     }
 
     public static void Stop()
@@ -203,10 +281,7 @@ public static class UiaRecorder
         Automation.RemoveAllEventHandlers();
         var com = _com;
         if (com == null) return;
-        var thread = new Thread(() => { try { com.RemoveAllEventHandlers(); } catch (Exception) { } });
-        thread.SetApartmentState(ApartmentState.MTA);
-        thread.Start();
-        thread.Join();
+        try { InMta(() => com.RemoveAllEventHandlers()); } catch (Exception) { }
         _com = null;
     }
 
@@ -214,40 +289,44 @@ public static class UiaRecorder
     /// A focus change, read from the element the COM client hands over: its control type, name and help text, and
     /// " IsDataValidForForm=False" and its FullDescription where it reports them.
     /// </summary>
-    public static void OnFocus(IRecorderElement element)
+    public static void OnFocus(double at, IRecorderElement element)
     {
         try
         {
-            object process = element.GetCurrentPropertyValue(30002 /* ProcessId */);
-            if (!(process is int) || (int)process != _processId) return;
-            object type = element.GetCurrentPropertyValue(30003 /* ControlType */);
-            ControlType controlType = type is int ? ControlType.LookupById((int)type) : null;
-            string text = (controlType != null ? controlType.ProgrammaticName.Replace("ControlType.", "") : "" + type) +
-                " '" + (element.GetCurrentPropertyValue(30005 /* Name */) as string) + "'";
-            string help = element.GetCurrentPropertyValue(30013 /* HelpText */) as string;
-            if (!string.IsNullOrEmpty(help)) text += " help '" + help + "'";
+            string text = Describe(element);
+            if (text == null) return;
             object valid = element.GetCurrentPropertyValue(30103 /* IsDataValidForForm */);
             if (valid is bool && !(bool)valid) text += " IsDataValidForForm=False";
             string description = element.GetCurrentPropertyValue(30159 /* FullDescription */) as string;
             if (!string.IsNullOrEmpty(description)) text += " description '" + description + "'";
-            Add("FocusChanged " + text);
+            Add(at, "FocusChanged " + text);
         }
-        catch (COMException) { Add("FocusChanged (gone)"); }
+        catch (COMException) { Add(at, "FocusChanged (gone)"); }
     }
 
-    static void OnSelected(object sender, AutomationEventArgs e) { Add("ElementSelected " + Describe(sender as AutomationElement)); }
+    public static void OnSelected(double at, IRecorderElement element)
+    {
+        try
+        {
+            string text = Describe(element);
+            if (text != null) Add(at, "ElementSelected " + text);
+        }
+        catch (COMException) { Add(at, "ElementSelected (gone)"); }
+    }
 
     static void OnNotification(object sender, AutomationEventArgs e)
     {
+        double at = Now();
         var notification = e as NotificationEventArgs;
-        if (notification == null) { Add("Notification from " + Describe(sender as AutomationElement)); return; }
-        Add("Notification " + notification.NotificationKind + "/" + notification.NotificationProcessing + " '" + notification.DisplayString +
+        if (notification == null) { Add(at, "Notification from " + Describe(sender as AutomationElement)); return; }
+        Add(at, "Notification " + notification.NotificationKind + "/" + notification.NotificationProcessing + " '" + notification.DisplayString +
             "' activity '" + notification.ActivityId + "' from " + Describe(sender as AutomationElement));
     }
 
     static void OnProperty(object sender, AutomationPropertyChangedEventArgs e)
     {
-        Add("PropertyChanged " + e.Property.ProgrammaticName.Replace("Pattern.", ".").Replace("Property", "") + " = " + e.NewValue + " on " + Describe(sender as AutomationElement));
+        double at = Now();
+        Add(at, "PropertyChanged " + e.Property.ProgrammaticName.Replace("Pattern.", ".").Replace("Property", "") + " = " + e.NewValue + " on " + Describe(sender as AutomationElement));
     }
 
     public static AutomationElement Find(IntPtr render, ControlType type, string name)
@@ -262,6 +341,32 @@ public static class UiaRecorder
         if (list == null) return null;
         var rows = list.FindAll(TreeScope.Children, new PropertyCondition(AutomationElement.ControlTypeProperty, ControlType.ListItem));
         return index < rows.Count ? rows[index] : null;
+    }
+
+    /// <summary>
+    /// Selects row <paramref name="index"/> of the Messages list through the COM client's SelectionItem pattern, the
+    /// way a screen reader does: UIA passes it to the app as Select alone.
+    /// </summary>
+    public static void SelectRowThroughCom(IntPtr render, int index)
+    {
+        InMta(() =>
+        {
+            var automation = (IRecorderAutomation)new CUIAutomationRecorderClass();
+            IRecorderElementArray all = automation.ElementFromHandle(render).FindAll(4 /* TreeScope_Descendants */, automation.CreateTrueCondition());
+            bool inList = false;
+            int seen = 0;
+            for (int i = 0; i < all.Length; i++)
+            {
+                IRecorderElement element = all.GetElement(i);
+                object type = element.GetCurrentPropertyValue(30003 /* ControlType */);
+                if (type is int && (int)type == ListTypeId) { inList = (element.GetCurrentPropertyValue(30005) as string) == "Messages"; continue; }
+                if (!inList || !(type is int) || (int)type != ListItemTypeId) continue;
+                if (seen++ < index) continue;
+                ((IRecorderSelectionItem)element.GetCurrentPattern(SelectionItemPatternId)).Select();
+                return;
+            }
+            throw new InvalidOperationException("The Messages list has no row " + index + ".");
+        });
     }
 
     public static void Key(IntPtr render, int key)
@@ -312,9 +417,12 @@ function Invoke-Walk([string]$walk) {
         try {
             if ($walk -eq 'inbox') {
                 foreach ($step in 1..5) { Invoke-Step "Tab ($step)" { [UiaRecorder]::Key($render, 0x09) } }
-                Invoke-Step 'Select the second row through UI Automation (SelectionItem.Select)' {
+                Invoke-Step 'Select the second row through the managed UIA2 client (SelectionItem.Select)' {
                     $row = [UiaRecorder]::Row($render, 1)
                     ([System.Windows.Automation.SelectionItemPattern]$row.GetCurrentPattern([System.Windows.Automation.SelectionItemPattern]::Pattern)).Select()
+                }
+                Invoke-Step 'Select the third row through the COM client (IUIAutomationSelectionItemPattern.Select)' {
+                    [UiaRecorder]::SelectRowThroughCom($render, 2)
                 }
                 Invoke-Step 'Down arrow in the list' { [UiaRecorder]::Key($render, 0x28) }
                 Invoke-Step 'F5 receives' { [UiaRecorder]::Key($render, 0x74) }
