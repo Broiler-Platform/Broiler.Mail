@@ -565,6 +565,37 @@ public sealed class ResponsiveInboxTests
     }
 
     /// <summary>
+    /// The reader's rows of commands (Back to inbox, Retry loading, and Reply, Reply all and Forward) are
+    /// framed strips like the toolbar, and inset their buttons as the toolbar insets Receive mail, so a
+    /// button's border does not lie on its row's.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 480)]
+    [InlineData(1100, 720)]
+    public async Task TheReadersCommandRowsKeepTheToolbarsInset(int width, int height)
+    {
+        // A message whose text could not be loaded shows Retry loading under its header.
+        using var reader = await ReaderFixture.OpenAsync(width, height, "error");
+        var receive = reader.InboxButton("Receive mail");
+        var toolbar = (StandardToolbar)receive.Parent!;
+        Assert.True(toolbar.Padding > 0);
+        var commands = new List<string> { "Retry loading", "Reply", "Reply all", "Forward" };
+        if (reader.Layout.ShowsReaderOnly) commands.Add(InboxView.BackText);
+        foreach (var text in commands)
+        {
+            var button = reader.Button(text);
+            BRect row = button.Parent!.Bounds;
+            string where = $"At {width}x{height}, {text} is at {button.Bounds} in its row at {row}";
+            Assert.True(button.Bounds.Height > 0, where);
+            if (text is "Reply all" or "Forward") continue;
+            // The first button of a row is inset from its start, top and bottom as Receive mail is in the toolbar.
+            Assert.True(Math.Abs(receive.Bounds.Left - toolbar.Bounds.Left - (button.Bounds.Left - row.Left)) < 0.5, where);
+            Assert.True(Math.Abs(receive.Bounds.Top - toolbar.Bounds.Top - (button.Bounds.Top - row.Top)) < 0.5, where);
+            Assert.True(Math.Abs(toolbar.Bounds.Bottom - receive.Bounds.Bottom - (row.Bottom - button.Bounds.Bottom)) < 0.5, where);
+        }
+    }
+
+    /// <summary>
     /// A message whose text could not be loaded has nothing below its header, so the header may take
     /// the reader: opened in a short compact window, the problem and Retry are on screen, not scrolled
     /// away above an empty text area. Once the text arrives, the header is bounded again.
@@ -622,7 +653,7 @@ public sealed class ResponsiveInboxTests
     [InlineData(640, 520, 1.0, "plain", true, false)]
     [InlineData(640, 540, 1.0, "plain", true, false)]
     [InlineData(640, 640, 1.0, "long", true, false)]
-    [InlineData(640, 528, 1.25, "html", true, true)]
+    [InlineData(640, 552, 1.25, "html", true, true)]
     [InlineData(640, 480, 2.0, "plain", false, true)]
     [InlineData(640, 640, 2.0, "long", false, true)]
     [InlineData(1100, 720, 1.0, "plain", true, false)]
@@ -987,6 +1018,8 @@ public sealed class ResponsiveInboxTests
         public Divider Divider => Descendants(Pane).OfType<Divider>().Single();
         public UiSession Session => session;
         public StandardButton Button(string text) => Descendants(Pane).OfType<StandardButton>().Single(button => button.Text == text);
+        /// <summary>A command of the inbox outside the reader, such as Receive mail on the toolbar.</summary>
+        public StandardButton InboxButton(string text) => Descendants(shell.Window).OfType<StandardButton>().Single(button => button.Text == text);
 
         public void Resize(int width)
         {

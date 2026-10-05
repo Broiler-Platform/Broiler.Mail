@@ -171,7 +171,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             Background = StandardControlPaint.Surface, Foreground = StandardControlPaint.Text,
         };
         var meta = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Role = StandardLabelRole.Muted };
-        var replyActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 0, Spacing = 8, PreferredSize = new BSize(0, 36) };
+        // The reader's rows of commands are framed strips like the toolbar, and inset their buttons as it does.
+        var replyActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36) };
         var reply = new StandardButton { Text = "Reply" };
         var replyAll = new StandardButton { Text = "Reply all" };
         var forward = new StandardButton { Text = "Forward" };
@@ -180,10 +181,10 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         // A message that could not be loaded explains why beside its header and offers Retry there.
         var messageFeedback = new InlineFeedback();
         var messageRetry = new StandardButton { Text = "Retry loading" };
-        var messageRetryRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 0, Spacing = 8, PreferredSize = new BSize(0, 36) };
+        var messageRetryRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36) };
         messageRetryRow.AddChild(messageRetry);
         var back = new StandardButton { Text = BackText };
-        var backRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 0, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
+        var backRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
         backRow.AddChild(back);
         var headerStack = new StandardPanel { Spacing = 4 };
         foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, previewActions }) headerStack.AddChild(element);
