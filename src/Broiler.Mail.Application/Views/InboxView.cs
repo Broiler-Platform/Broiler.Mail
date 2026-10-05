@@ -126,8 +126,16 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         // The notice keeps the toolbar's inset, so its accent stays clear of the frame around the pane.
         listNotice.AddChild(new Inset(listFeedback, toolbar.Padding, toolbar.Padding));
         listNotice.AddChild(listRetryRow);
-        // A long notice at a large text size scrolls instead of leaving the list no room.
-        var noticeArea = new BoundedScrollArea(listNotice, 0.4, "Inbox notice");
+        // A long notice at a large text size scrolls instead of leaving the list no room. Like the reader's
+        // header, it ends between the explanation's lines, not inside one, and shows the row with Retry
+        // whole or not at all: it grows to show that row while the list keeps two rows, and otherwise
+        // ends above it.
+        const int listRowsKept = 2;
+        var noticeArea = new BoundedScrollArea(listNotice, 0.4, "Inbox notice")
+        {
+            Rows = NoticeRows,
+            MinimumRemaining = () => listRowsKept * list.EffectiveItemHeight,
+        };
         listPane.AddChild(noticeArea);
         listPane.SetDock(noticeArea, UiDock.Top);
         listPane.AddChild(list);
@@ -214,6 +222,21 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         reading.SetDock(headerArea, UiDock.Top);
         reading.AddChild(text);
         pinnedCommands.AddChild(replyActions);
+
+        // Where the notice's rows are, as the notice last measured them: the explanation's lines, inside the
+        // inset and the feedback's own padding, and the row with Retry.
+        IEnumerable<(double Start, double End, bool Grows, double LineHeight)> NoticeRows()
+        {
+            double top = 0;
+            foreach (var child in listNotice.Children.Where(child => child.Visibility != UiVisibility.Collapsed))
+            {
+                double height = child.DesiredSize.Height;
+                if (height > 0 && child == listRetryRow) yield return (top, top + height, true, 0);
+                else if (height > 0 && listFeedback.Children.OfType<StandardLabel>().FirstOrDefault() is { } explanation)
+                    yield return (top + ((height - explanation.DesiredSize.Height) / 2), top + height, false, BTextMeasurer.GetLineHeight(explanation.Font));
+                top += height + listNotice.Spacing;
+            }
+        }
 
         // Where the header's rows are, as the stack last measured them, which are rows of buttons, and the
         // line height of the subject, the sender and recipients, and the date, so the header may end between lines.

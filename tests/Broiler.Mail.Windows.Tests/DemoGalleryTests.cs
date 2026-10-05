@@ -275,6 +275,54 @@ public sealed class DemoGalleryTests
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
 
+    /// <summary>
+    /// The inbox notice of the gallery's list problems, with their own explanations and DirectWrite's
+    /// metrics, at the sizes of the 200 % captures. The explanation is shown whole or cut between two of
+    /// its lines, never inside one, and the row with Retry is shown whole or not at all: whole where the
+    /// list keeps two rows below it.
+    /// </summary>
+    [Theory]
+    [InlineData("receive-error", 640, 480, false)]
+    [InlineData("receive-canceled", 640, 480, false)]
+    [InlineData("load-error", 640, 480, false)]
+    [InlineData("receive-error", 1100, 720, true)]
+    [InlineData("receive-canceled", 1100, 720, true)]
+    [InlineData("load-error", 1100, 720, false)]
+    public void Inbox_Notice_Ends_Between_Its_Lines_And_Shows_Retry_Whole_Or_Not_At_All(string name, int width, int height, bool retryShown)
+    {
+        var scenario = DemoOptions.Gallery.Single(item => item.Name == name).Scenario;
+        using (new Direct2DRenderer()) { }
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
+        try
+        {
+            Run(scenario, width, height, null, (model, shell, render) =>
+            {
+                // The app's window is compact before the fixture chooses a message, so it shows the list.
+                shell.Inbox.GoBackToList();
+                render();
+                Assert.NotNull(model.Inbox.ListProblem);
+                var notice = Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Inbox notice");
+                BRect shown = notice.Scroll.ContentBounds;
+                string where = $"{name} at {width}x{height}, text 200 %: the notice shows {shown} of {notice.AvailableHeight}";
+                Assert.True(shown.Height > 0, where);
+                var explanation = Descendants(notice).OfType<InlineFeedback>().Single();
+                var label = Descendants(explanation).OfType<StandardLabel>().Single();
+                if (label.Bounds.Bottom > shown.Bottom + 0.5)
+                {
+                    double line = BTextMeasurer.GetLineHeight(label.Font);
+                    double lines = (shown.Bottom - label.Bounds.Top) / line;
+                    Assert.True(lines >= 0.99 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the explanation at {label.Bounds} is cut inside a line of {line}.");
+                }
+                var retry = Descendants(notice).OfType<StandardButton>().Single();
+                BRect row = retry.Parent!.Bounds;
+                Assert.True(row.Bottom <= shown.Bottom + 0.5 || row.Top >= shown.Bottom - 0.5, $"{where}: the row with Retry at {row} is cut.");
+                Assert.True(retryShown == row.Bottom <= shown.Bottom + 0.5, $"{where}: Retry is at {retry.Bounds}.");
+            });
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
     [Fact]
     public void Save_Error_Shows_Settings_Feedback()
     {
