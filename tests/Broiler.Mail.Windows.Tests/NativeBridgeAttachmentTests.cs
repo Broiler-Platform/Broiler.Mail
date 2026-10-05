@@ -13,6 +13,7 @@ namespace Broiler.Mail.Windows.Tests;
 /// constructed before the window existed, received zero handles, attached to nothing, and external UI
 /// Automation clients saw an empty render pane.
 /// </summary>
+[Collection("UI theme")]
 public sealed class NativeBridgeAttachmentTests
 {
     private const uint WmGetObject = 0x003D;

@@ -15,6 +15,7 @@ using Broiler.UI.Standard;
 namespace Broiler.Mail.Windows.Tests;
 
 /// <summary>UI-11: the HTML preview by keyboard and screen reader, and a reading position that survives reflow.</summary>
+[Collection("UI theme")]
 public sealed class HtmlPreviewKeyboardTests
 {
     private static readonly string TallDocument = string.Concat(Enumerable.Range(1, 60).Select(index => $"<p>Paragraph {index}: a longer line of text that wraps differently once the window becomes narrower than before, so a resize changes how tall the whole document is.</p>"))
@@ -192,7 +193,9 @@ public sealed class HtmlPreviewKeyboardTests
         {
             try
             {
-                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<p>Agenda</p>", new HashSet<string>()), "Agenda as text", _ => { })
+                // Opened light, as from a light shell; without a theme it would take the process-wide palette.
+                using var window = new HtmlPreviewWindow(new HtmlPreviewDocument("<p>Agenda</p>", new HashSet<string>()), "Agenda as text", _ => { },
+                    theme: StandardThemeTokens.Light)
                 { ShowInTaskbar = false, Opacity = 0 };
                 window.Shown += (_, _) =>
                 {
@@ -288,6 +291,10 @@ public sealed class HtmlPreviewKeyboardTests
             _root = root;
             _host = new Host { Width = width, Height = height };
             Session = new StandardUiSessionBuilder().WithDispatcher(new ImmediateUiDispatcher()).Build(_host);
+            // Light at 100 %, whatever the process-wide palette is: at a large text size, the status line
+            // in the reflow test fills the whole window and leaves the document no viewport.
+            StandardControlPaint.SetSessionTheme(Session, StandardThemeTokens.Light);
+            StandardThemeController.ApplyToSubtree(root, StandardThemeTokens.Light);
             Session.AddRoot(root);
             Session.RenderFrame();
         }

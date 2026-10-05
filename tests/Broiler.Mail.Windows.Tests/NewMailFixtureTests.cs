@@ -15,6 +15,7 @@ using Broiler.UI.Standard;
 namespace Broiler.Mail.Windows.Tests;
 
 /// <summary>UI-02: the new-mail fixture, its acceptance-only server changes, and the simulated-scale option.</summary>
+[Collection("UI theme")]
 public sealed class NewMailFixtureTests
 {
     [Theory]

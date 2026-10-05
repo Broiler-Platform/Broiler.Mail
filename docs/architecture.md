@@ -82,13 +82,29 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   window is created, preserving the entry point's STA thread. Controls are never
   updated by storage continuations.
 - The Windows host implements `IUiClipboardHost` using bounded Unicode clipboard
-  access and `IUiTextInputHost` to place the default IME composition window. Committed
-  text flows through the Graphics WM_CHAR bridge. A per-monitor-v2 manifest and
+  access and `IUiTextInputHost` to place the default IME composition window at the
+  caret, in physical pixels, and to turn the IME off while a password field has the
+  caret, as a native password box does. Hosting's `WindowsInputBridge` subclasses the
+  render window. It handles characters, surrogate pairs, IME composition, and both
+  wheel axes, and tracks dead keys, whose composed character Windows delivers; the
+  Graphics character and wheel callbacks are not reached while it is attached.
+  Broiler.UI draws the composition inline, but the default IME window can still show
+  its own copy, because Hosting passes `WM_IME_SETCONTEXT` on unchanged and forwards
+  the composition messages to `DefWindowProc` (UI-10). A per-monitor-v2 manifest and
   native resize handling preserve logical sizes, with a 640×480 minimum client area.
 - `MailKeyboardNavigation` adds enabled-control traversal, automatic scrolling to
   focused fields, tab shortcuts, receive, and cancellation. First run opens Account.
   Full OS screen-reader/UI Automation integration remains the version 7 work item.
-  The legacy Graphics input bridge is isolated in the Windows project.
+  The legacy Graphics input adapter is isolated in the Windows project. For the main
+  window's native input it carries only pointer movement, buttons, and key presses
+  (the measurement harness also synthesizes events through it); the HTML preview
+  window takes all of its input through it. Broiler.Input 0.1.0-preview.5 has
+  neutral Windows message translators (`WindowsMouseInputDevice` and
+  `WindowsKeyboardInputDevice`) and a host seam (`IWindowsInputHost`), but Mail
+  references neither package and no consumed host implements the seam: Graphics
+  turns pointer and key messages into the legacy callbacks, and Hosting's bridge
+  passes them on. The adapter can go once Hosting feeds those translators from its
+  subclass and stops the callbacks.
 
 ## Verification
 

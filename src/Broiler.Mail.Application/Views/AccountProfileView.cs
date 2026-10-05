@@ -157,6 +157,10 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             // once the checklist above it has its new text.
             if (returnFocus && surface.Session is { } session)
                 FocusNavigation.FocusAndReveal(session, model.LastTest == MailProtocol.Smtp && testSmtp.CanFocus ? testSmtp : test);
+            // A command that stays disabled once its work is done hands focus on: an SMTP test that found
+            // no saved password to the SMTP password, which comes next. Focus stays while it runs.
+            else if (!model.IsBusy && surface.Session is { } focusSession)
+                FocusNavigation.KeepFocusUsable(focusSession, surface, focusSession.FocusedElement == testSmtp ? smtpPassword : null);
         }
         void RefreshSetup()
         {

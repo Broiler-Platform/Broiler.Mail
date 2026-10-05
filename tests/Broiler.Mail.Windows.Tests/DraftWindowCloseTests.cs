@@ -7,6 +7,7 @@ using static Broiler.Native.Windows.WindowNative;
 
 namespace Broiler.Mail.Windows.Tests;
 
+[Collection("UI theme")]
 public sealed class DraftWindowCloseTests
 {
     [Fact]
