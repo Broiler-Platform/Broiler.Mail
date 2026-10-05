@@ -148,7 +148,7 @@ public sealed class KeyboardShortcutTests
         fixture.Shell.Navigation.SelectTab(tab);
         fixture.Session.RenderFrame();
         var stops = MailKeyboardNavigation.TabStops(fixture.Shell.Navigation.SelectedTab!.Content!);
-        // An edit strokes its 2 DIP ring centred on its bounds, so 1 DIP of it lies outside them. A fixed
+        // An edit strokes its 2 DIP ring centered on its bounds, so 1 DIP of it lies outside them. A fixed
         // value rather than the form's inset, so Mail notices if the room goes away.
         const double ringOutside = 1;
         var cut = new List<string>();

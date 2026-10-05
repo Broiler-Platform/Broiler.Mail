@@ -20,7 +20,7 @@ demo server:
   - renumber: the server changes UIDVALIDITY. The reader closes and the status says the inbox was renumbered.
 The kept run then clicks Reply with posted mouse input at the button's UI Automation bounds and checks
 that the composer's message body has focus. It returns to the inbox twice, once with a posted click at the
-centre of the Inbox tab item's bounds (its header) and once by selecting the tab through UI Automation,
+center of the Inbox tab item's bounds (its header) and once by selecting the tab through UI Automation,
 and checks each time that focus returns to the reader control that had it when composing started.
 
 Rows are matched by AutomationId (item_<id>) and named by Mail's presenter: "Unread, From: <sender>,
@@ -250,7 +250,7 @@ public static class RefreshCheck
         PostMessage(render, WmMouseWheel, (IntPtr)((delta & 0xFFFF) << 16), Point(render, over.Left + over.Width / 2, over.Top + over.Height / 2, false));
     }
 
-    /// <summary>A left click at the centre of screen bounds, posted in the render child's client pixels.</summary>
+    /// <summary>A left click at the center of screen bounds, posted in the render child's client pixels.</summary>
     public static void Press(IntPtr render, Rect bounds) { PostMessage(render, WmLButtonDown, (IntPtr)1, Point(render, bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2, true)); }
     public static void Release(IntPtr render, Rect bounds) { PostMessage(render, WmLButtonUp, IntPtr.Zero, Point(render, bounds.Left + bounds.Width / 2, bounds.Top + bounds.Height / 2, true)); }
 
@@ -484,7 +484,7 @@ function Test-Reply([IntPtr]$render, [IntPtr]$window, [string]$name, $all, $resu
     $inboxTab = [RefreshCheck]::Find($all, [System.Windows.Automation.ControlType]::TabItem, 'Inbox')
     if (!$reply -or !$inboxTab) { $result.findings += 'REPLY: the reader has no Reply button or the window no Inbox tab.'; return }
     $replyBounds = $reply.Current.BoundingRectangle
-    # A tab item reports its header, so the click goes to the centre of the Inbox tab item's bounds.
+    # A tab item reports its header, so the click goes to the center of the Inbox tab item's bounds.
     $inboxHeader = $inboxTab.Current.BoundingRectangle
     $strip = [RefreshCheck]::Find($all, [System.Windows.Automation.ControlType]::Tab, 'Inbox')
     $tabCount = @($all | Where-Object { try { $_.Current.ControlType -eq [System.Windows.Automation.ControlType]::TabItem } catch { $false } }).Count
@@ -584,7 +584,7 @@ foreach ($r in $results | Where-Object { $_.focusInComposer_click }) {
 }
 foreach ($r in $results | Where-Object { $_.tabItemBounds }) {
     $lines.Add('')
-    $lines.Add("Tab item bounds: UI Automation reports the Inbox tab item as $($r.tabItemBounds.inbox) px wide in the $($r.tabItemBounds.strip) px tab strip of $($r.tabItemBounds.tabs) tabs; the click round clicks the centre of that rectangle.")
+    $lines.Add("Tab item bounds: UI Automation reports the Inbox tab item as $($r.tabItemBounds.inbox) px wide in the $($r.tabItemBounds.strip) px tab strip of $($r.tabItemBounds.tabs) tabs; the click round clicks the center of that rectangle.")
 }
 $lines.Add('')
 $lines.Add('## Findings')
@@ -597,7 +597,7 @@ foreach ($r in $results | Where-Object { $_.findings.Count -gt 0 }) {
 if (@($results | Where-Object { $_.findings -match '^RETURN_FOCUS_AUTOMATION' }).Count -gt 0) {
     $lines.Add('### RETURN_FOCUS_AUTOMATION')
     $lines.Add('')
-    $lines.Add('For SelectionItemPattern.Select, UI Automation first calls the tab item provider''s SetFocus, then Select. Up to Broiler.Hosting preview.5 the tab item''s SetFocus selected the tab, so Mail restored the reader control, and then focused the tab view. Since preview.7 SetFocus focuses the tab view without selecting and Select does what a click does, so this finding is a regression of that change.')
+    $lines.Add('For SelectionItemPattern.Select, UI Automation first calls the tab item provider''s SetFocus, then Select. Up to Broiler.Hosting preview.5 the tab item''s SetFocus selected the tab, which let Mail restore the reader control, and then focused the tab view (checked with a debugger on 4 October 2026). Hosting preview.7 split the two: SetFocus focuses the tab view without selecting, and Select does what a click does. If this finding appears, check first whether that split regressed, then Mail''s restore of the reader control when a tab is selected.')
     $lines.Add('')
 }
 $lines.Add('## Not covered by this run')
