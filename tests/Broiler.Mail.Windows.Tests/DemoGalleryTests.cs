@@ -331,14 +331,16 @@ public sealed class DemoGalleryTests
                 Assert.True(replyShown == onScreen, $"{where}: Reply is at {reply.Bounds}, the line at {divider}.");
                 // Shown, their row keeps a gap of 4 DIP from the line, as below the header; the compact
                 // header that scrolled left it flush with the line.
+                const double gap = 4;
                 if (replyShown)
-                    Assert.True(divider.Top - reply.Parent!.Bounds.Bottom >= 3.5, $"{where}: Reply's row ends at {reply.Parent.Bounds.Bottom}, the line at {divider}.");
+                    Assert.True(divider.Top - reply.Parent!.Bounds.Bottom >= gap - 0.5, $"{where}: Reply's row ends at {reply.Parent.Bounds.Bottom}, the line at {divider}.");
                 Assert.True(divider.Top >= header.Bounds.Bottom - 0.5, $"{where}: the line is at {divider}.");
                 var text = Descendants(reader).OfType<ScrollableMessageText>().Single();
                 Assert.Equal(divider.Bottom, text.Bounds.Top, 0.5);
-                // The lines are whole below the text's top margin; the gap below Reply's row, where the header
-                // ends with it, may narrow the margin below them.
-                Assert.True(text.Bounds.Height >= text.HeightOfLines(textLines) - (text.HeightOfLines(0) / 2) - 0.5, $"{where}: the text has {text.Bounds.Height}, less than {textLines} lines.");
+                // The text keeps its lines and their margins. Only where the header scrolls and ends with Reply's
+                // row may the gap below that row narrow the margin below the lines, by that gap at most.
+                bool endsWithReply = inHeader && header.Scroll.HasVerticalScrollbar && Math.Abs(shown.Bottom - reply.Parent!.Bounds.Bottom - gap) < 0.5;
+                Assert.True(text.Bounds.Height >= text.HeightOfLines(textLines) - (endsWithReply ? gap : 0) - 0.5, $"{where}: the text has {text.Bounds.Height}, less than {textLines} lines.");
                 // Beside the list, the subject's first line is whole.
                 if (width >= 680)
                 {
