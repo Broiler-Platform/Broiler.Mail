@@ -124,7 +124,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _appearance = new AppearanceController(_session, model.Settings, _host);
         _appearance.Applied += (_, _) =>
         {
-            WindowsTitleBar.Apply(NativeHandle, _appearance.Current!.IsDark);
+            WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
             // An open HTML preview follows too; it runs its own session on its own thread.
             _htmlPreview.ApplyTheme(_appearance.Current);
             Invalidate();
@@ -234,7 +234,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     {
         _recorder?.MarkInput();
         StandardThemeController.Apply(_session, tokens);
-        WindowsTitleBar.Apply(NativeHandle, tokens.IsDark);
+        WindowsTitleBar.ApplyDarkMode(NativeHandle, tokens.IsDark);
         Invalidate();
     }
 
@@ -278,7 +278,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _shell.Window, () => DpiScale);
         _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboard.Handle, () => DpiScale, Invalidate);
         // Before the first paint, so a dark caption never flashes light.
-        WindowsTitleBar.Apply(NativeHandle, _appearance.Current!.IsDark);
+        WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
     }
 
     protected override void OnResized(BSize clientSize, double dpiScale)

@@ -20,7 +20,18 @@ using Broiler.UI;
 
 namespace Broiler.Mail.Application.Views;
 
-/// <summary>Broiler.UI's tab control measures using its preferred size. Remeasure content at its actual allocation.</summary>
+/// <summary>
+/// Lays a tab out only while it is shown, and then at the rectangle it is given. StandardTabView
+/// (Broiler.UI preview.17) arranges every hidden tab at an empty rectangle, which lays a hidden form out
+/// at no width; the composer's status area then came back scrolled to its top after another tab was
+/// shown. Skipping that arrange keeps a hidden tab as it was left.
+/// </summary>
+/// <remarks>
+/// The re-measure is this wrapper's original purpose: the old tab control measured at its preferred
+/// size. The standard tab view now measures at its allocated size, but re-measures at arrange only when
+/// the width differs; this one also covers a height difference, and costs nothing when the sizes match.
+/// Retire the wrapper once the tab view leaves hidden content unarranged; ShellLayoutTests shows when.
+/// </remarks>
 // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=4; Fingerprint=14962F
 // Broiler-Falsified-If: tab content is arranged at the tab control's preferred size instead of the rectangle it was given
 // Broiler-Human:        PENDING
@@ -38,7 +49,7 @@ internal sealed class TabContent : UiElement
     // Broiler-Human:        PENDING
     protected override void ArrangeCore(BRect finalRect)
     {
-        if (finalRect.IsEmpty) return;
+        if (finalRect.IsEmpty) return; // Hidden: keep the layout it was left with.
         _content.Measure(finalRect.Size);
         _content.Arrange(finalRect);
     }

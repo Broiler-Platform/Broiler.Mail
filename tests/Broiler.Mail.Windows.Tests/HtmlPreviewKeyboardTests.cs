@@ -196,6 +196,7 @@ public sealed class HtmlPreviewKeyboardTests
                 { ShowInTaskbar = false, Opacity = 0 };
                 window.Shown += (_, _) =>
                 {
+                    bool lightCaption = !DwmCaption.IsDark(window.NativeHandle);
                     // Applied from another thread, as the main window does; it runs on the preview's thread.
                     Task.Run(() => window.ApplyTheme(changed)).Wait();
                     window.Post(() =>
@@ -206,6 +207,13 @@ public sealed class HtmlPreviewKeyboardTests
                             Assert.Equal(changed.FontBody, window.ToggleButton.Font);
                             Assert.Equal(changed.FontBody, window.Status.Font);
                             Assert.Equal(changed.Surface, window.Root.Background);
+                            // The caption follows as well, from light (opened from a light shell) to dark,
+                            // where Windows supports a dark caption. WindowCaptionTests covers the other calls.
+                            if (DwmCaption.IsSupported)
+                            {
+                                Assert.True(lightCaption);
+                                Assert.True(DwmCaption.IsDark(window.NativeHandle));
+                            }
                             window.Session.RenderFrame();
                             finished.TrySetResult();
                         }

@@ -20,7 +20,6 @@ using Broiler.UI.Edit.Standard;
 using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel.Standard;
-using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
 using Broiler.UI.Forms.Standard;
 using Broiler.Mail.Application.ViewModels;
@@ -57,10 +56,6 @@ internal static class ConfigurationForm
         panel.AddChild(label);
         return label;
     }
-
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=64528A
-    // Broiler-Human:        PENDING
-    public static ViewportScrollView Wrap(StandardPanel panel) => new(panel);
 
     /// <summary>
     /// Names a form's feedback area. When long feedback scrolls, the area is a tab stop so the keyboard
