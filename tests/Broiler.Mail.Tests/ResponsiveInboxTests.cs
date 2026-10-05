@@ -292,10 +292,20 @@ public sealed class ResponsiveInboxTests
         await model.Inbox.ReceiveAsync();
         Settle();
         var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
+        // Where the footer points, in the compact reader as beside the list: the explanation, then Retry
+        // loading, below the message's subject, sender and date.
+        void AssertDetailsAndRetryBelowTheHeader()
+        {
+            var reader = Descendants(shell.Window).OfType<StandardSplitContainer>().Single().SecondPane!;
+            BRect date = Descendants(reader).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received ", StringComparison.Ordinal)).Bounds;
+            BRect details = Descendants(reader).OfType<InlineFeedback>().Single(feedback => feedback.Message.Length > 0).Bounds;
+            BRect retry = Descendants(reader).OfType<StandardButton>().Single(button => button.Text == "Retry loading").Bounds;
+            Assert.True(date.Bottom <= details.Top + 0.5 && details.Bottom <= retry.Top + 0.5, $"The date is at {date}, the details at {details}, Retry at {retry}.");
+        }
 
         // Moving through the compact list loads a message without opening it, so its problem is out of sight.
         const string open = "The message could not be loaded. Open it to see the details and Retry.";
-        const string beside = "The message could not be loaded. Details and Retry are beside it.";
+        const string below = "The message could not be loaded. Details and Retry are below the message header.";
         await model.Inbox.SelectAsync(messages[2].Key);
         Settle();
         Assert.Equal(InboxProblemScope.Message, model.Inbox.ProblemScope);
@@ -307,19 +317,21 @@ public sealed class ResponsiveInboxTests
         Settle();
         Assert.True(layout.ShowsReaderOnly);
         Assert.Equal(InboxProblemScope.Message, model.Inbox.ProblemScope);
-        Assert.Equal(beside, shell.Footer.Text);
+        Assert.Equal(below, shell.Footer.Text);
+        AssertDetailsAndRetryBelowTheHeader();
         Assert.True(shell.Inbox.GoBackToList());
         Settle();
         Assert.Equal(open, shell.Footer.Text);
 
         // Resizing switches between both panes and the list alone.
-        foreach (var (width, expected) in new[] { (1100, beside), (640, open) })
+        foreach (var (width, expected) in new[] { (1100, below), (640, open) })
         {
             host.Width = width;
             shell.Window.InvalidateMeasure();
             Settle();
             Assert.Equal(width == 640, layout.IsCompact);
             Assert.Equal(expected, shell.Footer.Text);
+            if (expected == below) AssertDetailsAndRetryBelowTheHeader();
         }
 
         // A receive failure while the compact reader is shown: the list, with its details and Retry, is
@@ -504,12 +516,12 @@ public sealed class ResponsiveInboxTests
         Settle();
         Assert.Equal(selected, shell.Footer.Text);
 
-        // A message that fails to load is explained first, beside it; once it loads, the pointer is back.
+        // A message that fails to load is explained first, in the reader; once it loads, the pointer is back.
         receiver.Body = (_, _) => throw new MailConnectionException("The connection closed.");
         Assert.True(shell.Inbox.OpenSelected());
         Settle();
         Assert.True(layout.ShowsReaderOnly);
-        Assert.Equal("The message could not be loaded. Details and Retry are beside it.", shell.Footer.Text);
+        Assert.Equal("The message could not be loaded. Details and Retry are below the message header.", shell.Footer.Text);
         receiver.Body = body;
         await model.Inbox.RetryAsync(InboxProblemScope.Message);
         Settle();

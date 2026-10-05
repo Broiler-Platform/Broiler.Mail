@@ -221,6 +221,24 @@ public sealed class DemoGalleryTests
     }
 
     /// <summary>
+    /// Beside the list, the footer points to the explanation and Retry loading below the message's header,
+    /// where the reader shows them, as the compact reader does.
+    /// </summary>
+    [Fact]
+    public void Body_Error_Footer_Points_Below_The_Message_Header()
+    {
+        Run(DemoScenario.BodyError, 1100, 720, null, (_, shell, render) =>
+        {
+            render();
+            Assert.Equal("The message could not be loaded. Details and Retry are below the message header.", Footer(shell));
+            var date = Descendants(Tab(shell, "inbox")).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received ", StringComparison.Ordinal));
+            var retry = Button(shell, "inbox", "Retry loading");
+            Assert.True(IsAvailable(retry));
+            Assert.True(retry.Bounds.Top >= date.Bounds.Bottom - 0.5, $"Retry loading is at {retry.Bounds}, the date at {date.Bounds}.");
+        });
+    }
+
+    /// <summary>
     /// The reader header of the gallery's reading fixtures, with their own subject, sender, recipient and
     /// date, as Accept-UI -OpenReader shows them: in the compact reader at 640x480, and at 1100x720 with
     /// twice the text size. Each row is shown whole, scrolled below the header whole, or cut between two

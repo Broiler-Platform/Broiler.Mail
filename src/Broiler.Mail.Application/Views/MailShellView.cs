@@ -134,8 +134,8 @@ public sealed class MailShellView : IDisposable
     /// pane, the footer says how to show it instead, naming the reader's way back by its label. So
     /// does the status of a message the compact list selected without showing it. At the session limit,
     /// which is explained above the list, the compact reader's footer likewise points there instead of
-    /// giving the reading status, so it is no longer than that status. A message problem, beside the
-    /// reader, comes first.
+    /// giving the reading status, so it is no longer than that status. A message problem, in the reader,
+    /// comes first.
     /// </summary>
     private static string InboxStatus(InboxViewModel inbox, InboxView view)
     {
@@ -148,7 +148,7 @@ public sealed class MailShellView : IDisposable
             (_, true, true) => "Canceled. Retry is available.",
             (InboxProblemScope.Message, true, false) => "Canceled. Open the message to retry.",
             (_, true, false) => $"Canceled. Use {InboxView.BackText} to retry.",
-            (InboxProblemScope.Message, false, true) => "The message could not be loaded. Details and Retry are beside it.",
+            (InboxProblemScope.Message, false, true) => "The message could not be loaded. Details and Retry are below the message header.",
             (InboxProblemScope.Message, false, false) => "The message could not be loaded. Open it to see the details and Retry.",
             _ => (inbox.ProblemIsOlderPage ? "Older messages could not be loaded. " : "Mail could not be received. ")
                 + (paneShown ? "Details and Retry are above the list." : $"Use {InboxView.BackText} to see the details and Retry."),

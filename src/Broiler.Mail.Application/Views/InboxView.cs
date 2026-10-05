@@ -189,7 +189,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         foreach (var button in new[] { reply, replyAll, forward }) replyActions.AddChild(button);
         // The HTML preview's row is collapsed while empty, so it adds no gap below the row above it.
         var previewActions = new StandardPanel { Visibility = UiVisibility.Collapsed };
-        // A message that could not be loaded explains why beside its header and offers Retry there.
+        // A message that could not be loaded explains why below its subject, sender and date, and offers
+        // Retry there, in the compact reader as beside the list.
         var messageFeedback = new InlineFeedback();
         var messageRetry = new StandardButton { Text = "Retry loading" };
         var messageRetryRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36) };
