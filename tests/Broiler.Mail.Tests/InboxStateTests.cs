@@ -10,6 +10,7 @@ using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
+using Broiler.UI.Label.Standard;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.Standard;
 
@@ -30,6 +31,23 @@ public sealed class InboxStateTests
         Assert.Equal("The inbox is empty.", fixture.ListFeedback.Message);
         Assert.Equal(FeedbackKind.Information, fixture.ListFeedback.Kind);
         Assert.Equal(InboxProblemScope.None, fixture.Model.ProblemScope);
+    }
+
+    /// <summary>
+    /// Once received, an empty inbox has nothing to select: the reader says that the inbox is empty, as
+    /// the list does, and offers Receive mail to check again, not the wording for an inbox never received.
+    /// </summary>
+    [Fact]
+    public async Task TheReaderAgreesWithTheListAboutAnEmptyInbox()
+    {
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)));
+        Assert.Equal("Receive mail to load your inbox.", fixture.Reader.Text);
+        await fixture.ReceiveAsync();
+
+        Assert.Equal("The inbox is empty.", fixture.ListFeedback.Message);
+        Assert.Equal("The inbox is empty.", fixture.ReaderHeading.Text);
+        Assert.Equal("Use Receive mail to check for new messages.", fixture.Reader.Text);
+        Assert.True(fixture.Button("Receive mail").IsEnabled);
     }
 
     [Fact]
@@ -242,6 +260,8 @@ public sealed class InboxStateTests
         public InlineFeedback ListFeedback => Descendants(_content).OfType<InlineFeedback>().First();
         public InlineFeedback MessageFeedback => Descendants(_content).OfType<InlineFeedback>().Skip(1).First();
         public ScrollableMessageText Reader => Descendants(_content).OfType<ScrollableMessageText>().Single();
+        /// <summary>The reader's heading: the subject, or what to do without a message.</summary>
+        public StandardLabel ReaderHeading => Descendants(_content).OfType<StandardLabel>().Single(label => label.TextStyle == StandardTextStyle.Title);
         public StandardButton Button(string text) => Descendants(_content).OfType<StandardButton>().Single(button => button.Text == text);
 
         public bool IsShown(UiElement element)

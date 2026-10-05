@@ -259,7 +259,10 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
                 else if (!layout.IsCompact) readerOpen = true;
             }
             layout.Refresh();
-            subjectLine.Text = item is null ? "Select a message to read." : item.Subject.Length > 0 ? item.Subject : "(No subject)";
+            // A received inbox without messages has nothing to select; the reader says so, as the list does.
+            bool empty = model.HasLoaded && model.Messages.Count == 0;
+            subjectLine.Text = item is not null ? (item.Subject.Length > 0 ? item.Subject : "(No subject)")
+                : empty ? "The inbox is empty." : "Select a message to read.";
             string detailText = item is null ? "" : string.Join("\n", HeaderDetails(item, model.Body is { } loaded && loaded.Key == item.Key ? loaded.Composition : null));
             if (detailText != details.GetPlainText()) details.SetPlainText(detailText);
             details.Visibility = item is null ? UiVisibility.Collapsed : UiVisibility.Visible;
@@ -269,7 +272,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             ShowStates();
             var body = model.Body;
             string reader = body is null ? (model.SelectedMessage is null
-                ? (model.Messages.Count == 0 ? "Receive mail to load your inbox." : "Choose a message from the inbox list.")
+                ? (empty ? "Use Receive mail to check for new messages." : model.Messages.Count == 0 ? "Receive mail to load your inbox." : "Choose a message from the inbox list.")
                 : (model.IsLoadingMessage ? "Loading message body…" : ""))
                 : (body.IsHtmlFallback ? "Text extracted from HTML (formatting omitted).\n\n" : "") + body.PlainText +
                   (body.IsTruncated ? "\n\n[Preview limited to 32,000 characters.]" : "");
