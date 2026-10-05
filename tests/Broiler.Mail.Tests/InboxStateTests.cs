@@ -75,6 +75,29 @@ public sealed class InboxStateTests
         first.Settle();
     }
 
+    /// <summary>
+    /// Without a message, the heading is the reader header's only row: the empty date line and the HTML
+    /// preview's empty row take no room, so the line below the header is as far below the heading as the
+    /// header's top is above it, before the first receive and in an empty inbox alike. The empty date
+    /// line used to leave a blank line between "The inbox is empty." and the line.
+    /// </summary>
+    [Fact]
+    public async Task WithoutAMessageTheReaderHeaderEndsBelowItsHeading()
+    {
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)));
+        AssertHeadingIsTheOnlyRow("Select a message to read.");
+        await fixture.ReceiveAsync();
+        AssertHeadingIsTheOnlyRow("The inbox is empty.");
+
+        void AssertHeadingIsTheOnlyRow(string heading)
+        {
+            BRect title = fixture.ReaderHeading.Bounds, header = fixture.Header.Bounds, line = fixture.Divider.Bounds;
+            Assert.Equal(heading, fixture.ReaderHeading.Text);
+            Assert.True(title.Height > 0, $"The heading is at {title}.");
+            Assert.Equal(title.Top - header.Top, line.Top - title.Bottom, 0.5);
+        }
+    }
+
     [Fact]
     public async Task FailedRefreshKeepsMessagesAndOffersRetryAboveTheList()
     {
@@ -422,6 +445,9 @@ public sealed class InboxStateTests
         public ScrollableMessageText Reader => Descendants(_content).OfType<ScrollableMessageText>().Single();
         /// <summary>The reader's heading: the subject, or what to do without a message.</summary>
         public StandardLabel ReaderHeading => Descendants(_content).OfType<StandardLabel>().Single(label => label.TextStyle == StandardTextStyle.Title);
+        public BoundedScrollArea Header => Descendants(_content).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+        /// <summary>The line between the reader's header and the message text.</summary>
+        public Divider Divider => Descendants(_content).OfType<Divider>().Single();
         public StandardButton Button(string text) => Descendants(_content).OfType<StandardButton>().Single(button => button.Text == text);
 
         public bool IsShown(UiElement element)

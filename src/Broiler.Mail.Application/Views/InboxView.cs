@@ -187,7 +187,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var replyAll = new StandardButton { Text = "Reply all" };
         var forward = new StandardButton { Text = "Forward" };
         foreach (var button in new[] { reply, replyAll, forward }) replyActions.AddChild(button);
-        var previewActions = new StandardPanel();
+        // The HTML preview's row is collapsed while empty, so it adds no gap below the row above it.
+        var previewActions = new StandardPanel { Visibility = UiVisibility.Collapsed };
         // A message that could not be loaded explains why beside its header and offers Retry there.
         var messageFeedback = new InlineFeedback();
         var messageRetry = new StandardButton { Text = "Retry loading" };
@@ -302,6 +303,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             // The read state is one phrase with its separator (non-breaking spaces), so a line, and a header
             // that ends between lines, may end after the date but never on "Unread on".
             meta.Text = item is null ? "" : $"Received {dateFormat.Detail(item.ReceivedAt)} ·\u00A0{(item.IsRead ? "Read" : "Unread")}\u00A0on\u00A0server";
+            // An empty label still takes a line, so without a message the heading is the header's only row.
+            meta.Visibility = details.Visibility;
             replyActions.Visibility = item is null || commands is null ? UiVisibility.Collapsed : UiVisibility.Visible;
             reply.IsEnabled = replyAll.IsEnabled = forward.IsEnabled = commands?.CanRespond == true;
             ShowStates();
@@ -326,6 +329,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
                 foreach (var child in previewActions.Children.ToArray()) { previewActions.RemoveChild(child); child.Dispose(); }
                 if (htmlPreview is not null && body is not null && (body.HtmlText is not null || body.HtmlUnavailableReason is not null))
                     previewActions.AddChild(new HtmlMessagePreview(htmlPreview).CreateContent(body));
+                previewActions.Visibility = previewActions.Children.Count > 0 ? UiVisibility.Visible : UiVisibility.Collapsed;
             }
             shownBody = body;
             updating = false;
