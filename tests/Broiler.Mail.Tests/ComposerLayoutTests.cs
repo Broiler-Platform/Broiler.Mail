@@ -78,6 +78,8 @@ public sealed class ComposerLayoutTests
     {
         using var fixture = new Fixture(1100, 720);
         Assert.True(fixture.Composer.StartNew());
+        // Addressed, so the draft check below passes: a refused check takes focus to the field it names.
+        ((Broiler.UI.Edit.Standard.StandardEdit)Descendants(fixture.Surface).OfType<FormField>().Single(field => field.Label.Text == "To").Control).Text = "team@example.test";
         fixture.Render();
         // Text that was there before typing, such as a recovered draft, is not part of the history.
         const string loaded = "Dear all,\n";
@@ -92,6 +94,7 @@ public sealed class ComposerLayoutTests
         // Everything that refreshes the composer while the user writes.
         fixture.Dispatcher.DrainUntil(() => fixture.Composer.StorageKind != FeedbackKind.Progress);
         fixture.Composer.CheckDraft();
+        Assert.Equal(FeedbackKind.Success, fixture.Composer.StatusKind);
         fixture.Composer.SetAccount(fixture.Account with { DisplayName = "Renamed" });
         await fixture.Inbox.ReceiveAsync();
         fixture.Dispatcher.DrainUntil(() => !fixture.Inbox.IsBusy);

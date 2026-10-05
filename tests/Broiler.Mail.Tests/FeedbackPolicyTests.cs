@@ -446,7 +446,8 @@ public sealed class FeedbackPolicyTests
             foreach (string outcome in new[]
             {
                 "settings validation", "account validation in a collapsed section", "account section collapsed",
-                "composer copies collapsed", "composer check failed", "account test canceled", "account SMTP test found no password",
+                "composer copies collapsed", "composer check failed", "composer check failed in collapsed Cc", "composer check failed without a field",
+                "account test canceled", "account SMTP test found no password",
                 "inbox receive canceled", "inbox retry succeeded", "inbox load older reached the last page",
                 "inbox load older reached the last page in the reader",
                 "composer draft discarded", "composer send accepted", "background results while typing",
@@ -540,13 +541,33 @@ public sealed class FeedbackPolicyTests
                 expected = Copies().Toggle!;
                 break;
             case "composer check failed":
-                // The error names no field, so focus stays on the command and the error is announced.
+                // The error names To, so To takes focus, as a refused account or settings field does.
                 model.Composer.StartNew();
                 model.Composer.Edit("team.example.test", "", "", "Plans", "Body");
+                Show(tab = "compose");
+                Press(fixture.Button("Check draft"));
+                Assert.Equal(FeedbackKind.Error, model.Composer.StatusKind);
+                expected = fixture.Field(tab, "To");
+                break;
+            case "composer check failed in collapsed Cc":
+                model.Composer.StartNew();
+                model.Composer.Edit("to@example.test", "copy.example.test", "", "Plans", "Body");
+                Show(tab = "compose");
+                Assert.False(Copies().IsExpanded);
+                Press(fixture.Button("Check draft"));
+                Assert.True(Copies().IsExpanded);
+                expected = fixture.Field(tab, "Cc");
+                break;
+            case "composer check failed without a field":
+                // The error is about the subject, which names no recipient field: focus stays on the command and
+                // the error is announced.
+                model.Composer.StartNew();
+                model.Composer.Edit("to@example.test", "", "", new string('x', MailComposition.MaximumSubjectLength + 1), "Body");
                 Show(tab = "compose");
                 expected = fixture.Button("Check draft");
                 Press((StandardButton)expected);
                 Assert.Equal(FeedbackKind.Error, model.Composer.StatusKind);
+                Assert.Null(model.Composer.InvalidField);
                 break;
             case "account test canceled":
                 fixture.Receiver.Test = token => Task.Delay(Timeout.InfiniteTimeSpan, token);

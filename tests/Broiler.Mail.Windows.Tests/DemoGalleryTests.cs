@@ -634,6 +634,10 @@ public sealed class DemoGalleryTests
             // The error is the first line below the buttons, above the send hint.
             var status = Descendants(Tab(shell, "compose")).OfType<InlineFeedback>().First(line => line.Message.Length > 0);
             Assert.Equal((FeedbackKind.Error, composer.Status), (status.Kind, status.Message));
+            // The To field carries the error too, and reports Invalid with it.
+            var to = Descendants(Tab(shell, "compose")).OfType<FormField>().Single(field => field.Label.Text == "To");
+            Assert.Equal(composer.Status, to.Error);
+            Assert.True(to.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
             foreach (var action in new[] { "Check draft", "Save draft", "Discard draft" })
                 Assert.True(IsAvailable(Button(shell, "compose", action)), action);
             // The demo never sends; the send hint says so instead of the error.

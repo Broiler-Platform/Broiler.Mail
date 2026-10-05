@@ -76,13 +76,17 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         // Validate rather than truncate: imported recipients and prefixed subjects must remain intact.
         StandardEdit Field(string placeholder) => new() { MaxLength = int.MaxValue, PlaceholderText = placeholder };
         var to = Field("name@example.com, another@example.com");
-        panel.Add(new FormField("To", to));
+        var toField = new FormField("To", to);
+        panel.Add(toField);
         var copies = new FormSection("Cc and Bcc", "", collapsible: true, expanded: false);
         panel.Add(copies);
         var cc = Field("Visible to all recipients");
         var bcc = Field("Hidden from other recipients");
-        copies.Content.AddChild(new FormField("Cc", cc));
-        copies.Content.AddChild(new FormField("Bcc", bcc));
+        var ccField = new FormField("Cc", cc);
+        var bccField = new FormField("Bcc", bcc);
+        copies.Content.AddChild(ccField);
+        copies.Content.AddChild(bccField);
+        var recipientFields = new[] { ("To", toField), ("Cc", ccField), ("Bcc", bccField) };
         var subject = Field("");
         panel.Add(new FormField("Subject", subject));
         var body = new StandardRichEdit { AcceptsReturn = true, PreferredSize = new BSize(520, 120), PlaceholderText = "Write your message. Only plain text is kept." };
@@ -107,6 +111,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         feedback.AddChild(storage); feedback.AddChild(status);
         var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(send, check, save, discard), feedback));
         Guid? shown = null;
+        string? markedField = null;
         bool updating = false;
         var problemsShown = new HashSet<(InlineFeedback, string)>();
         void Refresh()
@@ -154,6 +159,19 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
                 : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
             ShowProblemsFirst();
+            // A refused recipient field carries the error itself, as the account form's fields do: it reports Invalid,
+            // and its description starts with the error. As there, the field (Cc and Bcc shown first) takes focus and
+            // is scrolled into view, but only while the user is still on the form.
+            foreach (var (name, field) in recipientFields) field.SetError(model.InvalidField == name ? model.Status : null);
+            if (model.InvalidField is { } refused && refused != markedField
+                && surface.Session is { } revealSession && FocusNavigation.MayTakeFocus(revealSession, surface))
+            {
+                // Cc and Bcc are shown first, and their summary gives way to them, so the field is scrolled to where
+                // it ends up.
+                if (refused != "To") { copies.IsExpanded = true; ShowCopiesSummary(); }
+                surface.Reveal(recipientFields.Single(pair => pair.Item1 == refused).Item2);
+            }
+            markedField = model.InvalidField;
             // A command that stays disabled once it has finished hands focus on: Discard draft to New
             // message, an accepted Send to the next enabled action (Save draft). Focus stays while it
             // runs, and a start button hidden by its own request leaves focus to that request.
