@@ -213,10 +213,10 @@ public sealed class DemoGalleryTests
     /// The reader header of the gallery's reading fixtures, with their own subject, sender, recipient and
     /// date, as Accept-UI -OpenReader shows them: in the compact reader at 640x480, and at 1100x720 with
     /// twice the text size. Each row is shown whole, scrolled below the header whole, or cut between two
-    /// lines of its text. With no message text (body-error), a header that scrolls takes all the reader that
-    /// the line below it leaves. Beside the list, Reply, Reply all and Forward are on screen whole below the
-    /// header, whatever it shows; in the compact reader they end the header. A line separates the header
-    /// from the message text.
+    /// lines of its text, and the date line never ends inside "Unread on server". With no message text
+    /// (body-error), a header that scrolls takes all the reader that the line below it leaves. Beside the
+    /// list, Reply, Reply all and Forward are on screen whole below the header, whatever it shows; in the
+    /// compact reader they end the header. A line separates the header from the message text.
     /// </summary>
     [Theory]
     [InlineData("inbox", 640, 480, 1.0, true)]
@@ -259,6 +259,12 @@ public sealed class DemoGalleryTests
                         };
                         double lines = (shown.Bottom - row.Bounds.Top) / line;
                         Assert.True(line > 0 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
+                        // The date line, cut between its lines, shows the read state with its separator whole or not at all.
+                        if (row is StandardLabel date && date.Text.StartsWith("Received ", StringComparison.Ordinal))
+                        {
+                            string visible = string.Join(" ", WrappedLines(date).Take((int)Math.Round(lines)));
+                            Assert.True(!visible.Contains('\u00B7'), $"{where}: the date line ends on '{visible}'.");
+                        }
                     }
                 var reader = Tab(shell, "inbox");
                 var divider = Descendants(reader).OfType<Divider>().Single().Bounds;
@@ -321,6 +327,23 @@ public sealed class DemoGalleryTests
             });
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>The lines a wrapping label shows at its width: it breaks only at spaces.</summary>
+    private static IEnumerable<string> WrappedLines(StandardLabel label)
+    {
+        string current = "";
+        foreach (string word in label.Text.Split(' '))
+        {
+            string candidate = current.Length == 0 ? word : current + " " + word;
+            if (current.Length > 0 && BTextMeasurer.MeasureAdvance(candidate, label.Font) > label.Bounds.Width)
+            {
+                yield return current;
+                candidate = word;
+            }
+            current = candidate;
+        }
+        if (current.Length > 0) yield return current;
     }
 
     [Fact]
