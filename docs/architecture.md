@@ -112,7 +112,10 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   (ADR 0032): where the palette's ring does not stand out (3:1) there, it draws the
   ring in that state's label color. Send, Save account and Save settings, and a
   hovered secondary button on the contrast palette's state fill, keep a visible ring
-  without Mail's help.
+  without Mail's help; the hovered one needs Hosting's palette to set the state text
+  (HighlightText), as the Hosting preview.7 build Mail adopts does. Mail's tests
+  drive each button state (rest, hovered, held down with Space) and read the fill,
+  label and ring drawn.
 - `MailKeyboardNavigation` adds enabled-control traversal, automatic scrolling to
   focused fields, tab shortcuts, receive, and cancellation. First run opens Account.
   A tab stop is any element that reports `CanFocus` and `IsTabStop`. Read-only scroll

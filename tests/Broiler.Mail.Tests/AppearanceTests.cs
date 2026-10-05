@@ -1,6 +1,9 @@
 using Broiler.Graphics.Color;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Input;
+using Broiler.Input.Keyboard;
+using Broiler.Input.Mouse;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Messages;
@@ -109,9 +112,11 @@ public sealed class AppearanceTests
     }
 
     /// <summary>
-    /// A default button is filled with the accent and strokes its focus ring inside that fill. Where the palette's
-    /// ring is the accent, or too close to it, Broiler.UI draws the ring in the button's label color (ADR 0032), so
-    /// keyboard focus on Save account (and Send, Save settings) stays visible; other buttons keep the palette's ring.
+    /// A button strokes its focus ring inside the fill it draws in its state: the accent on a default button, the
+    /// state fill while the pointer rests on a secondary one, the pressed fills while Space holds either down. Where
+    /// the palette's ring does not stand out from that fill (3:1), Broiler.UI draws it in the label color drawn on it
+    /// (ADR 0032), so keyboard focus on Save account (and Send, Save settings) and on Test connection stays visible in
+    /// every state; on the window color a button keeps the palette's ring.
     /// </summary>
     [Theory]
     [InlineData("Light")]
@@ -121,7 +126,7 @@ public sealed class AppearanceTests
     [InlineData("SystemDusk")]
     [InlineData("SystemDesert")]
     [InlineData("RingStandsOut")]
-    public void AKeyboardFocusedDefaultButtonShowsItsRingOnItsOwnFill(string name)
+    public void AKeyboardFocusedButtonShowsItsRingOnTheFillOfEachState(string name)
     {
         var palette = Palette(name);
         using var directory = new TestDirectory();
@@ -145,25 +150,67 @@ public sealed class AppearanceTests
             var account = shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;
             var save = Descendants(account).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Save account");
             var test = Descendants(account).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Test connection");
-            Assert.True(save.IsDefault && save.IsEnabled);
-            session.SetFocus(save);
-            Assert.True(session.IsFocusVisible);
+            Assert.True(save.IsDefault && save.IsEnabled && !test.IsDefault && test.IsEnabled);
+            session.RenderFrame();
 
-            var commands = session.RenderFrame().Commands.ToArray();
-            var fill = commands.OfType<BRenderCommand.FillRoundedRect>().Last(command => command.Rect == save.Bounds).Color;
-            var ring = commands.OfType<BRenderCommand.StrokeRoundedRect>().Single(command => command.Rect == StandardControlPaint.Inset(save.Bounds, 2)).Color;
-            Assert.Equal(palette.Accent, fill);
-            // Visible on the fill drawn, and on the hovered and pressed fills.
-            foreach (var drawn in new[] { fill, save.HoverBackground, save.PressedBackground })
-                Assert.True(StandardContrast.Ratio(ring, drawn) >= StandardContrast.AaLargeOrUi, $"{name}: ring {ring} on {drawn}");
-            // A palette whose ring already stands out keeps it, and buttons on the window color always do.
-            Assert.Equal(name == "RingStandsOut" ? palette.FocusRing : palette.OnAccent, ring);
-            Assert.Equal(palette.FocusRing, test.FocusRing);
+            foreach (var (button, fills, labels) in new[]
+            {
+                (save, new[] { palette.Accent, palette.AccentHover, palette.AccentPressed }, new[] { palette.OnAccent, palette.OnAccent, palette.OnAccent }),
+                (test, new[] { palette.Surface, palette.StateFill, palette.SurfaceDisabled }, new[] { palette.Text, palette.StateText, palette.Text }),
+            })
+            {
+                // Pressed last: the test never lets go of Space, which would save the account or start a test.
+                foreach (var state in new[] { ButtonState.Rest, ButtonState.Hovered, ButtonState.Pressed })
+                {
+                    var drawn = Drawn(session, button, state);
+                    string where = $"{name}, {button.Text}, {state}";
+                    Assert.True(drawn.Fill == fills[(int)state], $"{where}: fill {drawn.Fill}, expected {fills[(int)state]}");
+                    Assert.True(drawn.Label == labels[(int)state], $"{where}: label {drawn.Label}, expected {labels[(int)state]}");
+                    // The palette's ring where it stands out from the fill, the label's color where it does not.
+                    var expected = StandardContrast.Ratio(palette.FocusRing, drawn.Fill) >= StandardContrast.AaLargeOrUi ? palette.FocusRing : drawn.Label;
+                    Assert.True(drawn.Ring == expected, $"{where}: ring {drawn.Ring}, expected {expected}");
+                    Assert.True(StandardContrast.Ratio(drawn.Ring, drawn.Fill) >= StandardContrast.AaLargeOrUi, $"{where}: ring {drawn.Ring} on {drawn.Fill}");
+                    if (state == ButtonState.Rest)
+                        // A default button at rest takes its label's color unless the palette's ring stands out on the
+                        // accent; a button on the window color keeps the palette's ring.
+                        Assert.Equal(button == test || name == "RingStandsOut" ? palette.FocusRing : palette.OnAccent, drawn.Ring);
+                }
+            }
         }
         finally { StandardControlPaint.ApplyTheme(StandardThemeTokens.Light); }
     }
 
-    /// <summary>The palettes the default-button ring is checked in; the system ones are shaped like Hosting's.</summary>
+    private enum ButtonState { Rest, Hovered, Pressed }
+
+    /// <summary>
+    /// Puts <paramref name="button"/> into <paramref name="state"/> with its keyboard focus shown, as a user does: a key
+    /// press shows the focus (hovered: while the pointer rests on the button), or Space is held down. Returns the fill,
+    /// label and focus ring it then draws, read from a rendered frame.
+    /// </summary>
+    private static (BColor Fill, BColor Label, BColor Ring) Drawn(UiSession session, Broiler.UI.Button.Standard.StandardButton button, ButtonState state)
+    {
+        if (state == ButtonState.Hovered)
+            session.DispatchInput(UiInputEvent.FromMouseMove(new MouseMoveEvent(Header(),
+                InputPoint.ClientDeviceIndependentPixels(button.Bounds.Left + (button.Bounds.Width / 2), button.Bounds.Top + (button.Bounds.Height / 2)),
+                MouseButtons.None, InputEventSource.Synthetic)));
+        session.SetFocus(button);
+        // Shift does nothing on a button but counts as keyboard use; Space holds the button down until it is let go.
+        int key = state == ButtonState.Pressed ? 0x20 : 0x10;
+        session.DispatchInput(UiInputEvent.FromKeyboardKey(new KeyboardKeyEvent(Header(), KeyboardKey.FromName("VirtualKey:" + key),
+            KeyboardKeyTransition.Down, KeyboardModifierState.None, key, 0, 0, false, false, Source: InputEventSource.Synthetic)));
+        Assert.True(session.IsFocusVisible);
+        Assert.Equal(state == ButtonState.Pressed, button.IsPressed);
+
+        var commands = session.RenderFrame().Commands.ToArray();
+        var fill = commands.OfType<BRenderCommand.FillRoundedRect>().Last(command => command.Rect == button.Bounds).Color;
+        var label = commands.OfType<BRenderCommand.DrawText>().Last(command => command.Text.Text == button.Text).Text.Color;
+        var ring = commands.OfType<BRenderCommand.StrokeRoundedRect>().Single(command => command.Rect == StandardControlPaint.Inset(button.Bounds, 2)).Color;
+        return (fill, label, ring);
+    }
+
+    private static InputEventHeader Header() => new(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1);
+
+    /// <summary>The palettes the button rings are checked in; the system ones are shaped like Hosting's.</summary>
     private static StandardThemeTokens Palette(string name) => name switch
     {
         "Light" => StandardThemeTokens.Light,
