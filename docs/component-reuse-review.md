@@ -29,7 +29,7 @@ are suggestions, not existing products.
 
 | Priority | Mail code | Destination | Nature of the change |
 | --- | --- | --- | --- |
-| First | `TabContent` | `Broiler.UI.TabView.Standard` | Fix the control, then remove Mail's workaround. |
+| First | `TabContent` | `Broiler.UI.TabView.Standard` | Fix the control, then remove Mail's workaround. Both are completed; see the follow-up. |
 | First | `ViewportScrollView` and the measurement part of `ScrollableMessageText` | `Broiler.UI.ScrollView` / `.Standard` | Add viewport-constrained content measurement. |
 | Next | Native declarations in clipboard, IME, credentials, and window sizing | `Broiler.Native.Windows` | Reuse existing bindings and add missing binding families. |
 | Next | DPI handling and minimum-window-size mechanics | `Broiler.Graphics` / `.Windows` | Expose size constraints and implement them in the backend. |
@@ -40,7 +40,7 @@ are suggestions, not existing products.
 
 ### 1. Fix tab and scroll layout in Broiler.UI
 
-[TabContent](D:/Broiler.Mail/src/Broiler.Mail.Application/Views/TabContent.cs:6)
+`TabContent` (since removed)
 remeasures its child during arrangement to correct the tab control's initial
 measurement. [StandardTabView](D:/Broiler.UI/src/Implementations/Standard/Layout/Broiler.UI.TabView.Standard/StandardTabView.cs:44)
 measures content at its preferred size, then arranges it at the actual allocation.
@@ -272,4 +272,15 @@ dispositions above change as follows:
 | `FocusRingFrame` | New | Rings the reader's frameless header details while they have focus. A focus-ring offset option on `StandardRichEdit`, or a ring drawn outside the bounds, would retire it. |
 | IME placement (`WindowsTextInput`) | Kept, extended | Hosting has no `IUiTextInputHost` yet. With `DrawsCompositionInline` the IME must be off for every focus owner that draws no composition, not only password fields; Mail follows the session's focus to do that. |
 | High-contrast palette | Moved to Hosting | In system high contrast Mail uses `WindowsTheme.CreateHighContrastTheme(WindowsSystemColors.Query(), settings)` instead of the theme's preset. |
-| `DefaultButtonFocus` | Removed, replaced by the toolkit | That palette's focus ring and accent are both Highlight, and `StandardButton` strokes its ring inside its fill, so a keyboard-focused default button showed no ring. `StandardButton` now picks its ring color against the fill it draws in each state (Broiler.UI ADR 0032), which also fixes the hovered secondary button that Mail could not, given Hosting's state pair (`StateText` = HighlightText). Mail's tests read the fill, label and ring drawn at rest, hovered and held down. The pins therefore expect UI preview.18 to contain ADR 0032 and Hosting preview.7 the state pair; built against a release without them, those tests fail. |
+| Default-button focus ring | Toolkit (ADR 0032) | In the system contrast palette the focus ring and the accent are both Highlight, and `StandardButton` strokes its ring inside its fill, so a keyboard-focused default button would show no ring. `StandardButton` now picks its ring color against the fill it draws in each state (Broiler.UI ADR 0032), which also covers the hovered secondary button, given Hosting's state pair (`StateText` = HighlightText). Mail has no code for it; its tests read the fill, label and ring drawn at rest, hovered and held down. |
+
+The pins name releases that are not published yet. Mail was built and tested against
+Broiler.UI at `fd7657f` and Hosting at `c388a66`, and needs more of them than ADR 0032
+and the state pair. It compiles against `FormSection.ShowText`/`HideText` (ADR 0031) and
+`StandardScrollView.VerticalContentInset` (ADR 0034), and its tests and the notes in
+[the architecture](architecture.md) rely on `FocusWhenScrollable` and the field error as
+a description (ADR 0028), combo sizing (ADR 0029), hidden tabs (ADR 0030), the button
+rings (ADR 0032), and a read-only area that is a stop exactly while its bar shows
+(ADR 0034). UI preview.18 must therefore be cut at or after `fd7657f`, and Hosting
+preview.7 at or after `c388a66`; against an earlier cut Mail does not build, or its
+tests fail.
