@@ -429,26 +429,32 @@ public sealed class ResponsiveInboxTests
 
     /// <summary>
     /// The session limit is explained above the list, so the footer does not repeat it while the list is
-    /// shown. The compact reader hides the list but not the unavailable Load older, so its footer adds the
-    /// explanation to the reading status.
+    /// shown. The compact reader hides the list but not the unavailable Load older, so its footer points to
+    /// that explanation instead of giving the reading status, as for a list problem, and is no longer than
+    /// that status. A message problem, beside the reader, comes first; while Receive mail runs, its progress
+    /// does, without asking for Receive mail; once it returns to the newest page, the limit is gone.
     /// </summary>
     [Fact]
-    public async Task TheCompactReadersFooterExplainsTheSessionLimitWhileTheListIsHidden()
+    public async Task TheCompactReadersFooterPointsToTheSessionLimitWhileTheListIsHidden()
     {
         const string limit = "Session limit reached (500 messages). Receive mail again to return to the newest page.";
+        const string pointer = "Session limit reached. Use Back to inbox to see the details.";
         const string reading = "Reading plain text. This does not mark the message as read on the server.";
+        const string selected = "Message selected. Open it to read.";
         using var directory = new TestDirectory();
         var account = TestDirectory.Profile();
         var messages = Fixture.CreateMessages(account, InboxViewModel.MaximumLoadedMessages + InboxViewModel.PageSize);
         var receiver = Fixture.CreateReceiver(messages);
+        var body = receiver.Body;
         // Pages from the newest; the last loaded page still has older messages behind it.
-        receiver.Inbox = (cursor, _) =>
+        Func<MailInboxCursor?, CancellationToken, Task<MailInboxPage>> pages = (cursor, _) =>
         {
             int start = cursor?.NextIndex ?? 0;
             var page = messages.Skip(start).Take(InboxViewModel.PageSize).ToArray();
             int next = start + page.Length;
             return Task.FromResult(new MailInboxPage(page, next < messages.Length ? new(account.Id, 7, (uint)messages.Length + 1, messages.Length, next) : null));
         };
+        receiver.Inbox = pages;
         var dispatcher = new TestQueueDispatcher();
         var model = new MailShellViewModel(
             new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
@@ -478,20 +484,33 @@ public sealed class ResponsiveInboxTests
         var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
         Assert.Equal(limit, model.Inbox.SessionLimitNotice);
         Assert.Equal(model.Inbox.Status, shell.Footer.Text);
-        Assert.DoesNotContain(limit, shell.Footer.Text);
+        Assert.DoesNotContain("Session limit", shell.Footer.Text);
 
-        await model.Inbox.SelectAsync(model.Inbox.Messages[0].Key);
+        var newest = model.Inbox.Messages[0].Key;
+        await model.Inbox.SelectAsync(newest);
         Settle();
         Assert.True(layout.IsCompact && !layout.ShowsReaderOnly);
-        Assert.Equal("Message selected. Open it to read.", shell.Footer.Text);
+        Assert.Equal(selected, shell.Footer.Text);
 
         Assert.True(shell.Inbox.OpenSelected());
         Settle();
         Assert.True(layout.ShowsReaderOnly);
-        Assert.Equal($"{reading} {limit}", shell.Footer.Text);
+        Assert.Equal(reading, model.Inbox.Status);
+        Assert.Equal(pointer, shell.Footer.Text);
         Assert.True(shell.Inbox.GoBackToList());
         Settle();
-        Assert.Equal("Message selected. Open it to read.", shell.Footer.Text);
+        Assert.Equal(selected, shell.Footer.Text);
+
+        // A message that fails to load is explained first, beside it; once it loads, the pointer is back.
+        receiver.Body = (_, _) => throw new MailConnectionException("The connection closed.");
+        Assert.True(shell.Inbox.OpenSelected());
+        Settle();
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.Equal("The message could not be loaded. Details and Retry are beside it.", shell.Footer.Text);
+        receiver.Body = body;
+        await model.Inbox.RetryAsync(InboxProblemScope.Message);
+        Settle();
+        Assert.Equal(pointer, shell.Footer.Text);
 
         // Beside the list, the notice above it explains the limit.
         host.Width = 1100;
@@ -499,6 +518,29 @@ public sealed class ResponsiveInboxTests
         Settle();
         Assert.False(layout.IsCompact);
         Assert.Equal(reading, shell.Footer.Text);
+        host.Width = 640;
+        shell.Window.InvalidateMeasure();
+        Settle();
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.Equal(pointer, shell.Footer.Text);
+
+        // While Receive mail runs, the footer gives its progress; the newest page ends the limit.
+        var pending = new TaskCompletionSource<MailInboxPage>();
+        receiver.Inbox = (_, token) => pending.Task.WaitAsync(token);
+        var receiving = model.Inbox.ReceiveAsync();
+        dispatcher.Drain();
+        session.RenderFrame();
+        Assert.True(model.Inbox.IsLoadingList && layout.ShowsReaderOnly);
+        Assert.Null(model.Inbox.SessionLimitNotice);
+        Assert.Equal("Receiving newest messages…", shell.Footer.Text);
+        pending.SetResult(await pages(null, CancellationToken.None));
+        Settle();
+        await receiving;
+        Assert.Equal(InboxViewModel.PageSize, model.Inbox.Messages.Count);
+        Assert.Null(model.Inbox.SessionLimitNotice);
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.Equal(model.Inbox.Status, shell.Footer.Text);
+        Assert.DoesNotContain("Session limit", shell.Footer.Text);
     }
 
     /// <summary>

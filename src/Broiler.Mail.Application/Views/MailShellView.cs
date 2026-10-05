@@ -132,17 +132,19 @@ public sealed class MailShellView : IDisposable
     /// The inbox's status or, for a problem, a pointer to its explanation and Retry, which sit in the
     /// affected pane: above the list, or under the message's header. While compact mode hides that
     /// pane, the footer says how to show it instead, naming the reader's way back by its label. So
-    /// does the status of a message the compact list selected without showing it. The session limit is
-    /// explained above the list; while compact mode hides the list, the footer adds that explanation.
+    /// does the status of a message the compact list selected without showing it. At the session limit,
+    /// which is explained above the list, the compact reader's footer likewise points there instead of
+    /// giving the reading status, so it is no longer than that status. A message problem, beside the
+    /// reader, comes first.
     /// </summary>
     private static string InboxStatus(InboxViewModel inbox, InboxView view)
     {
         bool paneShown = view.ShowsPaneOf(inbox.ProblemScope);
         return (inbox.ProblemScope, inbox.ProblemIsCancellation, paneShown) switch
         {
-            (InboxProblemScope.None, _, _) => (inbox.StatusIsAboutMessage && !view.ShowsPaneOf(InboxProblemScope.Message)
-                ? "Message selected. Open it to read." : inbox.Status)
-                + (inbox.SessionLimitNotice is { } limit && !view.ShowsPaneOf(InboxProblemScope.List) ? " " + limit : ""),
+            (InboxProblemScope.None, _, _) => inbox.SessionLimitNotice is not null && !view.ShowsPaneOf(InboxProblemScope.List)
+                ? $"Session limit reached. Use {InboxView.BackText} to see the details."
+                : inbox.StatusIsAboutMessage && !view.ShowsPaneOf(InboxProblemScope.Message) ? "Message selected. Open it to read." : inbox.Status,
             (_, true, true) => "Canceled. Retry is available.",
             (InboxProblemScope.Message, true, false) => "Canceled. Open the message to retry.",
             (_, true, false) => $"Canceled. Use {InboxView.BackText} to retry.",

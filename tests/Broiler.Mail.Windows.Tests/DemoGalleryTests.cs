@@ -228,14 +228,17 @@ public sealed class DemoGalleryTests
     /// reader at twice the text size, where they wrapped and left the text less than a line, they end the
     /// header, as in the compact reader. A line separates the header from the message text, which keeps at
     /// least the given number of lines: the compact reader at 640x480 with twice the text size keeps two,
-    /// after Back to inbox and its inset.
+    /// after Back to inbox and its inset. So does the large inbox at the session limit, whose footer points
+    /// to the explanation above the hidden list instead of adding it to the reading status.
     /// </summary>
     [Theory]
     [InlineData("inbox", 640, 480, 1.0, false, true, 5)]
     [InlineData("long-message", 640, 480, 1.0, false, false, 8)]
     [InlineData("html-only", 640, 480, 1.0, false, true, 6)]
     [InlineData("body-error", 640, 480, 1.0, false, true, 0)]
+    [InlineData("large-inbox", 640, 480, 1.0, false, true, 5)]
     [InlineData("inbox", 640, 480, 2.0, false, false, 2)]
+    [InlineData("large-inbox", 640, 480, 2.0, false, false, 2)]
     [InlineData("inbox", 700, 480, 2.0, false, false, 2)]
     [InlineData("long-message", 700, 520, 2.0, false, false, 3)]
     [InlineData("inbox", 1100, 720, 2.0, true, true, 5)]
@@ -261,6 +264,10 @@ public sealed class DemoGalleryTests
                 BRect shown = header.Scroll.ContentBounds;
                 string where = $"{name} at {width}x{height}, text {textScale:P0}: the header shows {shown} of {header.AvailableHeight}";
                 Assert.Equal(width < 680, Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single().ShowsReaderOnly);
+                // Only the large inbox is at the session limit; its compact reader's footer points to the explanation.
+                Assert.Equal(name == "large-inbox", model.Inbox.SessionLimitNotice is not null);
+                if (model.Inbox.SessionLimitNotice is not null)
+                    Assert.Equal($"Session limit reached. Use {InboxView.BackText} to see the details.", Footer(shell));
                 if (model.Inbox.Body is null && header.Scroll.HasVerticalScrollbar)
                     Assert.True(Math.Abs(header.AvailableHeight - header.Bounds.Height) < 0.5, where);
                 else
