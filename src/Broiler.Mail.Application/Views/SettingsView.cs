@@ -58,8 +58,8 @@ public sealed class SettingsView(SettingsViewModel model)
             // In sentence case, as every other command; composed from the title it would read "Show Keyboard shortcuts".
             ShowText = "Show keyboard shortcuts", HideText = "Hide keyboard shortcuts",
         };
-        // Named for the toggle that controls it, as the composer's Cc and Bcc are.
-        shortcuts.Content.AccessibleName = "Keyboard shortcuts";
+        // Named for the toggle that controls it, and apart from the section's own name, as the composer's Cc and Bcc fields are.
+        shortcuts.Content.AccessibleName = "Keyboard shortcut list";
         panel.AddChild(shortcuts);
         foreach (var shortcut in MailShortcuts.All)
             shortcuts.Content.AddChild(new StandardLabel

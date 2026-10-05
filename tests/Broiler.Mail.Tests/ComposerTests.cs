@@ -208,14 +208,23 @@ public sealed class ComposerTests
             new(new JsonSettingsStore(directory.File("settings.json")), new ImmediateUiDispatcher(), new(), null),
             new(receiver, new ImmediateUiDispatcher()));
         using var shell = new MailShellView(model);
+        var expected = new Dictionary<string, string>
+        {
+            ["Cc and Bcc"] = "Cc and Bcc fields",
+            ["Keyboard shortcuts"] = "Keyboard shortcut list",
+            ["Sent-copy settings"] = "Sent-copy handling and folder",
+        };
         var sections = Descendants(shell.Window).OfType<FormSection>().Where(section => section.Toggle is not null).ToArray();
-        Assert.Equal(["Cc and Bcc", "Keyboard shortcuts", "Sent-copy settings"], sections.Select(section => section.Content.GetSemanticNode().Name).Order());
-        // A screen reader that follows a toggle's "controls" relation lands on the section's name ("Show Cc and
-        // Bcc" controls "Cc and Bcc"), not on an unnamed pane.
+        Assert.Equal(expected.Keys.Order(), sections.Select(section => section.GetSemanticNode().Name).Order());
+        // A screen reader that follows a toggle's "controls" relation lands on a name ("Show Cc and Bcc" controls
+        // "Cc and Bcc fields"), not on an unnamed pane. The section around the content is a group with the
+        // section's title, so the content says what it holds instead of repeating the title on the way into a field.
         foreach (var section in sections)
         {
             Assert.Same(section.Content, section.Toggle!.Controls);
-            Assert.EndsWith(" " + section.Content.GetSemanticNode().Name, section.Toggle.Text, StringComparison.OrdinalIgnoreCase);
+            string title = section.GetSemanticNode().Name;
+            Assert.Equal(expected[title], section.Content.GetSemanticNode().Name);
+            Assert.NotEqual(title, section.Content.GetSemanticNode().Name, StringComparer.OrdinalIgnoreCase);
         }
     }
 
@@ -240,10 +249,10 @@ public sealed class ComposerTests
             ["Sent-copy settings"] = ("Show Sent-copy settings", "Hide Sent-copy settings"),
         };
         var sections = Descendants(shell.Window).OfType<FormSection>().Where(section => section.Toggle is not null).ToArray();
-        Assert.Equal(expected.Keys.Order(), sections.Select(section => section.Content.GetSemanticNode().Name).Order());
+        Assert.Equal(expected.Keys.Order(), sections.Select(section => section.GetSemanticNode().Name).Order());
         foreach (var section in sections)
         {
-            var (show, hide) = expected[section.Content.GetSemanticNode().Name];
+            var (show, hide) = expected[section.GetSemanticNode().Name];
             section.Collapse();
             Assert.Equal(show, section.Toggle!.Text);
             Assert.Equal(show, section.Toggle.GetSemanticNode().Name);

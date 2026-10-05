@@ -83,8 +83,10 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             // Abbreviations keep their capitals in the sentence-case toggle.
             ShowText = "Show Cc and Bcc", HideText = "Hide Cc and Bcc",
         };
-        // The toggle names this content as the part it controls; a screen reader following it lands on a name.
-        copies.Content.AccessibleName = "Cc and Bcc";
+        // The toggle names this content as the part it controls; a screen reader following it lands on a name. The
+        // section around it is already a group called "Cc and Bcc", so the content says what it holds instead of
+        // repeating that on the way into a field.
+        copies.Content.AccessibleName = "Cc and Bcc fields";
         panel.Add(copies);
         var cc = Field("Visible to all recipients");
         var bcc = Field("Hidden from other recipients");

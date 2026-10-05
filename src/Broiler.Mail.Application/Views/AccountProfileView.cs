@@ -115,8 +115,8 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             // "Sent" keeps its capital: it names the Sent folder, as everywhere else in the app.
             ShowText = "Show Sent-copy settings", HideText = "Hide Sent-copy settings",
         };
-        // Named for the toggle that controls it, as the composer's Cc and Bcc are.
-        advanced.Content.AccessibleName = "Sent-copy settings";
+        // Named for the toggle that controls it, and apart from the section's own name, as the composer's Cc and Bcc fields are.
+        advanced.Content.AccessibleName = "Sent-copy handling and folder";
         smtpFields.AddChild(advanced);
         var sentCopy = new StandardComboBox();
         sentCopy.SetItems([new UiComboBoxItem("None", "Not configured — no app copy"),
