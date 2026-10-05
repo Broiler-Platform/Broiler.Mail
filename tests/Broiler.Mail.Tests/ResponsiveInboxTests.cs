@@ -440,7 +440,7 @@ public sealed class ResponsiveInboxTests
     [Fact]
     public async Task TheCompactReadersFooterPointsToTheSessionLimitWhileTheListIsHidden()
     {
-        const string limit = "Session limit reached (500 messages). Receive mail again to return to the newest page.";
+        const string limit = "Session limit reached (500 messages): older messages cannot be loaded now. Receive mail to start again from the newest page.";
         const string pointer = "Session limit reached. Use Back to inbox to see the details.";
         const string reading = "Reading plain text. This does not mark the message as read on the server.";
         const string selected = "Message selected. Open it to read.";

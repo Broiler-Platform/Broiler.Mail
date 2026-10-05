@@ -185,7 +185,7 @@ public sealed class DemoGalleryTests
             // unavailable, although the newest message was read since.
             Assert.False(Button(shell, "inbox", "Load older").IsEnabled);
             var notice = Descendants(Tab(shell, "inbox")).OfType<InlineFeedback>().First();
-            Assert.Equal((FeedbackKind.Information, "Session limit reached (500 messages). Receive mail again to return to the newest page."),
+            Assert.Equal((FeedbackKind.Information, "Session limit reached (500 messages): older messages cannot be loaded now. Receive mail to start again from the newest page."),
                 (notice.Kind, notice.Message));
             Assert.True(IsAvailable(Button(shell, "inbox", "Receive mail")));
             // The newest row is unread and every third row from it is read, as in the captures of the

@@ -103,7 +103,7 @@ public sealed class FeedbackPolicyTests
         fixture.Settle();
         Assert.False(inbox.CanLoadOlder);
         Assert.Equal(["Progress: Loading older messages…", "500 messages loaded.",
-            "Information: Session limit reached (500 messages). Receive mail again to return to the newest page."], fixture.Announced);
+            "Information: Session limit reached (500 messages): older messages cannot be loaded now. Receive mail to start again from the newest page."], fixture.Announced);
 
         fixture.Announced.Clear();
         foreach (var message in inbox.Messages.Take(5))

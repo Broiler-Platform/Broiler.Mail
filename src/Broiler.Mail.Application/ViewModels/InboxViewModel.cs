@@ -119,7 +119,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     /// stays while messages are read; while a page loads, that page's progress replaces it.
     /// </summary>
     public string? SessionLimitNotice => !IsLoadingList && _older is not null && Messages.Count >= MaximumLoadedMessages
-        ? "Session limit reached (500 messages). Receive mail again to return to the newest page." : null;
+        ? "Session limit reached (500 messages): older messages cannot be loaded now. Receive mail to start again from the newest page." : null;
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=63EC38
     // Broiler-Falsified-If: CanSelect is true while a page load is still running
     // Broiler-Human:        PENDING
