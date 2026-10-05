@@ -10,6 +10,7 @@ using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
 using Broiler.UI.Edit.Standard;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.ListView;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Splitter;
@@ -110,6 +111,27 @@ public sealed class KeyboardShortcutTests
     }
 
     [Fact]
+    public async Task TabIntoTheListBringsItsSelectedRowIntoView()
+    {
+        // New mail or scrolling can leave the selected row out of view; the list shows its focus on that row.
+        using var fixture = await Fixture.OpenAsync(height: 480, messages: 40);
+        var list = fixture.List;
+        Assert.Equal(0, list.SelectedIndex);
+        list.ScrollIntoView(39);
+        fixture.Session.RenderFrame();
+        Assert.False(RowShows(list, 0));
+
+        fixture.Session.SetFocus(fixture.Shell.Navigation);
+        for (int step = 0; step < 10 && fixture.Session.FocusedElement != list; step++)
+            Assert.True(fixture.Keyboard.Handle(Key(0x09)));
+        Assert.Same(list, fixture.Session.FocusedElement);
+        Assert.True(RowShows(list, 0));
+    }
+
+    private static bool RowShows(UiListView list, int index) =>
+        list.GetItemSemanticNode(index) is { } row && !list.Bounds.Intersect(row.Bounds).IsEmpty;
+
+    [Fact]
     public async Task AltLeftLeavesTheCompactReaderAndOtherwisePassesThrough()
     {
         using var fixture = await Fixture.OpenAsync(width: 500, select: false);
@@ -176,14 +198,16 @@ public sealed class KeyboardShortcutTests
         public StandardRichEdit ComposerBody => Descendants(ComposeContent).OfType<StandardRichEdit>().Single();
         public StandardEdit ComposerTo => (StandardEdit)Descendants(ComposeContent).OfType<StandardLabel>().Single(label => label.Text == "To").Target!;
 
-        public static async Task<Fixture> OpenAsync(int width = 1100, int height = 720, bool select = true)
+        public static async Task<Fixture> OpenAsync(int width = 1100, int height = 720, bool select = true, int messages = 1)
         {
             var directory = new TestDirectory();
             var account = TestDirectory.Profile();
-            var message = new MailMessageSummary { Key = new(account.Id, "INBOX", 7, 1), Sender = "Author & Co <author@example.test>", Subject = "Plans & budget" };
+            var message = new MailMessageSummary { Key = new(account.Id, "INBOX", 7, (uint)messages), Sender = "Author & Co <author@example.test>", Subject = "Plans & budget" };
+            var older = Enumerable.Range(1, messages - 1).Reverse()
+                .Select(uid => new MailMessageSummary { Key = new(account.Id, "INBOX", 7, (uint)uid), Sender = "Older <older@example.test>", Subject = $"Older message {uid}" });
             var receiver = new TestMailReceiver
             {
-                Inbox = (_, _) => Task.FromResult(new MailInboxPage([message], null)),
+                Inbox = (_, _) => Task.FromResult(new MailInboxPage([message, .. older], null)),
                 Body = (key, _) => Task.FromResult(new MailMessageBody(key, "Some message text.")
                 {
                     Composition = new MailCompositionSource
