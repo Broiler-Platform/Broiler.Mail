@@ -116,7 +116,6 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             };
         // The list pane: a notice row (empty inbox, receiving, or a problem with Retry) above the list.
         var listPane = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
-        var listNotice = new StandardPanel();
         var listFeedback = new InlineFeedback();
         var listRetry = new StandardButton { Text = "Retry receiving" };
         // Like the toolbar above it, the Retry row spans the pane and insets its button, so Retry
@@ -124,20 +123,23 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var listRetryRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36) };
         listRetryRow.AddChild(listRetry);
         // The notice keeps the toolbar's inset, so its accent stays clear of the frame around the pane.
-        listNotice.AddChild(new Inset(listFeedback, toolbar.Padding, toolbar.Padding));
-        listNotice.AddChild(listRetryRow);
-        // A long notice at a large text size scrolls instead of leaving the list no room. Like the reader's
-        // header, it ends between the explanation's lines, not inside one, and shows the row with Retry
-        // whole or not at all: it grows to show that row while the list keeps two rows, and otherwise
-        // ends above it.
+        var listExplanation = new Inset(listFeedback, toolbar.Padding, toolbar.Padding);
+        // A long explanation at a large text size scrolls instead of leaving the list no room. Like the
+        // reader's header, it ends between its lines, never inside one, even its first in a short pane, and
+        // shows them all while the list keeps two rows. Retry stays in view below it, so the footer can
+        // point to it.
         const int listRowsKept = 2;
-        var noticeArea = new BoundedScrollArea(listNotice, 0.4, "Inbox notice")
+        var noticeArea = new BoundedScrollArea(listExplanation, 0.4, "Inbox notice")
         {
             Rows = NoticeRows,
             MinimumRemaining = () => listRowsKept * list.EffectiveItemHeight,
+            KeepsLinesWhole = true,
         };
-        listPane.AddChild(noticeArea);
-        listPane.SetDock(noticeArea, UiDock.Top);
+        var listNotice = new FirstTakesRestStack();
+        listNotice.Add(noticeArea);
+        listNotice.Add(listRetryRow);
+        listPane.AddChild(listNotice);
+        listPane.SetDock(listNotice, UiDock.Top);
         listPane.AddChild(list);
         listPane.SetDock(list, UiDock.Fill);
         var reading = new StandardPanel { LayoutMode = UiPanelLayoutMode.Dock };
@@ -223,18 +225,15 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         reading.SetDock(headerArea, UiDock.Top);
         reading.AddChild(text);
 
-        // Where the notice's rows are, as the notice last measured them: the explanation's lines, inside the
-        // inset and the feedback's own padding, and the row with Retry.
+        // Where the explanation's lines are, as the notice last measured them: inside the inset and the
+        // feedback's own padding, which below the last line is a margin, not a row.
         IEnumerable<(double Start, double End, bool Grows, double LineHeight)> NoticeRows()
         {
-            double top = 0;
-            foreach (var child in listNotice.Children.Where(child => child.Visibility != UiVisibility.Collapsed))
+            double height = listExplanation.DesiredSize.Height;
+            if (height > 0 && listFeedback.Children.OfType<StandardLabel>().FirstOrDefault() is { } label)
             {
-                double height = child.DesiredSize.Height;
-                if (height > 0 && child == listRetryRow) yield return (top, top + height, true, 0);
-                else if (height > 0 && listFeedback.Children.OfType<StandardLabel>().FirstOrDefault() is { } explanation)
-                    yield return (top + ((height - explanation.DesiredSize.Height) / 2), top + height, false, BTextMeasurer.GetLineHeight(explanation.Font));
-                top += height + listNotice.Spacing;
+                double start = (height - label.DesiredSize.Height) / 2;
+                yield return (start, start + label.DesiredSize.Height, false, BTextMeasurer.GetLineHeight(label.Font));
             }
         }
 

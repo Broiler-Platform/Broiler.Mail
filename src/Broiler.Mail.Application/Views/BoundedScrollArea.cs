@@ -59,6 +59,13 @@ public sealed class BoundedScrollArea : UiElement
     /// </summary>
     public Func<double>? MinimumRemaining { get; init; }
 
+    /// <summary>
+    /// With <see cref="Rows"/>, the area never ends inside a line of text: where its share would cut the
+    /// first line of the row it ends in, or end above its first row, it takes more to show that line whole,
+    /// so a short notice still says something. Without it, such a row is cut at the share, as described there.
+    /// </summary>
+    public bool KeepsLinesWhole { get; init; }
+
     /// <summary>The scroll view that scrolls the content once it passes the cap.</summary>
     public StandardScrollView Scroll => _scroll;
 
@@ -94,9 +101,11 @@ public sealed class BoundedScrollArea : UiElement
         int grows = Array.FindIndex(rows, next, row => row.Grows);
         if (grows >= 0 && rows[grows].End <= limit) return rows[grows].End;
         var (start, _, _, lineHeight) = rows[next];
-        // Between two rows the share cuts neither.
-        if (start >= cap) return cap;
-        double end = lineHeight > 0 ? start + (Math.Floor((cap - start) / lineHeight) * lineHeight) : start;
+        bool keepsLine = KeepsLinesWhole && lineHeight > 0;
+        // Between two rows the share cuts neither, unless it would show nothing of the first.
+        if (start >= cap && !(keepsLine && next == 0)) return cap;
+        double end = lineHeight > 0 ? start + (Math.Floor(Math.Max(0, cap - start) / lineHeight) * lineHeight) : start;
+        if (keepsLine) return Math.Max(end, start + lineHeight);
         return end > cap / 2 ? end : cap;
     }
 

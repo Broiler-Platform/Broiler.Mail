@@ -191,7 +191,7 @@ public sealed class ShellLayoutTests
         // The height caps hold against the height the content was given: for the reader's header, the
         // height its commands below leave. An area passes its share only to show its whole content or to
         // end below a row of buttons, and the rows it shows leave the rest its minimum (the margin below
-        // the last row is not a row).
+        // the last row is not a row), or, if it keeps lines whole, to show its first line.
         foreach (var capped in Descendants(content).OfType<BoundedScrollArea>().Where(element => element.Bounds.Height > 0))
         {
             double available = capped.AvailableHeight;
@@ -201,6 +201,7 @@ public sealed class ShellLayoutTests
             var rows = capped.Rows?.Invoke().ToArray() ?? [];
             Assert.True(rows.Length > 0 && capped.MinimumRemaining is not null, $"{what}, past its share without rows or a minimum.");
             bool whole = !capped.Scroll.HasVerticalScrollbar;
+            if (capped.KeepsLinesWhole && rows[0].LineHeight > 0 && Math.Abs(rows[0].Start + rows[0].LineHeight - capped.Bounds.Height) < 0.5) continue;
             Assert.True(whole || rows.Any(row => row.Grows && Math.Abs(row.End - capped.Bounds.Height) < 0.5), $"{what}, past its share but not below a row of buttons.");
             double rowsEnd = whole ? rows[^1].End : capped.Bounds.Height;
             Assert.True(rowsEnd <= Math.Max(share, available - capped.MinimumRemaining!()) + 0.5, $"{what}; its rows end at {rowsEnd}.");

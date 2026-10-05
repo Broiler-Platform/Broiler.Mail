@@ -525,27 +525,29 @@ public sealed class ResponsiveInboxTests
     }
 
     /// <summary>
-    /// The inbox notice takes up to 40 % of the list pane and scrolls the rest, but, like the reader's
-    /// header, it does not end inside one of the explanation's lines, and it shows the row with Retry whole
-    /// or not at all. While the list keeps two rows, it grows to show Retry whole, as for a failed receive
-    /// at 1100x720 with twice the text size or a canceled one at 640x450; otherwise it ends above Retry, as
-    /// at 640x440, or between two lines of the explanation, as for a failed receive at 640x480 with twice
-    /// the text size, where it cut through a line and through Retry.
+    /// The inbox notice's explanation takes up to 40 % of the list pane that Retry below it leaves, and
+    /// scrolls the rest, but, like the reader's header, it does not end inside one of its lines, not even
+    /// its first in a short pane, and it shows them all while the list keeps two rows, as for a failed
+    /// receive at 1100x720 with twice the text size. Retry is always whole below it, the list right after,
+    /// so the footer's "Details and Retry are above the list" holds. Before, at 640x480 with twice the text
+    /// size, the notice cut through a line and through Retry, and then hid Retry, which a failed receive
+    /// at 640x480 now shows below one whole line; in a pane as short as at 640x320, that line is whole
+    /// too, past the share that would cut it.
     /// </summary>
     [Theory]
-    [InlineData(640, 480, 1.0, "receive-error", true, false)]
-    [InlineData(640, 480, 1.0, "receive-canceled", true, false)]
-    [InlineData(640, 480, 1.0, "load-error", true, false)]
-    [InlineData(640, 480, 2.0, "receive-error", false, true)]
-    [InlineData(640, 480, 2.0, "receive-canceled", true, false)]
-    [InlineData(640, 480, 2.0, "load-error", false, true)]
-    [InlineData(640, 450, 2.0, "receive-canceled", true, false)]
-    [InlineData(640, 440, 2.0, "receive-canceled", false, true)]
-    [InlineData(1100, 720, 2.0, "receive-error", true, false)]
-    [InlineData(1100, 720, 2.0, "receive-canceled", true, false)]
-    [InlineData(1100, 720, 2.0, "load-error", true, false)]
-    [InlineData(1100, 560, 2.0, "receive-error", false, true)]
-    public async Task TheInboxNoticeEndsBetweenItsLinesAndShowsRetryWholeOrNotAtAll(int width, int height, double textScale, string problem, bool retryShown, bool scrolls)
+    [InlineData(640, 480, 1.0, "receive-error", false)]
+    [InlineData(640, 480, 1.0, "receive-canceled", false)]
+    [InlineData(640, 480, 1.0, "load-error", false)]
+    [InlineData(640, 480, 2.0, "receive-error", true)]
+    [InlineData(640, 480, 2.0, "receive-canceled", false)]
+    [InlineData(640, 480, 2.0, "load-error", true)]
+    [InlineData(640, 450, 2.0, "receive-canceled", false)]
+    [InlineData(640, 320, 2.0, "receive-error", true)]
+    [InlineData(1100, 720, 2.0, "receive-error", false)]
+    [InlineData(1100, 720, 2.0, "receive-canceled", false)]
+    [InlineData(1100, 720, 2.0, "load-error", false)]
+    [InlineData(1100, 560, 2.0, "receive-error", true)]
+    public async Task TheInboxNoticeEndsBetweenItsLinesAndKeepsRetryInView(int width, int height, double textScale, string problem, bool scrolls)
     {
         StandardThemeTokens previous = StandardControlPaint.Theme;
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
@@ -576,18 +578,26 @@ public sealed class ResponsiveInboxTests
             double available = notice.AvailableHeight;
             string where = $"At {width}x{height}, text {textScale:P0}, {problem}: the notice shows {shown} of {available}";
             Assert.False(fixture.Layout.ShowsReaderOnly);
-            AssertNoticeEndsBetweenRows(notice, where);
-            var retry = Descendants(notice).OfType<StandardButton>().Single();
-            Assert.True(retryShown == retry.Bounds.Bottom <= shown.Bottom + 0.5, $"{where}: Retry is at {retry.Bounds}.");
+            var label = AssertNoticeEndsBetweenRows(notice, where);
             Assert.True(scrolls == notice.Scroll.HasVerticalScrollbar, $"{where}: the notice {(scrolls ? "does not scroll" : "scrolls")}.");
 
-            // Past its share, the notice leaves the list two rows; with Retry below, it keeps to its share.
+            // Retry's row is whole right below what the notice shows, and the list follows it.
+            var retry = fixture.Button(problem == "load-error" ? "Retry loading older" : "Retry receiving");
+            BRect row = retry.Parent!.Bounds;
+            Assert.False(retry.IsDescendantOf(notice), where);
+            Assert.Equal(notice.Bounds.Bottom, row.Top, 0.5);
+            Assert.True(row.Top <= retry.Bounds.Top && retry.Bounds.Bottom <= row.Bottom && row.Height >= retry.Bounds.Height, $"{where}: Retry is at {retry.Bounds} in its row at {row}.");
+            Assert.Equal(row.Bottom, fixture.List.Bounds.Top, 0.5);
+
+            // Past its share, the notice shows its whole explanation and leaves the list two rows (the margin
+            // below the last line is not a line), or else only its first line, which the share would cut.
             double share = available * 0.4;
             if (notice.Bounds.Height > share + 0.5)
-                Assert.True(available - notice.Bounds.Height >= (2 * fixture.List.EffectiveItemHeight) - 0.5, $"{where}; the list has {fixture.List.Bounds.Height}.");
-            if (!retryShown)
-                Assert.True(notice.Bounds.Height <= share + 0.5, where);
-            Assert.Equal(notice.Bounds.Bottom, fixture.List.Bounds.Top, 0.5);
+            {
+                double line = BTextMeasurer.GetLineHeight(label.Font);
+                if (scrolls) Assert.Equal(label.Bounds.Top + line, shown.Bottom, 0.5);
+                else Assert.True(available - (label.Bounds.Bottom - shown.Top) >= (2 * fixture.List.EffectiveItemHeight) - 0.5, $"{where}; the list has {fixture.List.Bounds.Height}.");
+            }
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
@@ -919,8 +929,9 @@ public sealed class ResponsiveInboxTests
             session.RenderFrame();
             var notice = areas.Single(area => area.MaximumFraction == 0.4);
             var list = Descendants(content).OfType<StandardListView>().Single();
-            Assert.InRange(notice.Bounds.Height, 1, (notice.Parent!.Bounds.Height * 0.4) + 1);
-            Assert.True(list.Bounds.Height > notice.Parent.Bounds.Height * 0.5);
+            var pane = Descendants(content).OfType<StandardSplitContainer>().Single().FirstPane!;
+            Assert.InRange(notice.Bounds.Height, 1, (notice.AvailableHeight * 0.4) + 1);
+            Assert.True(list.Bounds.Height > pane.Bounds.Height * 0.5);
         }
         finally
         {
@@ -1027,24 +1038,18 @@ public sealed class ResponsiveInboxTests
     }
 
     /// <summary>
-    /// The notice's explanation is on screen whole, or cut between two of its lines, and the row with Retry
-    /// is on screen whole or scrolled below the notice whole.
+    /// The notice's explanation is on screen whole, or cut between two of its lines, never inside one, and
+    /// shows at least one; returns its text.
     /// </summary>
-    private static void AssertNoticeEndsBetweenRows(BoundedScrollArea notice, string where)
+    private static StandardLabel AssertNoticeEndsBetweenRows(BoundedScrollArea notice, string where)
     {
         BRect shown = notice.Scroll.ContentBounds;
-        var rows = notice.Scroll.Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0).ToArray();
-        Assert.Equal(2, rows.Length);
-        foreach (var row in rows)
-        {
-            if (row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5) continue;
-            var explanation = Descendants(row).OfType<StandardLabel>().SingleOrDefault();
-            Assert.True(explanation is not null, $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
-            double line = BTextMeasurer.GetLineHeight(explanation.Font);
-            double lines = (shown.Bottom - explanation.Bounds.Top) / line;
-            Assert.True(Math.Abs(lines - Math.Round(lines)) < 0.01 || shown.Bottom >= explanation.Bounds.Bottom - 0.5,
-                $"{where}: the explanation at {explanation.Bounds} is cut inside a line of {line}.");
-        }
+        var explanation = Descendants(notice).OfType<StandardLabel>().Single();
+        if (explanation.Bounds.Bottom <= shown.Bottom + 0.5) return explanation;
+        double line = BTextMeasurer.GetLineHeight(explanation.Font);
+        double lines = (shown.Bottom - explanation.Bounds.Top) / line;
+        Assert.True(lines >= 0.99 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the explanation at {explanation.Bounds} is cut inside a line of {line}.");
+        return explanation;
     }
 
     /// <summary>The rows of the reader header: Back, the subject, the sender and recipients, the date, Reply, the HTML preview.</summary>

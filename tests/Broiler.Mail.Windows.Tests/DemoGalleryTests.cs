@@ -20,6 +20,7 @@ using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.RichEdit.Standard;
+using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Windows.Tests;
@@ -283,18 +284,18 @@ public sealed class DemoGalleryTests
 
     /// <summary>
     /// The inbox notice of the gallery's list problems, with their own explanations and DirectWrite's
-    /// metrics, at the sizes of the 200 % captures. The explanation is shown whole or cut between two of
-    /// its lines, never inside one, and the row with Retry is shown whole or not at all: whole where the
-    /// list keeps two rows below it.
+    /// metrics, at the sizes of the 200 % captures. The explanation shows the given number of whole lines,
+    /// all of them or cut between two, never inside one, and Retry is whole right below it, so the footer's
+    /// pointer to it holds: in the 640x480 captures and for load-error at 1100x720, Retry was cut or out of view.
     /// </summary>
     [Theory]
-    [InlineData("receive-error", 640, 480, false)]
-    [InlineData("receive-canceled", 640, 480, false)]
-    [InlineData("load-error", 640, 480, false)]
-    [InlineData("receive-error", 1100, 720, true)]
-    [InlineData("receive-canceled", 1100, 720, true)]
-    [InlineData("load-error", 1100, 720, false)]
-    public void Inbox_Notice_Ends_Between_Its_Lines_And_Shows_Retry_Whole_Or_Not_At_All(string name, int width, int height, bool retryShown)
+    [InlineData("receive-error", 640, 480, 1)]
+    [InlineData("receive-canceled", 640, 480, 1)]
+    [InlineData("load-error", 640, 480, 1)]
+    [InlineData("receive-error", 1100, 720, 6)]
+    [InlineData("receive-canceled", 1100, 720, 2)]
+    [InlineData("load-error", 1100, 720, 4)]
+    public void Inbox_Notice_Ends_Between_Its_Lines_And_Keeps_Retry_In_View(string name, int width, int height, int lines)
     {
         var scenario = DemoOptions.Gallery.Single(item => item.Name == name).Scenario;
         using (new Direct2DRenderer()) { }
@@ -311,19 +312,19 @@ public sealed class DemoGalleryTests
                 var notice = Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Inbox notice");
                 BRect shown = notice.Scroll.ContentBounds;
                 string where = $"{name} at {width}x{height}, text 200 %: the notice shows {shown} of {notice.AvailableHeight}";
-                Assert.True(shown.Height > 0, where);
-                var explanation = Descendants(notice).OfType<InlineFeedback>().Single();
-                var label = Descendants(explanation).OfType<StandardLabel>().Single();
-                if (label.Bounds.Bottom > shown.Bottom + 0.5)
-                {
-                    double line = BTextMeasurer.GetLineHeight(label.Font);
-                    double lines = (shown.Bottom - label.Bounds.Top) / line;
-                    Assert.True(lines >= 0.99 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the explanation at {label.Bounds} is cut inside a line of {line}.");
-                }
-                var retry = Descendants(notice).OfType<StandardButton>().Single();
+                var label = Descendants(notice).OfType<StandardLabel>().Single();
+                double line = BTextMeasurer.GetLineHeight(label.Font);
+                double shownLines = (Math.Min(shown.Bottom, label.Bounds.Bottom) - label.Bounds.Top) / line;
+                Assert.True(Math.Abs(shownLines - lines) < 0.01, $"{where}: the explanation at {label.Bounds} shows {shownLines} lines of {line}.");
+                var retry = Descendants(Tab(shell, "inbox")).OfType<StandardButton>().Single(button => button.Text is "Retry receiving" or "Retry loading older");
                 BRect row = retry.Parent!.Bounds;
-                Assert.True(row.Bottom <= shown.Bottom + 0.5 || row.Top >= shown.Bottom - 0.5, $"{where}: the row with Retry at {row} is cut.");
-                Assert.True(retryShown == row.Bottom <= shown.Bottom + 0.5, $"{where}: Retry is at {retry.Bounds}.");
+                Assert.Equal(notice.Bounds.Bottom, row.Top, 0.5);
+                Assert.True(row.Top <= retry.Bounds.Top && retry.Bounds.Bottom <= row.Bottom, $"{where}: Retry is at {retry.Bounds} in its row at {row}.");
+                // No scroll view clips it: it is on screen, not scrolled out of the notice.
+                for (var parent = retry.Parent; parent is not null; parent = parent.Parent)
+                    if (parent is StandardScrollView scroll)
+                        Assert.True(retry.Bounds.Top >= scroll.ContentBounds.Top - 0.5 && retry.Bounds.Bottom <= scroll.ContentBounds.Bottom + 0.5, $"{where}: Retry at {retry.Bounds} is out of {scroll.ContentBounds}.");
+                Assert.EndsWith(model.Inbox.ProblemIsCancellation ? "Retry is available." : "Details and Retry are above the list.", Footer(shell), StringComparison.Ordinal);
             });
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
