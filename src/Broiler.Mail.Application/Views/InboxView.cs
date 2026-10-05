@@ -214,6 +214,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         // scrolls, and the header has the height they leave (see PlaceCommands). A line across the reader
         // separates the header and its commands from the message text.
         var pinnedCommands = new StandardPanel();
+        pinnedCommands.AddChild(replyActions);
         var headerArea = new FirstTakesRestStack();
         headerArea.Add(headerColumn);
         headerArea.Add(new ReadingColumn(new Inset(pinnedCommands, 0, 4)));
@@ -221,7 +222,6 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         reading.AddChild(headerArea);
         reading.SetDock(headerArea, UiDock.Top);
         reading.AddChild(text);
-        pinnedCommands.AddChild(replyActions);
 
         // Where the notice's rows are, as the notice last measured them: the explanation's lines, inside the
         // inset and the feedback's own padding, and the row with Retry.
