@@ -89,6 +89,12 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     public bool ProblemIsCancellation => (MessageProblem ?? ListProblem)?.IsCancellation == true;
     /// <summary>The list problem came from Load older, not from receiving the newest messages.</summary>
     public bool ProblemIsOlderPage => ListProblem is not null && _lastPageWasOlder;
+    /// <summary>
+    /// Retrying the list problem loads the older page again, rather than receiving the newest messages,
+    /// as <see cref="RetryAsync(InboxProblemScope)"/> does. Unlike <see cref="CanLoadOlder"/>, it does not
+    /// change while a message loads, so the Retry beside the list keeps its name meanwhile.
+    /// </summary>
+    public bool ListRetryLoadsOlder => ProblemIsOlderPage && _older is not null && Messages.Count < MaximumLoadedMessages;
     /// <summary>Whether <see cref="RetryAsync()"/> can repeat the operation of the last problem.</summary>
     public bool CanRetry => CanRetryIn(ProblemScope);
 
@@ -258,7 +264,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     {
         if (!CanRetryIn(scope)) return Task.CompletedTask;
         return scope == InboxProblemScope.Message ? SelectAsync(SelectedMessage!.Key)
-            : _lastPageWasOlder && CanLoadOlder ? LoadOlderAsync() : ReceiveAsync();
+            : ListRetryLoadsOlder ? LoadOlderAsync() : ReceiveAsync();
     }
 
     private void SetProblem(InboxProblemScope scope, string text, bool canceled)

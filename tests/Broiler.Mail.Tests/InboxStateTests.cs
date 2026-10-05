@@ -149,8 +149,9 @@ public sealed class InboxStateTests
     /// <summary>
     /// A list problem (a failed or canceled receive, or a failed Load older) stays while a message is
     /// read: the rows are still from an earlier receive, so its notice and Retry stay above the list,
-    /// also beside a message that fails to load. Each Retry repeats its own pane's operation, and a new
-    /// page replaces both problems.
+    /// also beside a message that fails to load. While a message loads, the list's Retry keeps its name
+    /// (it was named Retry receiving after a failed Load older meanwhile). Each Retry repeats its own
+    /// pane's operation, and a new page replaces both problems.
     /// </summary>
     [Theory]
     [InlineData("receive-error", "Retry receiving")]
@@ -161,8 +162,10 @@ public sealed class InboxStateTests
         var account = TestDirectory.Profile();
         MailMessageSummary[] newest = [Message(account, 3), Message(account, 2)];
         bool broken = true;
+        TaskCompletionSource<MailMessageBody>? pendingBody = null;
         using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account,
-            key => key.Uid == 2 && broken ? throw new MailConnectionException("Broken message.") : Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")));
+            key => pendingBody is { } pending ? pending.Task
+                : key.Uid == 2 && broken ? throw new MailConnectionException("Broken message.") : Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")));
         // The newest page, then one older page, the last.
         Func<MailInboxCursor?, CancellationToken, Task<MailInboxPage>> working = (cursor, _) => Task.FromResult(cursor is null
             ? new MailInboxPage(newest, new(account.Id, 7, 4, 3, 2)) : new MailInboxPage([Message(account, 1)], null));
@@ -194,6 +197,21 @@ public sealed class InboxStateTests
         Assert.Equal(InboxProblemScope.List, fixture.Model.ProblemScope);
         Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
         Assert.True(fixture.IsShown(listRetry) && listRetry.IsEnabled);
+
+        // While a message loads, the list's Retry keeps its name, unavailable until the message has loaded.
+        pendingBody = new TaskCompletionSource<MailMessageBody>();
+        var loading = fixture.Model.SelectAsync(newest[0].Key);
+        fixture.Render();
+        Assert.True(fixture.Model.IsLoadingMessage);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        Assert.Equal(retryText, listRetry.Text);
+        Assert.True(fixture.IsShown(listRetry) && !listRetry.IsEnabled);
+        pendingBody.SetResult(new MailMessageBody(newest[0].Key, "Body 3"));
+        pendingBody = null;
+        fixture.Settle();
+        await loading;
+        Assert.Equal(retryText, listRetry.Text);
+        Assert.True(listRetry.IsEnabled);
 
         // A message that fails to load explains why under its header; the list's problem stays above the list.
         await fixture.Model.SelectAsync(newest[1].Key);
