@@ -128,10 +128,11 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   strip or a hidden tab. The reader's frameless editors are ringed by Mail: the
   message text around its view, the header details just outside the editor
   (`FocusRingFrame`). A field the forms refuse carries the
-  error itself (`FormField.SetError`), so it reports Invalid with the error as its
-  description and takes focus while the user is on the form: in Account and Settings
-  the field validation names, in the composer the recipient field (To, Cc, Bcc) a
-  draft check or a send stopped at.
+  error itself (`FormField.SetError`): it shows the error and reports Invalid with the
+  error in its name, and its control, which takes focus, reports Invalid with a
+  description that starts with the error. The field takes focus while the user is on
+  the form: in Account and Settings the field validation names, in the composer the
+  recipient field (To, Cc, Bcc) a draft check or a send stopped at.
   Broiler.Hosting maps the UI to UI Automation (names, states, relations, runtime IDs,
   events); a pass with a real screen reader (H-01) remains.
   The legacy Graphics input adapter is isolated in the Windows project. For the main

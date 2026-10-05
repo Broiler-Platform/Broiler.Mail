@@ -680,6 +680,7 @@ public sealed class DemoGalleryTests
             var to = Descendants(Tab(shell, "compose")).OfType<FormField>().Single(field => field.Label.Text == "To");
             Assert.Equal(composer.Status, to.Error);
             Assert.True(to.Control.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
+            Assert.StartsWith("Error: " + composer.Status, to.Control.GetSemanticNode().Description);
             Assert.True(to.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
             foreach (var action in new[] { "Check draft", "Save draft", "Discard draft" })
                 Assert.True(IsAvailable(Button(shell, "compose", action)), action);

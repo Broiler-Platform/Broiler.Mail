@@ -136,9 +136,9 @@ public sealed class ComposerTests
 
     /// <summary>
     /// A draft refused for one recipient field marks that field, as the account form marks its fields: the field
-    /// shows the error and reports Invalid with it, and its edit reports Invalid with the error as its description,
-    /// for a screen reader on the field and not only on the status line. Refusals of the whole draft mark none, and
-    /// the next edit clears the mark.
+    /// shows the error and reports Invalid with the error in its name, and its edit, which takes focus, reports
+    /// Invalid with a description that starts with the error, for a screen reader on the field and not only on the
+    /// status line. Refusals of the whole draft mark none, and the next edit clears the mark.
     /// </summary>
     [Theory]
     [InlineData("team.example.test", "", "", "Plans", "To")]
@@ -168,7 +168,9 @@ public sealed class ComposerTests
             bool marked = name == refused;
             Assert.Equal(marked ? composer.Status : "", field.Error);
             Assert.Equal(marked, field.Control.ErrorMessage is not null);
-            Assert.Equal(marked, field.Control.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
+            var control = field.Control.GetSemanticNode();
+            Assert.Equal(marked, control.State.HasFlag(UiSemanticState.Invalid));
+            Assert.Equal(marked, control.Description?.StartsWith("Error: " + composer.Status, StringComparison.Ordinal) == true);
             var node = field.GetSemanticNode();
             Assert.Equal(marked, node.State.HasFlag(UiSemanticState.Invalid));
             Assert.Equal(marked, node.Name.Contains(composer.Status, StringComparison.Ordinal));
@@ -186,11 +188,13 @@ public sealed class ComposerTests
         Assert.Equal(composer.Status, fields[refused].Error);
 
         // Typing in the field clears its mark, and the draft's.
+        string error = fields[refused].Error;
         var edit = (StandardEdit)fields[refused].Control;
         edit.Text += " ";
         Assert.Null(composer.InvalidField);
         Assert.Equal("", fields[refused].Error);
         Assert.False(edit.GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
+        Assert.False(edit.GetSemanticNode().Description?.Contains(error, StringComparison.Ordinal) == true);
         Assert.False(fields[refused].GetSemanticNode().State.HasFlag(UiSemanticState.Invalid));
     }
 
