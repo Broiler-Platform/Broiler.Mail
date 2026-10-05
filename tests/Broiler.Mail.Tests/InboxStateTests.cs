@@ -303,7 +303,7 @@ public sealed class InboxStateTests
     [InlineData(500, false)]
     public async Task TheSessionLimitStaysExplainedAboveTheListWhileAMessageIsRead(int total, bool limited)
     {
-        const string limit = "Session limit reached (500 messages): older messages cannot be loaded now. Receive mail to start again from the newest page.";
+        const string limit = "Session limit reached (500 messages). Older ones cannot be loaded in this session. Receive mail to start again.";
         var account = TestDirectory.Profile();
         TaskCompletionSource<MailMessageBody>? pendingBody = null;
         using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account,
@@ -364,7 +364,7 @@ public sealed class InboxStateTests
     [InlineData(true)]
     public async Task AReceiveProblemAtTheSessionLimitKeepsTheLimitExplained(bool canceled)
     {
-        const string limit = "Session limit reached (500 messages): older messages cannot be loaded now. Receive mail to start again from the newest page.";
+        const string limit = "Session limit reached (500 messages). Older ones cannot be loaded in this session. Receive mail to start again.";
         var account = TestDirectory.Profile();
         using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account);
         var pages = fixture.Receiver.Inbox = NewestFirst(account, InboxViewModel.MaximumLoadedMessages + InboxViewModel.PageSize);
