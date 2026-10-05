@@ -148,7 +148,7 @@ public sealed class MailShellView : IDisposable
             (_, true, true) => "Canceled. Retry is available.",
             (InboxProblemScope.Message, true, false) => "Canceled. Open the message to retry.",
             (_, true, false) => $"Canceled. Use {InboxView.BackText} to retry.",
-            (InboxProblemScope.Message, false, true) => "The message could not be loaded. Details and Retry are below the message header.",
+            (InboxProblemScope.Message, false, true) => "The message could not be loaded. Details and Retry are below its date.",
             (InboxProblemScope.Message, false, false) => "The message could not be loaded. Open it to see the details and Retry.",
             _ => (inbox.ProblemIsOlderPage ? "Older messages could not be loaded. " : "Mail could not be received. ")
                 + (paneShown ? "Details and Retry are above the list." : $"Use {InboxView.BackText} to see the details and Retry."),

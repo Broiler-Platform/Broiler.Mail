@@ -221,20 +221,24 @@ public sealed class DemoGalleryTests
     }
 
     /// <summary>
-    /// Beside the list, the footer points to the explanation and Retry loading below the message's header,
-    /// where the reader shows them, as the compact reader does.
+    /// Beside the list, the footer points to the explanation and Retry loading below the message's date,
+    /// where the reader shows them, as the compact reader does. They are part of the message header, above
+    /// the line that ends it, and are read with it, so the footer does not say they are below the header.
     /// </summary>
     [Fact]
-    public void Body_Error_Footer_Points_Below_The_Message_Header()
+    public void Body_Error_Footer_Points_Below_The_Date()
     {
         Run(DemoScenario.BodyError, 1100, 720, null, (_, shell, render) =>
         {
             render();
-            Assert.Equal("The message could not be loaded. Details and Retry are below the message header.", Footer(shell));
+            Assert.Equal("The message could not be loaded. Details and Retry are below its date.", Footer(shell));
             var date = Descendants(Tab(shell, "inbox")).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received ", StringComparison.Ordinal));
             var retry = Button(shell, "inbox", "Retry loading");
             Assert.True(IsAvailable(retry));
             Assert.True(retry.Bounds.Top >= date.Bounds.Bottom - 0.5, $"Retry loading is at {retry.Bounds}, the date at {date.Bounds}.");
+            var header = Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+            Assert.True(retry.IsDescendantOf(header), "Retry loading is outside the message header.");
+            Assert.True(retry.Bounds.Bottom <= Descendants(Tab(shell, "inbox")).OfType<Divider>().Single().Bounds.Top + 0.5, $"Retry loading is at {retry.Bounds}, below the line.");
         });
     }
 

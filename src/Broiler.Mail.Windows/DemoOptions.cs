@@ -30,7 +30,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         ("save-error", DemoScenario.SaveError, "Failed settings save with inline error feedback"),
         ("send-unknown", DemoScenario.SendUnknown, "Recovered uncertain-send state; sending disabled"),
         ("html-only", DemoScenario.HtmlOnly, "Selected HTML-only message with embedded image and text fallback"),
-        ("body-error", DemoScenario.BodyError, "Selected message whose body fails to load, with Retry below its header"),
+        ("body-error", DemoScenario.BodyError, "Selected message whose body fails to load, with Retry below its date"),
         ("invalid-setup", DemoScenario.InvalidSetup, "Account save rejected for an email address with a display name"),
         ("test-canceled", DemoScenario.TestCanceled, "Connection test canceled before the server answered"),
         ("draft-conflict", DemoScenario.DraftConflict, "Autosave refused because another instance changed the saved draft"),
