@@ -229,15 +229,17 @@ public sealed class DemoGalleryTests
     /// list, Reply, Reply all and Forward are on screen whole below the header, whatever it shows, where
     /// they fit on one row with the subject's first line and six lines of text; just wider than the compact
     /// reader at twice the text size, where they wrapped and left the text less than a line, they end the
-    /// header, as in the compact reader. A line separates the header from the message text, which keeps at
-    /// least the given number of lines: the compact reader at 640x480 with twice the text size keeps two,
-    /// after Back to inbox and its inset. So does the large inbox at the session limit, whose footer points
-    /// to the explanation above the hidden list instead of adding it to the reading status.
+    /// header, as in the compact reader. Their row is never flush with the line that separates the header
+    /// from the message text, as it was in html-only's scrolling compact header. The text keeps at least
+    /// the given number of lines: the compact reader at 640x480 with twice the text size keeps two, after
+    /// Back to inbox and its inset. So does the large inbox at the session limit, whose footer points to
+    /// the explanation above the hidden list instead of adding it to the reading status.
     /// </summary>
     [Theory]
     [InlineData("inbox", 640, 480, 1.0, false, true, 5)]
     [InlineData("long-message", 640, 480, 1.0, false, false, 8)]
     [InlineData("html-only", 640, 480, 1.0, false, true, 6)]
+    [InlineData("long-html", 640, 480, 1.0, false, true, 6)]
     [InlineData("body-error", 640, 480, 1.0, false, true, 0)]
     [InlineData("large-inbox", 640, 480, 1.0, false, true, 5)]
     [InlineData("inbox", 640, 480, 2.0, false, false, 2)]
@@ -300,10 +302,16 @@ public sealed class DemoGalleryTests
                 bool onScreen = inHeader ? reply.Bounds.Bottom <= shown.Bottom + 0.5
                     : reply.Bounds.Top >= header.Bounds.Bottom - 0.5 && reply.Bounds.Bottom <= divider.Top + 0.5;
                 Assert.True(replyShown == onScreen, $"{where}: Reply is at {reply.Bounds}, the line at {divider}.");
+                // Shown, their row keeps a gap of 4 DIP from the line, as below the header; the compact
+                // header that scrolled left it flush with the line.
+                if (replyShown)
+                    Assert.True(divider.Top - reply.Parent!.Bounds.Bottom >= 3.5, $"{where}: Reply's row ends at {reply.Parent.Bounds.Bottom}, the line at {divider}.");
                 Assert.True(divider.Top >= header.Bounds.Bottom - 0.5, $"{where}: the line is at {divider}.");
                 var text = Descendants(reader).OfType<ScrollableMessageText>().Single();
                 Assert.Equal(divider.Bottom, text.Bounds.Top, 0.5);
-                Assert.True(text.Bounds.Height >= text.HeightOfLines(textLines) - 0.5, $"{where}: the text has {text.Bounds.Height}, less than {textLines} lines.");
+                // The lines are whole below the text's top margin; the gap below Reply's row, where the header
+                // ends with it, may narrow the margin below them.
+                Assert.True(text.Bounds.Height >= text.HeightOfLines(textLines) - (text.HeightOfLines(0) / 2) - 0.5, $"{where}: the text has {text.Bounds.Height}, less than {textLines} lines.");
                 // Beside the list, the subject's first line is whole.
                 if (width >= 680)
                 {

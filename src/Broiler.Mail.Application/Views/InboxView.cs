@@ -202,7 +202,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         // A long subject or many recipients at a large text size scroll within the header, so the
         // message text keeps most of the pane. The header ends between its rows or lines of text, not
         // inside one: while the text keeps a few lines it grows to show the whole header, or the next
-        // row of buttons whole, and otherwise ends above the row or line its share would cut.
+        // row of buttons whole with the gap below it, which may narrow the text's margin below its lines,
+        // and otherwise ends above the row or line its share would cut.
         const double headerShare = 0.45;
         const int textLinesKept = 6;
         var text = new ScrollableMessageText();

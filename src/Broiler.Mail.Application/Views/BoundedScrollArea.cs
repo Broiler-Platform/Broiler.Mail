@@ -45,7 +45,8 @@ public sealed class BoundedScrollArea : UiElement
     /// for a row of text lines of one height, that height (0 for any other row). With them, the area
     /// does not end inside a row or a line. When its share would hide part of the content, the area
     /// shows the whole content if its rows leave <see cref="MinimumRemaining"/> of the space, or else
-    /// ends below the first row from the share's end that may grow it, if that leaves the minimum.
+    /// ends below the first row from the share's end that may grow it, if that leaves the minimum, and
+    /// below the gap between that row and the next, which may take from the minimum.
     /// Otherwise it ends above the row the share would cut, or below that row's last whole line, unless
     /// that leaves less than half its share: a row so near the top, such as Back to inbox in a very short
     /// window, is cut at the share instead. When the share is the whole space, nothing below would take
@@ -54,8 +55,9 @@ public sealed class BoundedScrollArea : UiElement
     public Func<IEnumerable<(double Start, double End, bool Grows, double LineHeight)>>? Rows { get; init; }
 
     /// <summary>
-    /// The height the area leaves of the space when it takes more than its share. Without it, the area
-    /// takes no more than its share.
+    /// The height the area leaves of the space when it takes more than its share, less the gap below a row
+    /// it ends below to show that row whole (see <see cref="Rows"/>). Without it, the area takes no more
+    /// than its share.
     /// </summary>
     public Func<double>? MinimumRemaining { get; init; }
 
@@ -99,7 +101,9 @@ public sealed class BoundedScrollArea : UiElement
         int next = Array.FindIndex(rows, row => row.End > cap);
         if (next < 0) return cap;
         int grows = Array.FindIndex(rows, next, row => row.Grows);
-        if (grows >= 0 && rows[grows].End <= limit) return rows[grows].End;
+        // Below the gap that separates the row from the next too, so the row is not flush with what follows
+        // the area, such as the line above the message text.
+        if (grows >= 0 && rows[grows].End <= limit) return grows + 1 < rows.Length ? rows[grows + 1].Start : rows[grows].End;
         var (start, _, _, lineHeight) = rows[next];
         bool keepsLine = KeepsLinesWhole && lineHeight > 0;
         // Between two rows the share cuts neither, unless it would show nothing of the first.

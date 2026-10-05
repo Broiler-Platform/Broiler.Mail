@@ -27,6 +27,9 @@ namespace Broiler.Mail.Tests;
 [Collection("UI theme")]
 public sealed class ResponsiveInboxTests
 {
+    /// <summary>The gap the reader's commands keep from the line below them, as the header's rows keep between them.</summary>
+    private const double CommandsGap = 4;
+
     [Fact]
     public async Task WideLayoutShowsBothPanesAndCompactLayoutStartsWithTheList()
     {
@@ -833,16 +836,17 @@ public sealed class ResponsiveInboxTests
     /// scrolls the rest, but it does not end inside one of its rows or lines. While the message text keeps
     /// six lines, it grows to show the whole header, as in the compact reader at 640x480 with Reply, Reply
     /// all and Forward, or a long sender at 640x640, or to show the next row of buttons whole, as Reply
-    /// above the HTML preview's row. A scroll bar that would scroll only the margin below Reply does not
-    /// appear, as it did at 640x520. Otherwise the header ends above the row its share would cut, or between
-    /// two of its lines, as for a long sender at 640x480 or a long subject at twice the text size, so the
-    /// text keeps its room. Beside the list, Reply, Reply all and Forward stay in view below the header,
-    /// even when it scrolls, where they fit on one row and leave the subject's first line and six lines of
-    /// text. In a reader too narrow or short for that, such as at 700x480, 700x1000 or 1100x500 with twice
-    /// the text size, they end the header, as in the compact reader, which has no height to spare for them:
-    /// at 700x480, pinned on two rows, they left the subject less than a line and the text less than one.
-    /// Beside the list the subject's first line and two lines of text are always shown. A line across the
-    /// reader separates the header from the message text.
+    /// above the HTML preview's row, and the gap below it: ending at the row left it flush with the line,
+    /// from which the commands below the header keep a gap. A scroll bar that would scroll only the margin
+    /// below Reply does not appear, as it did at 640x520. Otherwise the header ends above the row its share
+    /// would cut, or between two of its lines, as for a long sender at 640x480 or a long subject at twice
+    /// the text size, so the text keeps its room. Beside the list, Reply, Reply all and Forward stay in
+    /// view below the header, even when it scrolls, where they fit on one row and leave the subject's first
+    /// line and six lines of text. In a reader too narrow or short for that, such as at 700x480, 700x1000
+    /// or 1100x500 with twice the text size, they end the header, as in the compact reader, which has no
+    /// height to spare for them: at 700x480, pinned on two rows, they left the subject less than a line and
+    /// the text less than one. Beside the list the subject's first line and two lines of text are always
+    /// shown. A line across the reader separates the header from the message text.
     /// </summary>
     [Theory]
     [InlineData(640, 480, 1.0, "plain", false, true, false)]
@@ -889,14 +893,20 @@ public sealed class ResponsiveInboxTests
             bool onScreen = inHeader ? reply.Bounds.Bottom <= shown.Bottom + 0.5
                 : reply.Bounds.Top >= header.Bounds.Bottom - 0.5 && reply.Bounds.Bottom <= reader.Divider.Bounds.Top + 0.5;
             Assert.True(replyShown == onScreen, $"{where}: Reply is at {reply.Bounds}.");
+            if (replyShown)
+            {
+                BRect row = Assert.IsType<StandardToolbar>(reply.Parent).Bounds;
+                Assert.True(reader.Divider.Bounds.Top - row.Bottom >= CommandsGap - 0.5, $"{where}: Reply's row ends at {row.Bottom}, the line is at {reader.Divider.Bounds}.");
+            }
             // Below the header, they are on one row.
             if (pinned)
                 foreach (var command in new[] { "Reply all", "Forward" })
                     Assert.Equal(reply.Bounds.Top, reader.Button(command).Bounds.Top, 0.5);
 
             // Past its share, the rows the header shows end within it or leave the text six lines (the margin
-            // below the last row is not a row); with Reply below, it keeps to its share.
-            double rowsEnd = header.Scroll.HasVerticalScrollbar ? header.Bounds.Height : HeaderRows(header)[^1].Bounds.Bottom - shown.Top;
+            // below the last row, and the gap below a row of buttons it ends with, are not rows); with Reply
+            // below, it keeps to its share.
+            double rowsEnd = HeaderRows(header).Where(row => row.Bounds.Top < shown.Bottom - 0.5).Max(row => Math.Min(row.Bounds.Bottom, shown.Bottom)) - shown.Top;
             if (header.Bounds.Height > share + 0.5 && rowsEnd > share + 0.5)
                 Assert.True(available - rowsEnd >= reader.Text.HeightOfLines(6) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
             if (!replyShown)
