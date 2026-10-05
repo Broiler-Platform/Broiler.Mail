@@ -50,9 +50,24 @@ internal static class WindowGeometry
         if (window.Intersect(target).Width == 0) target = workAreas[0];
         return (target.Left + Math.Max(0, (target.Width - saved.Width) / 2), target.Top + Math.Max(0, (target.Height - saved.Height) / 2));
     }
+
+    /// <summary>
+    /// The outer bounds that give a window a client area of <paramref name="width"/> x <paramref name="height"/>
+    /// pixels while it keeps its frame (the outer size minus <paramref name="client"/>); null when the client
+    /// already has that size. A window Windows centered stays centered, but not left of or above the screen origin.
+    /// </summary>
+    public static PixelRect? FitClient(PixelRect outer, (int Width, int Height) client, int width, int height, bool centered)
+    {
+        if (client == (width, height)) return null;
+        int outerWidth = outer.Width + width - client.Width, outerHeight = outer.Height + height - client.Height;
+        int left = centered ? Math.Max(0, outer.Left - (outerWidth - outer.Width) / 2) : outer.Left;
+        int top = centered ? Math.Max(0, outer.Top - (outerHeight - outer.Height) / 2) : outer.Top;
+        return new(left, top, left + outerWidth, top + outerHeight);
+    }
 }
 
 /// <summary>How the main window is created and placed from remembered settings.</summary>
+/// <param name="ClientWidth">The client size in DIPs; once the window exists it gets this size at the scale it renders at.</param>
 /// <param name="Left">Option coordinates in DIPs, or null to let the window center itself.</param>
 /// <param name="MoveAfterShow">A physical position the window must be moved to once it exists.</param>
 /// <param name="Normal">The remembered normal bounds after clamping, kept while the window starts maximized.</param>
@@ -78,6 +93,7 @@ internal static unsafe class WindowsScreen
 {
     private const uint MonitorPrimary = 1;
     private const uint SwpNoSize = 0x0001, SwpNoMove = 0x0002, SwpNoZOrder = 0x0004, SwpNoActivate = 0x0010;
+    private const int GwlStyle = -16, GwlExStyle = -20;
 
     /// <summary>Work areas of all monitors, primary first.</summary>
     public static IReadOnlyList<PixelRect> WorkAreas()
@@ -97,6 +113,36 @@ internal static unsafe class WindowsScreen
         if (GetMonitorInfo(monitor, ref info) && GCHandle.FromIntPtr(state).Target is List<(PixelRect, bool)> areas)
             areas.Add((new(info.RcWork.Left, info.RcWork.Top, info.RcWork.Right, info.RcWork.Bottom), (info.DwFlags & MonitorPrimary) != 0));
         return 1;
+    }
+
+    /// <summary>Gives the window a client area of <paramref name="width"/> x <paramref name="height"/> pixels; see <see cref="WindowGeometry.FitClient"/>.</summary>
+    public static void FitClient(nint window, int width, int height, bool centered)
+    {
+        if (OuterBounds(window) is not { } outer || !GetClientRect(window, out RECT client)) return;
+        if (WindowGeometry.FitClient(outer, (client.Right - client.Left, client.Bottom - client.Top), width, height, centered) is { } fitted)
+            SetWindowPos(window, 0, fitted.Left, fitted.Top, fitted.Width, fitted.Height, SwpNoZOrder | SwpNoActivate);
+    }
+
+    /// <summary>
+    /// Track sizes for a window that renders at a simulated scale (WM_GETMINMAXINFO): the minimum client
+    /// size in pixels plus the frame for the window's real DPI, which a simulated scale does not change, and
+    /// no maximum from the real desktop, whose size says nothing about the pixels the simulated scale needs.
+    /// </summary>
+    public static void SimulatedTrackSize(nint window, nint minMaxInfo, int minimumClientWidth, int minimumClientHeight)
+    {
+        var frame = new RECT(0, 0, minimumClientWidth, minimumClientHeight);
+        if (minMaxInfo == 0 || !AdjustWindowRectExForDpi(ref frame, (uint)GetWindowLong32(window, GwlStyle), false,
+            (uint)GetWindowLong32(window, GwlExStyle), GetDpiForWindow(window))) return;
+        var limits = (MINMAXINFO*)minMaxInfo;
+        limits->ptMinTrackSize = new POINT { X = frame.Right - frame.Left, Y = frame.Bottom - frame.Top };
+        limits->ptMaxTrackSize = new POINT { X = short.MaxValue, Y = short.MaxValue };
+    }
+
+    /// <summary>Sends WM_DPICHANGED with a suggested outer rectangle in this process's memory, as Windows does.</summary>
+    public static void SendDpiChanged(nint window, uint dpi, PixelRect suggested)
+    {
+        var rect = new RECT(suggested.Left, suggested.Top, suggested.Right, suggested.Bottom);
+        SendMessage(window, 0x02E0, (nint)(dpi | (dpi << 16)), (nint)(&rect));
     }
 
     public static PixelRect? OuterBounds(nint window) =>
@@ -129,4 +175,13 @@ internal static unsafe class WindowsScreen
 
     [DllImport("user32.dll")]
     private static extern uint GetDpiForSystem();
+
+    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
+    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct MINMAXINFO
+    {
+        public POINT ptReserved, ptMaxSize, ptMaxPosition, ptMinTrackSize, ptMaxTrackSize;
+    }
 }

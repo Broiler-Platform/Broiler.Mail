@@ -79,4 +79,54 @@ public sealed class WindowGeometryTests
         Assert.Equal((360, 120), (moved.Normal!.Left, moved.Normal.Top));
         Assert.Equal(360, moved.Left);
     }
+
+    [Fact]
+    public void A_Window_On_A_Monitor_With_Another_Scale_Reopens_At_Its_Remembered_Dip_Size_Every_Time()
+    {
+        // The system scale is the 150 % primary's; the window was last on a monitor to its right. Frames
+        // are AdjustWindowRectExForDpi's for the main window's style at 96, 144, and 192 DPI.
+        var right = new PixelRect(1920, 0, 3840, 1040);
+        var frames = new Dictionary<double, (int Width, int Height)> { [1.0] = (16, 39), [1.5] = (22, 56), [2.0] = (26, 71) };
+        foreach (double monitorScale in new[] { 1.0, 2.0 })
+        {
+            var saved = At(2100, 100);
+            for (int start = 0; start < 3; start++)
+            {
+                var plan = WindowRestorePlan.For(new ApplicationSettings { Window = saved }, [Primary, right], 1.5);
+                Assert.Equal((1180, 740), (plan.ClientWidth, plan.ClientHeight));
+                Assert.Equal(1400, plan.Left);
+                // Direct2DWindow converts the option DIPs at the system scale and adds the system frame,
+                // but the window renders at the monitor's scale and draws the monitor's frame.
+                var outer = new PixelRect(2100, 100, 2100 + (int)Math.Round(plan.ClientWidth * 1.5) + frames[1.5].Width,
+                    100 + (int)Math.Round(plan.ClientHeight * 1.5) + frames[1.5].Height);
+                var client = (outer.Width - frames[monitorScale].Width, outer.Height - frames[monitorScale].Height);
+                var fitted = WindowGeometry.FitClient(outer, client, (int)Math.Round(plan.ClientWidth * monitorScale),
+                    (int)Math.Round(plan.ClientHeight * monitorScale), centered: plan.Left is null);
+                Assert.NotNull(fitted);
+                Assert.Equal((2100, 100), (fitted.Value.Left, fitted.Value.Top));
+                // The client the window ends up with is the remembered DIP size at the monitor's scale, so
+                // the size remembered at close is the same and nothing drifts from one start to the next.
+                var fittedClient = (fitted.Value.Width - frames[monitorScale].Width, fitted.Value.Height - frames[monitorScale].Height);
+                Assert.Equal(((int)(1180 * monitorScale), (int)(740 * monitorScale)), fittedClient);
+                saved = saved with
+                {
+                    Width = fitted.Value.Width, Height = fitted.Value.Height,
+                    ClientWidth = (int)Math.Round(fittedClient.Item1 / monitorScale), ClientHeight = (int)Math.Round(fittedClient.Item2 / monitorScale),
+                };
+                Assert.Equal((1180, 740), (saved.ClientWidth, saved.ClientHeight));
+            }
+        }
+    }
+
+    [Fact]
+    public void Fitting_The_Client_Keeps_The_Frame_And_A_Centered_Window_Centered()
+    {
+        var outer = new PixelRect(400, 200, 1516, 959);
+        Assert.Null(WindowGeometry.FitClient(outer, (1100, 720), 1100, 720, centered: true));
+        Assert.Equal(new PixelRect(400, 200, 2066, 1319), WindowGeometry.FitClient(outer, (1100, 720), 1650, 1080, centered: false));
+        Assert.Equal(new PixelRect(125, 20, 1791, 1139), WindowGeometry.FitClient(outer, (1100, 720), 1650, 1080, centered: true));
+        // A centered window larger than the screen starts at its origin, as Windows placed it.
+        Assert.Equal(new PixelRect(0, 0, 3316, 2199), WindowGeometry.FitClient(outer, (1100, 720), 3300, 2160, centered: true));
+        Assert.Equal(new PixelRect(675, 380, 1241, 779), WindowGeometry.FitClient(outer, (1100, 720), 550, 360, centered: true));
+    }
 }

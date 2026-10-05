@@ -28,6 +28,31 @@ namespace Broiler.Mail.Windows;
 // Broiler-Human:        PENDING
 internal static class Program
 {
+    private const string Usage = "Broiler.Mail.Windows [" + DemoOptions.Usage + " | --smoke-test | --data-directory <path>]";
+
+    /// <summary>
+    /// Usage, then the fixtures, the workloads, and the acceptance-only options, in that order.
+    /// scripts/Accept-UI.ps1 reads the fixture names between the first two headings.
+    /// </summary>
+    internal static void WriteHelp(TextWriter output)
+    {
+        output.WriteLine(Usage);
+        // One column wide enough for every name, so descriptions line up.
+        int column = DemoOptions.Gallery.Select(item => item.Name).Concat(DemoOptions.Workloads.Select(item => item.Name)).Max(name => name.Length);
+        output.WriteLine("Plain --demo starts the interactive demo. A named scenario opens prepared synthetic state with a fixed clock:");
+        foreach (var (name, _, description) in DemoOptions.Gallery)
+            output.WriteLine($"  {name.PadRight(column)} {description}");
+        output.WriteLine("--measure runs a fixed workload on the scenario, prints UI frame statistics, writes them to --report, and exits:");
+        foreach (var (name, _, description) in DemoOptions.Workloads)
+            output.WriteLine($"  {name.PadRight(column)} {description}");
+        output.WriteLine("Acceptance-only options simulate conditions for UI checks; they are not settings:");
+        foreach (var (name, description) in DemoOptions.AcceptanceOptions)
+        {
+            output.WriteLine($"  {name}");
+            output.WriteLine($"      {description}");
+        }
+    }
+
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=366F93
     // Broiler-Falsified-If: an argument list other than none, --help, a valid --demo option list, --smoke-test or --data-directory with a non-blank path starts the application instead of returning exit code 2
     // Broiler-Human:        PENDING
@@ -37,23 +62,14 @@ internal static class Program
         bool smoke = args.SequenceEqual(["--smoke-test"]);
         bool demo = DemoOptions.TryParse(args, out var demoOptions);
         bool customDirectory = args.Length == 2 && args[0] == "--data-directory" && !string.IsNullOrWhiteSpace(args[1]);
-        const string usage = "Broiler.Mail.Windows [" + DemoOptions.Usage + " | --smoke-test | --data-directory <path>]";
         if (args.SequenceEqual(["--help"]))
         {
-            Console.WriteLine(usage);
-            // One column wide enough for every name, so descriptions line up.
-            int column = DemoOptions.Gallery.Select(item => item.Name).Concat(DemoOptions.Workloads.Select(item => item.Name)).Max(name => name.Length);
-            Console.WriteLine("Plain --demo starts the interactive demo. A named scenario opens prepared synthetic state with a fixed clock:");
-            foreach (var (name, _, description) in DemoOptions.Gallery)
-                Console.WriteLine($"  {name.PadRight(column)} {description}");
-            Console.WriteLine("--measure runs a fixed workload on the scenario, prints UI frame statistics, writes them to --report, and exits:");
-            foreach (var (name, _, description) in DemoOptions.Workloads)
-                Console.WriteLine($"  {name.PadRight(column)} {description}");
+            WriteHelp(Console.Out);
             return 0;
         }
         if (args.Length != 0 && !smoke && !demo && !customDirectory)
         {
-            Console.Error.WriteLine("Usage: " + usage);
+            Console.Error.WriteLine("Usage: " + Usage);
             return 2;
         }
 

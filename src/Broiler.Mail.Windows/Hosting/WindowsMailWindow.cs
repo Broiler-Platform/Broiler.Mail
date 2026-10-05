@@ -58,6 +58,10 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private readonly WindowsHtmlPreviewHost _htmlPreview;
     private readonly FrameRecorder? _recorder;
     private int _exitCode;
+    // A simulated display scale (demo --scale, DPI tests); null reports Windows' own.
+    private double? _simulatedScale;
+    // WindowsWindowSizing's default minimum client size in DIPs.
+    private const int MinimumClientWidth = 640, MinimumClientHeight = 480;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
     // Broiler-Falsified-If: IME positioning calls receive the top-level frame handle instead of the render child window that holds keyboard focus, so the composition window is placed against the wrong client origin
     // Broiler-Human:        PENDING
@@ -89,8 +93,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private WindowsMailWindow(MailApplication application, DemoOptions? demo, WindowRestorePlan restore)
         : base(new BWindowOptions
         {
-            Title = demo is null ? "Broiler.Mail" : demo.Interactive
-                ? "Broiler.Mail — Demo (no network or saved data)" : $"Broiler.Mail — Demo: {demo.Name} (no network or saved data)",
+            Title = demo is null ? "Broiler.Mail" : demo.WindowTitle,
             // Remembered geometry, already clamped to the current monitors; otherwise the initial size, centered.
             ClientWidth = restore.ClientWidth,
             ClientHeight = restore.ClientHeight,
@@ -104,6 +107,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
                 SubpixelText: true),
         })
     {
+        // Before Show creates the native window, so OnCreated sizes it for this scale.
+        _simulatedScale = demo?.ScalePercent / 100.0;
         _host = new WindowsUiHost(this, () => InputHandle);
         // Results posted from any thread, this one included, wait until the window drains them:
         // on the message the wake-up posts, or before the next frame if no window existed yet.
@@ -219,6 +224,24 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         return renderList;
     }
 
+    /// <summary>The window's display scale, or the simulated one after --scale or <see cref="SimulateDpiChange"/>.</summary>
+    public override double DpiScale => _simulatedScale ?? base.DpiScale;
+
+    internal WindowsUiHost Host => _host;
+
+    /// <summary>
+    /// Changes the scale the way a WM_DPICHANGED from Windows does, for checks on one monitor: from now on
+    /// <see cref="DpiScale"/> reports <paramref name="scale"/> to layout, rendering, input, UI Automation, and
+    /// the IME, and the message resizes the window to <paramref name="suggested"/> (outer bounds in physical
+    /// pixels) through the same handlers as a real change. Windows' own DPI for the window and its frame stay
+    /// unchanged, so this shows Mail's reaction to a scale change, not a monitor move. Call it on the window thread.
+    /// </summary>
+    internal void SimulateDpiChange(double scale, PixelRect suggested)
+    {
+        _simulatedScale = scale;
+        WindowsScreen.SendDpiChanged(NativeHandle, (uint)Math.Round(scale * 96), suggested);
+    }
+
     // UI-12 measurement hooks; only a --measure demo run uses them.
     internal bool RunOnUiThread(Action action) => PostToUiThread(action);
 
@@ -279,6 +302,14 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboard.Handle, () => DpiScale, Invalidate);
         // Before the first paint, so a dark caption never flashes light.
         WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
+        // The window was sized from the option DIPs at the system scale, with a frame for that scale.
+        // On a monitor with another scale it renders at that monitor's scale (Windows sends no
+        // WM_DPICHANGED for a new window) and draws that monitor's frame; a simulated scale need not
+        // be the system's either. Before the window is shown, give it the planned DIP client size at
+        // the scale it has, so a remembered size reopens as it was instead of drifting with every start.
+        double scale = DpiScale;
+        WindowsScreen.FitClient(NativeHandle, (int)Math.Round(_restore.ClientWidth * scale), (int)Math.Round(_restore.ClientHeight * scale),
+            centered: _restore.Left is null);
     }
 
     protected override void OnResized(BSize clientSize, double dpiScale)
@@ -295,6 +326,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         if (hwnd == NativeHandle)
         {
             WindowsWindowSizing.OnMessage(hwnd, message, lParam, DpiScale);
+            // WM_GETMINMAXINFO: a simulated scale keeps Windows' frame and needs its own pixels on any desktop.
+            if (message == 0x0024 && _simulatedScale is { } simulated)
+                WindowsScreen.SimulatedTrackSize(hwnd, lParam, (int)Math.Ceiling(MinimumClientWidth * simulated), (int)Math.Ceiling(MinimumClientHeight * simulated));
             _inputBridge?.OnTopLevelMessage(message, wParam, lParam);
             // WM_EXITSIZEMOVE: one write when a move or resize ends, never one per pixel.
             if (message == 0x0232) _ = RememberLayout();
