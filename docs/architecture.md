@@ -123,7 +123,9 @@ renderer isolation. See the [Phase 0 contract decisions](phase-0-foundation.md).
   their own through Broiler.UI's `StandardScrollView.FocusWhenScrollable` while they
   scroll and hold nothing focusable, and draw a focus ring then. When a focused one
   stops scrolling, Broiler.UI hands the focus to the next stop at the next drain of the
-  window's queued dispatcher. The reader's frameless editors are ringed by Mail: the
+  window's queued dispatcher, or to the stop before it when none follows: a form's
+  status area, last on its page, hands it to the form's last action, never to the tab
+  strip or a hidden tab. The reader's frameless editors are ringed by Mail: the
   message text around its view, the header details just outside the editor
   (`FocusRingFrame`). A field the forms refuse carries the
   error itself (`FormField.SetError`), so it reports Invalid with the error as its
