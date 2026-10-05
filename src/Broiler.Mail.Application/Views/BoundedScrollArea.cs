@@ -62,8 +62,12 @@ public sealed class BoundedScrollArea : UiElement
     /// <summary>The scroll view that scrolls the content once it passes the cap.</summary>
     public StandardScrollView Scroll => _scroll;
 
+    /// <summary>The height the area was last measured in, of which it takes its share.</summary>
+    public double AvailableHeight { get; private set; }
+
     protected override BSize MeasureCore(BSize availableSize)
     {
+        AvailableHeight = availableSize.Height;
         double natural = _content.Measure(new BSize(availableSize.Width, double.PositiveInfinity)).Height;
         double cap = double.IsFinite(availableSize.Height) ? availableSize.Height * MaximumFraction : double.PositiveInfinity;
         double height = Math.Min(natural, cap);

@@ -600,17 +600,20 @@ public sealed class ResponsiveInboxTests
         fixture.Session.RenderFrame();
         Assert.Equal("Body text", fixture.ReaderText.Text);
         Assert.True(header.Scroll.HasVerticalScrollbar, "The long subject must scroll within the header.");
-        Assert.InRange(header.Bounds.Height, 1, (header.Parent!.Bounds.Height * 0.45) + 1);
+        Assert.InRange(header.Bounds.Height, 1, (header.AvailableHeight * 0.45) + 1);
     }
 
     /// <summary>
-    /// The reader header takes up to 45 % of the pane and scrolls the rest, but it does not end inside one
-    /// of its rows or lines. While the message text keeps six lines, it grows to show the whole header,
-    /// as in the compact reader at 640x480 with Reply, Reply all and Forward, or a long sender at 640x640,
-    /// or to show the next row of buttons whole, as Reply above the HTML preview's row. A scroll bar that
-    /// would scroll only the margin below Reply does not appear, as it did at 640x520. Otherwise the header
-    /// ends above the row its share would cut, or between two of its lines, as for a long sender at
-    /// 640x480 or a long subject at twice the text size, so the text keeps its room.
+    /// The reader header takes up to 45 % of the height the commands and the line below it leave, and
+    /// scrolls the rest, but it does not end inside one of its rows or lines. While the message text keeps
+    /// six lines, it grows to show the whole header, as in the compact reader at 640x480 with Reply, Reply
+    /// all and Forward, or a long sender at 640x640, or to show the next row of buttons whole, as Reply
+    /// above the HTML preview's row. A scroll bar that would scroll only the margin below Reply does not
+    /// appear, as it did at 640x520. Otherwise the header ends above the row its share would cut, or between
+    /// two of its lines, as for a long sender at 640x480 or a long subject at twice the text size, so the
+    /// text keeps its room. Beside the list, Reply, Reply all and Forward stay in view below the header,
+    /// even when it scrolls; the compact reader has no height to spare for that, so there they end the
+    /// header. A line across the reader separates the header from the message text.
     /// </summary>
     [Theory]
     [InlineData(640, 480, 1.0, "plain", true, false)]
@@ -625,11 +628,11 @@ public sealed class ResponsiveInboxTests
     [InlineData(1100, 720, 1.0, "plain", true, false)]
     [InlineData(1100, 720, 1.0, "longer", true, false)]
     [InlineData(1100, 720, 2.0, "plain", true, false)]
-    [InlineData(1100, 720, 2.0, "long", false, true)]
+    [InlineData(1100, 720, 2.0, "long", true, true)]
     [InlineData(1100, 680, 2.0, "plain", true, false)]
     [InlineData(1100, 740, 2.0, "plain", true, false)]
-    [InlineData(1100, 640, 2.0, "plain", false, true)]
-    [InlineData(1100, 500, 2.0, "plain", false, true)]
+    [InlineData(1100, 640, 2.0, "plain", true, true)]
+    [InlineData(1100, 500, 2.0, "plain", true, true)]
     public async Task TheReaderHeaderEndsBetweenItsRows(int width, int height, double textScale, string message, bool replyShown, bool scrolls)
     {
         StandardThemeTokens previous = StandardControlPaint.Theme;
@@ -639,22 +642,85 @@ public sealed class ResponsiveInboxTests
             using var reader = await ReaderFixture.OpenAsync(width, height, message);
             var header = reader.Header;
             BRect shown = header.Scroll.ContentBounds;
-            double available = header.Parent!.Bounds.Height;
+            double available = header.AvailableHeight;
             double share = available * 0.45;
-            string where = $"At {width}x{height}, text {textScale:P0}, {message} message, the header shows {shown} of {header.Parent.Bounds}";
+            string where = $"At {width}x{height}, text {textScale:P0}, {message} message, the header shows {shown} of {available} in {reader.Pane.Bounds}";
             Assert.Equal(width < 680, reader.Layout.ShowsReaderOnly);
             AssertEndsBetweenRows(header, where);
-            var reply = Descendants(header).OfType<StandardButton>().Single(button => button.Text == "Reply");
-            Assert.True(replyShown == reply.Bounds.Bottom <= shown.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
             Assert.True(scrolls == header.Scroll.HasVerticalScrollbar, $"{where}: the header {(scrolls ? "does not scroll" : "scrolls")}.");
 
-            // Past its share, the rows the header shows leave the text six lines (the margin below the last
-            // row is not a row); with Reply below, it keeps to its share.
+            // Beside the list, the commands are below the header; in the compact reader, they end it.
+            var reply = reader.Button("Reply");
+            bool inHeader = reply.IsDescendantOf(header);
+            Assert.Equal(reader.Layout.IsCompact, inHeader);
+            bool onScreen = inHeader ? reply.Bounds.Bottom <= shown.Bottom + 0.5
+                : reply.Bounds.Top >= header.Bounds.Bottom - 0.5 && reply.Bounds.Bottom <= reader.Divider.Bounds.Top + 0.5;
+            Assert.True(replyShown == onScreen, $"{where}: Reply is at {reply.Bounds}.");
+            foreach (var command in new[] { "Reply all", "Forward" })
+                Assert.Equal(reply.Bounds.Top, reader.Button(command).Bounds.Top, 0.5);
+
+            // Past its share, the rows the header shows end within it or leave the text six lines (the margin
+            // below the last row is not a row); with Reply below, it keeps to its share.
             double rowsEnd = header.Scroll.HasVerticalScrollbar ? header.Bounds.Height : HeaderRows(header)[^1].Bounds.Bottom - shown.Top;
-            if (header.Bounds.Height > share + 0.5)
+            if (header.Bounds.Height > share + 0.5 && rowsEnd > share + 0.5)
                 Assert.True(available - rowsEnd >= reader.Text.HeightOfLines(6) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
             if (!replyShown)
                 Assert.True(header.Bounds.Height <= share + 0.5, where);
+            AssertLineBetweenHeaderAndText(reader, where);
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>
+    /// Resizing between the side-by-side layout and the compact reader moves Reply, Reply all and Forward
+    /// between their place below the header and the end of the header, and keeps keyboard focus on them.
+    /// </summary>
+    [Fact]
+    public async Task ResizingMovesTheReaderCommandsAndKeepsTheirFocus()
+    {
+        using var reader = await ReaderFixture.OpenAsync(640, 480);
+        var header = reader.Header;
+        var replyAll = reader.Button("Reply all");
+        Assert.True(replyAll.IsDescendantOf(header));
+        reader.Session.SetFocus(replyAll);
+
+        reader.Resize(1100);
+        Assert.False(reader.Layout.IsCompact);
+        Assert.False(replyAll.IsDescendantOf(header));
+        Assert.True(replyAll.Bounds.Top >= header.Bounds.Bottom - 0.5 && replyAll.Bounds.Bottom <= reader.Divider.Bounds.Top + 0.5, $"Reply all is at {replyAll.Bounds}.");
+        Assert.Same(replyAll, reader.Session.FocusedElement);
+
+        reader.Resize(640);
+        Assert.True(reader.Layout.ShowsReaderOnly);
+        Assert.True(replyAll.IsDescendantOf(header));
+        Assert.Same(replyAll, reader.Session.FocusedElement);
+        // Tab order follows: the header's rows, Reply, Reply all and Forward, then the message text.
+        var stops = MailKeyboardNavigation.TabStops(reader.Pane).ToList();
+        Assert.True(stops.IndexOf(reader.Button(InboxView.BackText)) < stops.IndexOf(reader.Button("Reply")));
+        Assert.True(stops.IndexOf(reader.Button("Forward")) < stops.IndexOf(reader.Text.Editor));
+    }
+
+    /// <summary>
+    /// The line between the reader's header and the message text is drawn in the theme's border color, and
+    /// follows a change of theme.
+    /// </summary>
+    [Fact]
+    public async Task TheLineBelowTheReaderHeaderHasTheThemesBorderColor()
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(1100, 720);
+            foreach (var theme in new[] { StandardThemeTokens.Light, StandardThemeTokens.Dark, StandardThemeTokens.HighContrastDark })
+            {
+                StandardThemeController.Apply(reader.Session, theme);
+                var frame = reader.Session.RenderFrame();
+                BRect line = reader.Divider.Bounds;
+                var fills = frame!.Commands.OfType<BRenderCommand.FillRect>().Where(fill => Math.Abs(fill.Rect.Bottom - line.Bottom) < 0.5).ToArray();
+                Assert.Contains(fills, fill => fill.Color == theme.Border && fill.Rect.Height <= 1.5
+                    && Math.Abs(fill.Rect.Left - reader.Pane.Bounds.Left) < 0.5 && Math.Abs(fill.Rect.Right - reader.Pane.Bounds.Right) < 0.5);
+            }
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
@@ -676,11 +742,13 @@ public sealed class ResponsiveInboxTests
         {
             using var reader = await ReaderFixture.OpenAsync(width, height, message);
             var header = reader.Header;
-            string where = $"At {width}x{height}, text {textScale:P0}, {message}, the header is {header.Bounds} of {header.Parent!.Bounds}";
+            string where = $"At {width}x{height}, text {textScale:P0}, {message}, the header is {header.Bounds} of {header.AvailableHeight} in {reader.Pane.Bounds}";
             Assert.True(reader.Layout.ShowsReaderOnly);
             Assert.Equal("", reader.Text.Text);
             Assert.True(header.Scroll.HasVerticalScrollbar, $"{where}: the header fits; the window is not short enough.");
-            Assert.True(Math.Abs(header.Parent.Bounds.Height - header.Bounds.Height) < 0.5, where);
+            // All the height that Reply, Reply all, Forward and the line below them leave.
+            Assert.True(Math.Abs(header.AvailableHeight - header.Bounds.Height) < 0.5, where);
+            AssertLineBetweenHeaderAndText(reader, where);
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
@@ -703,7 +771,7 @@ public sealed class ResponsiveInboxTests
             Assert.True(reader.Layout.ShowsReaderOnly);
             Assert.True(back.Bounds.Bottom > shown.Bottom, $"Back to inbox at {back.Bounds} fits the header's {shown}; the window is not short enough.");
             Assert.True(back.Bounds.Top < shown.Bottom - 0.5, $"Back to inbox is at {back.Bounds}, the header shows {shown}.");
-            Assert.Equal(header.Parent!.Bounds.Height * 0.45, header.Bounds.Height, 0.5);
+            Assert.Equal(header.AvailableHeight * 0.45, header.Bounds.Height, 0.5);
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
@@ -741,7 +809,7 @@ public sealed class ResponsiveInboxTests
 
             var areas = Descendants(content).OfType<BoundedScrollArea>().ToArray();
             var header = areas.Single(area => area.MaximumFraction == 0.45);
-            Assert.InRange(header.Bounds.Height, 1, (header.Parent!.Bounds.Height * 0.45) + 1);
+            Assert.InRange(header.Bounds.Height, 1, (header.AvailableHeight * 0.45) + 1);
             Assert.True(header.Scroll.HasVerticalScrollbar, "The long subject must scroll within the header.");
 
             // A long failure keeps most of the list pane for the list.
@@ -888,8 +956,24 @@ public sealed class ResponsiveInboxTests
         bool IsWhole(double lines) => Math.Abs(lines - Math.Round(lines)) < 0.01;
     }
 
+    /// <summary>
+    /// A line across the reader separates what is above it, the header and its commands, from the message
+    /// text, which has the rest of the reader. The header's share is of the height the commands and the
+    /// line leave.
+    /// </summary>
+    private static void AssertLineBetweenHeaderAndText(ReaderFixture reader, string where)
+    {
+        BRect pane = reader.Pane.Bounds, header = reader.Header.Bounds, line = reader.Divider.Bounds;
+        Assert.True(line.Height > 0 && line.Top >= header.Bottom - 0.5, $"{where}: the line is at {line}, the header at {header}.");
+        Assert.Equal(pane.Left, line.Left, 0.5);
+        Assert.Equal(pane.Right, line.Right, 0.5);
+        Assert.Equal(line.Bottom, reader.Text.Bounds.Top, 0.5);
+        Assert.Equal(pane.Bottom, reader.Text.Bounds.Bottom, 0.5);
+        Assert.Equal(pane.Height - (line.Bottom - header.Bottom), reader.Header.AvailableHeight, 0.5);
+    }
+
     /// <summary>The shell's inbox with a message open in the reader: its sender, its recipient, and Reply.</summary>
-    private sealed class ReaderFixture(MailShellView shell, UiSession session, TestDirectory directory) : IDisposable
+    private sealed class ReaderFixture(MailShellView shell, UiSession session, TestDirectory directory, Host host, TestQueueDispatcher dispatcher) : IDisposable
     {
         private const string LongSender = "Maximilian Alexander von Langenstein-Habsburg <maximilian.alexander.von.langenstein-habsburg.office@subdomain.example.test>";
         private const string LongSubject = "Re: Fwd: Agenda, travel arrangements, accessibility requirements, and the revised budget spreadsheet for the cross-team planning workshop in Zürich";
@@ -898,6 +982,20 @@ public sealed class ResponsiveInboxTests
         public AdaptiveInboxLayout Layout => Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
         public BoundedScrollArea Header => Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
         public ScrollableMessageText Text => Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
+        /// <summary>The reader pane: the header, the commands below it, the line, and the message text.</summary>
+        public UiElement Pane => Descendants(shell.Window).OfType<StandardSplitContainer>().Single().SecondPane!;
+        public Divider Divider => Descendants(Pane).OfType<Divider>().Single();
+        public UiSession Session => session;
+        public StandardButton Button(string text) => Descendants(Pane).OfType<StandardButton>().Single(button => button.Text == text);
+
+        public void Resize(int width)
+        {
+            host.Width = width;
+            shell.Window.InvalidateMeasure();
+            session.RenderFrame();
+            dispatcher.Drain();
+            session.RenderFrame();
+        }
 
         /// <param name="message">
         /// "plain"; "html", which also has HTML, so the header ends with the HTML preview's row; "long",
@@ -928,7 +1026,8 @@ public sealed class ResponsiveInboxTests
                 new(receiver, dispatcher),
                 new ComposerViewModel(dispatcher: dispatcher));
             var shell = new MailShellView(model, html ? new NoPreviewHost() : null);
-            var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(width, height));
+            var host = new Host(width, height);
+            var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
             session.AddRoot(shell.Window);
             shell.Navigation.SelectTab("inbox");
             await model.Inbox.ReceiveAsync();
@@ -941,7 +1040,7 @@ public sealed class ResponsiveInboxTests
             // What the frame's layout posted, as the window drains it before the next frame.
             dispatcher.Drain();
             session.RenderFrame();
-            return new(shell, session, directory);
+            return new(shell, session, directory, host, dispatcher);
         }
 
         public void Dispose()

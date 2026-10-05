@@ -186,7 +186,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var backRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 0, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
         backRow.AddChild(back);
         var headerStack = new StandardPanel { Spacing = 4 };
-        foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, replyActions, previewActions }) headerStack.AddChild(element);
+        foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, previewActions }) headerStack.AddChild(element);
         // A long subject or many recipients at a large text size scroll within the header, so the
         // message text keeps most of the pane. The header ends between its rows or lines of text, not
         // inside one: while the text keeps a few lines it grows to show the whole header, or the next
@@ -201,9 +201,18 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             Rows = HeaderRows,
             MinimumRemaining = () => text.HeightOfLines(textLinesKept),
         };
-        reading.AddChild(headerColumn);
-        reading.SetDock(headerColumn, UiDock.Top);
+        // Beside the list, Reply, Reply all and Forward stay in view below the header even while it
+        // scrolls, and the header has the height they leave (see PlaceCommands). A line across the reader
+        // separates the header and its commands from the message text.
+        var pinnedCommands = new StandardPanel();
+        var headerArea = new FirstTakesRestStack();
+        headerArea.Add(headerColumn);
+        headerArea.Add(new ReadingColumn(new Inset(pinnedCommands, 0, 4)));
+        headerArea.Add(new Divider());
+        reading.AddChild(headerArea);
+        reading.SetDock(headerArea, UiDock.Top);
         reading.AddChild(text);
+        pinnedCommands.AddChild(replyActions);
 
         // Where the header's rows are, as the stack last measured them, which are rows of buttons, and the
         // line height of the subject, the sender and recipients, and the date, so the header may end between lines.
@@ -343,8 +352,23 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             if (session.FocusedElement is { } focused && (focused == hidden || focused.IsDescendantOf(hidden)))
                 session.SetFocus(layout.ShowsReaderOnly ? text.Editor : list);
         }
+        void PlaceCommands()
+        {
+            // The compact reader has no height to spare for commands that stay in view: at a large text
+            // size they would leave the message text a line or two. There they end the header, before the
+            // HTML preview's row, and scroll with it.
+            UiElement place = layout.IsCompact ? headerStack : pinnedCommands;
+            if (replyActions.Parent == place) return;
+            var focused = panel.Session?.FocusedElement;
+            bool keepFocus = focused is not null && (focused == replyActions || focused.IsDescendantOf(replyActions));
+            replyActions.Parent?.RemoveChild(replyActions);
+            if (place == headerStack) headerStack.InsertChild(headerStack.Children.ToList().IndexOf(previewActions), replyActions);
+            else pinnedCommands.AddChild(replyActions);
+            if (keepFocus && focused!.CanFocus) panel.Session!.SetFocus(focused);
+        }
         layout.ModeChanged += (_, _) =>
         {
+            PlaceCommands();
             backRow.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
             FocusVisiblePane();
             PanesChanged?.Invoke(this, EventArgs.Empty);

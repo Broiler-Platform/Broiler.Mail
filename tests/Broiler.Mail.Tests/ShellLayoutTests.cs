@@ -188,12 +188,13 @@ public sealed class ShellLayoutTests
         for (int index = 0; index < before.Length; index++)
             Assert.True(before[index] == after[index], $"{where}: {before[index].Element} was at {before[index].Bounds}, but {after[index].Bounds} once measured at the arranged size.");
 
-        // The height caps hold against the height the content was given. An area passes its share only to
-        // show its whole content or to end below a row of buttons, and the rows it shows leave the rest its
-        // minimum (the margin below the last row is not a row).
+        // The height caps hold against the height the content was given: for the reader's header, the
+        // height its commands below leave. An area passes its share only to show its whole content or to
+        // end below a row of buttons, and the rows it shows leave the rest its minimum (the margin below
+        // the last row is not a row).
         foreach (var capped in Descendants(content).OfType<BoundedScrollArea>().Where(element => element.Bounds.Height > 0))
         {
-            double available = capped.Parent!.Bounds.Height;
+            double available = capped.AvailableHeight;
             double share = available * capped.MaximumFraction;
             string what = $"{where}: {capped.Scroll.AccessibleName} is {capped.Bounds.Height} of {available}";
             if (capped.Bounds.Height <= share + 1) continue;

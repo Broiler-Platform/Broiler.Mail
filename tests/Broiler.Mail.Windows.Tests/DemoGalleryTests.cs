@@ -213,15 +213,18 @@ public sealed class DemoGalleryTests
     /// The reader header of the gallery's reading fixtures, with their own subject, sender, recipient and
     /// date, as Accept-UI -OpenReader shows them: in the compact reader at 640x480, and at 1100x720 with
     /// twice the text size. Each row is shown whole, scrolled below the header whole, or cut between two
-    /// lines of its text. With no message text (body-error), a header that scrolls takes the whole reader.
+    /// lines of its text. With no message text (body-error), a header that scrolls takes all the reader that
+    /// the line below it leaves. Beside the list, Reply, Reply all and Forward are on screen whole below the
+    /// header, whatever it shows; in the compact reader they end the header. A line separates the header
+    /// from the message text.
     /// </summary>
     [Theory]
     [InlineData("inbox", 640, 480, 1.0, true)]
     [InlineData("long-message", 640, 480, 1.0, false)]
     [InlineData("html-only", 640, 480, 1.0, true)]
     [InlineData("body-error", 640, 480, 1.0, true)]
-    [InlineData("inbox", 1100, 720, 2.0, false)]
-    [InlineData("long-message", 1100, 720, 2.0, false)]
+    [InlineData("inbox", 1100, 720, 2.0, true)]
+    [InlineData("long-message", 1100, 720, 2.0, true)]
     public void Reader_Header_Ends_Between_Its_Rows(string name, int width, int height, double textScale, bool replyShown)
     {
         var scenario = DemoOptions.Gallery.Single(item => item.Name == name).Scenario;
@@ -240,10 +243,10 @@ public sealed class DemoGalleryTests
                 render();
                 var header = Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
                 BRect shown = header.Scroll.ContentBounds;
-                string where = $"{name} at {width}x{height}, text {textScale:P0}: the header shows {shown} of {header.Parent!.Bounds}";
+                string where = $"{name} at {width}x{height}, text {textScale:P0}: the header shows {shown} of {header.AvailableHeight}";
                 Assert.Equal(width < 680, Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single().ShowsReaderOnly);
                 if (model.Inbox.Body is null && header.Scroll.HasVerticalScrollbar)
-                    Assert.True(Math.Abs(header.Parent.Bounds.Height - header.Bounds.Height) < 0.5, where);
+                    Assert.True(Math.Abs(header.AvailableHeight - header.Bounds.Height) < 0.5, where);
                 else
                     foreach (var row in header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0))
                     {
@@ -257,8 +260,16 @@ public sealed class DemoGalleryTests
                         double lines = (shown.Bottom - row.Bounds.Top) / line;
                         Assert.True(line > 0 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
                     }
-                var reply = Descendants(header).OfType<StandardButton>().Single(button => button.Text == "Reply");
-                Assert.True(replyShown == reply.Bounds.Bottom <= shown.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
+                var reader = Tab(shell, "inbox");
+                var divider = Descendants(reader).OfType<Divider>().Single().Bounds;
+                var reply = Descendants(reader).OfType<StandardButton>().Single(button => button.Text == "Reply");
+                bool inHeader = reply.IsDescendantOf(header);
+                Assert.Equal(width < 680, inHeader);
+                bool onScreen = inHeader ? reply.Bounds.Bottom <= shown.Bottom + 0.5
+                    : reply.Bounds.Top >= header.Bounds.Bottom - 0.5 && reply.Bounds.Bottom <= divider.Top + 0.5;
+                Assert.True(replyShown == onScreen, $"{where}: Reply is at {reply.Bounds}, the line at {divider}.");
+                Assert.True(divider.Top >= header.Bounds.Bottom - 0.5, $"{where}: the line is at {divider}.");
+                Assert.Equal(divider.Bottom, Descendants(reader).OfType<ScrollableMessageText>().Single().Bounds.Top, 0.5);
             });
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
