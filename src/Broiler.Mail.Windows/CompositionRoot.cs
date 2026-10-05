@@ -45,6 +45,7 @@ internal static class CompositionRoot
             new JsonSettingsStore(Path.Combine(dataDirectory, "settings.json")),
             new ImapMailReceiver(credentials),
             new SmtpMailSender(credentials), credentials,
-            new JsonDraftStore(Path.Combine(dataDirectory, "drafts.json")), new ImapSentCopyWriter(credentials));
+            new JsonDraftStore(Path.Combine(dataDirectory, "drafts.json")), new ImapSentCopyWriter(credentials),
+            new SmtpConnectionTester(credentials));
     }
 }

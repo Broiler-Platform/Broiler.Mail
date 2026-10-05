@@ -1,6 +1,7 @@
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Accounts;
+using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
@@ -121,6 +122,29 @@ public sealed class CredentialWorkflowTests
         };
         Assert.NotEqual(CredentialKey.For(profile, MailProtocol.Imap).Binding,
             CredentialKey.For(profile with { IncomingServer = changed }, MailProtocol.Imap).Binding);
+    }
+
+    [Fact]
+    public void SavedPasswordsAreCheckedForPresenceWithoutReadingTheSecret()
+    {
+        using var directory = new TestDirectory();
+        var profile = TestDirectory.Profile() with { OutgoingServer = new() { Host = "smtp.example.test", Port = 587, UserName = "test", Security = TransportSecurity.StartTls } };
+        var credentials = new PresenceOnlyCredentialStore(CredentialKey.For(profile, MailProtocol.Smtp));
+        var dispatcher = new TestQueueDispatcher();
+        var model = new AccountProfileViewModel(new JsonAccountStore(directory.File("accounts.json")), credentials, new TestMailReceiver(), dispatcher, profile, null);
+        dispatcher.DrainUntil(() => model.HasPassword is not null && model.HasSmtpPassword is not null);
+        Assert.Equal((false, true), (model.HasPassword, model.HasSmtpPassword));
+        Assert.Equal(0, credentials.Reads);
+    }
+
+    /// <summary>Knows which slot holds a password, and counts every read of a secret.</summary>
+    private sealed class PresenceOnlyCredentialStore(CredentialKey saved) : ICredentialStore
+    {
+        public int Reads { get; private set; }
+        public Task<string?> ReadAsync(CredentialKey key, CancellationToken cancellationToken = default) { Reads++; return Task.FromResult<string?>(null); }
+        public Task<bool> ContainsAsync(CredentialKey key, CancellationToken cancellationToken = default) => Task.FromResult(key == saved);
+        public Task WriteAsync(CredentialKey key, string secret, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteAsync(CredentialKey key, CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 
     private static AccountProfileViewModel Model(TestDirectory directory, TestCredentialStore credentials, TestMailReceiver receiver, AccountProfile profile) =>

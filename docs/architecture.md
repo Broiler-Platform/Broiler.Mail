@@ -41,13 +41,14 @@ Broiler.Graphics dependency; upgrades should be deliberate and validated togethe
 | Startup | `Program`, `CompositionRoot`, `MailApplication` | Loads accounts/settings/drafts independently, shows read errors, and opens the shell without invoking mail adapters. |
 | Native hosting | `WindowsMailWindow`, `WindowsUiHost` | Broiler Direct2D, native input, UI dispatch through Broiler.UI's queued dispatcher, clipboard, default IME placement, minimum size, and DPI-aware resizing. |
 | Shell | `MailShellView`, `MailShellViewModel`, `InboxView`, `ComposerView` | Inbox, Account, Settings, and Compose tabs; receiving and recoverable composition. |
-| Account setup | `AccountProfileView`, `AccountProfileViewModel`, `AccountProfile` | Validated IMAP and optional SMTP settings; separate password controls reuse account/protocol bindings. Connection testing remains IMAP-only. |
+| Account setup | `AccountProfileView`, `AccountProfileViewModel`, `AccountProfile` | Validated IMAP and optional SMTP settings; separate password controls reuse account/protocol bindings. Separate explicit tests: the IMAP connection, and a non-sending SMTP sign-in whose result never gates receiving. |
 | Settings | `SettingsView`, `SettingsViewModel`, `ApplicationSettings` | Theme and initial window size save/reload; preferences apply at startup. |
 | Persistence | `JsonAccountStore`, `JsonSettingsStore`, `JsonDraftStore`, `JsonConfigurationFile` | Versioned JSON, explicit paths, write locks, bounded reads, same-directory replacement, and visible errors. |
 | Credentials | `CredentialKey`, `ICredentialStore`, `WindowsCredentialStore` | Windows generic credentials scoped to account/protocol and bound to connection identity. |
 | Receiving | `IMailReceiver`, `ImapMailReceiver`, `InboxViewModel` | Read-only IMAP, bounded header pages, on-demand bodies, cancellation, and safe errors. |
 | Reading | `MessageTextDecoder`, `ScrollableMessageText`, `PlainTextMessagePreview` | MIME/charset decoding, HTML text extraction, and a bounded wrapping/scrolling reader. |
 | Sending | `MailDraft`, `IMailSender`, `SmtpMailSender`, `SendResult` | MailKit SMTP with required TLS, protected SMTP credentials, plain-text MIME, and durable submission outcomes. |
+| SMTP sign-in test | `IOutgoingConnectionTester`, `SmtpConnectionTester`, `MailConnectionFailure` | Connect, required TLS, AUTH, best-effort QUIT; no submission command and no retry ([decision 0006](decisions/0006-non-sending-smtp-test.md)). |
 | Sent copies | `ISentCopyWriter`, `ImapSentCopyWriter`, `OutgoingMessageFactory` | Explicit provider-managed mode or one append to an existing IMAP folder after durable SMTP acceptance. |
 | Composition | `MailCompositionSource`, `MailComposition`, `ComposerViewModel`, `ComposerView` | New/reply/reply-all/forward, independent recipient fields, pinned sender, plain-text body, and reply-thread metadata. |
 | HTML | `HtmlMessagePreview`, `WindowsHtmlPreviewHost`, `HtmlPreviewWindow` | Native Broiler.HTML (`HtmlContainer` / `BBitmap`) host in `Direct2DWindow` with passive HTML reduction, bounded cid images, plain-text toggle, remote image blocking, and external link handling. |
@@ -157,6 +158,16 @@ operations require a saved, unchanged profile. The UI serializes operations, cle
 password input, and offers cancellation during connection tests. Closing the shell
 cancels an active test. OAuth is rejected before networking until sign-in is implemented.
 
+The SMTP sign-in test follows the same rules with its own contract,
+`IOutgoingConnectionTester`, kept apart from `IMailSender`. It reads only the SMTP
+slot, connects with implicit TLS or required STARTTLS, authenticates, and sends a
+best-effort QUIT. It never sends MAIL, RCPT, DATA or any other submission command. Its
+failures carry a `MailConnectionFailure` kind with fixed text. Its result is kept in
+memory beside the outgoing checklist step and never changes receiving readiness. A
+test that cannot start, for example because of unsaved edits, is refused with what to
+do first rather than reported as failed, and leaves both results in place. See
+[decision 0006](decisions/0006-non-sending-smtp-test.md).
+
 ## Receiving and text boundaries
 
 Header requests fetch at most 50 envelopes/flags/dates, ordered by descending UID;
@@ -197,7 +208,10 @@ accepts arm64 for future testing; arm64 is not advertised as validated.
 `--demo` uses only an in-memory account and synthetic mail. It does not construct
 the Windows credential adapter or read the default configuration directory.
 Its `send-rejected` fixture offers Send to a synthetic sender that refuses the recipient;
-no demo sender contacts a server or reports acceptance.
+no demo sender contacts a server or reports acceptance. The `smtp-test-failed` and
+`smtp-test-passed` fixtures answer the SMTP sign-in test synthetically and show a saved
+SMTP password by presence only (`ICredentialStore.ContainsAsync`); no demo credential
+lookup returns a secret.
 `--data-directory` supports isolated real configuration tests. The user will run
 live-provider acceptance later using the [included checklist](version-1-acceptance.md).
 Physical multi-monitor and IME language coverage are also recorded as user checks.
@@ -217,7 +231,8 @@ Tests cover TLS/STARTTLS persistence, old profiles without `outgoingServer`, inv
 edits preserving disk contents, form capture, removal of outgoing settings, IMAP
 credential isolation, and keyboard/scroll layout with SMTP expanded at both
 640×480 and 1100×720. Separate SMTP password save/forget controls now reuse the
-existing credential workflow. Connection testing remains IMAP-only.
+existing credential workflow. A separate, non-sending SMTP sign-in test now
+completes outgoing setup ([decision 0006](decisions/0006-non-sending-smtp-test.md)).
 
 The composer entry is also complete. `MessageTextDecoder` now extracts bounded
 composition headers from the fetched MIME message, separately from abbreviated

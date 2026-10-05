@@ -42,7 +42,8 @@ internal static class DemoApplication
     {
         options ??= new(DemoScenario.Inbox, Interactive: true);
         var store = new DemoStore(options);
-        return new(store, store, new DemoReceiver(options.Scenario, options.Interactive), new DemoSender(options.Scenario), store, CreateDrafts(options.Scenario, store.Profile));
+        return new(store, store, new DemoReceiver(options.Scenario, options.Interactive), new DemoSender(options.Scenario), store, CreateDrafts(options.Scenario, store.Profile),
+            outgoingTester: new DemoOutgoingTester(options.Scenario));
     }
 
     /// <summary>Dates relative to a fixed moment, zone, and culture, so gallery captures are reproducible.</summary>
@@ -145,15 +146,22 @@ internal static class DemoApplication
     // Broiler-Human:        PENDING
     private sealed class DemoStore(DemoOptions options) : IAccountStore, ISettingsStore, ICredentialStore
     {
-        private AccountProfile _profile = new()
+        private AccountProfile _profile = FixtureProfile(options.Scenario);
+        // The SMTP sign-in fixtures show an SMTP password as saved, for their own outgoing server only.
+        private readonly CredentialKey? _savedSmtpPassword = options.Scenario is DemoScenario.SmtpTestFailed or DemoScenario.SmtpTestPassed
+            ? CredentialKey.For(FixtureProfile(options.Scenario), MailProtocol.Smtp) : null;
+        private static AccountProfile FixtureProfile(DemoScenario scenario) => new()
         {
             Id = DemoAccount, DisplayName = "Demo inbox", EmailAddress = "reader@example.test",
             IncomingServer = new() { Host = "imap.example.test", Port = 993, UserName = "reader" },
-            // The send fixtures need outgoing mail and a Sent folder to describe their outcomes.
-            OutgoingServer = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed
-                ? new() { Host = "smtp.example.test", Port = 465, UserName = "reader" } : null,
-            SentCopyMode = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed ? SentCopyMode.AppendToFolder : SentCopyMode.NotConfigured,
-            SentFolder = options.Scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed ? "Sent" : null,
+            // The send fixtures need outgoing mail and a Sent folder to describe their outcomes; the SMTP test
+            // fixtures need outgoing mail only.
+            OutgoingServer = scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed
+                ? new() { Host = "smtp.example.test", Port = 465, UserName = "reader" }
+                : scenario is DemoScenario.SmtpTestFailed or DemoScenario.SmtpTestPassed
+                ? new() { Host = "smtp.example.test", Port = 587, UserName = "reader", Security = TransportSecurity.StartTls } : null,
+            SentCopyMode = scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed ? SentCopyMode.AppendToFolder : SentCopyMode.NotConfigured,
+            SentFolder = scenario is DemoScenario.SendRejected or DemoScenario.SentCopyFailed ? "Sent" : null,
         };
         private ApplicationSettings _settings = new() { Theme = options.Theme, WindowWidth = options.Width, WindowHeight = options.Height };
         public AccountProfile Profile => _profile;
@@ -179,8 +187,27 @@ internal static class DemoApplication
         // Broiler-Falsified-If: a credential lookup in demo mode returns a non-null secret
         // Broiler-Human:        PENDING
         public Task<string?> ReadAsync(CredentialKey key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
+        // Presence only: no secret exists, so no lookup returns one, and the demo tester and sender never read one.
+        public Task<bool> ContainsAsync(CredentialKey key, CancellationToken cancellationToken = default) => Task.FromResult(key == _savedSmtpPassword);
         public Task WriteAsync(CredentialKey key, string secret, CancellationToken cancellationToken = default) => throw new InvalidOperationException("Demo mode does not store passwords. Restart without --demo to configure an account.");
         public Task DeleteAsync(CredentialKey key, CancellationToken cancellationToken = default) => throw new InvalidOperationException("Demo mode does not access saved passwords.");
+    }
+
+    /// <summary>Answers the SMTP sign-in test synthetically; it never opens a connection or reads a credential.</summary>
+    private sealed class DemoOutgoingTester(DemoScenario scenario) : IOutgoingConnectionTester
+    {
+        public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default)
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            return scenario switch
+            {
+                DemoScenario.SmtpTestPassed => Task.CompletedTask,
+                DemoScenario.SmtpTestFailed => Task.FromException(new MailConnectionException(
+                    "The demo SMTP server rejected the sign-in. Check the SMTP username and password, then test again.", MailConnectionFailure.AuthenticationRejected)),
+                _ => Task.FromException(new MailConnectionException(
+                    "Demo mode does not connect to a server. Restart without --demo to test an account.", MailConnectionFailure.Setup)),
+            };
+        }
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=73E97D

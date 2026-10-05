@@ -1,4 +1,6 @@
 using System.Text;
+using Broiler.Graphics.Geometry;
+using Broiler.Graphics.RenderList;
 using Broiler.Mail.Application;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Accounts;
@@ -7,7 +9,12 @@ using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Settings;
 using Broiler.Mail.Infrastructure.Mail;
 using Broiler.Mail.Infrastructure.Persistence;
+using Broiler.Mail.Application.Views;
 using Broiler.Mail.Infrastructure.Preview;
+using Broiler.UI;
+using Broiler.UI.Button.Standard;
+using Broiler.UI.Edit.Standard;
+using Broiler.UI.Label.Standard;
 using Broiler.UI.Standard;
 using MailKit.Net.Imap;
 using MailKit.Net.Smtp;
@@ -206,6 +213,71 @@ public sealed class Version2AcceptanceTests
         Assert.False(restartedComposer.CanSend, "An accepted or outcome-unknown draft must not be resent automatically.");
     }
 
+    [Theory]
+    [InlineData(TransportSecurity.Tls)]
+    [InlineData(TransportSecurity.StartTls)]
+    public async Task SmtpSignInTestThroughTheAccountFormSendsNothing(TransportSecurity security)
+    {
+        using var directory = new TestDirectory();
+        // In connection-test mode the fixture fails this test on MAIL, RCPT, DATA, or any other submission command.
+        await using var smtpServer = new LocalSmtpServer(security, connectionTestOnly: true);
+        var credentials = new TestCredentialStore();
+        var accounts = new JsonAccountStore(directory.File("accounts.json"));
+        var drafts = new JsonDraftStore(directory.File("drafts.json"));
+        var account = new AccountProfile
+        {
+            Id = AccountId.New(), DisplayName = "Test User", EmailAddress = "test@example.test",
+            IncomingServer = new() { Host = "127.0.0.1", Port = 993, UserName = "test", Security = TransportSecurity.Tls },
+            OutgoingServer = new() { Host = "127.0.0.1", Port = smtpServer.Port, UserName = "test", Security = security },
+        };
+        await accounts.SaveAsync(account);
+        await credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Imap), "different-imap-secret");
+        var sender = new CountingSender();
+        var tester = new SmtpConnectionTester(credentials, () => new SmtpClient
+        {
+            ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString()
+        }, TimeSpan.FromSeconds(5));
+        var app = new MailApplication(accounts, new JsonSettingsStore(directory.File("settings.json")), new TestMailReceiver(), sender, credentials, drafts,
+            outgoingTester: tester);
+        await app.InitializeAsync();
+
+        var dispatcher = new TestQueueDispatcher();
+        var model = app.CreateViewModel(dispatcher);
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host());
+        session.AddRoot(shell.Window);
+        shell.Navigation.SelectTab("account");
+        dispatcher.DrainUntil(() => model.Account.HasPassword is not null && model.Account.HasSmtpPassword is not null);
+        var content = shell.Navigation.SelectedTab!.Content!;
+        StandardButton Button(string text) => Descendants(content).OfType<StandardButton>().Single(button => button.Text == text);
+
+        // The SMTP password is saved through the form, then the test signs in with it.
+        var password = (StandardEdit)Descendants(content).OfType<StandardLabel>().Single(label => label.Text == "SMTP password / app password").Target!;
+        password.Text = LocalSmtpServer.Password;
+        Assert.False(Button("Test SMTP sign-in").IsEnabled);
+        Button("Save SMTP password").Click();
+        dispatcher.DrainUntil(() => !model.Account.IsBusy);
+        Assert.Equal(true, model.Account.HasSmtpPassword);
+        Assert.True(Button("Test SMTP sign-in").IsEnabled);
+        Button("Test SMTP sign-in").Click();
+        dispatcher.DrainUntil(() => !model.Account.IsBusy);
+        session.RenderFrame();
+
+        Assert.Equal(ConnectionCheck.Passed, model.Account.OutgoingCheck);
+        Assert.Equal(ConnectionCheck.NotRun, model.Account.ConnectionCheck);
+        Assert.True(smtpServer.AuthenticatedOverTls);
+        Assert.All(smtpServer.Commands, command => Assert.Contains(command, new[] { "EHLO", "STARTTLS", "AUTH", "QUIT" }));
+        Assert.Contains("QUIT", smtpServer.Commands);
+        Assert.Equal(0, smtpServer.DataCount);
+        Assert.Empty(smtpServer.Recipients);
+        // Nothing reached the sender or the composer, and the secret appears nowhere on screen.
+        Assert.Equal(0, sender.Calls);
+        Assert.False(model.Composer.HasDraft);
+        Assert.Null((await drafts.LoadAsync()).Draft);
+        Assert.DoesNotContain(Descendants(shell.Window).OfType<StandardLabel>(), label => label.Text.Contains(LocalSmtpServer.Password, StringComparison.Ordinal));
+        Assert.DoesNotContain(LocalSmtpServer.Password, model.Account.Status);
+    }
+
     [Fact]
     public void IsolatedHtmlPreviewRendersBoundedCidImagesAndBlocksActiveContent()
     {
@@ -233,5 +305,31 @@ public sealed class Version2AcceptanceTests
         var allowedDocument = HtmlPreviewPolicy.Create(hostileHtml, embedded, allowRemoteImages: true);
         Assert.Contains("<img src=\"https://example.test/remote.jpg\" alt=\"External\"", allowedDocument.Html);
         Assert.Contains("img-src 'self' data: https: http:;", allowedDocument.Html);
+    }
+
+    private static IEnumerable<UiElement> Descendants(UiElement root)
+    {
+        yield return root;
+        foreach (var child in root.Children)
+            foreach (var item in Descendants(child)) yield return item;
+    }
+
+    private sealed class CountingSender : IMailSender
+    {
+        public int Calls { get; private set; }
+        public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)
+        {
+            Calls++;
+            return Task.FromResult(new SendResult(SubmissionStatus.Rejected, "Not used by this test."));
+        }
+    }
+
+    private sealed class Host : IUiHost
+    {
+        public BSize ViewportSize => new(1100, 720);
+        public double Scale => 1;
+        public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
+        public void Invalidate(UiInvalidation invalidation) { }
+        public void Present(BRenderList renderList) { }
     }
 }

@@ -242,6 +242,58 @@ public sealed class FeedbackPolicyTests
     }
 
     [Fact]
+    public async Task AnSmtpTestAnnouncesProgressAndTheResultOnceAndNeverTakesFocus()
+    {
+        var tester = new TestOutgoingTester();
+        using var fixture = Fixture.Open(outgoing: tester);
+        var account = fixture.Model.Account;
+        fixture.Shell.Navigation.SelectTab("account");
+        fixture.Settle();
+        fixture.Announced.Clear();
+
+        await account.TestOutgoingConnectionAsync();
+        fixture.Settle();
+        // Progress and the result once each; the checklist line that changes with them is silent.
+        Assert.Equal(["Progress: Signing in to the SMTP server… No message is sent.",
+            "Success: The SMTP server accepted the sign-in over an encrypted connection. No message was sent."], fixture.Announced);
+        Assert.Equal(account.Status, fixture.Footer.Text);
+
+        // The confirmation goes away unannounced; the checklist keeps the result.
+        fixture.Announced.Clear();
+        fixture.Clock.Advance(SaveViewModel.SuccessDisplayTime);
+        fixture.Settle();
+        Assert.Equal("", account.Status);
+        Assert.Empty(fixture.Announced);
+        Assert.Equal(ConnectionCheck.Passed, account.OutgoingCheck);
+
+        // A failure that arrives after the user moved on keeps their tab and focus.
+        var pending = new TaskCompletionSource();
+        tester.Test = async token =>
+        {
+            await pending.Task.WaitAsync(token);
+            throw new MailConnectionException("The SMTP server rejected the sign-in.", MailConnectionFailure.AuthenticationRejected);
+        };
+        fixture.Model.Composer.StartNew();
+        var testing = account.TestOutgoingConnectionAsync();
+        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Session.SetFocus(fixture.ComposerBody);
+        fixture.Dispatcher.Drain();
+        fixture.Session.RenderFrame();
+        fixture.Announced.Clear();
+        pending.SetResult();
+        await testing;
+        fixture.Settle();
+        Assert.Equal("compose", fixture.Shell.Navigation.SelectedTab?.Id);
+        Assert.Same(fixture.ComposerBody, fixture.Session.FocusedElement);
+        Assert.Equal(["Error: SMTP sign-in test failed: The SMTP server rejected the sign-in."], fixture.Announced);
+
+        // The footer names the problem and points to the details instead of repeating them.
+        fixture.Shell.Navigation.SelectTab("account");
+        fixture.Settle();
+        Assert.Equal("SMTP sign-in test failed. Details are below the buttons.", fixture.Footer.Text);
+    }
+
+    [Fact]
     public void AFormsFeedbackIsATabStopOnlyWhileItScrollsAndIsThenNamed()
     {
         // Short feedback: Tab goes from the last action back to the tabs, not into the feedback area.
@@ -321,7 +373,7 @@ public sealed class FeedbackPolicyTests
         public InlineFeedback SettingsFeedback => Descendants(Tab("settings")).OfType<InlineFeedback>().Single();
         public StandardLabel Footer => (StandardLabel)Shell.Window.Children[0].Children[0];
 
-        public static Fixture Open(SubmissionStatus sendResult = SubmissionStatus.Accepted, string emailAddress = "test@example.test")
+        public static Fixture Open(SubmissionStatus sendResult = SubmissionStatus.Accepted, string emailAddress = "test@example.test", TestOutgoingTester? outgoing = null)
         {
             var directory = new TestDirectory();
             var account = TestDirectory.Profile() with
@@ -337,7 +389,7 @@ public sealed class FeedbackPolicyTests
             var clock = new ManualClock();
             var sender = new Sender { Result = sendResult };
             var model = new MailShellViewModel(
-                new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null) { Clock = clock },
+                new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null, outgoing) { Clock = clock },
                 new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null) { Clock = clock },
                 new(receiver, dispatcher),
                 new ComposerViewModel(dispatcher: dispatcher, sender: sender));
