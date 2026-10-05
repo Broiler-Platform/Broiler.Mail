@@ -845,7 +845,7 @@ public sealed class ResponsiveInboxTests
             Assert.True(reader.Layout.ShowsReaderOnly);
             Assert.Equal("", reader.Text.Text);
             Assert.True(header.Scroll.HasVerticalScrollbar, $"{where}: the header fits; the window is not short enough.");
-            // All the height that Reply, Reply all, Forward and the line below them leave.
+            // All the height the line below it leaves: the compact reader ends its header with the commands.
             Assert.True(Math.Abs(header.AvailableHeight - header.Bounds.Height) < 0.5, where);
             AssertLineBetweenHeaderAndText(reader, where);
         }
