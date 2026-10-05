@@ -339,20 +339,22 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             // List notice: a problem with Retry, progress while receiving, why the list is empty, or why
             // Load older is unavailable at the session limit. A list problem stays while a message is read:
             // the rows are still from an earlier receive. So does the session limit, which the reader's
-            // status would otherwise replace.
+            // status would otherwise replace; after a list problem, it follows that explanation.
             bool listProblem = model.ListProblem is not null;
+            string? limit = model.SessionLimitNotice;
             (string text, FeedbackKind kind) notice =
-                model.ListProblem is { } problem ? (problem.Text, problem.IsCancellation ? FeedbackKind.Information : FeedbackKind.Error)
+                model.ListProblem is { } problem ? (limit is null ? problem.Text : $"{problem.Text} {limit}", problem.IsCancellation ? FeedbackKind.Information : FeedbackKind.Error)
                 : model.IsLoadingList ? (model.Status, FeedbackKind.Progress)
-                : model.SessionLimitNotice is { } limit ? (limit, FeedbackKind.Information)
+                : limit is not null ? (limit, FeedbackKind.Information)
                 : model.Messages.Count == 0 ? (model.HasLoaded ? "The inbox is empty." : model.CanReceive ? "Receive mail to load your inbox." : "", FeedbackKind.Information)
                 : ("", FeedbackKind.Information);
-            listFeedback.Set(notice.text, notice.kind);
             // The notice announces progress and problems itself, then disappears once rows arrive;
             // say that receiving finished, or a screen reader user hears nothing after the progress.
+            // It comes before the notice, so the count is heard before why Load older is unavailable.
             if (listWasLoading && !model.IsLoadingList && !listProblem && model.Messages.Count > 0)
                 panel.Session?.AnnounceStatus(list, model.Messages.Count == 1 ? "1 message loaded." : $"{model.Messages.Count} messages loaded.");
             listWasLoading = model.IsLoadingList;
+            listFeedback.Set(notice.text, notice.kind);
             listRetryRow.Visibility = listProblem ? UiVisibility.Visible : UiVisibility.Collapsed;
             listRetry.IsEnabled = model.CanRetryIn(InboxProblemScope.List);
             // Named for what it repeats (RetryAsync): the older page, or receiving the newest messages.

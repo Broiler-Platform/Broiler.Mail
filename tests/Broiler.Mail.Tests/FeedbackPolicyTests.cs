@@ -69,6 +69,52 @@ public sealed class FeedbackPolicyTests
         Assert.StartsWith("Error: The server did not respond.", Assert.Single(fixture.Announced.Skip(1)));
     }
 
+    /// <summary>
+    /// The page that reaches the session limit is announced with its count, and then the notice that
+    /// explains why Load older is now unavailable, once. Moving through the messages afterwards is
+    /// silent: that notice stays as it is.
+    /// </summary>
+    [Fact]
+    public async Task ReachingTheSessionLimitIsAnnouncedOnceAfterTheCount()
+    {
+        using var fixture = Fixture.Open();
+        var inbox = fixture.Model.Inbox;
+        var account = fixture.Model.Account.Profile!;
+        const int total = InboxViewModel.MaximumLoadedMessages + InboxViewModel.PageSize;
+        fixture.Receiver.Inbox = (cursor, _) =>
+        {
+            int end = cursor?.NextIndex ?? total - 1;
+            int start = end - InboxViewModel.PageSize + 1;
+            var page = Enumerable.Range(start + 1, InboxViewModel.PageSize).Reverse().Select(uid => new MailMessageSummary
+            {
+                Key = new(account.Id, "INBOX", 7, (uint)uid), Sender = "author@example.test", Subject = $"Message {uid}",
+            }).ToArray();
+            return Task.FromResult(new MailInboxPage(page, start == 0 ? null : new(account.Id, 7, total + 1, total, start - 1)));
+        };
+        await fixture.ReceiveAsync();
+        while (inbox.Messages.Count < InboxViewModel.MaximumLoadedMessages - InboxViewModel.PageSize)
+        {
+            await inbox.LoadOlderAsync();
+            fixture.Settle();
+        }
+
+        fixture.Announced.Clear();
+        await inbox.LoadOlderAsync();
+        fixture.Settle();
+        Assert.False(inbox.CanLoadOlder);
+        Assert.Equal(["Progress: Loading older messages…", "500 messages loaded.",
+            "Information: Session limit reached (500 messages). Receive mail again to return to the newest page."], fixture.Announced);
+
+        fixture.Announced.Clear();
+        foreach (var message in inbox.Messages.Take(5))
+        {
+            await inbox.SelectAsync(message.Key);
+            fixture.Settle();
+        }
+        Assert.Equal(inbox.Messages[4].Key, inbox.Body?.Key);
+        Assert.Empty(fixture.Announced);
+    }
+
     [Fact]
     public async Task SendingAnnouncesEachOutcomeOnceWithoutARepeatedBusyLine()
     {

@@ -285,14 +285,7 @@ public sealed class InboxStateTests
         TaskCompletionSource<MailMessageBody>? pendingBody = null;
         using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account,
             key => pendingBody?.Task ?? Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")));
-        // Pages of the newest messages first, as the server numbers them; the last page has no older cursor.
-        fixture.Receiver.Inbox = (cursor, _) =>
-        {
-            int end = cursor?.NextIndex ?? total - 1;
-            int start = Math.Max(0, end - InboxViewModel.PageSize + 1);
-            var messages = Enumerable.Range(start + 1, end - start + 1).Reverse().Select(uid => Message(account, (uint)uid)).ToArray();
-            return Task.FromResult(new MailInboxPage(messages, start == 0 ? null : new(account.Id, 7, (uint)total + 1, total, start - 1)));
-        };
+        fixture.Receiver.Inbox = NewestFirst(account, total);
         await fixture.ReceiveAsync();
         Assert.Equal("", fixture.ListFeedback.Message);
         var older = fixture.Button("Load older");
@@ -337,6 +330,61 @@ public sealed class InboxStateTests
         Assert.Equal("", fixture.ListFeedback.Message);
         Assert.True(older.IsEnabled);
     }
+
+    /// <summary>
+    /// A receive that fails or is canceled at the session limit leaves the 500 rows and the limit: the
+    /// notice keeps explaining it after the problem, so Load older is not unavailable without a reason.
+    /// Retry receiving returns to the newest page, which ends both.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task AReceiveProblemAtTheSessionLimitKeepsTheLimitExplained(bool canceled)
+    {
+        const string limit = "Session limit reached (500 messages). Receive mail again to return to the newest page.";
+        var account = TestDirectory.Profile();
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account);
+        var pages = fixture.Receiver.Inbox = NewestFirst(account, InboxViewModel.MaximumLoadedMessages + InboxViewModel.PageSize);
+        await fixture.ReceiveAsync();
+        while (fixture.Model.CanLoadOlder)
+        {
+            await fixture.Model.LoadOlderAsync();
+            fixture.Settle();
+        }
+        Assert.Equal(limit, fixture.ListFeedback.Message);
+
+        fixture.Receiver.Inbox = canceled ? (_, token) => new TaskCompletionSource<MailInboxPage>().Task.WaitAsync(token)
+            : (_, _) => throw new MailConnectionException("The server did not respond.");
+        var receiving = fixture.Model.ReceiveAsync();
+        if (canceled) fixture.Model.Cancel();
+        fixture.Settle();
+        await receiving;
+        var problem = fixture.Model.ListProblem;
+        Assert.NotNull(problem);
+        Assert.Equal(InboxViewModel.MaximumLoadedMessages, fixture.Model.Messages.Count);
+        var older = fixture.Button("Load older");
+        Assert.False(older.IsEnabled);
+        Assert.Equal((canceled ? FeedbackKind.Information : FeedbackKind.Error, $"{problem.Text} {limit}"), (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        var retry = fixture.Button("Retry receiving");
+        Assert.True(fixture.IsShown(retry) && retry.IsEnabled);
+
+        fixture.Receiver.Inbox = pages;
+        retry.Click();
+        fixture.Settle();
+        Assert.Null(fixture.Model.ListProblem);
+        Assert.Equal(InboxViewModel.PageSize, fixture.Model.Messages.Count);
+        Assert.Equal("", fixture.ListFeedback.Message);
+        Assert.True(older.IsEnabled);
+    }
+
+    /// <summary>Pages of the newest messages first, as the server numbers them; the last page has no older cursor.</summary>
+    private static Func<MailInboxCursor?, CancellationToken, Task<MailInboxPage>> NewestFirst(AccountProfile account, int total) => (cursor, _) =>
+    {
+        int end = cursor?.NextIndex ?? total - 1;
+        int start = Math.Max(0, end - InboxViewModel.PageSize + 1);
+        var messages = Enumerable.Range(start + 1, end - start + 1).Reverse().Select(uid => Message(account, (uint)uid)).ToArray();
+        return Task.FromResult(new MailInboxPage(messages, start == 0 ? null : new(account.Id, 7, (uint)total + 1, total, start - 1)));
+    };
 
     private static MailMessageSummary Message(AccountProfile account, uint uid) => new()
     { Key = new(account.Id, "INBOX", 7, uid), Sender = "sender@example.test", Subject = $"Subject {uid}" };
