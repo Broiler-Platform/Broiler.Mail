@@ -9,7 +9,8 @@ runs; the [4 October consolidated audit](roadmap-status-2026-10-04.md) records t
 before the 4–5 October round. This document is the execution plan for UI work;
 the [experience review](experience-roadmap.md) remains the original design rationale.
 
-The 4–5 October records describe two local, unpushed Mail branches, stacked on `main`
+The 4–5 October records describe two Mail branches (pushed to `origin` on 5 October; no pull
+request yet), stacked on `main`
 (`757e81b`). Each record says which one it belongs to:
 
 - **Published stack:** `claude/ui-13-acceptance`, built on the published Broiler.UI

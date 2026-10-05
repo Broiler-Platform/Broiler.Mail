@@ -9,7 +9,8 @@ evidence gathered with locally packed packages. Status and the rest of the round
 ## Where it stands
 
 - **Branch:** `claude/ui-09-upstream-adoption`, 38 commits on top of `claude/ui-13-acceptance` (the
-  published stack, code tip `12ceded` plus documentation). Local and unpushed.
+  published stack, code tip `12ceded` plus documentation). Pushed to `origin` on 5 October; no pull
+  request yet.
 - **Pins (committed):** `BroilerUiVersion` 0.1.0-preview.18, `BroilerHostingVersion` 0.1.0-preview.7,
   `BroilerNativeVersion` 0.1.0-preview.7. Native preview.7 is on NuGet; **UI preview.18 and Hosting
   preview.7 are not**, so the branch does not restore from NuGet.org yet.
