@@ -368,6 +368,68 @@ public sealed class ResponsiveInboxTests
         Assert.Equal("Mail could not be received. Details and Retry are above the list.", shell.Footer.Text);
     }
 
+    /// <summary>
+    /// Reading a message after a receive failed keeps that problem: the compact reader's footer says how
+    /// to get back to its details and Retry, and after Back to inbox they are above the list again,
+    /// where Tab reaches Retry.
+    /// </summary>
+    [Fact]
+    public async Task OpeningAMessageAfterAListProblemKeepsItsDetailsAndRetry()
+    {
+        using var directory = new TestDirectory();
+        var account = TestDirectory.Profile();
+        var messages = Fixture.CreateMessages(account, 5);
+        var receiver = Fixture.CreateReceiver(messages);
+        var dispatcher = new TestQueueDispatcher();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        using var shell = new MailShellView(model);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(640, 480));
+        session.AddRoot(shell.Window);
+        shell.Navigation.SelectTab("inbox");
+        void Settle()
+        {
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            session.RenderFrame();
+            // What the frame's layout posted, as the window drains it before the next frame.
+            dispatcher.Drain();
+            session.RenderFrame();
+        }
+        await model.Inbox.ReceiveAsync();
+        Settle();
+        receiver.Inbox = (_, _) => throw new MailConnectionException("The server did not respond.");
+        await model.Inbox.ReceiveAsync();
+        Settle();
+        var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
+        var inbox = shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!;
+        StandardButton Button(string text) => Descendants(inbox).OfType<StandardButton>().Single(button => button.Text == text);
+        const string above = "Mail could not be received. Details and Retry are above the list.";
+        Assert.Equal(above, shell.Footer.Text);
+
+        // Moving through the compact list loads a message without opening it.
+        await model.Inbox.SelectAsync(messages[1].Key);
+        Settle();
+        Assert.False(layout.ShowsReaderOnly);
+        Assert.Equal(above, shell.Footer.Text);
+
+        // Read message loads it again and shows it alone.
+        Button("Read message").Click();
+        Settle();
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.Equal($"Body {messages[1].Key.Uid}", Descendants(inbox).OfType<ScrollableMessageText>().Single().Text);
+        Assert.Equal("Mail could not be received. Use Back to inbox to see the details and Retry.", shell.Footer.Text);
+
+        Assert.True(shell.Inbox.GoBackToList());
+        Settle();
+        Assert.Equal(above, shell.Footer.Text);
+        var retry = Button("Retry receiving");
+        Assert.True(retry.IsEnabled && retry.Bounds.Height > 0, $"Retry receiving is at {retry.Bounds}.");
+        Assert.Contains(retry, MailKeyboardNavigation.TabStops(inbox));
+    }
+
     private static IEnumerable<UiElement> Descendants(UiElement root)
     {
         yield return root;

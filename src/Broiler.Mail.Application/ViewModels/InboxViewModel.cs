@@ -29,6 +29,9 @@ namespace Broiler.Mail.Application.ViewModels;
 /// <summary>Which pane an inbox problem belongs to, so its explanation and Retry appear beside it.</summary>
 public enum InboxProblemScope { None, List, Message }
 
+/// <summary>Why an inbox operation failed, or that the user canceled it, as its pane explains it.</summary>
+public sealed record InboxProblem(string Text, bool IsCancellation);
+
 public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatcher) : IDisposable
 {
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=Low; Resources=0; Fingerprint=75CF89
@@ -62,17 +65,32 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     public bool IsLoadingMessage => IsBusy && _running == InboxProblemScope.Message;
     /// <summary>At least one page loaded successfully for the current account, so an empty list means an empty inbox.</summary>
     public bool HasLoaded { get; private set; }
-    /// <summary>The explanation of the last failed or canceled operation, or null. It stays until that pane's next operation.</summary>
-    public string? Problem { get; private set; }
-    public InboxProblemScope ProblemScope { get; private set; }
+    /// <summary>
+    /// Why the last page failed or was canceled, or null. It stays until the next page operation, so
+    /// reading a message meanwhile does not hide that the rows are from an earlier receive.
+    /// </summary>
+    public InboxProblem? ListProblem { get; private set; }
+    /// <summary>Why the selected message failed to load or its loading was canceled, or null. It stays until the next operation.</summary>
+    public InboxProblem? MessageProblem { get; private set; }
+    /// <summary>
+    /// The explanation of the last failed or canceled operation, or null: the message's when both panes
+    /// have one, since a page operation replaces both.
+    /// </summary>
+    public string? Problem => (MessageProblem ?? ListProblem)?.Text;
+    public InboxProblemScope ProblemScope => MessageProblem is not null ? InboxProblemScope.Message
+        : ListProblem is not null ? InboxProblemScope.List : InboxProblemScope.None;
     /// <summary>The problem is a cancellation the user asked for, not a failure.</summary>
-    public bool ProblemIsCancellation { get; private set; }
+    public bool ProblemIsCancellation => (MessageProblem ?? ListProblem)?.IsCancellation == true;
     /// <summary>The list problem came from Load older, not from receiving the newest messages.</summary>
-    public bool ProblemIsOlderPage => ProblemScope == InboxProblemScope.List && _lastPageWasOlder;
-    public bool CanRetry => !_disposed && !IsBusy && ProblemScope switch
+    public bool ProblemIsOlderPage => ListProblem is not null && _lastPageWasOlder;
+    /// <summary>Whether <see cref="RetryAsync()"/> can repeat the operation of the last problem.</summary>
+    public bool CanRetry => CanRetryIn(ProblemScope);
+
+    /// <summary>Whether <see cref="RetryAsync(InboxProblemScope)"/> can repeat the operation of the problem of <paramref name="scope"/>.</summary>
+    public bool CanRetryIn(InboxProblemScope scope) => !_disposed && !IsBusy && scope switch
     {
-        InboxProblemScope.List => CanReceive,
-        InboxProblemScope.Message => SelectedMessage is not null && _account is not null,
+        InboxProblemScope.List => ListProblem is not null && CanReceive,
+        InboxProblemScope.Message => MessageProblem is not null && SelectedMessage is not null && _account is not null,
         _ => false,
     };
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=A12292
@@ -225,26 +243,27 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         Notify();
     }
 
-    /// <summary>Repeats the operation that failed or was canceled: the same page, or the selected message.</summary>
-    public Task RetryAsync()
+    /// <summary>Repeats the operation that failed or was canceled last: the same page, or the selected message.</summary>
+    public Task RetryAsync() => RetryAsync(ProblemScope);
+
+    /// <summary>Repeats the operation of the problem of <paramref name="scope"/>: the same page, or the selected message.</summary>
+    public Task RetryAsync(InboxProblemScope scope)
     {
-        if (!CanRetry) return Task.CompletedTask;
-        return ProblemScope == InboxProblemScope.Message ? SelectAsync(SelectedMessage!.Key)
+        if (!CanRetryIn(scope)) return Task.CompletedTask;
+        return scope == InboxProblemScope.Message ? SelectAsync(SelectedMessage!.Key)
             : _lastPageWasOlder && CanLoadOlder ? LoadOlderAsync() : ReceiveAsync();
     }
 
     private void SetProblem(InboxProblemScope scope, string text, bool canceled)
     {
-        Problem = text;
-        ProblemScope = scope;
-        ProblemIsCancellation = canceled;
+        if (scope == InboxProblemScope.Message) MessageProblem = new(text, canceled);
+        else ListProblem = new(text, canceled);
     }
 
     private void ClearProblem()
     {
-        Problem = null;
-        ProblemScope = InboxProblemScope.None;
-        ProblemIsCancellation = false;
+        ListProblem = null;
+        MessageProblem = null;
     }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=687E68
@@ -259,8 +278,11 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         int generation = ++_generation;
         IsBusy = true;
         _running = scope;
-        // A new attempt replaces an earlier explanation; its own outcome decides what is shown next.
-        ClearProblem();
+        // A new attempt replaces its pane's earlier explanation; its own outcome decides what is shown
+        // next. A page also replaces the message's, but loading a message leaves the list's: its rows
+        // are still from an earlier receive.
+        MessageProblem = null;
+        if (scope == InboxProblemScope.List) ListProblem = null;
         Status = busy;
         Notify();
         T? result = default;

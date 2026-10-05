@@ -128,6 +128,86 @@ public sealed class InboxStateTests
         Assert.Equal("", fixture.MessageFeedback.Message);
     }
 
+    /// <summary>
+    /// A list problem (a failed or canceled receive, or a failed Load older) stays while a message is
+    /// read: the rows are still from an earlier receive, so its notice and Retry stay above the list,
+    /// also beside a message that fails to load. Each Retry repeats its own pane's operation, and a new
+    /// page replaces both problems.
+    /// </summary>
+    [Theory]
+    [InlineData("receive-error", "Retry receiving")]
+    [InlineData("receive-canceled", "Retry receiving")]
+    [InlineData("load-error", "Retry loading older")]
+    public async Task ReadingAMessageKeepsTheListProblemAndItsRetry(string problem, string retryText)
+    {
+        var account = TestDirectory.Profile();
+        MailMessageSummary[] newest = [Message(account, 3), Message(account, 2)];
+        bool broken = true;
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account,
+            key => key.Uid == 2 && broken ? throw new MailConnectionException("Broken message.") : Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")));
+        // The newest page, then one older page, the last.
+        Func<MailInboxCursor?, CancellationToken, Task<MailInboxPage>> working = (cursor, _) => Task.FromResult(cursor is null
+            ? new MailInboxPage(newest, new(account.Id, 7, 4, 3, 2)) : new MailInboxPage([Message(account, 1)], null));
+        fixture.Receiver.Inbox = working;
+        await fixture.ReceiveAsync();
+        int pages = 0;
+        fixture.Receiver.Inbox = problem switch
+        {
+            "receive-error" => (_, _) => throw new MailConnectionException("The server did not respond."),
+            "receive-canceled" => (_, token) => new TaskCompletionSource<MailInboxPage>().Task.WaitAsync(token),
+            _ => (cursor, token) => cursor is null ? working(cursor, token) : throw new MailConnectionException("The server did not respond."),
+        };
+        var failing = problem == "load-error" ? fixture.Model.LoadOlderAsync() : fixture.Model.ReceiveAsync();
+        if (problem == "receive-canceled") fixture.Model.Cancel();
+        fixture.Settle();
+        await failing;
+        var listProblem = fixture.Model.ListProblem;
+        Assert.NotNull(listProblem);
+        var notice = (fixture.ListFeedback.Kind, fixture.ListFeedback.Message);
+        Assert.Equal(listProblem.Text, notice.Message);
+        var listRetry = fixture.Button(retryText);
+        Assert.True(fixture.IsShown(listRetry) && listRetry.IsEnabled);
+
+        // Reading a message keeps the list's explanation and its Retry.
+        await fixture.Model.SelectAsync(newest[0].Key);
+        fixture.Settle();
+        Assert.Equal("Body 3", fixture.Reader.Text);
+        Assert.Same(listProblem, fixture.Model.ListProblem);
+        Assert.Equal(InboxProblemScope.List, fixture.Model.ProblemScope);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        Assert.True(fixture.IsShown(listRetry) && listRetry.IsEnabled);
+
+        // A message that fails to load explains why under its header; the list's problem stays above the list.
+        await fixture.Model.SelectAsync(newest[1].Key);
+        fixture.Settle();
+        Assert.Equal(InboxProblemScope.Message, fixture.Model.ProblemScope);
+        Assert.Equal("Broken message.", fixture.MessageFeedback.Message);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        var messageRetry = fixture.Button("Retry loading");
+        Assert.True(fixture.IsShown(messageRetry) && messageRetry.IsEnabled);
+        Assert.True(fixture.IsShown(listRetry) && listRetry.IsEnabled);
+
+        // Retry loading repeats only the message.
+        broken = false;
+        fixture.Receiver.Inbox = (cursor, token) => { pages++; return working(cursor, token); };
+        messageRetry.Click();
+        fixture.Settle();
+        Assert.Equal("Body 2", fixture.Reader.Text);
+        Assert.Equal(0, pages);
+        Assert.Null(fixture.Model.MessageProblem);
+        Assert.Same(listProblem, fixture.Model.ListProblem);
+        Assert.False(fixture.IsShown(messageRetry));
+
+        // The list's Retry repeats its page, which replaces the problem.
+        listRetry.Click();
+        fixture.Settle();
+        Assert.Equal(1, pages);
+        Assert.Equal(InboxProblemScope.None, fixture.Model.ProblemScope);
+        Assert.Equal("", fixture.ListFeedback.Message);
+        Assert.False(fixture.IsShown(listRetry));
+        Assert.Equal(problem == "load-error" ? 3 : 2, fixture.Model.Messages.Count);
+    }
+
     private static MailMessageSummary Message(AccountProfile account, uint uid) => new()
     { Key = new(account.Id, "INBOX", 7, uid), Sender = "sender@example.test", Subject = $"Subject {uid}" };
 
@@ -145,7 +225,7 @@ public sealed class InboxStateTests
         public Fixture(Func<CancellationToken, Task<MailInboxPage>> inbox, AccountProfile? account = null, Func<MailMessageKey, Task<MailMessageBody>>? body = null)
         {
             Dispatcher = new TestQueueDispatcher();
-            var receiver = new TestMailReceiver { Inbox = (_, token) => inbox(token) };
+            var receiver = Receiver = new TestMailReceiver { Inbox = (_, token) => inbox(token) };
             if (body is not null) receiver.Body = (key, _) => body(key);
             Model = new InboxViewModel(receiver, Dispatcher);
             Model.SetAccount(account ?? TestDirectory.Profile());
@@ -156,6 +236,7 @@ public sealed class InboxStateTests
         }
 
         public TestQueueDispatcher Dispatcher { get; }
+        public TestMailReceiver Receiver { get; }
         public InboxViewModel Model { get; }
         public UiSession Session { get; }
         public InlineFeedback ListFeedback => Descendants(_content).OfType<InlineFeedback>().First();

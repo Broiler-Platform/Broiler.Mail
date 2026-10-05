@@ -296,9 +296,10 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         void ShowStates()
         {
             // List notice: a problem with Retry, progress while receiving, or why the list is empty.
-            bool listProblem = model.ProblemScope == InboxProblemScope.List;
+            // A list problem stays while a message is read: the rows are still from an earlier receive.
+            bool listProblem = model.ListProblem is not null;
             (string text, FeedbackKind kind) notice =
-                listProblem ? (model.Problem!, model.ProblemIsCancellation ? FeedbackKind.Information : FeedbackKind.Error)
+                model.ListProblem is { } problem ? (problem.Text, problem.IsCancellation ? FeedbackKind.Information : FeedbackKind.Error)
                 : model.IsLoadingList ? (model.Status, FeedbackKind.Progress)
                 : model.Messages.Count == 0 ? (model.HasLoaded ? "The inbox is empty." : model.CanReceive ? "Receive mail to load your inbox." : "", FeedbackKind.Information)
                 : ("", FeedbackKind.Information);
@@ -309,13 +310,13 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
                 panel.Session?.AnnounceStatus(list, model.Messages.Count == 1 ? "1 message loaded." : $"{model.Messages.Count} messages loaded.");
             listWasLoading = model.IsLoadingList;
             listRetryRow.Visibility = listProblem ? UiVisibility.Visible : UiVisibility.Collapsed;
-            listRetry.IsEnabled = model.CanRetry;
+            listRetry.IsEnabled = model.CanRetryIn(InboxProblemScope.List);
             // Named for what it repeats (RetryAsync): the older page, or receiving the newest messages.
             listRetry.Text = model.ProblemIsOlderPage && model.CanLoadOlder ? "Retry loading older" : "Retry receiving";
-            bool messageProblem = model.ProblemScope == InboxProblemScope.Message && model.SelectedMessage is not null;
-            messageFeedback.Set(messageProblem ? model.Problem! : "", model.ProblemIsCancellation ? FeedbackKind.Information : FeedbackKind.Error);
-            messageRetryRow.Visibility = messageProblem ? UiVisibility.Visible : UiVisibility.Collapsed;
-            messageRetry.IsEnabled = model.CanRetry;
+            var messageProblem = model.SelectedMessage is null ? null : model.MessageProblem;
+            messageFeedback.Set(messageProblem?.Text ?? "", messageProblem?.IsCancellation == true ? FeedbackKind.Information : FeedbackKind.Error);
+            messageRetryRow.Visibility = messageProblem is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
+            messageRetry.IsEnabled = model.CanRetryIn(InboxProblemScope.Message);
             KeepFocusUsable();
         }
         void KeepFocusUsable()
@@ -330,8 +331,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             // Back to inbox, which leads there.
             else if (!model.IsBusy) FocusNavigation.KeepFocusUsable(session, panel, focused != older ? null : layout.ShowsReaderOnly ? back : list);
         }
-        listRetry.Clicked += async (_, _) => await model.RetryAsync();
-        messageRetry.Clicked += async (_, _) => await model.RetryAsync();
+        listRetry.Clicked += async (_, _) => await model.RetryAsync(InboxProblemScope.List);
+        messageRetry.Clicked += async (_, _) => await model.RetryAsync(InboxProblemScope.Message);
         void FocusVisiblePane()
         {
             if (panel.Session is not { } session || !layout.IsCompact) return;
