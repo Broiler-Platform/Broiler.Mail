@@ -369,6 +369,65 @@ public sealed class ResponsiveInboxTests
     }
 
     /// <summary>
+    /// Moving through the compact list loads the selected message without showing it, so the footer does
+    /// not describe reading it: it says how to read it, until the reader shows it, alone or beside the list.
+    /// </summary>
+    [Fact]
+    public async Task TheCompactListsFooterSaysHowToReadTheSelectedMessage()
+    {
+        using var directory = new TestDirectory();
+        var account = TestDirectory.Profile();
+        var messages = Fixture.CreateMessages(account, 5);
+        var receiver = Fixture.CreateReceiver(messages);
+        var dispatcher = new TestQueueDispatcher();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        using var shell = new MailShellView(model);
+        var host = new Host(640, 480);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+        session.AddRoot(shell.Window);
+        shell.Navigation.SelectTab("inbox");
+        void Settle()
+        {
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            session.RenderFrame();
+            // What the frame's layout posted, as the window drains it before the next frame.
+            dispatcher.Drain();
+            session.RenderFrame();
+        }
+        await model.Inbox.ReceiveAsync();
+        Settle();
+        var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
+        Assert.Equal(model.Inbox.Status, shell.Footer.Text);
+
+        const string selected = "Message selected. Open it to read.";
+        const string reading = "Reading plain text. This does not mark the message as read on the server.";
+        await model.Inbox.SelectAsync(messages[1].Key);
+        Settle();
+        Assert.True(layout.IsCompact && !layout.ShowsReaderOnly);
+        Assert.Equal(reading, model.Inbox.Status);
+        Assert.Equal(selected, shell.Footer.Text);
+
+        Assert.True(shell.Inbox.OpenSelected());
+        Settle();
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.Equal(reading, shell.Footer.Text);
+        Assert.True(shell.Inbox.GoBackToList());
+        Settle();
+        Assert.Equal(selected, shell.Footer.Text);
+
+        // Beside the list, the reader shows the message.
+        host.Width = 1100;
+        shell.Window.InvalidateMeasure();
+        Settle();
+        Assert.False(layout.IsCompact);
+        Assert.Equal(reading, shell.Footer.Text);
+    }
+
+    /// <summary>
     /// Reading a message after a receive failed keeps that problem: the compact reader's footer says how
     /// to get back to its details and Retry, and after Back to inbox they are above the list again,
     /// where Tab reaches Retry.

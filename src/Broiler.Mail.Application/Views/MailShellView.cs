@@ -81,7 +81,7 @@ public sealed class MailShellView : IDisposable
                 "compose" => !string.IsNullOrEmpty(model.Composer.Status) && model.Composer.StatusKind == FeedbackKind.Information && !model.Composer.IsBusy
                     ? model.Composer.Status
                     : IsProblem(model.Composer.StorageKind) ? $"The draft is not saved. {DetailsBelow}" : model.Composer.StorageStatus,
-                _ => InboxStatus(model.Inbox, Inbox.ShowsPaneOf(model.Inbox.ProblemScope)),
+                _ => InboxStatus(model.Inbox, Inbox),
             };
             status.Text = text;
         }
@@ -131,19 +131,25 @@ public sealed class MailShellView : IDisposable
     /// <summary>
     /// The inbox's status or, for a problem, a pointer to its explanation and Retry, which sit in the
     /// affected pane: above the list, or under the message's header. While compact mode hides that
-    /// pane, the footer says how to show it instead, naming the reader's way back by its label.
+    /// pane, the footer says how to show it instead, naming the reader's way back by its label. So
+    /// does the status of a message the compact list selected without showing it.
     /// </summary>
-    private static string InboxStatus(InboxViewModel inbox, bool paneShown) => (inbox.ProblemScope, inbox.ProblemIsCancellation, paneShown) switch
+    private static string InboxStatus(InboxViewModel inbox, InboxView view)
     {
-        (InboxProblemScope.None, _, _) => inbox.Status,
-        (_, true, true) => "Canceled. Retry is available.",
-        (InboxProblemScope.Message, true, false) => "Canceled. Open the message to retry.",
-        (_, true, false) => $"Canceled. Use {InboxView.BackText} to retry.",
-        (InboxProblemScope.Message, false, true) => "The message could not be loaded. Details and Retry are beside it.",
-        (InboxProblemScope.Message, false, false) => "The message could not be loaded. Open it to see the details and Retry.",
-        _ => (inbox.ProblemIsOlderPage ? "Older messages could not be loaded. " : "Mail could not be received. ")
-            + (paneShown ? "Details and Retry are above the list." : $"Use {InboxView.BackText} to see the details and Retry."),
-    };
+        bool paneShown = view.ShowsPaneOf(inbox.ProblemScope);
+        return (inbox.ProblemScope, inbox.ProblemIsCancellation, paneShown) switch
+        {
+            (InboxProblemScope.None, _, _) => inbox.StatusIsAboutMessage && !view.ShowsPaneOf(InboxProblemScope.Message)
+                ? "Message selected. Open it to read." : inbox.Status,
+            (_, true, true) => "Canceled. Retry is available.",
+            (InboxProblemScope.Message, true, false) => "Canceled. Open the message to retry.",
+            (_, true, false) => $"Canceled. Use {InboxView.BackText} to retry.",
+            (InboxProblemScope.Message, false, true) => "The message could not be loaded. Details and Retry are beside it.",
+            (InboxProblemScope.Message, false, false) => "The message could not be loaded. Open it to see the details and Retry.",
+            _ => (inbox.ProblemIsOlderPage ? "Older messages could not be loaded. " : "Mail could not be received. ")
+                + (paneShown ? "Details and Retry are above the list." : $"Use {InboxView.BackText} to see the details and Retry."),
+        };
+    }
 
     public StandardWindow Window { get; }
     public StandardTabView Navigation { get; }

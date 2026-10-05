@@ -49,6 +49,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     private bool _disposed;
     private bool _loadingPage;
     private InboxProblemScope _running;
+    private InboxProblemScope _statusScope;
     private bool _lastPageWasOlder;
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=8C487F
@@ -58,6 +59,11 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     public MailMessageSummary? SelectedMessage { get; private set; }
     public MailMessageBody? Body { get; private set; }
     public string Status { get; private set; } = "Save an account in the Account tab to receive mail.";
+    /// <summary>
+    /// <see cref="Status"/> describes the selected message, which is loading or loaded, rather than the
+    /// list or the account, so it fits only while the message is shown.
+    /// </summary>
+    public bool StatusIsAboutMessage => _statusScope == InboxProblemScope.Message;
     public bool IsBusy { get; private set; }
     /// <summary>A page of summaries is loading; the list stays visible meanwhile.</summary>
     public bool IsLoadingList => IsBusy && _running == InboxProblemScope.List;
@@ -134,6 +140,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         _older = null;
         HasLoaded = false;
         ClearProblem();
+        _statusScope = InboxProblemScope.None;
         Status = account is { IsEnabled: true }
             ? $"Ready to receive mail for {account.EmailAddress} using the saved profile."
             : "Save and enable an account in the Account tab to receive mail.";
@@ -283,6 +290,8 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         // are still from an earlier receive.
         MessageProblem = null;
         if (scope == InboxProblemScope.List) ListProblem = null;
+        // The operation's progress, outcome, or cancellation is the status until another operation starts.
+        _statusScope = scope;
         Status = busy;
         Notify();
         T? result = default;
