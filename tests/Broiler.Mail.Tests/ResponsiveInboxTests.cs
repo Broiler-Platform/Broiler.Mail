@@ -428,6 +428,80 @@ public sealed class ResponsiveInboxTests
     }
 
     /// <summary>
+    /// The session limit is explained above the list, so the footer does not repeat it while the list is
+    /// shown. The compact reader hides the list but not the unavailable Load older, so its footer adds the
+    /// explanation to the reading status.
+    /// </summary>
+    [Fact]
+    public async Task TheCompactReadersFooterExplainsTheSessionLimitWhileTheListIsHidden()
+    {
+        const string limit = "Session limit reached (500 messages). Receive mail again to return to the newest page.";
+        const string reading = "Reading plain text. This does not mark the message as read on the server.";
+        using var directory = new TestDirectory();
+        var account = TestDirectory.Profile();
+        var messages = Fixture.CreateMessages(account, InboxViewModel.MaximumLoadedMessages + InboxViewModel.PageSize);
+        var receiver = Fixture.CreateReceiver(messages);
+        // Pages from the newest; the last loaded page still has older messages behind it.
+        receiver.Inbox = (cursor, _) =>
+        {
+            int start = cursor?.NextIndex ?? 0;
+            var page = messages.Skip(start).Take(InboxViewModel.PageSize).ToArray();
+            int next = start + page.Length;
+            return Task.FromResult(new MailInboxPage(page, next < messages.Length ? new(account.Id, 7, (uint)messages.Length + 1, messages.Length, next) : null));
+        };
+        var dispatcher = new TestQueueDispatcher();
+        var model = new MailShellViewModel(
+            new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
+            new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
+            new(receiver, dispatcher),
+            new ComposerViewModel(dispatcher: dispatcher));
+        using var shell = new MailShellView(model);
+        var host = new Host(640, 480);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
+        session.AddRoot(shell.Window);
+        shell.Navigation.SelectTab("inbox");
+        void Settle()
+        {
+            dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            session.RenderFrame();
+            // What the frame's layout posted, as the window drains it before the next frame.
+            dispatcher.Drain();
+            session.RenderFrame();
+        }
+        await model.Inbox.ReceiveAsync();
+        Settle();
+        while (model.Inbox.CanLoadOlder)
+        {
+            await model.Inbox.LoadOlderAsync();
+            Settle();
+        }
+        var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
+        Assert.Equal(limit, model.Inbox.SessionLimitNotice);
+        Assert.Equal(model.Inbox.Status, shell.Footer.Text);
+        Assert.DoesNotContain(limit, shell.Footer.Text);
+
+        await model.Inbox.SelectAsync(model.Inbox.Messages[0].Key);
+        Settle();
+        Assert.True(layout.IsCompact && !layout.ShowsReaderOnly);
+        Assert.Equal("Message selected. Open it to read.", shell.Footer.Text);
+
+        Assert.True(shell.Inbox.OpenSelected());
+        Settle();
+        Assert.True(layout.ShowsReaderOnly);
+        Assert.Equal($"{reading} {limit}", shell.Footer.Text);
+        Assert.True(shell.Inbox.GoBackToList());
+        Settle();
+        Assert.Equal("Message selected. Open it to read.", shell.Footer.Text);
+
+        // Beside the list, the notice above it explains the limit.
+        host.Width = 1100;
+        shell.Window.InvalidateMeasure();
+        Settle();
+        Assert.False(layout.IsCompact);
+        Assert.Equal(reading, shell.Footer.Text);
+    }
+
+    /// <summary>
     /// Reading a message after a receive failed keeps that problem: the compact reader's footer says how
     /// to get back to its details and Retry, and after Back to inbox they are above the list again,
     /// where Tab reaches Retry.

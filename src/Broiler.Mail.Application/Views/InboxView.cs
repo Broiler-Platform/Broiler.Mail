@@ -336,12 +336,15 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         bool listWasLoading = false;
         void ShowStates()
         {
-            // List notice: a problem with Retry, progress while receiving, or why the list is empty.
-            // A list problem stays while a message is read: the rows are still from an earlier receive.
+            // List notice: a problem with Retry, progress while receiving, why the list is empty, or why
+            // Load older is unavailable at the session limit. A list problem stays while a message is read:
+            // the rows are still from an earlier receive. So does the session limit, which the reader's
+            // status would otherwise replace.
             bool listProblem = model.ListProblem is not null;
             (string text, FeedbackKind kind) notice =
                 model.ListProblem is { } problem ? (problem.Text, problem.IsCancellation ? FeedbackKind.Information : FeedbackKind.Error)
                 : model.IsLoadingList ? (model.Status, FeedbackKind.Progress)
+                : model.SessionLimitNotice is { } limit ? (limit, FeedbackKind.Information)
                 : model.Messages.Count == 0 ? (model.HasLoaded ? "The inbox is empty." : model.CanReceive ? "Receive mail to load your inbox." : "", FeedbackKind.Information)
                 : ("", FeedbackKind.Information);
             listFeedback.Set(notice.text, notice.kind);

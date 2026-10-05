@@ -132,15 +132,17 @@ public sealed class MailShellView : IDisposable
     /// The inbox's status or, for a problem, a pointer to its explanation and Retry, which sit in the
     /// affected pane: above the list, or under the message's header. While compact mode hides that
     /// pane, the footer says how to show it instead, naming the reader's way back by its label. So
-    /// does the status of a message the compact list selected without showing it.
+    /// does the status of a message the compact list selected without showing it. The session limit is
+    /// explained above the list; while compact mode hides the list, the footer adds that explanation.
     /// </summary>
     private static string InboxStatus(InboxViewModel inbox, InboxView view)
     {
         bool paneShown = view.ShowsPaneOf(inbox.ProblemScope);
         return (inbox.ProblemScope, inbox.ProblemIsCancellation, paneShown) switch
         {
-            (InboxProblemScope.None, _, _) => inbox.StatusIsAboutMessage && !view.ShowsPaneOf(InboxProblemScope.Message)
-                ? "Message selected. Open it to read." : inbox.Status,
+            (InboxProblemScope.None, _, _) => (inbox.StatusIsAboutMessage && !view.ShowsPaneOf(InboxProblemScope.Message)
+                ? "Message selected. Open it to read." : inbox.Status)
+                + (inbox.SessionLimitNotice is { } limit && !view.ShowsPaneOf(InboxProblemScope.List) ? " " + limit : ""),
             (_, true, true) => "Canceled. Retry is available.",
             (InboxProblemScope.Message, true, false) => "Canceled. Open the message to retry.",
             (_, true, false) => $"Canceled. Use {InboxView.BackText} to retry.",

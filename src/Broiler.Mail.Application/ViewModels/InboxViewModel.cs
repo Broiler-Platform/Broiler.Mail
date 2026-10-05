@@ -113,6 +113,13 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     // Broiler-Falsified-If: CanLoadOlder stays true after Messages.Count has reached MaximumLoadedMessages
     // Broiler-Human:        PENDING
     public bool CanLoadOlder => CanReceive && _older is not null && Messages.Count < MaximumLoadedMessages;
+    /// <summary>
+    /// Why Load older is unavailable although the server has older messages, or null: the session holds
+    /// <see cref="MaximumLoadedMessages"/> summaries until Receive mail returns to the newest page. It
+    /// stays while messages are read; while a page loads, that page's progress replaces it.
+    /// </summary>
+    public string? SessionLimitNotice => !IsLoadingList && _older is not null && Messages.Count >= MaximumLoadedMessages
+        ? "Session limit reached (500 messages). Receive mail again to return to the newest page." : null;
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=63EC38
     // Broiler-Falsified-If: CanSelect is true while a page load is still running
     // Broiler-Human:        PENDING
@@ -181,8 +188,6 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
                 ? $"{Messages.Count} messages loaded. Select one to read. Reading does not mark messages as read on the server."
                 : $"{Messages.Count} messages loaded. Reading does not mark messages as read on the server.";
             if (reading is not null) Status += " " + reading;
-            if (Messages.Count >= MaximumLoadedMessages && _older is not null)
-                Status += " Session limit reached (500 messages). Receive mail again to return to the newest page.";
         }, cursor is null ? "Receiving newest messages…" : "Loading older messages…", InboxProblemScope.List);
     }
 

@@ -269,6 +269,75 @@ public sealed class InboxStateTests
         Assert.Equal(problem == "load-error" ? 3 : 2, fixture.Model.Messages.Count);
     }
 
+    /// <summary>
+    /// At the session limit with older mail on the server, Load older is unavailable; the notice above
+    /// the list says why and how to go on. Reading a message replaces the status, not that notice, so it
+    /// stays while a message loads and is read, until Receive mail returns to the newest page. The status,
+    /// which the footer shows, does not repeat it. A mailbox loaded completely has nothing older and no notice.
+    /// </summary>
+    [Theory]
+    [InlineData(600, true)]
+    [InlineData(500, false)]
+    public async Task TheSessionLimitStaysExplainedAboveTheListWhileAMessageIsRead(int total, bool limited)
+    {
+        const string limit = "Session limit reached (500 messages). Receive mail again to return to the newest page.";
+        var account = TestDirectory.Profile();
+        TaskCompletionSource<MailMessageBody>? pendingBody = null;
+        using var fixture = new Fixture(_ => Task.FromResult(new MailInboxPage([], null)), account,
+            key => pendingBody?.Task ?? Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")));
+        // Pages of the newest messages first, as the server numbers them; the last page has no older cursor.
+        fixture.Receiver.Inbox = (cursor, _) =>
+        {
+            int end = cursor?.NextIndex ?? total - 1;
+            int start = Math.Max(0, end - InboxViewModel.PageSize + 1);
+            var messages = Enumerable.Range(start + 1, end - start + 1).Reverse().Select(uid => Message(account, (uint)uid)).ToArray();
+            return Task.FromResult(new MailInboxPage(messages, start == 0 ? null : new(account.Id, 7, (uint)total + 1, total, start - 1)));
+        };
+        await fixture.ReceiveAsync();
+        Assert.Equal("", fixture.ListFeedback.Message);
+        var older = fixture.Button("Load older");
+        while (fixture.Model.CanLoadOlder)
+        {
+            await fixture.Model.LoadOlderAsync();
+            fixture.Settle();
+        }
+        Assert.Equal(InboxViewModel.MaximumLoadedMessages, fixture.Model.Messages.Count);
+        Assert.False(older.IsEnabled);
+        if (!limited)
+        {
+            Assert.Null(fixture.Model.SessionLimitNotice);
+            Assert.Equal("", fixture.ListFeedback.Message);
+            return;
+        }
+        Assert.Equal(limit, fixture.Model.SessionLimitNotice);
+        var notice = (FeedbackKind.Information, limit);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        Assert.True(fixture.IsShown(fixture.ListFeedback));
+        Assert.DoesNotContain("Session limit", fixture.Model.Status);
+
+        // While the newest message loads and once it is read, the notice stays and Load older stays unavailable.
+        pendingBody = new TaskCompletionSource<MailMessageBody>();
+        var loading = fixture.Model.SelectAsync(fixture.Model.Messages[0].Key);
+        fixture.Render();
+        Assert.True(fixture.Model.IsLoadingMessage);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        pendingBody.SetResult(new MailMessageBody(fixture.Model.Messages[0].Key, $"Body {total}"));
+        pendingBody = null;
+        fixture.Settle();
+        await loading;
+        Assert.Equal($"Body {total}", fixture.Reader.Text);
+        Assert.StartsWith("Reading plain text.", fixture.Model.Status);
+        Assert.Equal(notice, (fixture.ListFeedback.Kind, fixture.ListFeedback.Message));
+        Assert.False(older.IsEnabled);
+
+        // Receive mail returns to the newest page, where Load older is available again.
+        await fixture.ReceiveAsync();
+        Assert.Equal(InboxViewModel.PageSize, fixture.Model.Messages.Count);
+        Assert.Null(fixture.Model.SessionLimitNotice);
+        Assert.Equal("", fixture.ListFeedback.Message);
+        Assert.True(older.IsEnabled);
+    }
+
     private static MailMessageSummary Message(AccountProfile account, uint uid) => new()
     { Key = new(account.Id, "INBOX", 7, uid), Sender = "sender@example.test", Subject = $"Subject {uid}" };
 
