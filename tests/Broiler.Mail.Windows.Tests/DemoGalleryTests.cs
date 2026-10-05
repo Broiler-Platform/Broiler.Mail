@@ -224,7 +224,7 @@ public sealed class DemoGalleryTests
     /// The reader header of the gallery's reading fixtures, with their own subject, sender, recipient and
     /// date, as Accept-UI -OpenReader shows them: in the compact reader at 640x480, and at 1100x720 with
     /// twice the text size. Each row is shown whole, scrolled below the header whole, or cut between two
-    /// lines of its text, and the date line never ends inside "Unread on server". With no message text
+    /// lines of its text, and no line of the date starts with its separator. With no message text
     /// (body-error), a header that scrolls takes all the reader that the line below it leaves. Beside the
     /// list, Reply, Reply all and Forward are on screen whole below the header, whatever it shows, where
     /// they fit on one row with the subject's first line and six lines of text; just wider than the compact
@@ -278,6 +278,10 @@ public sealed class DemoGalleryTests
                 else
                     foreach (var row in header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0))
                     {
+                        // The date line's separator ends a line, never starts one, where it would read as a
+                        // bullet; the read state is one phrase, so a header cut between lines shows it whole.
+                        if (row is StandardLabel date && date.Text.StartsWith("Received ", StringComparison.Ordinal))
+                            Assert.DoesNotContain(WrappedLines(date), text => text.StartsWith('\u00B7'));
                         if (row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5) continue;
                         double line = row switch
                         {
@@ -287,12 +291,6 @@ public sealed class DemoGalleryTests
                         };
                         double lines = (shown.Bottom - row.Bounds.Top) / line;
                         Assert.True(line > 0 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
-                        // The date line, cut between its lines, shows the read state with its separator whole or not at all.
-                        if (row is StandardLabel date && date.Text.StartsWith("Received ", StringComparison.Ordinal))
-                        {
-                            string visible = string.Join(" ", WrappedLines(date).Take((int)Math.Round(lines)));
-                            Assert.True(!visible.Contains('\u00B7'), $"{where}: the date line ends on '{visible}'.");
-                        }
                     }
                 var reader = Tab(shell, "inbox");
                 var divider = Descendants(reader).OfType<Divider>().Single().Bounds;

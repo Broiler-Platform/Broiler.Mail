@@ -1016,6 +1016,31 @@ public sealed class ResponsiveInboxTests
     }
 
     /// <summary>
+    /// The reader's date line wraps after its separator, which ends the date, so the next line starts with
+    /// the read state, whole, and not with a "·" that reads as a bullet, as it did when the separator was
+    /// joined to the read state.
+    /// </summary>
+    [Fact]
+    public async Task TheDateLineWrapsAfterItsSeparator()
+    {
+        using var reader = await ReaderFixture.OpenAsync(640, 480);
+        var date = Descendants(reader.Pane).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received ", StringComparison.Ordinal));
+        double line = BTextMeasurer.GetLineHeight(date.Font);
+        // The widest compact reader in which it wraps: the line's last word moves to the next line.
+        int width = 640;
+        while (date.Bounds.Height < 1.5 * line)
+        {
+            width -= 4;
+            Assert.True(width > 240, "The date line does not wrap.");
+            reader.Resize(width);
+        }
+        string[] lines = reader.Session.RenderFrame().Commands.OfType<BRenderCommand.DrawText>().Select(text => text.Text.Text)
+            .SkipWhile(text => !text.StartsWith("Received ", StringComparison.Ordinal)).Take(2).ToArray();
+        Assert.EndsWith("\u00A0·", lines[0], StringComparison.Ordinal);
+        Assert.Contains(lines[1], new[] { "Read\u00A0on\u00A0server", "Unread\u00A0on\u00A0server" });
+    }
+
+    /// <summary>
     /// With no message text, the header may take the whole reader. It does not end above a row it would cut
     /// there: nothing below would use the space, so the problem and Retry would only be scrolled away
     /// above an empty text area, as they were at 640x570 with twice the text size.
