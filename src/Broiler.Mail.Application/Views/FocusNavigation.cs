@@ -30,6 +30,27 @@ internal static class FocusNavigation
         return session.FocusedElement is not { } focused || focused == area || focused.IsDescendantOf(area) || area.IsDescendantOf(focused);
     }
 
+    /// <summary>
+    /// Hands focus on from a control in <paramref name="scope"/> that can no longer take it, such as a
+    /// command that disabled itself once its work was done: to <paramref name="preferred"/> when the
+    /// keyboard can reach it, otherwise to the next tab stop after it, wrapping within the scope, and
+    /// scrolls it into view. Focus anywhere else is left alone, so a result arriving later never
+    /// moves it. Callers wait until the operation has finished; while it runs, focus stays on the command.
+    /// </summary>
+    public static void KeepFocusUsable(UiSession session, UiElement scope, UiElement? preferred = null)
+    {
+        // Only controls that normally take focus: a read-only scroll view is a tab stop without being focusable.
+        if (session.FocusedElement is not { Focusable: true, CanFocus: false } focused || !focused.IsDescendantOf(scope)) return;
+        // A tab stop, not merely focusable: a collapsed split pane stays visible but is hidden from
+        // the keyboard and from screen readers.
+        var stops = MailKeyboardNavigation.TabStops(scope);
+        var target = preferred is not null && stops.Contains(preferred) ? preferred
+            : MailKeyboardNavigation.NextTabStop(scope, focused, 1) ?? stops.FirstOrDefault();
+        // The target may sit in a part of a form that is scrolled away, such as New message above
+        // a long draft.
+        if (target is not null) FocusAndReveal(session, target);
+    }
+
     public static void Reveal(UiSession session, UiElement element)
     {
         // Layout first so newly selected tabs have useful bounds. Then reveal off-screen form fields.

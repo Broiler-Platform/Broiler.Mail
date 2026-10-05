@@ -1,5 +1,6 @@
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Text;
 using Broiler.Graphics.Windowing;
 using Broiler.Input.Keyboard;
 using Broiler.Mail.Application.Preview;
@@ -106,6 +107,79 @@ public sealed class ResponsiveInboxTests
         }
         Assert.Equal(fixture.Messages[3].Key, fixture.Model.SelectedMessage?.Key);
         Assert.NotNull(fixture.Model.Body);
+    }
+
+    [Theory]
+    [InlineData(700)]
+    [InlineData(780)]
+    public async Task BetweenTheCompactSwitchAndAWideWindowBothPanesKeepTheirReadableWidths(int width)
+    {
+        using var fixture = await Fixture.OpenAsync(1100);
+        Assert.Equal(0.35, fixture.Split.SplitterFraction, 3);
+
+        // At 35 %, the list would be narrower than the width the compact switch keeps readable.
+        fixture.Resize(width);
+        Assert.False(fixture.Layout.IsCompact);
+        Assert.True(fixture.List.Bounds.Width >= AdaptiveInboxLayout.ListReadableWidth - 0.5, $"The list is {fixture.List.Bounds.Width} DIP wide.");
+        Assert.True(fixture.Reader.Bounds.Width >= AdaptiveInboxLayout.ReaderReadableWidth - 0.5, $"The reader is {fixture.Reader.Bounds.Width} DIP wide.");
+
+        // Only the display was clamped: the saved ratio is unchanged and shows again in a wider window.
+        Assert.Equal(0.35, fixture.Model.SplitterFraction, 3);
+        fixture.Resize(1100);
+        Assert.Equal(0.35, fixture.Model.SplitterFraction, 3);
+        Assert.Equal(0.35, fixture.Split.SplitterFraction, 3);
+        Assert.Equal(Math.Round(0.35 * (1100 - fixture.Split.Splitter.PreferredSize.Width)), fixture.List.Bounds.Width, 0);
+
+        // The compact switch has not moved.
+        fixture.Resize(679);
+        Assert.True(fixture.Layout.IsCompact);
+        fixture.Resize(680);
+        Assert.False(fixture.Layout.IsCompact);
+    }
+
+    [Theory]
+    [InlineData(680)]
+    [InlineData(684)]
+    [InlineData(687)]
+    public async Task JustAboveTheCompactSwitchThePanesShareTheSplittersWidth(int width)
+    {
+        using var fixture = await Fixture.OpenAsync(1100);
+        fixture.Resize(width);
+        Assert.False(fixture.Layout.IsCompact);
+
+        // The switch compares the two readable widths with the whole width, without the splitter,
+        // so here the panes are together that much narrower, and neither by more than that.
+        double splitter = fixture.Split.Splitter.PreferredSize.Width;
+        Assert.Equal(width - splitter, fixture.List.Bounds.Width + fixture.Reader.Bounds.Width, 0);
+        Assert.InRange(fixture.List.Bounds.Width, AdaptiveInboxLayout.ListReadableWidth - splitter, AdaptiveInboxLayout.ListReadableWidth + 0.5);
+        Assert.InRange(fixture.Reader.Bounds.Width, AdaptiveInboxLayout.ReaderReadableWidth - splitter, AdaptiveInboxLayout.ReaderReadableWidth + 0.5);
+        Assert.Equal(0.35, fixture.Model.SplitterFraction, 3);
+    }
+
+    [Fact]
+    public async Task TheListCannotBeDraggedNarrowerThanItsReadableWidthAndItsRowsStayInside()
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2.25));
+        try
+        {
+            using var fixture = await Fixture.OpenAsync(1100, 720, received: DateTimeOffset.Now.AddYears(-2));
+            fixture.Split.SplitterFraction = 0.05;
+            var frame = fixture.Session.RenderFrame();
+
+            var list = fixture.List;
+            Assert.True(list.Bounds.Width >= AdaptiveInboxLayout.ListReadableWidth - 0.5, $"The list is {list.Bounds.Width} DIP wide.");
+            Assert.Equal(list.Bounds.Width / (1100 - fixture.Split.Splitter.PreferredSize.Width), fixture.Model.SplitterFraction, 3);
+            var rows = frame.Commands.OfType<BRenderCommand.DrawText>()
+                .Where(text => list.ContentBounds.Contains(text.Origin)).ToArray();
+            Assert.NotEmpty(rows);
+            foreach (var text in rows)
+            {
+                double right = text.Origin.X + BTextMeasurer.MeasureAdvance(text.Text.Text, text.Text.Font);
+                Assert.True(right <= list.ContentBounds.Right + 0.5, $"'{text.Text.Text}' ends at {right}, the list's rows at {list.ContentBounds.Right}.");
+            }
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
     }
 
     [Fact]
@@ -286,8 +360,12 @@ public sealed class ResponsiveInboxTests
         public ScrollableMessageText ReaderText => Descendants(Content).OfType<ScrollableMessageText>().Single();
         public StandardButton BackButton => Descendants(Content).OfType<StandardButton>().Single(button => button.Text == "Back to inbox");
 
-        public static MailMessageSummary[] CreateMessages(AccountProfile account, int count) => Enumerable.Range(1, count).Reverse()
-            .Select(uid => new MailMessageSummary { Key = new(account.Id, "INBOX", 7, (uint)uid), Sender = $"sender{uid}@example.test", Subject = $"Subject {uid}" }).ToArray();
+        public static MailMessageSummary[] CreateMessages(AccountProfile account, int count, DateTimeOffset? received = null) => Enumerable.Range(1, count).Reverse()
+            .Select(uid => new MailMessageSummary
+            {
+                Key = new(account.Id, "INBOX", 7, (uint)uid), Sender = $"sender{uid}@example.test", Subject = $"Subject {uid}",
+                ReceivedAt = received,
+            }).ToArray();
 
         public static TestMailReceiver CreateReceiver(MailMessageSummary[] messages) => new()
         {
@@ -295,10 +373,10 @@ public sealed class ResponsiveInboxTests
             Body = (key, _) => Task.FromResult(new MailMessageBody(key, $"Body {key.Uid}")),
         };
 
-        public static async Task<Fixture> OpenAsync(int width, int height = 600)
+        public static async Task<Fixture> OpenAsync(int width, int height = 600, DateTimeOffset? received = null)
         {
             var account = TestDirectory.Profile();
-            var messages = CreateMessages(account, 40);
+            var messages = CreateMessages(account, 40, received);
             var receiver = CreateReceiver(messages);
             var dispatcher = new TestQueueDispatcher();
             var model = new InboxViewModel(receiver, dispatcher);

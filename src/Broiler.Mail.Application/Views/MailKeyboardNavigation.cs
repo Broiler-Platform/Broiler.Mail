@@ -90,12 +90,46 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         // Layout first: the adaptive inbox decides during layout which pane is collapsed (and hidden).
         session.RenderFrame();
         var controls = new List<UiElement> { shell.Navigation };
-        if (shell.Navigation.SelectedTab?.Content is { } content)
+        var content = shell.Navigation.SelectedTab?.Content;
+        if (content is not null)
             controls.AddRange(TabStops(content));
         int current = controls.IndexOf(session.FocusedElement!);
-        int next = current < 0 ? (direction > 0 ? 0 : controls.Count - 1) : (current + direction + controls.Count) % controls.Count;
-        session.SetFocus(controls[next]);
-        Reveal(controls[next]);
+        UiElement next;
+        if (current >= 0) next = controls[(current + direction + controls.Count) % controls.Count];
+        // A control that is no longer a stop, such as a button disabled while its operation runs,
+        // keeps its place: Tab continues from there instead of restarting at the tabs.
+        else if (session.FocusedElement is { } focused && content is not null && focused.IsDescendantOf(content))
+            next = NextTabStop(content, focused, direction) ?? shell.Navigation;
+        else next = direction > 0 ? controls[0] : controls[^1];
+        session.SetFocus(next);
+        Reveal(next);
+    }
+
+    /// <summary>
+    /// The tab stop after <paramref name="from"/> in Tab order (before it for a negative
+    /// <paramref name="direction"/>), for a control that is not a stop itself, such as a button that
+    /// disabled itself: its place is where it would be among <see cref="TabStops"/>, by
+    /// <see cref="UiElement.TabIndex"/> and then document order. Null when <paramref name="from"/> is
+    /// not in <paramref name="scope"/> or no stop follows.
+    /// </summary>
+    internal static UiElement? NextTabStop(UiElement scope, UiElement from, int direction)
+    {
+        // Every element, shown or not, so a control that was just hidden still has its place.
+        var position = new Dictionary<UiElement, int>(ReferenceEqualityComparer.Instance);
+        foreach (var element in AllDescendants(scope)) position[element] = position.Count;
+        if (!position.TryGetValue(from, out int place)) return null;
+        // TabStops is sorted by TabIndex, then document position, so the neighbour is the first stop
+        // past that key in the direction of travel.
+        int Compare(UiElement stop) => stop.TabIndex != from.TabIndex ? stop.TabIndex.CompareTo(from.TabIndex) : position[stop].CompareTo(place);
+        var stops = TabStops(scope);
+        return direction > 0 ? stops.FirstOrDefault(stop => Compare(stop) > 0) : stops.LastOrDefault(stop => Compare(stop) < 0);
+    }
+
+    private static IEnumerable<UiElement> AllDescendants(UiElement element)
+    {
+        yield return element;
+        foreach (var child in element.Children)
+            foreach (var descendant in AllDescendants(child)) yield return descendant;
     }
 
     /// <summary>

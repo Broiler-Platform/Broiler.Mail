@@ -118,18 +118,22 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             Orientation = UiSplitterOrientation.Vertical,
             FirstPane = listPane,
             SecondPane = reading,
-            FirstPaneMinimumSize = 180,
-            SecondPaneMinimumSize = 220,
+            // Side by side, neither pane is dragged below the width the compact switch keeps readable
+            // (just above the switch the two share the splitter's width; see NeedsCompact). The saved
+            // ratio is only clamped for display, so a wider window shows it again.
+            FirstPaneMinimumSize = AdaptiveInboxLayout.ListReadableWidth,
+            SecondPaneMinimumSize = AdaptiveInboxLayout.ReaderReadableWidth,
             SplitterFraction = model.SplitterFraction,
         };
         // Whether the reader is the pane being looked at. In compact mode only one pane shows, and
         // moving the list selection with the keyboard must not leave the list.
         bool readerOpen = false;
         MailMessageKey? selectedKey = null;
-        var layout = new AdaptiveInboxLayout(split, () => readerOpen && model.SelectedMessage is not null);
+        var layout = new AdaptiveInboxLayout(split, () => readerOpen && model.SelectedMessage is not null, () => model.SplitterFraction);
         split.SplitterPositionChanged += (_, e) =>
         {
-            // Collapsing a pane for compact mode must not overwrite the user's wide split ratio.
+            // Collapsing a pane for compact mode, or a narrow width clamping the split to the panes'
+            // minimum widths, must not overwrite the user's wide split ratio.
             if (!updating && !layout.IsAdapting && !layout.IsCompact)
                 model.SplitterFraction = e.NewFraction;
         };
@@ -253,6 +257,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             listWasLoading = model.IsLoadingList;
             listRetryRow.Visibility = listProblem ? UiVisibility.Visible : UiVisibility.Collapsed;
             listRetry.IsEnabled = model.CanRetry;
+            // Named for what it repeats (RetryAsync): the older page, or receiving the newest messages.
+            listRetry.Text = model.ProblemIsOlderPage && model.CanLoadOlder ? "Retry loading older" : "Retry receiving";
             bool messageProblem = model.ProblemScope == InboxProblemScope.Message && model.SelectedMessage is not null;
             messageFeedback.Set(messageProblem ? model.Problem! : "", model.ProblemIsCancellation ? FeedbackKind.Information : FeedbackKind.Error);
             messageRetryRow.Visibility = messageProblem ? UiVisibility.Visible : UiVisibility.Collapsed;
@@ -266,6 +272,10 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             if (focused == listRetry && listRetryRow.Visibility != UiVisibility.Visible) session.SetFocus(list);
             else if (focused == messageRetry && messageRetryRow.Visibility != UiVisibility.Visible) session.SetFocus(text.Editor);
             else if (focused == cancel && !model.IsBusy) session.SetFocus(receive.IsEnabled ? receive : list);
+            // Any other command that stays disabled once its work is done hands focus on; Load older
+            // on the last page goes to the list it extended or, while the reader is shown alone, to
+            // Back to inbox, which leads there.
+            else if (!model.IsBusy) FocusNavigation.KeepFocusUsable(session, panel, focused != older ? null : layout.ShowsReaderOnly ? back : list);
         }
         listRetry.Clicked += async (_, _) => await model.RetryAsync();
         messageRetry.Clicked += async (_, _) => await model.RetryAsync();

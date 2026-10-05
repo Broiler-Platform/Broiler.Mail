@@ -63,6 +63,22 @@ internal sealed class DemoScenarioDriver
                 yield return () => Select(inbox, 55);
                 yield return inbox.ReceiveAsync;
                 break;
+            case DemoScenario.ReceiveCanceled:
+                yield return inbox.ReceiveAsync;
+                yield return () => Select(inbox, 55);
+                yield return () =>
+                {
+                    // Canceled before the server answers, as the Cancel button or Escape does.
+                    var receiving = inbox.ReceiveAsync();
+                    inbox.Cancel();
+                    return receiving;
+                };
+                break;
+            case DemoScenario.LoadError:
+                yield return inbox.ReceiveAsync;
+                yield return () => Select(inbox, 55);
+                yield return inbox.LoadOlderAsync;
+                break;
             case DemoScenario.HtmlOnly:
             case DemoScenario.LongHtml:
                 yield return inbox.ReceiveAsync;
@@ -102,6 +118,15 @@ internal sealed class DemoScenarioDriver
                 break;
             case DemoScenario.SendRejected:
                 yield return () => model.Composer.SendAsync();
+                break;
+            case DemoScenario.DraftInvalid:
+                yield return () =>
+                {
+                    // A recipient typed without its @, then checked, as a user would.
+                    Field(shell, "compose", "To").Text = "team.example.test";
+                    model.Composer.CheckDraft();
+                    return Task.CompletedTask;
+                };
                 break;
             case DemoScenario.LargeDraft:
             case DemoScenario.SendUnknown:

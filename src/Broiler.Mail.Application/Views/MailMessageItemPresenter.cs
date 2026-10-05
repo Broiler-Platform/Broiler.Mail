@@ -1,4 +1,5 @@
 using System;
+using System.Globalization;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.Text;
 using Broiler.Mail.Core.Messages;
@@ -10,8 +11,9 @@ namespace Broiler.Mail.Application.Views;
 
 /// <summary>
 /// Specialized list item presenter for Mail messages displaying sender, subject, received time, and read/unread status.
-/// A narrow row drops the sender's address before shortening the name; the accessible name always
-/// carries the full sender and received time.
+/// A narrow row drops the sender's address before shortening the name, and shortens or leaves out the
+/// date rather than crowd the sender out; the row's semantic name always carries the full sender and
+/// received time.
 /// </summary>
 public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null) : IUiListItemPresenter
 {
@@ -32,10 +34,11 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null)
 
         if (context.Item.Tag is MailMessageSummary message)
         {
-            string date = _dates.List(message.ReceivedAt);
+            bool unread = !context.State.IsRead;
+            string date = RowDate(_dates.ListForms(message.ReceivedAt), message.Sender, unread, context.Bounds.Width, context.Font);
             var displayItem = new UiListItem(
                 context.Item.Id,
-                RowSender(message.Sender, date, !context.State.IsRead, context.Bounds.Width, context.Font),
+                RowSender(message.Sender, date, unread, context.Bounds.Width, context.Font),
                 message.Subject,
                 date,
                 message.IsRead,
@@ -102,14 +105,51 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null)
         string name = SenderName(sender);
         if (name.Length == sender.Length)
             return sender;
-        // Line 1 of StandardTwoLineListItemPresenter: 10 DIP inset, the unread dot (6 + 6), and the
-        // date right-aligned in a font 2 DIP smaller with 8 DIP to the edge and 10 DIP before it.
-        double available = rowWidth - 10 - (unread ? 12 : 0) - 8;
+        double available = SenderSpace(unread, rowWidth);
         if (!string.IsNullOrEmpty(date))
-            available -= BTextMeasurer.MeasureAdvance(date, font with { Size = Math.Max(9, font.Size - 2) }) + 10;
-        BFontStyle senderFont = unread ? font with { Weight = BFontWeight.Bold } : font;
-        return BTextMeasurer.MeasureAdvance(sender, senderFont) <= available ? sender : name;
+            available -= BTextMeasurer.MeasureAdvance(date, DateFont(font)) + DateGap;
+        return BTextMeasurer.MeasureAdvance(sender, SenderFont(unread, font)) <= available ? sender : name;
     }
+
+    /// <summary>
+    /// The longest of <paramref name="forms"/> (<see cref="MessageDateFormatter.ListForms"/>) that still
+    /// leaves the sender's name its first few characters, or an empty string when even the shortest
+    /// would crowd the sender out. The full date stays in the row's semantic name
+    /// (<see cref="CreateSemanticNode"/>) and in the reader.
+    /// </summary>
+    public static string RowDate(IReadOnlyList<string> forms, string sender, bool unread, double rowWidth, BFontStyle font)
+    {
+        ArgumentNullException.ThrowIfNull(forms);
+        ArgumentNullException.ThrowIfNull(sender);
+        ArgumentNullException.ThrowIfNull(font);
+        // The name's first few characters (whole text elements), as the row shortens it.
+        string name = SenderName(sender);
+        int end = 0;
+        for (int count = 0; count < MinimumSenderCharacters && end < name.Length; count++)
+            end += StringInfo.GetNextTextElementLength(name, end);
+        string shortest = end >= name.Length ? name : string.Concat(name.AsSpan(0, end), "...");
+        // The presenter never starts the date closer than 20 DIP to the sender's left edge, so a date
+        // that leaves less is pushed past the row's edge instead.
+        double needed = Math.Max(BTextMeasurer.MeasureAdvance(shortest, SenderFont(unread, font)), DateMinimumOffset - DateGap);
+        double space = SenderSpace(unread, rowWidth);
+        BFontStyle dateFont = DateFont(font);
+        foreach (string form in forms)
+            if (space - BTextMeasurer.MeasureAdvance(form, dateFont) - DateGap >= needed)
+                return form;
+        return string.Empty;
+    }
+
+    // Line 1 of StandardTwoLineListItemPresenter: 10 DIP inset, the unread dot (6 + 6), and the date
+    // right-aligned in a font 2 DIP smaller with 8 DIP to the edge and 10 DIP before it.
+    private const double DateGap = 10;
+    private const double DateMinimumOffset = 20;
+    private const int MinimumSenderCharacters = 4;
+
+    private static double SenderSpace(bool unread, double rowWidth) => rowWidth - 10 - (unread ? 12 : 0) - 8;
+
+    private static BFontStyle DateFont(BFontStyle font) => font with { Size = Math.Max(9, font.Size - 2) };
+
+    private static BFontStyle SenderFont(bool unread, BFontStyle font) => unread ? font with { Weight = BFontWeight.Bold } : font;
 
     /// <summary>
     /// The display name of a single <c>Name &lt;address&gt;</c> sender, unquoted; otherwise the sender

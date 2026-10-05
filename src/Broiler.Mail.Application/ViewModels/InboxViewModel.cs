@@ -67,6 +67,8 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     public InboxProblemScope ProblemScope { get; private set; }
     /// <summary>The problem is a cancellation the user asked for, not a failure.</summary>
     public bool ProblemIsCancellation { get; private set; }
+    /// <summary>The list problem came from Load older, not from receiving the newest messages.</summary>
+    public bool ProblemIsOlderPage => ProblemScope == InboxProblemScope.List && _lastPageWasOlder;
     public bool CanRetry => !_disposed && !IsBusy && ProblemScope switch
     {
         InboxProblemScope.List => CanReceive,
@@ -218,7 +220,8 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         var scope = _running;
         StopPending();
         Status = "Mail operation canceled. You can retry.";
-        SetProblem(scope, scope == InboxProblemScope.List ? "Receiving was canceled." : "Loading the message was canceled.", canceled: true);
+        SetProblem(scope, scope == InboxProblemScope.Message ? "Loading the message was canceled."
+            : _lastPageWasOlder ? "Loading older messages was canceled." : "Receiving was canceled.", canceled: true);
         Notify();
     }
 

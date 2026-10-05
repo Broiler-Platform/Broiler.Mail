@@ -82,7 +82,9 @@ public sealed class MailShellView : IDisposable
                 // The explanation and Retry sit beside the affected pane; the footer only points there.
                 _ => model.Inbox.ProblemScope switch
                 {
-                    InboxProblemScope.List when !model.Inbox.ProblemIsCancellation => "Mail could not be received. Details and Retry are beside the list.",
+                    InboxProblemScope.List when !model.Inbox.ProblemIsCancellation => model.Inbox.ProblemIsOlderPage
+                        ? "Older messages could not be loaded. Details and Retry are beside the list."
+                        : "Mail could not be received. Details and Retry are beside the list.",
                     InboxProblemScope.Message when !model.Inbox.ProblemIsCancellation => "The message could not be loaded. Details and Retry are beside it.",
                     InboxProblemScope.None => model.Inbox.Status,
                     _ => "Canceled. Retry is available.",
