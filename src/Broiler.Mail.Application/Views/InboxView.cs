@@ -307,7 +307,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             // and no line starts with the separator, where it would read as a bullet.
             meta.Text = item is null ? "" : $"Received {dateFormat.Detail(item.ReceivedAt)}\u00A0· {(item.IsRead ? "Read" : "Unread")}\u00A0on\u00A0server";
             // An empty label still takes a line, so without a message the heading is the header's only row.
-            meta.Visibility = details.Visibility;
+            meta.Visibility = item is null ? UiVisibility.Collapsed : UiVisibility.Visible;
             replyActions.Visibility = item is null || commands is null ? UiVisibility.Collapsed : UiVisibility.Visible;
             reply.IsEnabled = replyAll.IsEnabled = forward.IsEnabled = commands?.CanRespond == true;
             ShowStates();
