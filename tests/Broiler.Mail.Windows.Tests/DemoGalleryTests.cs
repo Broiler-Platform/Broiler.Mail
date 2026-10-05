@@ -156,6 +156,28 @@ public sealed class DemoGalleryTests
             Assert.False(DemoOptions.TryParse(["--demo", "inbox", "--contrast", invalid], out _));
     }
 
+    /// <summary>
+    /// --help explains each --contrast value among the acceptance-only options: high is the theme's preset, the
+    /// others simulate the Windows 11 contrast theme they name, which Windows calls Aquatic, Desert, Dusk and Night sky.
+    /// </summary>
+    [Fact]
+    public void Help_Explains_Every_Contrast_Value()
+    {
+        using var output = new System.IO.StringWriter();
+        Program.WriteHelp(output);
+        string[] lines = output.ToString().Split(Environment.NewLine);
+        int acceptance = Array.FindIndex(lines, line => line.StartsWith("Acceptance-only", StringComparison.Ordinal));
+        Assert.True(acceptance >= 0);
+        string option = "--contrast high|" + string.Join("|", DemoOptions.ContrastThemes.Select(theme => theme.Name));
+        Assert.Contains(option, DemoOptions.Usage, StringComparison.Ordinal);
+        int index = Array.FindIndex(lines, acceptance, line => line.Trim() == option);
+        Assert.True(index > acceptance, $"No '{option}' among the acceptance-only options.");
+        string description = lines[index + 1];
+        Assert.Contains("high uses the theme's own high-contrast preset", description, StringComparison.Ordinal);
+        foreach (string name in new[] { "Aquatic", "Desert", "Dusk", "Night sky" })
+            Assert.Contains(name, description, StringComparison.Ordinal);
+    }
+
     [Fact]
     public void Every_Gallery_Scenario_Has_One_Unique_Name()
     {

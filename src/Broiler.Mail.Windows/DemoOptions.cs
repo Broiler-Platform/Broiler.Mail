@@ -67,6 +67,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
     /// <summary>Options for acceptance scripts only. They simulate conditions; they are not settings a user would choose.</summary>
     internal static IReadOnlyList<(string Name, string Description)> AcceptanceOptions { get; } = Array.AsReadOnly(new[]
     {
+        ("--contrast high|aquatic|desert|dusk|night-sky", "Renders as if Windows high contrast were on; the system's settings are unchanged. high uses the theme's own high-contrast preset. aquatic, desert, dusk and night-sky use the palette built from the colors of the Windows 11 contrast theme of that name (Aquatic, Desert, Dusk, Night sky), as it is built from the system's own contrast colors."),
         ("--scale <100-300>", "Renders the main window at a simulated display scale in percent, named in the window title, at the requested size in DIPs even if that is larger than the screen. HTML previews keep Windows' own scale, except the one a long-html or preview-zoom measurement opens; Windows' own scale is unchanged."),
         ("--server-change vanish|outside|renumber", "With new-mail only: the next receive deletes the open message on the server, pushes it below the newest page, or renumbers the inbox."),
     });
