@@ -421,6 +421,8 @@ public sealed class FeedbackPolicyTests
         fixture.Settle();
         Assert.Equal(FeedbackKind.Error, composer.StatusKind);
         Assert.Equal("Enter valid email addresses separated by commas.", fixture.ComposerStatus.Message);
+        // The footer points to the problem, as the account and settings forms do.
+        Assert.Equal("The draft has a problem. Details are below the buttons.", fixture.Footer.Text);
 
         // A passed check is replaced by the retention notice before its time is up; the notice stays.
         composer.Edit("to@example.test", "", "", "Plans", "Body");

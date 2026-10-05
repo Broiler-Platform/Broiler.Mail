@@ -77,10 +77,13 @@ public sealed class MailShellView : IDisposable
                     : "Save your account details, then save a password and test the connection.",
                 "settings" => IsProblem(model.Settings.StatusKind) ? $"{model.Settings.StatusSummary} {DetailsBelow}"
                     : string.IsNullOrEmpty(model.Settings.Status) ? "Saved appearance and inbox spacing apply immediately. The window reopens at its last size and position." : model.Settings.Status,
-                // Informational composer messages appear only here; the composer shows the others inline.
+                // Informational composer messages appear only here; the composer shows the others inline,
+                // and the footer points to a problem there as the other forms do.
                 "compose" => !string.IsNullOrEmpty(model.Composer.Status) && model.Composer.StatusKind == FeedbackKind.Information && !model.Composer.IsBusy
                     ? model.Composer.Status
-                    : IsProblem(model.Composer.StorageKind) ? $"The draft is not saved. {DetailsBelow}" : model.Composer.StorageStatus,
+                    : IsProblem(model.Composer.StorageKind) ? $"The draft is not saved. {DetailsBelow}"
+                    : IsProblem(model.Composer.StatusKind) && !string.IsNullOrEmpty(model.Composer.Status) ? $"The draft has a problem. {DetailsBelow}"
+                    : model.Composer.StorageStatus,
                 _ => InboxStatus(model.Inbox, Inbox),
             };
             status.Text = text;
