@@ -14,7 +14,7 @@ checked is in the [UI acceptance record of 5 October](ui-acceptance-2026-10-05.m
 | Published stack | `claude/ui-13-acceptance` at `12ceded` (the full native runs used `4c36950`; `12ceded` adds the composer footer pointer) | Broiler.UI 0.1.0-preview.17, Broiler.Hosting 0.1.0-preview.5 | Yes |
 | Adoption build | `claude/ui-09-upstream-adoption` at `e870135` (on `4c36950`; to be rebased onto `12ceded`) | Broiler.UI 0.1.0-preview.18, Broiler.Hosting 0.1.0-preview.7, Broiler.Native 0.1.0-preview.7 | Only once UI preview.18 and Hosting preview.7 are published; verified so far with local packs |
 
-Both branches are local and not pushed. Each check carries one mark:
+Both branches are pushed to `origin`; no pull request exists yet. Each check carries one mark:
 
 - **Both**: run it now on the published stack and again on the adoption build after the releases.
   Where the results should differ, the check says so.
