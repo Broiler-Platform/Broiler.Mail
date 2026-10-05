@@ -173,14 +173,21 @@ public sealed class DemoGalleryTests
     }
 
     [Fact]
-    public void Large_Inbox_Loads_The_Session_Limit_Without_Duplicates()
+    public void Large_Inbox_Loads_The_Session_Limit_Without_Duplicates_And_Explains_It()
     {
-        Run(DemoScenario.LargeInbox, model =>
+        Run(DemoScenario.LargeInbox, (model, shell) =>
         {
             Assert.Equal(InboxViewModel.MaximumLoadedMessages, model.Inbox.Messages.Count);
             Assert.Equal(model.Inbox.Messages.Count, model.Inbox.Messages.Select(message => message.Key).Distinct().Count());
             Assert.False(model.Inbox.CanLoadOlder);
             Assert.Equal(model.Inbox.Messages[0].Key, model.Inbox.Body?.Key);
+            // Older mail is left on the server, so the notice above the list says why Load older is
+            // unavailable, although the newest message was read since.
+            Assert.False(Button(shell, "inbox", "Load older").IsEnabled);
+            var notice = Descendants(Tab(shell, "inbox")).OfType<InlineFeedback>().First();
+            Assert.Equal((FeedbackKind.Information, "Session limit reached (500 messages). Receive mail again to return to the newest page."),
+                (notice.Kind, notice.Message));
+            Assert.True(IsAvailable(Button(shell, "inbox", "Receive mail")));
         });
     }
 

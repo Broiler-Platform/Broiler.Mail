@@ -220,7 +220,8 @@ internal static class DemoApplication
         // Only the new-mail fixture's server changes between receives; the others stay as recorded.
         private readonly DemoMailbox? _mailbox = scenario == DemoScenario.NewMail ? new(change) : null;
 
-        private int Total => scenario switch { DemoScenario.Empty => 0, DemoScenario.LargeInbox => 500, _ => 55 };
+        // The large inbox holds more than a session loads, so its fixture ends at the session limit with older mail left.
+        private int Total => scenario switch { DemoScenario.Empty => 0, DemoScenario.LargeInbox => 600, _ => 55 };
         // The interactive demo shows its busy states; gallery fixtures settle immediately.
         private TimeSpan Latency(int milliseconds) => interactive ? TimeSpan.FromMilliseconds(milliseconds) : TimeSpan.Zero;
         private string Subject(uint uid) => uid > DemoMailbox.InitialCount && scenario == DemoScenario.NewMail ? $"New message {uid}"
