@@ -33,6 +33,9 @@ transcript.txt. It records what the app raises, not what a particular screen rea
 #>
 param(
     [string]$Executable,
+    # The Broiler package versions the executable was built from, for the transcript's header, when they are not the
+    # ones in Directory.Packages.props: for example a build with -p:BroilerUiVersion=... overrides.
+    [string]$Packages,
     [string]$Output,
     [ValidateSet('inbox', 'composer')]
     [string[]]$Walks = @('inbox', 'composer'),
@@ -49,6 +52,7 @@ $repository = Split-Path -Parent $PSScriptRoot
 if (!$Output) { $Output = Join-Path $repository ("artifacts/uia-record/" + (Get-Date -Format 'yyyy-MM-dd-HHmm')) }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 
+$publishedHere = !$Executable
 if (!$Executable) {
     # NativeAOT publishing locates the C++ toolchain through vswhere.
     $installer = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer'
@@ -460,6 +464,18 @@ function Invoke-Walk([string]$walk) {
     }
 }
 
+# What the transcript applies to.
+$revision = (git -C $repository rev-parse --short HEAD) 2>$null
+if ((git -C $repository status --porcelain) 2>$null) { $revision = "$revision plus uncommitted changes" }
+if (!$Packages) {
+    $props = [xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Packages.props') -Raw)
+    $Packages = ($props.Project.PropertyGroup.ChildNodes | Where-Object { $_.Name -like 'Broiler*Version' } |
+        ForEach-Object { "$($_.Name -replace 'Version$', '') $($_.InnerText)" }) -join ', '
+    if (!$publishedHere) { $Packages += ' (Directory.Packages.props; the executable was given, not published by this run)' }
+}
+Write-Line "# UI Automation events, $(Get-Date -Format 'yyyy-MM-dd HH:mm'); revision $revision"
+Write-Line "# Packages: $Packages"
+Write-Line "# Executable: $Executable"
 foreach ($walk in $Walks) { Invoke-Walk $walk }
 $path = Join-Path $Output 'transcript.txt'
 Set-Content -LiteralPath $path -Value $transcript -Encoding utf8

@@ -23,6 +23,10 @@ them as checks this run did not perform.
 #>
 param(
     [string]$Executable,
+    # The Broiler package versions the executable was built from, for the summary, when they are not the ones in
+    # Directory.Packages.props: for example a build with -p:BroilerUiVersion=... overrides. Without it the summary
+    # lists Directory.Packages.props, and says so when -Executable was given rather than published by this run.
+    [string]$Packages,
     [string]$Output,
     [string[]]$Scenarios,
     [string[]]$Sizes = @('640x480', '1100x720', '1920x1080'),
@@ -57,6 +61,7 @@ $repository = Split-Path -Parent $PSScriptRoot
 if (!$Output) { $Output = Join-Path $repository ("artifacts/acceptance/" + (Get-Date -Format 'yyyy-MM-dd-HHmm')) }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 
+$publishedHere = !$Executable
 if (!$Executable) {
     # NativeAOT publishing locates the C++ toolchain through vswhere.
     $installer = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer'
@@ -392,9 +397,12 @@ $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Output
 # What the results apply to.
 $revision = (git -C $repository rev-parse --short HEAD) 2>$null
 if ((git -C $repository status --porcelain) 2>$null) { $revision = "$revision plus uncommitted changes" }
-$props = [xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Packages.props') -Raw)
-$packages = ($props.Project.PropertyGroup.ChildNodes | Where-Object { $_.Name -like 'Broiler*Version' } |
-    ForEach-Object { "$($_.Name -replace 'Version$', '') $($_.InnerText)" }) -join ', '
+if (!$Packages) {
+    $props = [xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Packages.props') -Raw)
+    $Packages = ($props.Project.PropertyGroup.ChildNodes | Where-Object { $_.Name -like 'Broiler*Version' } |
+        ForEach-Object { "$($_.Name -replace 'Version$', '') $($_.InnerText)" }) -join ', '
+    if (!$publishedHere) { $Packages += ' (Directory.Packages.props; the executable was given, not published by this run)' }
+}
 $os = (Get-CimInstance Win32_OperatingSystem)
 $scales = ($results | Where-Object { $_.dpiScale } | ForEach-Object { $_.dpiScale } | Sort-Object -Unique) -join ', '
 
@@ -402,7 +410,7 @@ $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add("# UI acceptance run, $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
 $lines.Add('')
 $lines.Add("- Revision: $revision")
-$lines.Add("- Packages: $packages")
+$lines.Add("- Packages: $Packages")
 $lines.Add("- Executable: $Executable")
 $lines.Add("- SDK: $(dotnet --version); OS: $($os.Caption) $($os.Version); architecture: $env:PROCESSOR_ARCHITECTURE")
 $textScaleNote = if ($TextScale -gt 0) { "$TextScale % (fixed with --text-scale)" } else { 'system setting' }

@@ -28,6 +28,10 @@ briefly. Every demo process this script starts is closed, or killed if it does n
 #>
 param(
     [string]$Executable,
+    # The Broiler package versions the executable was built from, for the summary, when they are not the ones in
+    # Directory.Packages.props: for example a build with -p:BroilerUiVersion=... overrides. Without it the summary
+    # lists Directory.Packages.props, and says so when -Executable was given rather than published by this run.
+    [string]$Packages,
     [string]$Output,
     [ValidateSet('disclosure', 'draft-error', 'account-error', 'row-names', 'row-validity', 'runtime-ids')]
     [string[]]$Checks = @('disclosure', 'draft-error', 'account-error', 'row-names', 'row-validity', 'runtime-ids'),
@@ -41,6 +45,7 @@ $repository = Split-Path -Parent $PSScriptRoot
 if (!$Output) { $Output = Join-Path $repository ("artifacts/uia-probe/" + (Get-Date -Format 'yyyy-MM-dd-HHmm')) }
 New-Item -ItemType Directory -Force -Path $Output | Out-Null
 
+$publishedHere = !$Executable
 if (!$Executable) {
     # NativeAOT publishing locates the C++ toolchain through vswhere.
     $installer = 'C:\Program Files (x86)\Microsoft Visual Studio\Installer'
@@ -449,10 +454,17 @@ $results | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $Output
 
 $revision = (git -C $repository rev-parse --short HEAD) 2>$null
 if ((git -C $repository status --porcelain) 2>$null) { $revision = "$revision plus uncommitted changes" }
+if (!$Packages) {
+    $props = [xml](Get-Content -LiteralPath (Join-Path $repository 'Directory.Packages.props') -Raw)
+    $Packages = ($props.Project.PropertyGroup.ChildNodes | Where-Object { $_.Name -like 'Broiler*Version' } |
+        ForEach-Object { "$($_.Name -replace 'Version$', '') $($_.InnerText)" }) -join ', '
+    if (!$publishedHere) { $Packages += ' (Directory.Packages.props; the executable was given, not published by this run)' }
+}
 $lines = [System.Collections.Generic.List[string]]::new()
 $lines.Add("# UI Automation probe, $(Get-Date -Format 'yyyy-MM-dd HH:mm')")
 $lines.Add('')
 $lines.Add("- Revision: $revision")
+$lines.Add("- Packages: $Packages")
 $lines.Add("- Executable: $Executable")
 $lines.Add("- Method: published executable, demo fixtures, the UIA client of Windows PowerShell (managed UIA2, and the COM client for IsDataValidForForm, DescribedBy and FullDescription)")
 $lines.Add('')
