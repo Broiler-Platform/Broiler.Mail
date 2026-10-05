@@ -197,7 +197,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         var backRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
         backRow.AddChild(back);
         var headerStack = new StandardPanel { Spacing = 4 };
-        foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, previewActions }) headerStack.AddChild(element);
+        foreach (var element in new UiElement[] { backRow, subjectLine, details, meta, messageFeedback, messageRetryRow, replyActions, previewActions }) headerStack.AddChild(element);
         // A long subject or many recipients at a large text size scroll within the header, so the
         // message text keeps most of the pane. The header ends between its rows or lines of text, not
         // inside one: while the text keeps a few lines it grows to show the whole header, or the next
@@ -213,14 +213,15 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             MinimumRemaining = () => text.HeightOfLines(textLinesKept),
         };
         // Beside the list, Reply, Reply all and Forward stay in view below the header even while it
-        // scrolls, and the header has the height they leave (see PlaceCommands). A line across the reader
-        // separates the header and its commands from the message text.
+        // scrolls, where they fit, and the header has the height they leave (see PlaceCommands). A line
+        // across the reader separates the header and its commands from the message text.
+        const double commandsInset = 4;
         var pinnedCommands = new StandardPanel();
-        pinnedCommands.AddChild(replyActions);
-        var headerArea = new FirstTakesRestStack();
+        var divider = new Divider();
+        var headerArea = new FirstTakesRestStack { Fit = PlaceCommands };
         headerArea.Add(headerColumn);
-        headerArea.Add(new ReadingColumn(new Inset(pinnedCommands, 0, 4)));
-        headerArea.Add(new Divider());
+        headerArea.Add(new ReadingColumn(new Inset(pinnedCommands, 0, commandsInset)));
+        headerArea.Add(divider);
         reading.AddChild(headerArea);
         reading.SetDock(headerArea, UiDock.Top);
         reading.AddChild(text);
@@ -380,23 +381,43 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             if (session.FocusedElement is { } focused && (focused == hidden || focused.IsDescendantOf(hidden)))
                 session.SetFocus(layout.ShowsReaderOnly ? text.Editor : list);
         }
-        void PlaceCommands()
+        // Called as the reader's header area is measured in its space, once its rows are measured: true when
+        // the commands moved, so the area measures them again where they are now.
+        bool PlaceCommands(BSize space) => MoveCommands(!layout.IsCompact && CommandsFitBelowHeader(space));
+        bool CommandsFitBelowHeader(BSize space)
         {
-            // The compact reader has no height to spare for commands that stay in view: at a large text
-            // size they would leave the message text a line or two. There they end the header, before the
-            // HTML preview's row, and scroll with it.
-            UiElement place = layout.IsCompact ? headerStack : pinnedCommands;
-            if (replyActions.Parent == place) return;
+            // Hidden commands, without a message, stay where they are, as they do in a space without bounds.
+            var buttons = replyActions.Children.Where(button => button.Visibility != UiVisibility.Collapsed).ToArray();
+            if (replyActions.Visibility == UiVisibility.Collapsed || buttons.Length == 0 || !double.IsFinite(space.Width) || !double.IsFinite(space.Height))
+                return replyActions.Parent == pinnedCommands;
+            // They stay in view only on one row at the reader's width, below the header's first line, and
+            // above the lines the header keeps for the text. In a narrower or shorter reader, such as one
+            // just wider than the compact reader at a large text size, they would wrap and take the
+            // subject's and the text's room; there they end the header before the HTML preview's row, as in
+            // the compact reader, which has no height to spare for them, and scroll with it.
+            double padding = 2 * replyActions.Padding;
+            double row = buttons.Sum(button => button.DesiredSize.Width) + ((buttons.Length - 1) * replyActions.Spacing) + padding;
+            double width = Math.Min(space.Width - (2 * ReadingColumn.MarginFor(space.Width)), ReadingColumn.DefaultMaximumWidth);
+            double commands = Math.Max(buttons.Max(button => button.DesiredSize.Height) + padding, replyActions.PreferredSize.Height) + (2 * commandsInset) + divider.Thickness;
+            double firstLine = headerContent.VerticalMargin + BTextMeasurer.GetLineHeight(subjectLine.Font);
+            return row <= width && space.Height - commands >= firstLine + text.HeightOfLines(textLinesKept);
+        }
+        bool MoveCommands(bool pin)
+        {
+            UiElement place = pin ? pinnedCommands : headerStack;
+            if (replyActions.Parent == place) return false;
             var focused = panel.Session?.FocusedElement;
             bool keepFocus = focused is not null && (focused == replyActions || focused.IsDescendantOf(replyActions));
             replyActions.Parent?.RemoveChild(replyActions);
-            if (place == headerStack) headerStack.InsertChild(headerStack.Children.ToList().IndexOf(previewActions), replyActions);
-            else pinnedCommands.AddChild(replyActions);
+            if (pin) pinnedCommands.AddChild(replyActions);
+            else headerStack.InsertChild(headerStack.Children.ToList().IndexOf(previewActions), replyActions);
             if (keepFocus && focused!.CanFocus) panel.Session!.SetFocus(focused);
+            return true;
         }
         layout.ModeChanged += (_, _) =>
         {
-            PlaceCommands();
+            // The compact reader keeps them in its header; beside the list, the header area places them as it is measured.
+            if (layout.IsCompact) MoveCommands(pin: false);
             backRow.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
             FocusVisiblePane();
             PanesChanged?.Invoke(this, EventArgs.Empty);

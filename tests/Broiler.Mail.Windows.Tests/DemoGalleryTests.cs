@@ -216,17 +216,25 @@ public sealed class DemoGalleryTests
     /// twice the text size. Each row is shown whole, scrolled below the header whole, or cut between two
     /// lines of its text, and the date line never ends inside "Unread on server". With no message text
     /// (body-error), a header that scrolls takes all the reader that the line below it leaves. Beside the
-    /// list, Reply, Reply all and Forward are on screen whole below the header, whatever it shows; in the
-    /// compact reader they end the header. A line separates the header from the message text.
+    /// list, Reply, Reply all and Forward are on screen whole below the header, whatever it shows, where
+    /// they fit on one row with the subject's first line and six lines of text; just wider than the compact
+    /// reader at twice the text size, where they wrapped and left the text less than a line, they end the
+    /// header, as in the compact reader. A line separates the header from the message text, which keeps at
+    /// least the given number of lines: the compact reader at 640x480 with twice the text size keeps two,
+    /// after Back to inbox and its inset.
     /// </summary>
     [Theory]
-    [InlineData("inbox", 640, 480, 1.0, true)]
-    [InlineData("long-message", 640, 480, 1.0, false)]
-    [InlineData("html-only", 640, 480, 1.0, true)]
-    [InlineData("body-error", 640, 480, 1.0, true)]
-    [InlineData("inbox", 1100, 720, 2.0, true)]
-    [InlineData("long-message", 1100, 720, 2.0, true)]
-    public void Reader_Header_Ends_Between_Its_Rows(string name, int width, int height, double textScale, bool replyShown)
+    [InlineData("inbox", 640, 480, 1.0, false, true, 5)]
+    [InlineData("long-message", 640, 480, 1.0, false, false, 8)]
+    [InlineData("html-only", 640, 480, 1.0, false, true, 6)]
+    [InlineData("body-error", 640, 480, 1.0, false, true, 0)]
+    [InlineData("inbox", 640, 480, 2.0, false, false, 2)]
+    [InlineData("inbox", 700, 480, 2.0, false, false, 2)]
+    [InlineData("long-message", 700, 520, 2.0, false, false, 3)]
+    [InlineData("inbox", 1100, 720, 2.0, true, true, 5)]
+    [InlineData("long-message", 1100, 720, 2.0, true, true, 5)]
+    [InlineData("html-only", 1100, 720, 2.0, true, true, 6)]
+    public void Reader_Header_Ends_Between_Its_Rows(string name, int width, int height, double textScale, bool pinned, bool replyShown, int textLines)
     {
         var scenario = DemoOptions.Gallery.Single(item => item.Name == name).Scenario;
         // The app measures text with DirectWrite, which a renderer registers for the process. The headless
@@ -271,12 +279,20 @@ public sealed class DemoGalleryTests
                 var divider = Descendants(reader).OfType<Divider>().Single().Bounds;
                 var reply = Descendants(reader).OfType<StandardButton>().Single(button => button.Text == "Reply");
                 bool inHeader = reply.IsDescendantOf(header);
-                Assert.Equal(width < 680, inHeader);
+                Assert.True(pinned != inHeader, $"{where}: Reply is {(inHeader ? "in" : "below")} the header.");
                 bool onScreen = inHeader ? reply.Bounds.Bottom <= shown.Bottom + 0.5
                     : reply.Bounds.Top >= header.Bounds.Bottom - 0.5 && reply.Bounds.Bottom <= divider.Top + 0.5;
                 Assert.True(replyShown == onScreen, $"{where}: Reply is at {reply.Bounds}, the line at {divider}.");
                 Assert.True(divider.Top >= header.Bounds.Bottom - 0.5, $"{where}: the line is at {divider}.");
-                Assert.Equal(divider.Bottom, Descendants(reader).OfType<ScrollableMessageText>().Single().Bounds.Top, 0.5);
+                var text = Descendants(reader).OfType<ScrollableMessageText>().Single();
+                Assert.Equal(divider.Bottom, text.Bounds.Top, 0.5);
+                Assert.True(text.Bounds.Height >= text.HeightOfLines(textLines) - 0.5, $"{where}: the text has {text.Bounds.Height}, less than {textLines} lines.");
+                // Beside the list, the subject's first line is whole.
+                if (width >= 680)
+                {
+                    var subject = Descendants(header).OfType<StandardLabel>().First(label => label.Visibility == UiVisibility.Visible && label.Bounds.Height > 0);
+                    Assert.True(shown.Bottom >= subject.Bounds.Top + BTextMeasurer.GetLineHeight(subject.Font) - 0.5, $"{where}: the subject at {subject.Bounds} is cut.");
+                }
             });
         }
         finally { StandardControlPaint.ApplyTheme(previous); }

@@ -13,9 +13,23 @@ public sealed class FirstTakesRestStack : UiElement
 {
     public void Add(UiElement child) => AddChild(child);
 
+    /// <summary>
+    /// Called with the space the stack is measured in, once its children are measured there. It may move
+    /// an element within the stack, such as the reader's commands from below its header into it where they
+    /// do not fit, and returns true when it did, so the children are measured again. It depends only on
+    /// the space and on what the stack shows, so measuring again in the same space moves nothing.
+    /// </summary>
+    public Func<BSize, bool>? Fit { get; init; }
+
     private IEnumerable<UiElement> Shown => Children.Where(child => child.Visibility != UiVisibility.Collapsed);
 
     protected override BSize MeasureCore(BSize availableSize)
+    {
+        var size = MeasureChildren(availableSize);
+        return Fit?.Invoke(availableSize) == true ? MeasureChildren(availableSize) : size;
+    }
+
+    private BSize MeasureChildren(BSize availableSize)
     {
         var shown = Shown.ToArray();
         if (shown.Length == 0) return BSize.Empty;
