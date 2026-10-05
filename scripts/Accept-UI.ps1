@@ -414,10 +414,12 @@ $lines.Add("- Packages: $Packages")
 $lines.Add("- Executable: $Executable")
 $lines.Add("- SDK: $(dotnet --version); OS: $($os.Caption) $($os.Version); architecture: $env:PROCESSOR_ARCHITECTURE")
 $textScaleNote = if ($TextScale -gt 0) { "$TextScale % (fixed with --text-scale)" } else { 'system setting' }
+# The contrast themes by the names Windows 11 gives them in Settings.
+$contrastThemes = @{ 'aquatic' = 'Aquatic'; 'desert' = 'Desert'; 'dusk' = 'Dusk'; 'night-sky' = 'Night sky' }
 $contrastNote = switch ($Contrast) {
     '' { 'no' }
     'high' { 'the theme''s preset (--contrast high)' }
-    default { "the Windows $Contrast contrast theme's colors (--contrast $Contrast)" }
+    default { "the colors of the Windows 11 contrast theme $($contrastThemes[$Contrast]) (--contrast $Contrast)" }
 }
 $lines.Add("- Text scale: $textScaleNote; high-contrast palette forced: $contrastNote; reader opened: $([bool]$OpenReader)")
 $lines.Add("- Display scale: $scales; monitors: $([Acceptance]::GetSystemMetrics(80)); high contrast on: $([System.Windows.Forms.SystemInformation]::HighContrast)")
