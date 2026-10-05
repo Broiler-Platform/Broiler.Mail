@@ -188,6 +188,9 @@ public sealed class DemoGalleryTests
             Assert.Equal((FeedbackKind.Information, "Session limit reached (500 messages). Receive mail again to return to the newest page."),
                 (notice.Kind, notice.Message));
             Assert.True(IsAvailable(Button(shell, "inbox", "Receive mail")));
+            // The newest row is unread and every third row from it is read, as in the captures of the
+            // 500-message mailbox.
+            Assert.Equal(Enumerable.Range(0, InboxViewModel.MaximumLoadedMessages).Select(row => row % 3 == 2), model.Inbox.Messages.Select(message => message.IsRead));
         });
     }
 

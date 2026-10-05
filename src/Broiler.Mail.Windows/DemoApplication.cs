@@ -285,7 +285,9 @@ internal static class DemoApplication
                 Subject = Subject((uint)uid),
                 // Spread a large inbox over several days so rows show times, dates, and older years.
                 ReceivedAt = Newest.AddMinutes((uid - total) * (total > 55 ? 180 : 1)),
-                IsRead = uid % 3 == 0,
+                // The large inbox counts from its newest row, so its rows keep the read states they had
+                // when it held 500 messages: every third, starting with the third.
+                IsRead = (scenario == DemoScenario.LargeInbox ? total - uid + 1 : uid) % 3 == 0,
             }).ToArray();
             return new(messages, start == 0 ? null : new(account.Id, 1, (uint)total + 1, total, start - 1));
         }
