@@ -302,10 +302,11 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             string detailText = item is null ? "" : string.Join("\n", HeaderDetails(item, model.Body is { } loaded && loaded.Key == item.Key ? loaded.Composition : null));
             if (detailText != details.GetPlainText()) details.SetPlainText(detailText);
             details.Visibility = item is null ? UiVisibility.Collapsed : UiVisibility.Visible;
-            // The separator ends the date, after a non-breaking space, and the read state is one phrase, so a
-            // line, and a header that ends between lines, may end after the separator but never on "Unread on",
-            // and no line starts with the separator, where it would read as a bullet.
-            meta.Text = item is null ? "" : $"Received {dateFormat.Detail(item.ReceivedAt)}\u00A0· {(item.IsRead ? "Read" : "Unread")}\u00A0on\u00A0server";
+            // The date with its time and the separator that ends it is one phrase, and the read state another
+            // (non-breaking spaces), so a line, and a header that ends between lines, may end after "Received"
+            // or after the separator, but never inside the date ("10:00" above "AM") or on "Unread on", and no
+            // line starts with the separator, where it would read as a bullet.
+            meta.Text = item is null ? "" : $"Received {dateFormat.Detail(item.ReceivedAt).Replace(' ', '\u00A0')}\u00A0· {(item.IsRead ? "Read" : "Unread")}\u00A0on\u00A0server";
             // An empty label still takes a line, so without a message the heading is the header's only row.
             meta.Visibility = item is null ? UiVisibility.Collapsed : UiVisibility.Visible;
             replyActions.Visibility = item is null || commands is null ? UiVisibility.Collapsed : UiVisibility.Visible;

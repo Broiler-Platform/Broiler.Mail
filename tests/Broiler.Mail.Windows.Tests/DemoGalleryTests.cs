@@ -242,7 +242,8 @@ public sealed class DemoGalleryTests
     /// The reader header of the gallery's reading fixtures, with their own subject, sender, recipient and
     /// date, as Accept-UI -OpenReader shows them: in the compact reader at 640x480, and at 1100x720 with
     /// twice the text size. Each row is shown whole, scrolled below the header whole, or cut between two
-    /// lines of its text, and no line of the date starts with its separator. With no message text
+    /// lines of its text, and the date line wraps only after "Received" or after its separator, never
+    /// inside the date, as it did at 700 wide with twice the text size. With no message text
     /// (body-error), a header that scrolls takes all the reader that the line below it leaves. Beside the
     /// list, Reply, Reply all and Forward are on screen whole below the header, whatever it shows, where
     /// they fit on one row with the subject's first line and six lines of text; just wider than the compact
@@ -296,10 +297,16 @@ public sealed class DemoGalleryTests
                 else
                     foreach (var row in header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0))
                     {
-                        // The date line's separator ends a line, never starts one, where it would read as a
-                        // bullet; the read state is one phrase, so a header cut between lines shows it whole.
+                        // The date line wraps only after "Received" or after its separator, which ends the date:
+                        // no line starts with the separator, where it would read as a bullet, or ends inside the
+                        // date ("10:00" above "AM · Unread on server"). The read state is one phrase, so a header
+                        // cut between lines shows it whole.
                         if (row is StandardLabel date && date.Text.StartsWith("Received ", StringComparison.Ordinal))
-                            Assert.DoesNotContain(WrappedLines(date), text => text.StartsWith('\u00B7'));
+                        {
+                            string[] dateLines = WrappedLines(date).ToArray();
+                            Assert.True(dateLines.SkipLast(1).All(text => text == "Received" || text.EndsWith('\u00B7')),
+                                $"{where}: the date line wraps as '{string.Join("' / '", dateLines)}'.");
+                        }
                         if (row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5) continue;
                         double line = row switch
                         {

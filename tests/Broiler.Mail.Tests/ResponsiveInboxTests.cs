@@ -1,3 +1,4 @@
+using System.Globalization;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.RenderList;
 using Broiler.Graphics.Text;
@@ -1030,26 +1031,31 @@ public sealed class ResponsiveInboxTests
     /// <summary>
     /// The reader's date line wraps after its separator, which ends the date, so the next line starts with
     /// the read state, whole, and not with a "·" that reads as a bullet, as it did when the separator was
-    /// joined to the read state.
+    /// joined to the read state. Narrower, it also wraps after "Received", but never inside the date, which
+    /// left the separator in the middle of the next line, as in the gallery's inbox at 700x480 with twice the
+    /// text size ("Received 9/28/2026 10:00" above "AM · Unread on server").
     /// </summary>
     [Fact]
     public async Task TheDateLineWrapsAfterItsSeparator()
     {
-        using var reader = await ReaderFixture.OpenAsync(640, 480);
+        using var reader = await ReaderFixture.OpenAsync(640, 480, received: new DateTimeOffset(2026, 9, 28, 10, 0, 0, TimeSpan.Zero));
         var date = Descendants(reader.Pane).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received ", StringComparison.Ordinal));
         double line = BTextMeasurer.GetLineHeight(date.Font);
-        // The widest compact reader in which it wraps: the line's last word moves to the next line.
-        int width = 640;
-        while (date.Bounds.Height < 1.5 * line)
+        // From the widest compact reader in which it wraps (the line's last word moves to the next line) to
+        // one in which the date takes a line of its own.
+        int lineCount = 1;
+        for (int width = 640; lineCount < 3; width -= 4)
         {
-            width -= 4;
-            Assert.True(width > 240, "The date line does not wrap.");
+            Assert.True(width > 160, $"The date line wraps into {lineCount} lines at most.");
             reader.Resize(width);
+            lineCount = (int)Math.Round(date.Bounds.Height / line);
+            if (lineCount < 2) continue;
+            string[] lines = reader.Session.RenderFrame().Commands.OfType<BRenderCommand.DrawText>().Select(text => text.Text.Text)
+                .SkipWhile(text => !text.StartsWith("Received", StringComparison.Ordinal)).Take(lineCount).Select(text => text.TrimEnd()).ToArray();
+            string where = $"At {width}, the date line wraps as '{string.Join("' / '", lines)}'.";
+            Assert.True(lines.SkipLast(1).All(text => text == "Received" || text.EndsWith("\u00A0·", StringComparison.Ordinal)), where);
+            Assert.True(lines[^1] is "Read\u00A0on\u00A0server" or "Unread\u00A0on\u00A0server", where);
         }
-        string[] lines = reader.Session.RenderFrame().Commands.OfType<BRenderCommand.DrawText>().Select(text => text.Text.Text)
-            .SkipWhile(text => !text.StartsWith("Received ", StringComparison.Ordinal)).Take(2).ToArray();
-        Assert.EndsWith("\u00A0·", lines[0], StringComparison.Ordinal);
-        Assert.Contains(lines[1], new[] { "Read\u00A0on\u00A0server", "Unread\u00A0on\u00A0server" });
     }
 
     /// <summary>
@@ -1348,7 +1354,11 @@ public sealed class ResponsiveInboxTests
         /// lines at 1100x720, as in ShellLayoutTests; or "error" and "long error", whose body fails to load,
         /// so the reader has no message text, only the problem and Retry.
         /// </param>
-        public static async Task<ReaderFixture> OpenAsync(int width, int height, string message = "plain")
+        /// <param name="received">
+        /// When the message was received, which the reader shows as the gallery does, in US English ("9/28/2026
+        /// 10:00 AM"); without it, the date is unknown.
+        /// </param>
+        public static async Task<ReaderFixture> OpenAsync(int width, int height, string message = "plain", DateTimeOffset? received = null)
         {
             bool html = message == "html";
             var directory = new TestDirectory();
@@ -1356,6 +1366,7 @@ public sealed class ResponsiveInboxTests
             var messages = Fixture.CreateMessages(account, 5);
             if (message == "longer") messages[0] = messages[0] with { Subject = LongerSubject };
             else if (message.StartsWith("long", StringComparison.Ordinal)) messages[0] = messages[0] with { Subject = LongSubject, Sender = LongSender };
+            if (received is not null) messages[0] = messages[0] with { ReceivedAt = received };
             var receiver = Fixture.CreateReceiver(messages);
             receiver.Body = (key, _) => message.EndsWith("error", StringComparison.Ordinal)
                 ? throw new MailConnectionException(message == "error" ? "The connection closed."
@@ -1370,7 +1381,8 @@ public sealed class ResponsiveInboxTests
                 new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
                 new(receiver, dispatcher),
                 new ComposerViewModel(dispatcher: dispatcher));
-            var shell = new MailShellView(model, html ? new NoPreviewHost() : null);
+            var shell = new MailShellView(model, html ? new NoPreviewHost() : null,
+                received is null ? null : new MessageDateFormatter(culture: CultureInfo.GetCultureInfo("en-US")));
             var host = new Host(width, height);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
             session.AddRoot(shell.Window);
