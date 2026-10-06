@@ -30,7 +30,7 @@ public sealed class ReaderReplyTests
 
         fixture.ReaderButton(action).Click();
 
-        Assert.Equal("compose", fixture.Shell.Navigation.SelectedTab!.Id);
+        Assert.Equal("compose", fixture.Shell.ActiveViewId);
         Assert.True(fixture.Model.Composer.HasDraft);
         Assert.Equal(subject, fixture.Model.Composer.Subject);
         if (action == "Forward") Assert.Empty(fixture.Model.Composer.To);
@@ -49,7 +49,7 @@ public sealed class ReaderReplyTests
         Assert.True(fixture.ReaderButton("Reply").IsEnabled);
         fixture.ReaderButton("Reply").Click();
 
-        Assert.Equal("compose", fixture.Shell.Navigation.SelectedTab!.Id);
+        Assert.Equal("compose", fixture.Shell.ActiveViewId);
         Assert.Equal(draftId, fixture.Model.Composer.DraftId);
         Assert.Equal("Unsent thoughts", fixture.Model.Composer.Subject);
         Assert.Equal("Keep me", fixture.Model.Composer.PlainText);
@@ -61,7 +61,7 @@ public sealed class ReaderReplyTests
     public async Task TheComposersOwnReplyMovesFocusOnceStraightToTheBody()
     {
         using var fixture = await Fixture.OpenAsync();
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Session.RenderFrame();
         var reply = fixture.ComposerButton("Reply");
         Assert.True(reply.IsEnabled);
@@ -89,9 +89,9 @@ public sealed class ReaderReplyTests
         var reply = fixture.ReaderButton("Reply");
         fixture.Session.SetFocus(reply);
         reply.Click();
-        Assert.Equal("compose", fixture.Shell.Navigation.SelectedTab!.Id);
+        Assert.Equal("compose", fixture.Shell.ActiveViewId);
 
-        fixture.Shell.Navigation.SelectTab("inbox");
+        fixture.Shell.ShowView("inbox");
 
         Assert.Same(reply, fixture.Session.FocusedElement);
         Assert.Equal(fixture.Message.Key, fixture.Model.Inbox.SelectedMessage?.Key);
@@ -108,7 +108,7 @@ public sealed class ReaderReplyTests
         fixture.Model.Composer.SetAccount(null);
         Assert.False(fixture.ReaderButton("Forward").IsEnabled);
         Assert.False(fixture.Model.Compose.Respond(CompositionKind.Forward));
-        Assert.Equal("inbox", fixture.Shell.Navigation.SelectedTab!.Id);
+        Assert.Equal("inbox", fixture.Shell.ActiveViewId);
     }
 
     [Fact]
@@ -181,8 +181,8 @@ public sealed class ReaderReplyTests
         public MailShellView Shell { get; }
         public UiSession Session { get; }
         public MailMessageSummary Message { get; }
-        public UiElement InboxContent => Shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!;
-        private UiElement ComposeContent => Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!;
+        public UiElement InboxContent => Shell.GetContent("inbox");
+        private UiElement ComposeContent => Shell.GetContent("compose");
         public StandardRichEdit ComposerBody => Descendants(ComposeContent).OfType<StandardRichEdit>().Single();
         public StandardEdit ComposerTo => (StandardEdit)Descendants(ComposeContent).OfType<StandardLabel>().Single(label => label.Text == "To").Target!;
         public StandardButton ReaderButton(string text) => Descendants(InboxContent).OfType<StandardButton>().Single(button => button.Text == text);
@@ -213,8 +213,8 @@ public sealed class ReaderReplyTests
                 new ComposerViewModel(dispatcher: dispatcher));
             var shell = new MailShellView(model);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(width, height));
-            session.AddRoot(shell.Window);
-            shell.Navigation.SelectTab("inbox");
+            shell.Attach(session);
+            shell.ShowView("inbox");
             await model.Inbox.ReceiveAsync();
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
             if (select) await model.Inbox.SelectAsync(message.Key);

@@ -1,9 +1,26 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   9
+// Annotated:        0/9
+// Exempt:           4
+// Human-reviewed:   0/9
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       9
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
+using System.Net.Security;
 using System.Net.Sockets;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Validation;
-using MailKit.Net.Smtp;
-using MailKit.Security;
+using Broiler.Mail.Infrastructure.Protocols.Smtp;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
@@ -15,17 +32,20 @@ public sealed class SmtpConnectionTester : IOutgoingConnectionTester
 {
     private static readonly TimeSpan DefaultQuitBudget = TimeSpan.FromSeconds(2);
     private readonly ICredentialStore _credentials;
-    private readonly Func<SmtpClient> _createClient;
+    private readonly Func<SmtpProtocolClient> _clientFactory;
     private readonly TimeSpan _timeout;
     private readonly TimeSpan _quitBudget;
 
-    public SmtpConnectionTester(ICredentialStore credentials) : this(credentials, () => new SmtpClient(), TimeSpan.FromSeconds(20)) { }
+    public SmtpConnectionTester(ICredentialStore credentials)
+        : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20)) { }
 
-    // Test-only seam for a fixture certificate and short deadlines; production uses platform certificate validation.
-    internal SmtpConnectionTester(ICredentialStore credentials, Func<SmtpClient> createClient, TimeSpan timeout, TimeSpan? quitBudget = null)
+    internal SmtpConnectionTester(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout, TimeSpan? quitBudget = null)
+        : this(credentials, () => new SmtpProtocolClient(certValidator), timeout, quitBudget) { }
+
+    internal SmtpConnectionTester(ICredentialStore credentials, Func<SmtpProtocolClient> clientFactory, TimeSpan timeout, TimeSpan? quitBudget = null)
     {
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
-        _createClient = createClient;
+        _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         _timeout = timeout;
         _quitBudget = quitBudget ?? DefaultQuitBudget;
     }
@@ -60,18 +80,12 @@ public sealed class SmtpConnectionTester : IOutgoingConnectionTester
         bool connected = false;
         try
         {
-            using var client = _createClient(); // No protocol logger and no certificate-validation bypass.
-            // MailKit's own read timeout is only a backstop behind the deadline, as for IMAP.
-            client.Timeout = checked((int)(_timeout + TimeSpan.FromSeconds(1)).TotalMilliseconds);
-            var security = server.Security == TransportSecurity.Tls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-            await client.ConnectAsync(server.Host, server.Port, security, deadline.Token).ConfigureAwait(false);
+            await using var client = _clientFactory();
+            await client.ConnectAsync(server.Host, server.Port, server.Security, deadline.Token).ConfigureAwait(false);
             connected = true;
 
-            if (!client.Capabilities.HasFlag(SmtpCapabilities.Authentication))
+            if (!client.SupportsAuthentication)
                 throw Failure(MailConnectionFailure.AuthenticationUnavailable);
-            // MailKit never uses OAuth mechanisms with a password. Without another usable mechanism it reports no
-            // compatible mechanism, which would read as a server without sign-in on this port, so an OAuth-only
-            // server is named for what it is.
             if (!client.AuthenticationMechanisms.Any(IsPasswordMechanism))
                 throw Failure(MailConnectionFailure.UnsupportedSignIn);
             await client.AuthenticateAsync(server.UserName, secret, deadline.Token).ConfigureAwait(false);
@@ -97,23 +111,20 @@ public sealed class SmtpConnectionTester : IOutgoingConnectionTester
     }
 
     private static bool IsPasswordMechanism(string mechanism) =>
-        SaslMechanism.IsSupported(mechanism) && !mechanism.Equals("XOAUTH2", StringComparison.OrdinalIgnoreCase)
-        && !mechanism.Equals("OAUTHBEARER", StringComparison.OrdinalIgnoreCase) && !mechanism.Equals("ANONYMOUS", StringComparison.OrdinalIgnoreCase);
+        mechanism.Equals("PLAIN", StringComparison.OrdinalIgnoreCase) ||
+        mechanism.Equals("LOGIN", StringComparison.OrdinalIgnoreCase);
 
     private static MailConnectionFailure? Classify(Exception error, bool connected, bool deadlineFired) => error switch
     {
         // TLS stream reads can surface deadline cancellation as an I/O error instead of OCE.
         IOException or SocketException when (deadlineFired || IsTimeout(error)) => MailConnectionFailure.Timeout,
         OperationCanceledException or TimeoutException => MailConnectionFailure.Timeout,
-        // MailKit wraps a handshake cut off by the deadline as a handshake failure. A server that never answers
-        // the handshake is a reachability problem; blaming its certificate would send the user the wrong way.
-        SslHandshakeException when (deadlineFired || IsTimeout(error)) => MailConnectionFailure.Timeout,
-        SslHandshakeException => MailConnectionFailure.TlsVerification,
-        // Before the connection is up, only required STARTTLS is refused this way.
+        TlsHandshakeException when (deadlineFired || IsTimeout(error)) => MailConnectionFailure.Timeout,
+        TlsHandshakeException => MailConnectionFailure.TlsVerification,
         NotSupportedException => connected ? MailConnectionFailure.AuthenticationUnavailable : MailConnectionFailure.TlsUnavailable,
-        MailKit.Security.AuthenticationException => MailConnectionFailure.AuthenticationRejected,
+        SmtpAuthenticationException => MailConnectionFailure.AuthenticationRejected,
         SmtpCommandException => MailConnectionFailure.ServerRefused,
-        SmtpProtocolException or SaslException => MailConnectionFailure.Interrupted,
+        SmtpProtocolException => MailConnectionFailure.Interrupted,
         SocketException => MailConnectionFailure.Unreachable,
         IOException => MailConnectionFailure.Interrupted,
         _ => null,

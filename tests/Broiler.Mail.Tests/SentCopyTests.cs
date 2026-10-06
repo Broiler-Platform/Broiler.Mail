@@ -4,10 +4,8 @@ using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Mail;
+using Broiler.Mail.Infrastructure.Mime;
 using Broiler.Mail.Infrastructure.Persistence;
-using MailKit.Net.Imap;
-using MailKit.Net.Smtp;
-using MimeKit;
 
 namespace Broiler.Mail.Tests;
 
@@ -24,8 +22,7 @@ public sealed class SentCopyTests
         { OutgoingServer = new() { Host = "127.0.0.1", Port = smtp.Port, UserName = "test", Security = security } };
         var credentials = await Credentials(profile);
         await credentials.WriteAsync(CredentialKey.For(profile, MailProtocol.Smtp), LocalSmtpServer.Password);
-        var sender = new SmtpMailSender(credentials, () => new SmtpClient
-        { ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == smtp.Certificate.GetCertHashString() }, TimeSpan.FromSeconds(5));
+        var sender = new SmtpMailSender(credentials, (_, cert, _, _) => cert?.GetCertHashString() == smtp.Certificate.GetCertHashString(), TimeSpan.FromSeconds(5));
         using var directory = new TestDirectory();
         var store = new JsonDraftStore(directory.File("drafts.json"));
         var writer = new Copy(async (account, draft) =>
@@ -43,16 +40,16 @@ public sealed class SentCopyTests
         Assert.Equal(1, smtp.DataCount); Assert.Equal(1, imap.AppendCount);
         Assert.Contains(imap.MailCommands, command => command.Contains("APPEND", StringComparison.Ordinal) && command.Contains("Sent", StringComparison.Ordinal) && command.Contains("\\Seen", StringComparison.Ordinal));
         Assert.DoesNotContain(imap.Commands, command => command is "CREATE" or "SELECT" or "EXAMINE");
-        using var submitted = Parse(smtp.RawMessage!);
-        using var copied = Parse(imap.AppendedMessage!);
+        var submitted = Parse(smtp.RawMessage!);
+        var copied = Parse(imap.AppendedMessage!);
         Assert.Equal(submitted.MessageId, copied.MessageId);
         Assert.Equal(submitted.Date, copied.Date);
         Assert.Equal(submitted.TextBody!.TrimEnd('\r', '\n'), copied.TextBody!.TrimEnd('\r', '\n'));
         Assert.Equal(submitted.Subject, copied.Subject);
         Assert.Equal(submitted.InReplyTo, copied.InReplyTo);
         Assert.Equal(submitted.References, copied.References);
-        Assert.False(submitted.Headers.Contains(HeaderId.Bcc));
-        Assert.Equal("hidden@example.test", Assert.Single(copied.Bcc.Mailboxes).Address);
+        Assert.Empty(submitted.Bcc);
+        Assert.Equal("hidden@example.test", Assert.Single(copied.Bcc));
         await model.SendAsync();
         using var recovered = new ComposerViewModel(store, await store.LoadAsync(), sender: sender, sentCopies: writer);
         recovered.SetAccount(profile);
@@ -177,7 +174,7 @@ public sealed class SentCopyTests
         model.Edit("to@example.test", "cc@example.test", "hidden@example.test", "Grüße", "Body Grüße\nsecond line");
         return model;
     }
-    private static MimeMessage Parse(string text) => MimeMessage.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(text)));
+    private static ParsedMimeMessage Parse(string text) => MimeParser.Parse(System.Text.Encoding.UTF8.GetBytes(text));
     private static MailServerSettings Smtp() => new() { Host = "smtp.example.test", Port = 465, UserName = "test" };
     private static AccountProfile Profile(LocalImapServer server, TransportSecurity security = TransportSecurity.Tls) => TestDirectory.Profile() with
     {
@@ -191,7 +188,7 @@ public sealed class SentCopyTests
         return credentials;
     }
     private static ImapSentCopyWriter Writer(ICredentialStore credentials, LocalImapServer server, double seconds = 5) =>
-        new(credentials, () => new ImapClient { ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == server.Certificate.GetCertHashString() }, TimeSpan.FromSeconds(seconds));
+        new(credentials, (_, cert, _, _) => cert?.GetCertHashString() == server.Certificate.GetCertHashString(), TimeSpan.FromSeconds(seconds));
     private sealed class Sender(SubmissionStatus result) : IMailSender
     {
         public int Calls { get; private set; }

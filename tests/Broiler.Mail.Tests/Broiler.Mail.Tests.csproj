@@ -4,6 +4,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
+    <ProjectReference Include="../../src/Broiler.Mail.Cli/Broiler.Mail.Cli.csproj" />
     <ProjectReference Include="../../src/Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
     <PackageReference Include="xunit" />

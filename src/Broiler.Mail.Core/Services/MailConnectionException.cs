@@ -5,7 +5,7 @@
 // ----------------------
 // Relevant units:   1
 // Annotated:        1/1
-// Exempt:           0
+// Exempt:           1
 // Human-reviewed:   0/1
 // IP risk:          None
 // Security risk:    Low
@@ -18,7 +18,7 @@
 namespace Broiler.Mail.Core.Services;
 
 /// <summary>A safe user-facing connection failure. Must not include remote response text or secrets.</summary>
-// Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=EB3577
+// Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=5FAB92
 // Broiler-Falsified-If: a MailConnectionException is constructed with text taken from a server response or a saved secret
 // Broiler-Human:        PENDING
 public sealed class MailConnectionException(string message, MailConnectionFailure failure = MailConnectionFailure.Unspecified) : Exception(message)

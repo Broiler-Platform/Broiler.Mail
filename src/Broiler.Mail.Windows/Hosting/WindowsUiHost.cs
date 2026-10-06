@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   11
-// Annotated:        11/11
-// Exempt:           4
-// Human-reviewed:   0/11
+// Relevant units:   15
+// Annotated:        9/15
+// Exempt:           10
+// Human-reviewed:   0/15
 // IP risk:          Low
 // Security risk:    Critical
 // Criteria:         5/4
 // Resource impact:  3/10 max
-// Unverified:       11
+// Unverified:       15
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -24,15 +24,45 @@ using Broiler.UI;
 
 namespace Broiler.Mail.Windows.Hosting;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=3; Fingerprint=087FCE
+// Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=3; Fingerprint=FB603E
 // Broiler-Falsified-If: a paste reads clipboard memory past the size GlobalSize reports for a block another process placed there
 // Broiler-Human:        PENDING
-internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandle) : IUiHost, IUiClipboardHost, IUiTextInputHost, IUiSystemSettingsHost
+internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandle) : IUiHost, IUiClipboardHost, IUiTextInputHost, IUiSystemSettingsHost, IUiWindowHost
 {
     private readonly WindowsClipboard _clipboard = new(() => window.NativeHandle);
     private readonly WindowsTextInput _textInput = new(inputHandle, () => window.DpiScale);
+    private readonly List<WindowsHostWindow> _hostWindows = [];
     private UiSystemSettings _settings = MailSystemSettings.Query();
     private UiSession? _session;
+
+    internal WindowsHostWindow? ActiveHostWindow { get; private set; }
+    internal IReadOnlyList<WindowsHostWindow> HostWindows => _hostWindows;
+
+    public IUiHostWindow CreateHostWindow(UiHostWindowRequest request)
+    {
+        var hostWindow = new WindowsHostWindow(window, request);
+        _hostWindows.Add(hostWindow);
+        ActiveHostWindow = hostWindow;
+        hostWindow.Closed += (_, _) =>
+        {
+            _hostWindows.Remove(hostWindow);
+            if (ActiveHostWindow == hostWindow)
+                ActiveHostWindow = _hostWindows.LastOrDefault();
+        };
+        hostWindow.Show();
+        return hostWindow;
+    }
+
+    public void DisposeHostWindows()
+    {
+        foreach (var hostWindow in _hostWindows.ToArray())
+        {
+            try { hostWindow.Dispose(); }
+            catch (Exception) { }
+        }
+        _hostWindows.Clear();
+        ActiveHostWindow = null;
+    }
 
     public UiSystemSettings Settings => _settings;
 

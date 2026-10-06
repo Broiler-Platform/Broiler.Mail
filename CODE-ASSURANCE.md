@@ -13,57 +13,57 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Metric | Value |
 |---|---:|
-| Files scanned | 71 |
+| Files scanned | 106 |
 | Files not covered | 0 |
-| Files carrying an annotation | 71 |
-| Code units | 705 |
-| Relevant | 420 |
-| Exempt by predicate | 285 |
-| Annotated | 420 of 420 (100%) |
-| Human reviewed | 0 of 420 (0%) |
-| Unverified | 420 |
+| Files carrying an annotation | 66 |
+| Code units | 1694 |
+| Relevant | 997 |
+| Exempt by predicate | 697 |
+| Annotated | 376 of 997 (38%) |
+| Human reviewed | 0 of 997 (0%) |
+| Unverified | 997 |
 
 ## Review states
 
 | State | Count |
 |---|---:|
-| NEW | 0 |
+| NEW | 621 |
 | AI_ASSESSED | 0 |
-| HUMAN_PENDING | 420 |
+| HUMAN_PENDING | 376 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
-| EXEMPT | 285 |
+| EXEMPT | 697 |
 
 ## IP risk
 
 | Value | Units |
 |---|---:|
-| None | 150 |
-| Low | 270 |
+| None | 138 |
+| Low | 239 |
 | Medium | 0 |
 | High | 0 |
 | Unknown | 0 |
-| *not annotated* | 0 |
+| *not annotated* | 621 |
 
 ## Security risk
 
 | Value | Units |
 |---|---:|
 | None | 7 |
-| Low | 112 |
-| Medium | 92 |
-| High | 191 |
-| Critical | 18 |
-| *not annotated* | 0 |
+| Low | 96 |
+| Medium | 88 |
+| High | 176 |
+| Critical | 10 |
+| *not annotated* | 621 |
 
 ## Resource impact
 
 | Metric | Value |
 |---|---:|
 | Maximum | 8 / 10 |
-| Average over annotated units | 2.6 / 10 |
-| Units scored | 420 |
+| Average over annotated units | 2.7 / 10 |
+| Units scored | 376 |
 
 ## High-security review areas
 
@@ -86,7 +86,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 - `Broiler.Mail.Application.Preview.IHtmlPreviewHost.Close()` in `src/Broiler.Mail.Application/Preview/IHtmlPreviewHost.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Application.Preview.IMessagePreview` in `src/Broiler.Mail.Application/Preview/IMessagePreview.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Application.Preview.IMessagePreview.CreateContent(MailMessageBody)` in `src/Broiler.Mail.Application/Preview/IMessagePreview.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Application.ViewModels.AccountProfileViewModel` in `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Application.ViewModels.AccountSetupStep` in `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Application.ViewModels.AccountProfileViewModel.SaveAsync(CancellationToken)` in `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Application.ViewModels.AccountProfileViewModel.SavePasswordAsync(string, CancellationToken)` in `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Application.ViewModels.AccountProfileViewModel.SavePasswordAsync(string, MailProtocol, CancellationToken)` in `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` - Security=High, human line PENDING
@@ -143,8 +143,8 @@ and the figures below are the measurement of how far from that claim the per-uni
 - `Broiler.Mail.Core.Services.ISettingsStore.SaveAsync(ApplicationSettings, CancellationToken)` in `src/Broiler.Mail.Core/Services/ISettingsStore.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Core.Validation.ConfigurationValidator` in `src/Broiler.Mail.Core/Validation/ConfigurationValidator.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Core.Validation.ConfigurationValidator.Validate(AccountProfile)` in `src/Broiler.Mail.Core/Validation/ConfigurationValidator.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateServer(MailServerSettings)` in `src/Broiler.Mail.Core/Validation/ConfigurationValidator.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Core.Validation.ConfigurationValidator.RequireText(string?, string, int)` in `src/Broiler.Mail.Core/Validation/ConfigurationValidator.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateServer(MailServerSettings, string)` in `src/Broiler.Mail.Core/Validation/ConfigurationValidator.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Core.Validation.ConfigurationValidator.RequireText(string?, string, int, string)` in `src/Broiler.Mail.Core/Validation/ConfigurationValidator.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Mail.ImapMailReceiver` in `src/Broiler.Mail.Infrastructure/Mail/ImapMailReceiver.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Mail.ImapMailReceiver.MaximumPageSize` in `src/Broiler.Mail.Infrastructure/Mail/ImapMailReceiver.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Mail.ImapMailReceiver.MaximumMessageBytes` in `src/Broiler.Mail.Infrastructure/Mail/ImapMailReceiver.cs` - Security=High, human line PENDING
@@ -180,7 +180,6 @@ and the figures below are the measurement of how far from that claim the per-uni
 - `Broiler.Mail.Infrastructure.Persistence.JsonAccountStore.RemoveAsync(AccountId, CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountStore.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Persistence.JsonAccountStore.ValidateAccounts(AccountProfile[])` in `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountStore.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile<T>` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile.Options` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile.ReadAsync(CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile.UpdateAsync(Func<T, T>, CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile.AcquireWriteLockAsync(CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, human line PENDING
@@ -208,27 +207,20 @@ and the figures below are the measurement of how far from that claim the per-uni
 - `Broiler.Mail.Windows.Hosting.WindowsUiHost.TryGetText(out string)` in `src/Broiler.Mail.Windows/Hosting/WindowsUiHost.cs` - Security=Critical, human line PENDING
 - `Broiler.Mail.Windows.Hosting.WindowsUiHost.SetText(string)` in `src/Broiler.Mail.Windows/Hosting/WindowsUiHost.cs` - Security=Critical, human line PENDING
 - `Broiler.Mail.Windows.Hosting.WindowsUiHost.PublishCaret(UiTextCaretInfo)` in `src/Broiler.Mail.Windows/Hosting/WindowsUiHost.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Hosting.WindowsWindowSizing` in `src/Broiler.Mail.Windows/Hosting/WindowsWindowSizing.cs` - Security=Critical, human line PENDING
-- `Broiler.Mail.Windows.Hosting.WindowsWindowSizing.OnMessage(nint, uint, nint, double)` in `src/Broiler.Mail.Windows/Hosting/WindowsWindowSizing.cs` - Security=Critical, human line PENDING
-- `Broiler.Mail.Windows.Hosting.WindowsWindowSizing.Rect` in `src/Broiler.Mail.Windows/Hosting/WindowsWindowSizing.cs` - Security=Critical, human line PENDING
-- `Broiler.Mail.Windows.Hosting.WindowsWindowSizing.MinMaxInfo` in `src/Broiler.Mail.Windows/Hosting/WindowsWindowSizing.cs` - Security=Critical, human line PENDING
-- `Broiler.Mail.Windows.Hosting.WindowsWindowSizing.GetWindowLongW(nint, int)` in `src/Broiler.Mail.Windows/Hosting/WindowsWindowSizing.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Hosting.WindowsWindowSizing.AdjustWindowRectExForDpi(ref Rect, uint, bool, uint, uint)` in `src/Broiler.Mail.Windows/Hosting/WindowsWindowSizing.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Hosting.WindowsWindowSizing.SetWindowPos(nint, nint, int, int, int, int, uint)` in `src/Broiler.Mail.Windows/Hosting/WindowsWindowSizing.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.ImageHttpClient` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.HtmlPreviewWindow()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.HtmlPreviewWindow(HtmlPreviewDocument, string, Action<Uri>, string?, IReadOnlyDictionary<string, MailEmbeddedImage>?)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.HtmlPreviewWindow(HtmlPreviewDocument, string, Action<Uri>, string?, IReadOnlyDictionary<string, MailEmbeddedImage>?, StandardThemeTokens?, string?, PreviewMeasurement?)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.LoadRemoteImages()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.LoadRemoteImagesAsync()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.OpenLink(string, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.RunCore()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.ScrollableHtmlView` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.ScrollableHtmlView(string, Func<IBroilerRenderer?>, Action<string>)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.ScrollableHtmlView(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.ScrollableHtmlView.UpdateHtml(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlViewElement` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlViewElement.CreateContainer(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.HtmlViewElement(string, Func<IBroilerRenderer?>, Action<string>)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.HtmlViewElement(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlViewElement.UpdateHtml(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlViewElement.OnInput(UiInputEvent)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.DenyingRequestTransport` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
@@ -241,21 +233,6 @@ and the figures below are the measurement of how far from that claim the per-uni
 - `Broiler.Mail.Windows.Preview.WindowsHtmlPreviewHost.Dispose()` in `src/Broiler.Mail.Windows/Preview/WindowsHtmlPreviewHost.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Program` in `src/Broiler.Mail.Windows/Program.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Program.Main(string[])` in `src/Broiler.Mail.Windows/Program.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=Critical, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.UnicodeText` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.MaximumBytes` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=Critical, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.TryGetText(out string)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=Critical, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.SetText(string)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=Critical, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.OpenClipboard(nint)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.CloseClipboard()` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.EmptyClipboard()` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.GetClipboardData(uint)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.SetClipboardData(uint, nint)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.GlobalAlloc(uint, nuint)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.GlobalLock(nint)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.GlobalUnlock(nint)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.GlobalSize(nint)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Services.WindowsClipboard.GlobalFree(nint)` in `src/Broiler.Mail.Windows/Services/WindowsClipboard.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Services.WindowsCredentialStore` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=Critical, human line PENDING
 - `Broiler.Mail.Windows.Services.WindowsCredentialStore.Generic` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Services.WindowsCredentialStore.PersistLocalMachine` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, human line PENDING
@@ -281,8 +258,8 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Metric | Value |
 |---|---:|
-| Units carrying a criterion | 356 |
-| Units required to carry one | 209 |
+| Units carrying a criterion | 320 |
+| Units required to carry one | 186 |
 | Required and missing | 0 |
 
 A `Broiler-Falsified-If:` line states, at the declaration, the observation that would make
@@ -302,14 +279,14 @@ that the rule is reviewable in one place rather than in several hundred.
 
 | Case | Units |
 |---|---:|
-| TrivialPropertyOrAccessor | 74 |
-| ParameterAssigningConstructor | 2 |
-| TrivialExpressionBodiedMember | 14 |
-| CompilerSuppliedRecordOrEnumMember | 56 |
+| TrivialPropertyOrAccessor | 174 |
+| ParameterAssigningConstructor | 3 |
+| TrivialExpressionBodiedMember | 28 |
+| CompilerSuppliedRecordOrEnumMember | 72 |
 | DelegatingOverrideOrOperator | 1 |
 | InsideAssemblyMarker | 0 |
-| FieldDeclaringStorage | 109 |
-| EnumMemberOfADeclaredVocabulary | 29 |
+| FieldDeclaringStorage | 286 |
+| EnumMemberOfADeclaredVocabulary | 133 |
 | DeclaredInSource | 0 |
 
 ## Per-unit exemptions
@@ -333,14 +310,14 @@ through a `<Compile Include>` it states, is left out of the record.
 ## Change detection
 
 `assurance.manifest.json` lists **every** code unit in the 4 covered assemblies -
-705 of them, exempt and relevant alike - with the fingerprint of its declaration.
+1694 of them, exempt and relevant alike - with the fingerprint of its declaration.
 This manifest is a change-detection record, not a review. A unit listed there is watched, not reviewed:
 the entry records what the declaration's tokens hashed to when the generator last ran, and
 nothing else. What the manifest adds is that a unit the exemption predicate treats as
 trivial is no longer invisible: a semantic change to one moves a value in a generated file
 the check compares byte for byte. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail` holds the manifest to the tree.
 
-Beside the units it lists **every covered file** - 71 of them - with a
+Beside the units it lists **every covered file** - 106 of them - with a
 fingerprint over the complete token stream of its compilation unit. A unit entry exists only
 for a declaration kind the scanner enumerates, and an enumeration is a whitelist: an
 `[assembly: ...]` attribute is a member of nothing and can be in no unit at all.

@@ -16,8 +16,6 @@ using Broiler.UI.Button.Standard;
 using Broiler.UI.Edit.Standard;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.Standard;
-using MailKit.Net.Imap;
-using MailKit.Net.Smtp;
 
 namespace Broiler.Mail.Tests;
 
@@ -65,15 +63,9 @@ public sealed class Version2AcceptanceTests
         await credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Imap), LocalImapServer.Password);
         await credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Smtp), LocalSmtpServer.Password);
 
-        var receiver = new ImapMailReceiver(credentials, () => new ImapClient
-        {
-            ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == imapServer.Certificate.GetCertHashString()
-        }, TimeSpan.FromSeconds(5));
+        var receiver = new ImapMailReceiver(credentials, (_, cert, _, _) => cert?.GetCertHashString() == imapServer.Certificate.GetCertHashString(), TimeSpan.FromSeconds(5));
 
-        var sender = new SmtpMailSender(credentials, () => new SmtpClient
-        {
-            ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString()
-        }, TimeSpan.FromSeconds(5));
+        var sender = new SmtpMailSender(credentials, (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString(), TimeSpan.FromSeconds(5));
 
         var app = new MailApplication(accounts, settings, receiver, sender, credentials, drafts);
         await app.InitializeAsync();
@@ -143,10 +135,7 @@ public sealed class Version2AcceptanceTests
         await accounts.SaveAsync(account);
         await credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Smtp), LocalSmtpServer.Password);
 
-        var sender = new SmtpMailSender(credentials, () => new SmtpClient
-        {
-            ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString()
-        }, TimeSpan.FromSeconds(5));
+        var sender = new SmtpMailSender(credentials, (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString(), TimeSpan.FromSeconds(5));
 
         using var composer = new ComposerViewModel(drafts, new(0, null), new ImmediateUiDispatcher(), sender);
         composer.SetAccount(account);
@@ -188,10 +177,7 @@ public sealed class Version2AcceptanceTests
         await accounts.SaveAsync(account);
         await credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Smtp), LocalSmtpServer.Password);
 
-        var sender = new SmtpMailSender(credentials, () => new SmtpClient
-        {
-            ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString()
-        }, TimeSpan.FromSeconds(5));
+        var sender = new SmtpMailSender(credentials, (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString(), TimeSpan.FromSeconds(5));
 
         using var composer = new ComposerViewModel(drafts, new(0, null), new ImmediateUiDispatcher(), sender);
         composer.SetAccount(account);
@@ -233,10 +219,7 @@ public sealed class Version2AcceptanceTests
         await accounts.SaveAsync(account);
         await credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Imap), "different-imap-secret");
         var sender = new CountingSender();
-        var tester = new SmtpConnectionTester(credentials, () => new SmtpClient
-        {
-            ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString()
-        }, TimeSpan.FromSeconds(5));
+        var tester = new SmtpConnectionTester(credentials, (_, cert, _, _) => cert?.GetCertHashString() == smtpServer.Certificate.GetCertHashString(), TimeSpan.FromSeconds(5));
         var app = new MailApplication(accounts, new JsonSettingsStore(directory.File("settings.json")), new TestMailReceiver(), sender, credentials, drafts,
             outgoingTester: tester);
         await app.InitializeAsync();
@@ -245,10 +228,10 @@ public sealed class Version2AcceptanceTests
         var model = app.CreateViewModel(dispatcher);
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host());
-        session.AddRoot(shell.Window);
-        shell.Navigation.SelectTab("account");
+        shell.Attach(session);
+        shell.ShowView("account");
         dispatcher.DrainUntil(() => model.Account.HasPassword is not null && model.Account.HasSmtpPassword is not null);
-        var content = shell.Navigation.SelectedTab!.Content!;
+        var content = shell.ActiveContent;
         StandardButton Button(string text) => Descendants(content).OfType<StandardButton>().Single(button => button.Text == text);
 
         // The SMTP password is saved through the form, then the test signs in with it.

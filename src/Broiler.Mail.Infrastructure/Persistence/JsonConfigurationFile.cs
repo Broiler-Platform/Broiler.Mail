@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   6
-// Annotated:        6/6
-// Exempt:           3
-// Human-reviewed:   0/6
+// Relevant units:   4
+// Annotated:        4/4
+// Exempt:           1
+// Human-reviewed:   0/4
 // IP risk:          Low
 // Security risk:    High
-// Criteria:         5/5
+// Criteria:         4/4
 // Resource impact:  4/10 max
-// Unverified:       6
+// Unverified:       4
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -22,14 +22,14 @@ using System.Text.Json.Serialization.Metadata;
 namespace Broiler.Mail.Infrastructure.Persistence;
 
 /// <summary>Versioned configuration with same-directory replacement and a cross-process write lock.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=398D88
+// Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=474A5B
 // Broiler-Falsified-If: two overlapping UpdateAsync calls, in one process or two, both apply their change to the same prior state so that one change is lost
 // Broiler-Human:        PENDING
 internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefault, Action<T> validate,
     JsonTypeInfo<ConfigurationEnvelope<T>> typeInfo, long maximumBytes = 1024 * 1024) where T : class
 {
     private readonly string _path = Path.GetFullPath(path);
-    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=4C6116
+    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=5E5E32
     // Broiler-Falsified-If: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
     // Broiler-Human:        PENDING
 
@@ -59,7 +59,7 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
         }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=421205
+    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=628085
     // Broiler-Falsified-If: a failure or cancellation while writing leaves the target file truncated or partly written instead of holding its previous content
     // Broiler-Human:        PENDING
     public async Task UpdateAsync(Func<T, T> update, CancellationToken cancellationToken)

@@ -1,6 +1,5 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
-    <PackageReference Include="MailKit" />
     <InternalsVisibleTo Include="Broiler.Mail.Tests" />
     <ProjectReference Include="../Broiler.Mail.Core/Broiler.Mail.Core.csproj" />
   </ItemGroup>

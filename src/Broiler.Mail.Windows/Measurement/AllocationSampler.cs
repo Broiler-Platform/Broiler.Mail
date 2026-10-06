@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   8
+// Annotated:        0/8
+// Exempt:           3
+// Human-reviewed:   0/8
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       8
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using System.Diagnostics.Tracing;
 
 namespace Broiler.Mail.Windows.Measurement;

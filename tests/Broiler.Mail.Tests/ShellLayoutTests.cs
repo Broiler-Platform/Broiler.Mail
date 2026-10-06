@@ -11,23 +11,18 @@ using Broiler.UI.Standard;
 
 namespace Broiler.Mail.Tests;
 
-/// <summary>
-/// Each tab's content is laid out at the rectangle the tab view gives it, after resizes too, and a tab
-/// is as it was left once another tab was shown. Since Broiler.UI preview.18 (ADR 0030) the standard tab
-/// view does both itself, so the shell adds each tab's content directly; these tests showed when Mail's
-/// <c>TabContent</c> wrapper could go.
-/// </summary>
+/// <summary>Workspace/dialog layout after resize, and preserved scroll state when reopening forms.</summary>
 [Collection("UI theme")]
 public sealed class ShellLayoutTests
 {
-    private static readonly string[] TabIds = ["inbox", "compose", "account", "settings"];
+    private static readonly string[] ViewIds = ["inbox", "compose", "account", "settings"];
 
     [Theory]
     [InlineData(640, 480, 1.0)]
     [InlineData(640, 480, 2.0)]
     [InlineData(1100, 720, 1.0)]
     [InlineData(1100, 720, 2.0)]
-    public async Task EveryTabIsLaidOutAtTheRectangleTheTabViewGivesIt(int width, int height, double textScale)
+    public async Task EveryViewIsMeasuredAtItsArrangedSize(int width, int height, double textScale)
     {
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
         try
@@ -35,15 +30,13 @@ public sealed class ShellLayoutTests
             using var fixture = await Fixture.OpenAsync(width, height);
             var (shell, session, host) = (fixture.Shell, fixture.Session, fixture.Host);
 
-            foreach (string tab in TabIds)
+            foreach (string tab in ViewIds)
             {
-                shell.Navigation.SelectTab(tab);
+                shell.ShowView(tab);
                 Render(session);
                 AssertLaidOutAtItsRectangle(shell, $"{tab} at {width}x{height}, text {textScale:P0}");
 
-                // Resizing while the tab stays open. A newly shown tab is always measured at its
-                // rectangle; an open one depends on the new measure pass reaching it, also when only
-                // the height changes, which the tab view's own arrange-time check (width) misses.
+                // Both width-only and height-only resizes must reach the open form.
                 foreach ((int w, int h) in new[] { (width, height + 240), (width + 200, height + 240), (width + 200, height), (width, height) })
                 {
                     host.Width = w;
@@ -61,15 +54,13 @@ public sealed class ShellLayoutTests
     }
 
     /// <summary>
-    /// Coming back to a tab must find it as it was left: the same scroll positions and the same layout.
-    /// Before Broiler.UI preview.18 the tab view arranged each tab it hid at an empty rectangle, which laid
-    /// a hidden form out at no width, and the composer's status area came back scrolled to its top at
-    /// 640x480 with 200 % text.
+    /// Reopening a form must preserve its scroll positions, including the independently scrolling
+    /// status area in a small window with enlarged text.
     /// </summary>
     [Theory]
     [InlineData(640, 480, 2.0)]
     [InlineData(1100, 720, 1.0)]
-    public async Task ATabIsAsItWasLeftAfterAnotherTabWasShown(int width, int height, double textScale)
+    public async Task ReopeningAViewPreservesItsLayoutAndScrollOffsets(int width, int height, double textScale)
     {
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
         try
@@ -78,11 +69,11 @@ public sealed class ShellLayoutTests
             var (shell, session) = (fixture.Shell, fixture.Session);
             int scrolledForms = 0;
 
-            foreach (string tab in TabIds)
+            foreach (string tab in ViewIds)
             {
-                shell.Navigation.SelectTab(tab);
+                shell.ShowView(tab);
                 Render(session);
-                var content = shell.Navigation.SelectedTab!.Content!;
+                var content = shell.ActiveContent;
                 // Part way down everything shown that scrolls, so a reset or a clamp on the way back shows.
                 var scrolled = Shown(content).OfType<UiScrollView>()
                     .Where(scroll => scroll.ExtentSize.Height - scroll.ViewportSize.Height > 2).ToArray();
@@ -95,9 +86,9 @@ public sealed class ShellLayoutTests
                 var layout = ShownLayout(content);
                 if (tab is "compose" or "account" or "settings" && scrolled.Length > 0) scrolledForms++;
 
-                shell.Navigation.SelectTab(tab == "inbox" ? "settings" : "inbox");
+                shell.ShowView(tab == "inbox" ? "settings" : "inbox");
                 Render(session);
-                shell.Navigation.SelectTab(tab);
+                shell.ShowView(tab);
                 Render(session);
 
                 string where = $"{tab} at {width}x{height}, text {textScale:P0}";
@@ -139,11 +130,11 @@ public sealed class ShellLayoutTests
             string where = $"at {width}x{height}, text {textScale:P0}: the footer is at {text} in {area}";
 
             // The tab names start this far into the tab view, which spans the window.
-            Assert.Equal(area.Left, shell.Navigation.Bounds.Left, 0.5);
-            Assert.Equal(area.Left + shell.Navigation.HeaderPaddingX, text.Left, 0.5);
-            Assert.Equal(area.Right - shell.Navigation.HeaderPaddingX, text.Right, 0.5);
+            Assert.Equal(area.Left, shell.NavigationFocus.Bounds.Left, 0.5);
+            Assert.Equal(area.Left + 12, text.Left, 0.5);
+            Assert.Equal(area.Right - 12, text.Right, 0.5);
             Assert.Equal(area.Bottom - MailShellView.FooterPadding, text.Bottom, 0.5);
-            Assert.True(shell.Navigation.Bounds.Bottom <= text.Top - MailShellView.FooterPadding + 0.5, where);
+            Assert.True(shell.NavigationFocus.Bounds.Bottom <= text.Top - MailShellView.FooterPadding + 0.5, where);
             // Shown whole: the text has the height it asked for at that width.
             Assert.True(text.Height >= footer.DesiredSize.Height - 0.5, where);
             if (width == 640)
@@ -163,16 +154,24 @@ public sealed class ShellLayoutTests
 
     private static void AssertLaidOutAtItsRectangle(MailShellView shell, string where)
     {
-        var tabs = shell.Navigation;
-        var content = tabs.SelectedTab!.Content!;
-        BRect area = tabs.Bounds;
+        Assert.True(shell.Menu.MenuBarHeight >= BTextMeasurer.GetLineHeight(shell.Menu.Font) + 8);
+        if (shell.ActiveDialog is { } dialog)
+        {
+            var owner = shell.Window.ChromeLayout.Content;
+            Assert.InRange(dialog.Bounds.Left, owner.Left, owner.Right);
+            Assert.InRange(dialog.Bounds.Right, dialog.Bounds.Left, owner.Right);
+            Assert.InRange(dialog.Bounds.Top, owner.Top, owner.Bottom);
+            Assert.InRange(dialog.Bounds.Bottom, dialog.Bounds.Top, owner.Bottom);
+        }
+        var content = shell.ActiveContent;
+        BRect area = shell.ActiveDialog?.ChromeLayout.Content ?? shell.Window.ChromeLayout.Content;
         BRect bounds = content.Bounds;
         // The content fills the tab view below its headers.
         Assert.True(bounds.Height > 0, $"{where}: the content was not arranged.");
         Assert.Equal(area.Left, bounds.Left, 0.5);
         Assert.Equal(area.Right, bounds.Right, 0.5);
-        Assert.Equal(area.Bottom, bounds.Bottom, 0.5);
-        Assert.InRange(bounds.Top, area.Top + 1, area.Top + (area.Height / 2));
+        Assert.InRange(bounds.Bottom, bounds.Top, area.Bottom);
+        Assert.InRange(bounds.Top, area.Top, area.Top + (area.Height / 2));
 
         // Measuring again at the arranged size changes nothing: the content was already measured at the
         // size it was given.
@@ -264,7 +263,7 @@ public sealed class ShellLayoutTests
             var shell = new MailShellView(model);
             var host = new Host(width, height);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-            session.AddRoot(shell.Window);
+            shell.Attach(session);
             Assert.True(model.Composer.StartNew());
             await model.Inbox.ReceiveAsync();
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);

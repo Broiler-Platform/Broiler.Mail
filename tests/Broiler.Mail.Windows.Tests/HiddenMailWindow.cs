@@ -56,17 +56,15 @@ internal sealed class HiddenMailWindow : IDisposable
         thread.SetApartmentState(ApartmentState.STA);
         thread.Start();
         Window = Wait(_ready.Task);
-        Frame = Window.NativeHandle;
-        Render = Window.RenderNativeHandleForTests;
     }
 
     public static HiddenMailWindow Start(Func<MailApplication>? create = null, DemoOptions? demo = null) =>
         new(create ?? (() => DemoApplication.Create()), demo);
 
     public WindowsMailWindow Window { get; }
-    public nint Frame { get; }
+    public nint Frame => Window.NativeHandleForTests;
     /// <summary>The render child, which holds keyboard focus and receives input in a real session.</summary>
-    public nint Render { get; }
+    public nint Render => Window.RenderNativeHandleForTests;
 
     /// <summary>Posts a message to the render window without waiting for it.</summary>
     public void Post(uint message, nint wParam, nint lParam) => Assert.True(PostMessage(Render, message, wParam, lParam));

@@ -33,7 +33,7 @@ internal static class CompositionRoot
     public static string DefaultDataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Broiler.Mail");
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=B98535
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=1091D3
     // Broiler-Falsified-If: the accounts, settings or drafts store is given a file outside the data directory passed in
     // Broiler-Human:        PENDING
     public static MailApplication CreateApplication(string? dataDirectory = null)

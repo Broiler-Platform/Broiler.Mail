@@ -3,19 +3,20 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   4
-// Annotated:        4/4
-// Exempt:           4
-// Human-reviewed:   0/4
+// Relevant units:   12
+// Annotated:        4/12
+// Exempt:           8
+// Human-reviewed:   0/12
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         4/4
 // Resource impact:  8/10 max
-// Unverified:       4
+// Unverified:       12
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Preview;
@@ -29,7 +30,7 @@ namespace Broiler.Mail.Windows.Preview;
 /// message closes the open window first; closing or replacing a preview that is still opening
 /// cancels it before its window appears.
 /// </summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=5F4FCA
+// Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=E65A2E
 // Broiler-Falsified-If: a URI whose scheme is not http or https is passed to Process.Start with shell execution by the preview's open-external callback
 // Broiler-Human:        PENDING
 internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? currentTheme = null) : IHtmlPreviewHost
@@ -49,7 +50,7 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
 
     public MailMessageKey? Current { get { lock (_gate) return _current; } }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=B20A8C
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=B6EE38
     // Broiler-Falsified-If: a Close or Dispose that runs before the preview thread publishes its window leaves that window open and shown
     // Broiler-Human:        PENDING
     public async Task<string> ShowAsync(MailMessageBody message)
@@ -149,7 +150,7 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
         return await ready.Task.ConfigureAwait(false);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=2A0B85
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=27042D
     // Broiler-Falsified-If: a preview window already published in _window is never closed after Close is called
     // Broiler-Human:        PENDING
     public void Close()
@@ -190,7 +191,7 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
     private void CloseWindowLocked()
     {
         if (_window is { IsDisposed: false } window)
-            try { window.CloseWindow(); } catch (InvalidOperationException) { }
+            try { window.CloseWindow(); } catch (Exception error) when (error is InvalidOperationException or COMException) { }
     }
 
     // Listeners marshal to their own threads; a failing listener must not end the preview thread.

@@ -3,23 +3,25 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   2
-// Annotated:        2/2
+// Relevant units:   4
+// Annotated:        2/4
 // Exempt:           0
-// Human-reviewed:   0/2
+// Human-reviewed:   0/4
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         2/2
 // Resource impact:  7/10 max
-// Unverified:       2
+// Unverified:       4
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
 using Broiler.Hosting.Windows;
 using Broiler.Mail.Application.Views;
+using Broiler.Mail.Core.Diagnostics;
 using Broiler.Mail.Windows.Hosting;
 using Broiler.Mail.Windows.Services;
 using Broiler.UI.Standard;
+using System.Text;
 
 namespace Broiler.Mail.Windows;
 
@@ -54,12 +56,14 @@ internal static class Program
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=366F93
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=BB787D
     // Broiler-Falsified-If: an argument list other than none, --help, a valid --demo option list, --smoke-test or --data-directory with a non-blank path starts the application instead of returning exit code 2
     // Broiler-Human:        PENDING
     [STAThread]
     private static int Main(string[] args)
     {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        GlobalExceptionHandler.Install();
         bool smoke = args.SequenceEqual(["--smoke-test"]);
         bool demo = DemoOptions.TryParse(args, out var demoOptions);
         bool customDirectory = args.Length == 2 && args[0] == "--data-directory" && !string.IsNullOrWhiteSpace(args[1]);
@@ -70,7 +74,6 @@ internal static class Program
         }
         if (args.Length != 0 && !smoke && !demo && !customDirectory)
         {
-            Console.Error.WriteLine("Usage: " + Usage);
             return 2;
         }
 
@@ -86,8 +89,6 @@ internal static class Program
                 smokeApplication.InitializeAsync().GetAwaiter().GetResult();
                 using var shell = smokeApplication.CreateShell();
                 ShellSmokeCheck.Run(shell);
-                Console.WriteLine("Broiler.Mail: composition and all four UI tabs rendered successfully.");
-                Console.WriteLine("This checks composition and UI rendering only; credentials, mail servers, and HTML process isolation are not validated.");
                 return 0;
             }
 
@@ -100,13 +101,12 @@ internal static class Program
             MailSystemSettings.HighContrastOverride = demoOptions?.HighContrast == true;
             MailSystemSettings.ContrastColorsOverride = demoOptions?.ContrastColors;
             StandardControlPaint.ApplyTheme(AppearancePolicy.Resolve(application.LoadedSettings.Theme, MailSystemSettings.Query(), MailSystemSettings.HighContrastTheme));
-            Console.WriteLine(demo ? "Demo mode: synthetic mail; no files, saved credentials, or network access." : $"Configuration directory: {dataDirectory}");
             using var window = new WindowsMailWindow(application, demoOptions);
             return window.Run();
         }
-        catch (Exception exception)
+        catch (Exception error)
         {
-            Console.Error.WriteLine($"Broiler.Mail could not start: {exception.Message}");
+            GlobalExceptionHandler.LogException(error, "Program.Main", ExceptionSource.Captured, isTerminating: true);
             return 1;
         }
     }

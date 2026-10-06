@@ -4,6 +4,8 @@
     <PackageReference Include="Broiler.UI.Forms.Standard" />
     <PackageReference Include="Broiler.UI.Button.Standard" />
     <PackageReference Include="Broiler.UI.ComboBox.Standard" />
+    <PackageReference Include="Broiler.UI.Dialog.Standard" />
+    <PackageReference Include="Broiler.UI.Menu.Standard" />
     <PackageReference Include="Broiler.UI.Edit.Standard" />
     <PackageReference Include="Broiler.UI.Label.Standard" />
     <PackageReference Include="Broiler.UI.ListView.Standard" />
@@ -11,8 +13,8 @@
     <PackageReference Include="Broiler.UI.RichEdit.Standard" />
     <PackageReference Include="Broiler.UI.ScrollView.Standard" />
     <PackageReference Include="Broiler.UI.Splitter.Standard" />
-    <PackageReference Include="Broiler.UI.TabView.Standard" />
     <PackageReference Include="Broiler.UI.Toolbar.Standard" />
+    <PackageReference Include="Broiler.UI.TabView.Standard" />
     <PackageReference Include="Broiler.UI.Window.Standard" />
   </ItemGroup>
 </Project>

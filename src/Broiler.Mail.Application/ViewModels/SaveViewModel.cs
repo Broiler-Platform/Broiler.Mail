@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   5
-// Annotated:        5/5
-// Exempt:           2
-// Human-reviewed:   0/5
+// Relevant units:   11
+// Annotated:        5/11
+// Exempt:           9
+// Human-reviewed:   0/11
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         4/0
 // Resource impact:  7/10 max
-// Unverified:       5
+// Unverified:       11
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -108,7 +108,7 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
     protected Task SaveAsync(Func<Task> save, Action commit, string successMessage) =>
         RunAsync(save, commit, "Saving…", successMessage, "Not saved", "Save canceled.");
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=3B4A10
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=21F7C0
     // Broiler-Falsified-If: a second call made while the first operation is still running starts its operation instead of returning
     // Broiler-Human:        PENDING
     protected async Task RunAsync(Func<Task> operation, Action commit, string busyMessage,

@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   9
-// Annotated:        9/9
-// Exempt:           5
-// Human-reviewed:   0/9
+// Relevant units:   11
+// Annotated:        5/11
+// Exempt:           7
+// Human-reviewed:   0/11
 // IP risk:          Low
 // Security risk:    Medium
-// Criteria:         6/0
+// Criteria:         3/0
 // Resource impact:  4/10 max
-// Unverified:       9
+// Unverified:       11
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -57,7 +57,7 @@ public sealed class ScrollableMessageText : UiElement
     // Above and below the text, inside the scroll view.
     private const double VerticalMargin = 8;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A24DF7
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=BC2359
     // Broiler-Human:        PENDING
     public ScrollableMessageText()
     {
@@ -108,7 +108,7 @@ public sealed class ScrollableMessageText : UiElement
         return range > 0 ? _scroll.VerticalOffset / range : 0;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=050DA5
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=C0B869
     // Broiler-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
     // Broiler-Human:        PENDING
     public string Text
@@ -117,7 +117,7 @@ public sealed class ScrollableMessageText : UiElement
         set => _editor.SetPlainText(value ?? string.Empty);
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=AB27B5
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=1F754E
     // Broiler-Human:        PENDING
     public void ScrollToStart()
     {
@@ -127,7 +127,7 @@ public sealed class ScrollableMessageText : UiElement
         _scroll.ScrollToStart();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=884914
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=2E0436
     // Broiler-Falsified-If: an infinite available width reaches the label as its wrap width, so long message lines never wrap
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)

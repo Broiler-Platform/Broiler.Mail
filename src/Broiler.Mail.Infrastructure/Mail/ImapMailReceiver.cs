@@ -3,26 +3,27 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   13
-// Annotated:        13/13
+// Relevant units:   15
+// Annotated:        13/15
 // Exempt:           4
-// Human-reviewed:   0/13
+// Human-reviewed:   0/15
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         12/11
 // Resource impact:  7/10 max
-// Unverified:       13
+// Unverified:       15
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
+using System.Net.Security;
+using System.Net.Sockets;
+using System.Text;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Validation;
-using MailKit;
-using MailKit.Net.Imap;
-using MailKit.Security;
-using System.Net.Sockets;
+using Broiler.Mail.Infrastructure.Protocols.Imap;
+using Broiler.Mail.Infrastructure.Protocols.Smtp;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
@@ -31,6 +32,10 @@ namespace Broiler.Mail.Infrastructure.Mail;
 // Broiler-Human:        PENDING
 public sealed class ImapMailReceiver : IMailReceiver
 {
+    static ImapMailReceiver()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=431894
     // Broiler-Falsified-If: GetInboxAsync accepts a maximumCount of 51 and fetches more than 50 envelopes in one request
     // Broiler-Human:        PENDING
@@ -40,22 +45,25 @@ public sealed class ImapMailReceiver : IMailReceiver
     // Broiler-Human:        PENDING
     public const int MaximumMessageBytes = 2 * 1024 * 1024;
     private readonly ICredentialStore _credentials;
-    private readonly Func<ImapClient> _createClient;
+    private readonly Func<ImapProtocolClient> _clientFactory;
     private readonly TimeSpan _timeout;
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=8F6932
     // Broiler-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
     // Broiler-Human:        PENDING
-    public ImapMailReceiver(ICredentialStore credentials) : this(credentials, () => new ImapClient(), TimeSpan.FromSeconds(20)) { }
+    public ImapMailReceiver(ICredentialStore credentials) : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20)) { }
 
     // Test-only seam for a fixture certificate and a short deadline; production uses platform certificate validation.
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=0F261A
     // Broiler-Falsified-If: code outside the test assembly reaches this constructor with a client factory that replaces certificate validation
     // Broiler-Human:        PENDING
-    internal ImapMailReceiver(ICredentialStore credentials, Func<ImapClient> createClient, TimeSpan timeout)
+    internal ImapMailReceiver(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout)
+        : this(credentials, () => new ImapProtocolClient(certValidator), timeout) { }
+
+    internal ImapMailReceiver(ICredentialStore credentials, Func<ImapProtocolClient> clientFactory, TimeSpan timeout)
     {
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
-        _createClient = createClient;
+        _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         _timeout = timeout;
     }
 
@@ -65,11 +73,11 @@ public sealed class ImapMailReceiver : IMailReceiver
     public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default) =>
         WithConnectionAsync(account, (_, _) => Task.FromResult(true), cancellationToken);
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=2E32CD
+    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=41FD65
     // Broiler-Falsified-If: an account configured for STARTTLS authenticates in plaintext when the server does not advertise STARTTLS
     // Broiler-Human:        PENDING
     private async Task<T> WithConnectionAsync<T>(AccountProfile account,
-        Func<ImapClient, CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
+        Func<ImapProtocolClient, CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
     {
         ConfigurationValidator.Validate(account);
         cancellationToken.ThrowIfCancellationRequested();
@@ -85,12 +93,8 @@ public sealed class ImapMailReceiver : IMailReceiver
             string? secret = await _credentials.ReadAsync(CredentialKey.For(account, MailProtocol.Imap), deadline.Token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(secret))
                 throw new MailConnectionException("No password is saved for these connection details. Save a password in the Account tab.");
-            using var client = _createClient(); // No protocol logger and no certificate-validation bypass.
-            // MailKit's own read timeout is only a backstop behind the deadline: when both fired together,
-            // its IOException could win and be reported as an unreadable connection instead of a timeout.
-            client.Timeout = checked((int)(_timeout + TimeSpan.FromSeconds(1)).TotalMilliseconds);
-            var security = server.Security == TransportSecurity.Tls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls;
-            await client.ConnectAsync(server.Host, server.Port, security, deadline.Token).ConfigureAwait(false);
+            await using var client = _clientFactory();
+            await client.ConnectAsync(server.Host, server.Port, server.Security, deadline.Token).ConfigureAwait(false);
             await client.AuthenticateAsync(server.UserName, secret, deadline.Token).ConfigureAwait(false);
             return await operation(client, deadline.Token).ConfigureAwait(false);
         }
@@ -107,9 +111,9 @@ public sealed class ImapMailReceiver : IMailReceiver
             cancellationToken.ThrowIfCancellationRequested();
             throw new MailConnectionException("The mail operation timed out. Check the server address, port, and network, then retry.");
         }
-        catch (SslHandshakeException)
+        catch (TlsHandshakeException)
         { throw new MailConnectionException("TLS verification failed. Check the server name, certificate, and TLS port. Certificate errors cannot be bypassed."); }
-        catch (MailKit.Security.AuthenticationException)
+        catch (ImapAuthenticationException)
         { throw new MailConnectionException("Authentication was rejected. Check the username and password, or the provider's app-password requirements."); }
         catch (SocketException)
         { throw new MailConnectionException("The mail server could not be reached. Check its address, port, and your network."); }
@@ -119,7 +123,7 @@ public sealed class ImapMailReceiver : IMailReceiver
         { throw new MailConnectionException("The server rejected an IMAP command. Try receiving mail again."); }
         catch (ImapProtocolException)
         { throw new MailConnectionException("The server returned an invalid IMAP response."); }
-        catch (MessageNotFoundException)
+        catch (ImapMessageNotFoundException)
         { throw new MailConnectionException("This message is no longer available. Receive mail again to update the inbox."); }
         catch (FormatException)
         { throw new MailConnectionException("The message could not be decoded. It may contain malformed mail data."); }
@@ -146,30 +150,27 @@ public sealed class ImapMailReceiver : IMailReceiver
             throw new ArgumentException("The inbox continuation does not belong to this request.", nameof(older));
         return WithConnectionAsync(account, async (client, token) =>
         {
-            var inbox = client.Inbox;
-            await inbox.OpenAsync(FolderAccess.ReadOnly, token).ConfigureAwait(false);
+            var inbox = await client.ExamineInboxAsync(token).ConfigureAwait(false);
             int count = inbox.Count;
             uint validity = inbox.UidValidity;
-            uint? nextUid = inbox.UidNext?.Id;
+            uint? nextUid = inbox.UidNext;
             if (older is not null && (older.UidValidity != validity || older.MessageCount != count || older.UidNext != nextUid))
                 throw InboxChanged();
             if (count == 0) return new MailInboxPage([], null);
             int end = older?.NextIndex ?? count - 1;
             int start = Math.Max(0, end - maximumCount + 1);
-            var summaries = await inbox.FetchAsync(start, end, MessageSummaryItems.UniqueId | MessageSummaryItems.Envelope |
-                MessageSummaryItems.InternalDate | MessageSummaryItems.Flags, token).ConfigureAwait(false);
-            if (inbox.Count != count || inbox.UidValidity != validity || inbox.UidNext?.Id != nextUid) throw InboxChanged();
-            // FETCH may also return unsolicited flag updates for messages outside the requested page.
-            var requested = summaries.Where(item => item.Index >= start && item.Index <= end).ToArray();
-            if (requested.Length != end - start + 1 || requested.Any(item => !item.UniqueId.IsValid || item.Envelope is null || item.Flags is null))
+            var summaries = await client.FetchSummariesAsync(start + 1, end + 1, token).ConfigureAwait(false);
+
+            var requested = summaries.Where(item => (item.SequenceNumber - 1) >= start && (item.SequenceNumber - 1) <= end).ToArray();
+            if (requested.Length != end - start + 1 || requested.Any(item => item.Uid == 0 || item.Subject is null && item.From is null))
                 throw InboxChanged();
-            var messages = requested.OrderByDescending(item => item.UniqueId.Id).Select(item => new MailMessageSummary
+            var messages = requested.OrderByDescending(item => item.Uid).Select(item => new MailMessageSummary
             {
-                Key = new(account.Id, "INBOX", validity, item.UniqueId.Id),
-                Sender = MessageTextDecoder.Header(item.Envelope!.From?.ToString(), "(Unknown sender)"),
-                Subject = MessageTextDecoder.Header(item.Envelope!.Subject, "(No subject)"),
-                ReceivedAt = item.InternalDate ?? item.Envelope!.Date,
-                IsRead = item.Flags?.HasFlag(MessageFlags.Seen) == true,
+                Key = new(account.Id, "INBOX", validity, item.Uid),
+                Sender = MessageTextDecoder.Header(item.Sender ?? item.From, "(Unknown sender)"),
+                Subject = MessageTextDecoder.Header(item.Subject, "(No subject)"),
+                ReceivedAt = item.InternalDate ?? item.EnvelopeDate,
+                IsRead = item.IsSeen,
             }).ToArray();
             return new MailInboxPage(messages, start == 0 ? null : new(account.Id, validity, nextUid, count, start - 1));
         }, cancellationToken);
@@ -185,12 +186,15 @@ public sealed class ImapMailReceiver : IMailReceiver
             throw new ArgumentException("The message does not belong to this account's inbox.", nameof(message));
         return WithConnectionAsync(account, async (client, token) =>
         {
-            var inbox = client.Inbox;
-            await inbox.OpenAsync(FolderAccess.ReadOnly, token).ConfigureAwait(false);
+            var inbox = await client.ExamineInboxAsync(token).ConfigureAwait(false);
             if (inbox.UidValidity != message.UidValidity) throw InboxChanged();
+
             // Partial BODY.PEEK bounds the transfer and leaves server flags unchanged. One extra byte detects overflow.
-            using var stream = await inbox.GetStreamAsync(new UniqueId(message.Uid), 0, MaximumMessageBytes + 1,
-                token, new SizeLimitProgress()).ConfigureAwait(false);
+            using var stream = await client.GetBodyStreamAsync(message.Uid, 0, MaximumMessageBytes + 1, token, (transferred, total) =>
+            {
+                if (transferred > MaximumMessageBytes || total > MaximumMessageBytes + 1) throw MessageTooLarge();
+            }).ConfigureAwait(false);
+
             if (stream.Length > MaximumMessageBytes) throw MessageTooLarge();
             return await MessageTextDecoder.DecodeAsync(message, stream, token).ConfigureAwait(false);
         }, cancellationToken);
@@ -203,19 +207,4 @@ public sealed class ImapMailReceiver : IMailReceiver
     // Broiler-Falsified-If: the reading limit stated in the message differs from MaximumMessageBytes
     // Broiler-Human:        PENDING
     private static MailConnectionException MessageTooLarge() => new("This message exceeds the version 1 reading limit of 2 MiB (including attachments).");
-
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=0; Fingerprint=1ED042
-    // Broiler-Falsified-If: a server that announces or sends more than 2 MiB plus one byte for the partial body fetch is read on instead of aborted
-    // Broiler-Human:        PENDING
-    private sealed class SizeLimitProgress : ITransferProgress
-    {
-        // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=0; Fingerprint=B96F7A
-        // Broiler-Falsified-If: a progress report of 2,097,153 bytes transferred returns instead of throwing the message-too-large error
-        // Broiler-Human:        PENDING
-        public void Report(long bytesTransferred, long totalSize)
-        {
-            if (bytesTransferred > MaximumMessageBytes || totalSize > MaximumMessageBytes + 1) throw MessageTooLarge();
-        }
-        public void Report(long bytesTransferred) => Report(bytesTransferred, bytesTransferred);
-    }
 }

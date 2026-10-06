@@ -3,23 +3,23 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   9
-// Annotated:        9/9
+// Relevant units:   10
+// Annotated:        9/10
 // Exempt:           0
-// Human-reviewed:   0/9
+// Human-reviewed:   0/10
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         9/9
 // Resource impact:  7/10 max
-// Unverified:       9
+// Unverified:       10
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
 using System.Text;
+using Broiler.Mail.Core.Diagnostics;
 using Broiler.Mail.Core.Messages;
-using MimeKit;
-using MimeKit.Text;
-using MimeKit.Utils;
+using Broiler.Mail.Infrastructure.Html;
+using Broiler.Mail.Infrastructure.Mime;
 using Broiler.Mail.Infrastructure.Preview;
 
 namespace Broiler.Mail.Infrastructure.Mail;
@@ -30,6 +30,11 @@ namespace Broiler.Mail.Infrastructure.Mail;
 // Broiler-Human:        PENDING
 internal static class MessageTextDecoder
 {
+    static MessageTextDecoder()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
+
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=0ECAA8
     // Broiler-Falsified-If: a text body longer than 32,000 characters reaches the reading pane in full instead of being cut at this limit and marked truncated
     // Broiler-Human:        PENDING
@@ -40,7 +45,7 @@ internal static class MessageTextDecoder
     // Broiler-Human:        PENDING
     public static async Task<MailMessageBody> DecodeAsync(MailMessageKey key, Stream stream, CancellationToken token)
     {
-        using var message = await MimeMessage.LoadAsync(new ParserOptions { MaxMimeDepth = 32 }, stream, token).ConfigureAwait(false);
+        var message = await MimeParser.ParseAsync(stream, token).ConfigureAwait(false);
         string? text = message.TextBody;
         string? htmlBody = message.HtmlBody;
         bool fallback = false;
@@ -62,72 +67,30 @@ internal static class MessageTextDecoder
         string? compositionError = null;
         try { composition = CompositionHeaders(message); }
         catch (ArgumentException) { compositionError = "Reply headers are invalid or exceed the composition limits. Start a new message instead."; }
-        var embeddedImages = ExtractEmbeddedImages(message);
         return new(key, string.IsNullOrWhiteSpace(text) ? "(No readable text in this message.)" : text,
             htmlBody is { Length: <= HtmlPreviewPolicy.MaximumHtmlCharacters } ? htmlBody : null)
         {
             HtmlUnavailableReason = htmlBody?.Length > HtmlPreviewPolicy.MaximumHtmlCharacters ? "HTML exceeds the 128,000-character preview limit. The text preview remains available." : null,
             IsHtmlFallback = fallback, IsTruncated = truncated,
             Composition = composition, CompositionUnavailableReason = compositionError,
-            EmbeddedImages = embeddedImages,
+            EmbeddedImages = message.EmbeddedImages,
         };
-    }
-
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=64E094
-    // Broiler-Falsified-If: a part declared as image/svg+xml, or as any type other than PNG, JPEG, GIF or WebP, is extracted as an embedded image
-    // Broiler-Human:        PENDING
-    private static readonly HashSet<string> SupportedImageTypes = new(StringComparer.OrdinalIgnoreCase)
-    {
-        "image/png", "image/jpeg", "image/gif", "image/webp"
-    };
-
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=7DD7B4
-    // Broiler-Falsified-If: the returned dictionary holds more than 16 images, an image larger than 1 MiB, or more than 2 MiB of image data in total
-    // Broiler-Human:        PENDING
-    private static Dictionary<string, MailEmbeddedImage> ExtractEmbeddedImages(MimeMessage message)
-    {
-        var result = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase);
-        int totalBytes = 0;
-        foreach (var entity in message.BodyParts)
-        {
-            if (result.Count >= MailEmbeddedImage.MaximumImageCount) break;
-            if (entity is not MimePart part) continue;
-            string? contentId = part.ContentId;
-            if (string.IsNullOrWhiteSpace(contentId)) continue;
-            string mediaType = part.ContentType.MimeType;
-            if (!SupportedImageTypes.Contains(mediaType)) continue;
-
-            string normalizedCid = contentId.Trim().Trim('<', '>');
-            if (normalizedCid.Length == 0 || normalizedCid.Length > 256 || normalizedCid.Any(char.IsControl)) continue;
-            if (result.ContainsKey(normalizedCid)) continue;
-
-            if (part.Content is null) continue;
-            using var memory = new MemoryStream();
-            part.Content.DecodeTo(memory);
-            byte[] bytes = memory.ToArray();
-            if (bytes.Length == 0 || bytes.Length > MailEmbeddedImage.MaximumImageBytes) continue;
-            if (totalBytes + bytes.Length > MailEmbeddedImage.MaximumTotalBytes) break;
-
-            totalBytes += bytes.Length;
-            result[normalizedCid] = new MailEmbeddedImage(normalizedCid, mediaType.ToLowerInvariant(), bytes);
-        }
-        return result;
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=5BC1DA
     // Broiler-Falsified-If: a received Message-ID, References or In-Reply-To value containing CR or LF is copied into the reply composition source
     // Broiler-Human:        PENDING
-    private static MailCompositionSource CompositionHeaders(MimeMessage message)
+    private static MailCompositionSource CompositionHeaders(ParsedMimeMessage message)
     {
         static string Safe(string value, int maximum)
         {
             if (value.Length > maximum || value.Any(char.IsControl)) throw new ArgumentException();
             return value;
         }
-        static string[] Addresses(InternetAddressList list)
+        static string[] Addresses(IEnumerable<string> list)
         {
-            var addresses = list.Mailboxes.Take(MailComposition.MaximumRecipients + 1)
-                .Select(mailbox => Safe(mailbox.Address, 320)).ToArray();
+            var addresses = list.Take(MailComposition.MaximumRecipients + 1)
+                .Select(address => Safe(address, 320)).ToArray();
             if (addresses.Length > MailComposition.MaximumRecipients) throw new ArgumentException();
             // The composer uses canonical mailbox addresses, not a truncated display-name string.
             foreach (string address in addresses)
@@ -147,8 +110,7 @@ internal static class MessageTextDecoder
             From = Addresses(message.From), ReplyTo = Addresses(message.ReplyTo), To = Addresses(message.To), Cc = Addresses(message.Cc),
             MessageId = message.MessageId is { } id ? Safe(id, 998) : null,
             References = Ids(message.References),
-            InReplyTo = Ids(message.Headers.Where(header => header.Id == HeaderId.InReplyTo)
-                .SelectMany(header => MimeUtils.EnumerateReferences(header.Value))),
+            InReplyTo = Ids(message.InReplyTo),
         };
     }
 

@@ -59,7 +59,8 @@ In demo mode:
 - Ctrl+2: Account
 - Ctrl+3: Settings
 - Ctrl+4: Compose
-- Ctrl+Tab / Ctrl+Shift+Tab: switch tabs
+- F10: open the menu; arrows and Enter choose a command
+- Escape: close the active dialog (or cancel an active connection test)
 - F5: receive mail
 - Escape: cancel active operation
 - Tab / Shift+Tab: move between controls; off-screen fields scroll into view

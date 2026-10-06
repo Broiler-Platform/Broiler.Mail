@@ -3,7 +3,6 @@ using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Mail;
-using MailKit.Net.Imap;
 
 namespace Broiler.Mail.Tests;
 
@@ -193,8 +192,7 @@ public sealed class ImapReceivingTests
         var account = TestDirectory.Profile() with { IncomingServer = new() { Host = "127.0.0.1", Port = server.Port, UserName = "test", Security = security } };
         var credentials = new TestCredentialStore();
         await credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Imap), LocalImapServer.Password);
-        var receiver = new ImapMailReceiver(credentials, () => new ImapClient
-        { ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == server.Certificate.GetCertHashString() }, timeout ?? TimeSpan.FromSeconds(5));
+        var receiver = new ImapMailReceiver(credentials, (_, cert, _, _) => cert?.GetCertHashString() == server.Certificate.GetCertHashString(), timeout ?? TimeSpan.FromSeconds(5));
         return (receiver, account);
     }
 }

@@ -3,25 +3,26 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   6
-// Annotated:        6/6
+// Relevant units:   7
+// Annotated:        6/7
 // Exempt:           4
-// Human-reviewed:   0/6
+// Human-reviewed:   0/7
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         4/4
 // Resource impact:  3/10 max
-// Unverified:       6
+// Unverified:       7
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
+using System.Net.Security;
+using System.Text;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Validation;
-using MailKit.Net.Smtp;
-using MailKit.Security;
-using MimeKit;
+using Broiler.Mail.Infrastructure.Mime;
+using Broiler.Mail.Infrastructure.Protocols.Smtp;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
@@ -30,24 +31,32 @@ namespace Broiler.Mail.Infrastructure.Mail;
 // Broiler-Human:        PENDING
 public sealed class SmtpMailSender : IMailSender
 {
+    static SmtpMailSender()
+    {
+        Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+    }
     private readonly ICredentialStore _credentials;
-    private readonly Func<SmtpClient> _createClient;
+    private readonly Func<SmtpProtocolClient> _clientFactory;
     private readonly TimeSpan _timeout;
     public bool IsAvailable => true;
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=None; Security=High; Resources=1; Fingerprint=B5D1E4
     // Broiler-Falsified-If: the client produced by the public constructor accepts a server certificate that system certificate validation rejects
     // Broiler-Human:        PENDING
-    public SmtpMailSender(ICredentialStore credentials) : this(credentials, () => new SmtpClient(), TimeSpan.FromSeconds(20)) { }
+    public SmtpMailSender(ICredentialStore credentials)
+        : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20)) { }
 
     // Only tests replace certificate validation and shorten the deadline.
     // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=B7C6FC
     // Broiler-Falsified-If: an assembly other than the component's test project can construct the sender with its own client factory or deadline
     // Broiler-Human:        PENDING
-    internal SmtpMailSender(ICredentialStore credentials, Func<SmtpClient> createClient, TimeSpan timeout)
+    internal SmtpMailSender(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout)
+        : this(credentials, () => new SmtpProtocolClient(certValidator), timeout) { }
+
+    internal SmtpMailSender(ICredentialStore credentials, Func<SmtpProtocolClient> clientFactory, TimeSpan timeout)
     {
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
-        _createClient = createClient;
+        _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         _timeout = timeout;
     }
 
@@ -69,19 +78,19 @@ public sealed class SmtpMailSender : IMailSender
             if (server is null) return Rejected("Configure and save the SMTP server first.");
             if (server.Authentication != AuthenticationMethod.Password)
                 return Rejected("SMTP OAuth sign-in is not implemented. Use password or app-password authentication.");
-            using var message = OutgoingMessageFactory.Create(account, draft);
-            var recipients = draft.To.Concat(draft.Cc).Concat(draft.Bcc).Distinct(StringComparer.OrdinalIgnoreCase).Select(value => MailboxAddress.Parse(value)).ToArray();
+            byte[] messageBytes = MimeSerializer.Serialize(account, draft, includeBcc: false);
+            var recipients = draft.To.Concat(draft.Cc).Concat(draft.Bcc).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             string? secret = await _credentials.ReadAsync(CredentialKey.For(account, MailProtocol.Smtp), deadline.Token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(secret)) return Rejected("Save an SMTP password for the current outgoing server in Account first.");
-            using var client = _createClient();
-            client.Timeout = (int)_timeout.TotalMilliseconds;
-            await client.ConnectAsync(server.Host, server.Port,
-                server.Security == TransportSecurity.Tls ? SecureSocketOptions.SslOnConnect : SecureSocketOptions.StartTls, deadline.Token).ConfigureAwait(false);
+
+            await using var client = _clientFactory();
+            await client.ConnectAsync(server.Host, server.Port, server.Security, deadline.Token).ConfigureAwait(false);
             await client.AuthenticateAsync(server.UserName, secret, deadline.Token).ConfigureAwait(false);
             deadline.Token.ThrowIfCancellationRequested();
             submissionStarted = true;
+
             // Bcc exists only in the explicit envelope. No Bcc header is ever constructed.
-            await client.SendAsync(FormatOptions.Default, message, message.From.Mailboxes.Single(), recipients, deadline.Token).ConfigureAwait(false);
+            await client.SendMailAsync(draft.FromAddress, recipients, messageBytes, deadline.Token).ConfigureAwait(false);
             accepted = true;
             // No QUIT round trip after acceptance: a later connection failure must not suggest a retry.
             return Accepted();

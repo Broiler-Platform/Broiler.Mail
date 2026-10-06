@@ -32,14 +32,14 @@ public sealed class ToolbarWrapTests
         {
             using var shell = new MailShellView(model);
             using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(width, height));
-            session.AddRoot(shell.Window);
+            shell.Attach(session);
             int checkedToolbars = 0, wrapped = 0;
             foreach (string tab in new[] { "inbox", "compose", "account", "settings" })
             {
-                shell.Navigation.SelectTab(tab);
+                shell.ShowView(tab);
                 session.RenderFrame();
                 session.RenderFrame();
-                foreach (var toolbar in Descendants(shell.Navigation.SelectedTab!.Content!).OfType<StandardToolbar>().Where(Shown))
+                foreach (var toolbar in Descendants(shell.ActiveContent).OfType<StandardToolbar>().Where(Shown))
                 {
                     checkedToolbars++;
                     string where = $"{tab} toolbar {toolbar.AccessibleName ?? toolbar.GetType().Name} at {width}x{height}, text {textScale:P0}";

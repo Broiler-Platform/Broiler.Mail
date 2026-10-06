@@ -403,8 +403,8 @@ public sealed class SmtpSetupTests
             {
                 if (e.Change == UiSemanticChangeKind.StatusAnnounced) Announced.Add(e.Message ?? "");
             };
-            Session.AddRoot(Shell.Window);
-            Shell.Navigation.SelectTab("account");
+            Shell.Attach(Session);
+            Shell.ShowView("account");
             Keyboard = Shell.CreateKeyboardNavigation(Session);
             Settle();
         }
@@ -416,7 +416,7 @@ public sealed class SmtpSetupTests
         public MailShellView Shell { get; }
         public UiSession Session { get; }
         public MailKeyboardNavigation Keyboard { get; }
-        public UiElement Content => Shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;
+        public UiElement Content => Shell.GetContent("account");
         private StandardPanel Checklist => Descendants(Content).OfType<FormSection>().First().Content;
         public StandardLabel Footer => Shell.Footer;
         public StandardButton Next => Descendants(Content).OfType<StandardButton>().Single(button => button.Text.StartsWith("Next:", StringComparison.Ordinal) || button.Text == "Open Inbox");

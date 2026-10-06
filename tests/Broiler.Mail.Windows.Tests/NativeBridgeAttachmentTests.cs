@@ -67,7 +67,7 @@ public sealed class NativeBridgeAttachmentTests
                 window.Show();
                 ShowWindow(window.NativeHandle, 0); // Keep the native fixture hidden.
                 // A new message focuses To; posted characters must arrive there exactly once.
-                var compose = window.Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!;
+                var compose = window.Shell.GetContent("compose");
                 Descendants(compose).OfType<StandardButton>().Single(button => button.Text == "New message").Click();
                 var to = (StandardEdit)Descendants(compose).OfType<StandardLabel>().Single(label => label.Text == "To").Target!;
                 ready.SetResult((window.NativeHandle, window.RenderNativeHandleForTests, window.AutomationBridge?.Hwnd ?? 0, window.InputBridge is not null));

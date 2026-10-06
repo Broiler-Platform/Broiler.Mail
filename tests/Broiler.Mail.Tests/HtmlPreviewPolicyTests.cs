@@ -119,4 +119,105 @@ public sealed class HtmlPreviewPolicyTests
         if (oversized) { Assert.Null(body.HtmlText); Assert.Contains("limit", body.HtmlUnavailableReason); }
         else { Assert.Contains("<b>HTML</b>", body.HtmlText); Assert.Null(body.HtmlUnavailableReason); }
     }
+
+    [Fact]
+    public void PreservesValidDataUriImagesInHtml()
+    {
+        string redPixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        string html = $"<p>Here is an inline picture: <img src=\"{redPixel}\" alt=\"Red Dot\"></p>";
+        var doc = HtmlPreviewPolicy.Create(html);
+
+        Assert.True(doc.HasEmbeddedImages);
+        Assert.Contains("<img src=\"data:image/png;base64,", doc.Html);
+        Assert.Contains("alt=\"Red Dot\"", doc.Html);
+        Assert.Contains("style=\"max-width:100%;height:auto\"", doc.Html);
+    }
+
+    [Theory]
+    [InlineData("data:text/html;base64,PHNjcmlwdD5hbGVydCgxKTwvc2NyaXB0Pg==")] // Non-image MIME
+    [InlineData("data:image/svg+xml;base64,PHN2Zz48L3N2Zz4=")] // SVG active content
+    [InlineData("data:image/png;notbase64,abcd")] // Missing base64
+    [InlineData("data:image/png;base64,bad!@#$")] // Invalid characters in base64
+    [InlineData("data:image/png;base64,bad&quot;onerror=&quot;alert(1)")] // Encoded breakout attempt
+    public void RejectsUnsafeOrMalformedDataUris(string unsafeDataUri)
+    {
+        string html = $"<p><img src=\"{unsafeDataUri}\" alt=\"Dangerous\"></p>";
+        var doc = HtmlPreviewPolicy.Create(html);
+
+        Assert.False(doc.HasEmbeddedImages);
+        Assert.DoesNotContain("<img", doc.Html);
+        Assert.DoesNotContain("alert(1)", doc.Html);
+    }
+
+    [Fact]
+    public void AttributeBreakoutAttemptsDoNotLeakActiveHandlers()
+    {
+        string html = "<p><img src=\"data:image/png;base64,iVBORw0KGgo=\" onerror=\"alert(1)\"></p>";
+        var doc = HtmlPreviewPolicy.Create(html);
+        Assert.DoesNotContain("onerror", doc.Html);
+        Assert.DoesNotContain("alert(1)", doc.Html);
+        Assert.Contains("<img src=\"data:image/png;base64,iVBORw0KGgo=\"", doc.Html);
+    }
+
+    [Fact]
+    public void ResolvesUrlEncodedCidAndFilenameImages()
+    {
+        byte[] fakeBytes = [1, 2, 3, 4];
+        var embedded = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["image@example.com"] = new MailEmbeddedImage("image@example.com", "image/jpeg", fakeBytes),
+            ["logo.png"] = new MailEmbeddedImage("logo.png", "image/png", fakeBytes)
+        };
+
+        // One URL-encoded CID (%40 for @), one relative filename
+        string html = "<p><img src=\"cid:image%40example.com\" alt=\"Encoded CID\"><img src=\"logo.png\" alt=\"Filename Ref\"></p>";
+        var doc = HtmlPreviewPolicy.Create(html, embedded);
+
+        Assert.True(doc.HasEmbeddedImages);
+        Assert.Contains("<img src=\"data:image/jpeg;base64,", doc.Html);
+        Assert.Contains("alt=\"Encoded CID\"", doc.Html);
+        Assert.Contains("<img src=\"data:image/png;base64,", doc.Html);
+        Assert.Contains("alt=\"Filename Ref\"", doc.Html);
+    }
+
+    [Fact]
+    public void InlinesDownloadedRemoteImagesWhenAllowed()
+    {
+        byte[] fakeBytes = [10, 20, 30];
+        string remoteUrl = "https://example.test/banner.jpg";
+        var downloaded = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase)
+        {
+            [remoteUrl] = new MailEmbeddedImage(remoteUrl, "image/jpeg", fakeBytes)
+        };
+
+        string html = $"<p><img src=\"{remoteUrl}\" alt=\"Banner\"></p>";
+        var doc = HtmlPreviewPolicy.Create(html, downloaded, allowRemoteImages: true);
+
+        Assert.True(doc.HasEmbeddedImages);
+        Assert.Contains("<img src=\"data:image/jpeg;base64,", doc.Html);
+        Assert.Contains("alt=\"Banner\"", doc.Html);
+        Assert.Contains(remoteUrl, doc.RemoteImageUrls);
+    }
+
+    [Fact]
+    public async Task MimeDecoderExtractsJpegAliasesAndBmpImages()
+    {
+        byte[] fakeBytes = [0xFF, 0xD8, 0xFF, 0xE0];
+        string base64 = Convert.ToBase64String(fakeBytes);
+        string raw = "MIME-Version: 1.0\r\nContent-Type: multipart/related; boundary=bound\r\n\r\n" +
+            "--bound\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Test</p>\r\n" +
+            "--bound\r\nContent-Type: image/jpg\r\nContent-ID: <jpgtest@example.com>\r\nContent-Transfer-Encoding: base64\r\n\r\n" +
+            base64 + "\r\n" +
+            "--bound\r\nContent-Type: image/bmp\r\nContent-ID: <bmptest@example.com>\r\nContent-Transfer-Encoding: base64\r\n\r\n" +
+            base64 + "\r\n--bound--\r\n";
+
+        using var stream = new MemoryStream(Encoding.UTF8.GetBytes(raw));
+        var body = await MessageTextDecoder.DecodeAsync(new(AccountId.New(), "INBOX", 1, 1), stream, CancellationToken.None);
+
+        Assert.Equal(2, body.EmbeddedImages.Count);
+        Assert.Contains("jpgtest@example.com", body.EmbeddedImages.Keys);
+        Assert.Contains("bmptest@example.com", body.EmbeddedImages.Keys);
+        Assert.Equal("image/jpeg", body.EmbeddedImages["jpgtest@example.com"].ContentType);
+        Assert.Equal("image/bmp", body.EmbeddedImages["bmptest@example.com"].ContentType);
+    }
 }

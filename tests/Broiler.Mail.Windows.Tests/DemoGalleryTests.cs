@@ -722,7 +722,7 @@ public sealed class DemoGalleryTests
     private static string[] StepLines(MailShellView shell) => Descendants(Tab(shell, "account")).OfType<FormSection>().First().Content.Children
         .OfType<StandardLabel>().Where(label => label.Visibility == UiVisibility.Visible).Select(label => label.Text).ToArray();
 
-    private static UiElement Tab(MailShellView shell, string id) => shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
+    private static UiElement Tab(MailShellView shell, string id) => shell.GetContent(id);
 
     private static StandardButton Button(MailShellView shell, string tab, string text) =>
         Descendants(Tab(shell, tab)).OfType<StandardButton>().Single(button => button.Text == text);
@@ -770,10 +770,10 @@ public sealed class DemoGalleryTests
         }
         driver.Completion.GetAwaiter().GetResult();
         dispatcher.Drain();
-        Assert.Equal(options.InitialTab, shell.Navigation.SelectedTab?.Id);
+        Assert.Equal(options.InitialView, shell.ActiveViewId);
 
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new HeadlessHost(options.Width, options.Height));
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         Assert.NotNull(session.RenderFrame());
         verify(model, shell, () =>
         {

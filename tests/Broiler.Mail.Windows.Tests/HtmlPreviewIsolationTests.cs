@@ -6,6 +6,7 @@ using Broiler.Graphics.Imaging;
 using Broiler.Graphics.Rendering;
 using Broiler.Graphics.RenderList;
 using Broiler.Graphics.Resources;
+using Broiler.HTML.Image;
 using Broiler.Input;
 using Broiler.Input.Keyboard;
 using Broiler.Input.Mouse;
@@ -837,6 +838,46 @@ public sealed class HtmlPreviewIsolationTests
     private static UiInputEvent MouseClick(double x, double y) => UiInputEvent.FromMouseButton(new MouseButtonEvent(
         Header(), InputPoint.ClientDeviceIndependentPixels(x, y),
         MouseButtons.None, MouseButton.Left, MouseButtonTransition.Up, InputEventSource.Synthetic));
+    [Fact]
+    public void RendersInlineDataImageSuccessfully()
+    {
+        HtmlRuntime.Initialize();
+        string redPixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        var renderer = new TestBroilerRenderer();
+        var view = new ScrollableHtmlView($"<img src='{redPixel}' width='20' height='20'>", () => renderer, _ => { });
+        view.Measure(new BSize(200, 200));
+        view.Arrange(new BRect(0, 0, 200, 200));
+        var tile = view.Content.PaintTile(0, 1.0, 200, 200);
+        var p = tile.GetPixel(10, 10);
+        Assert.True(p.R > 100, $"Expected red pixel from inline image, got {p}");
+    }
+
+    [Fact]
+    public void HtmlViewElement_UpdatesAndRenders_WhenHtmlUpdatedWithInlinedDataUri()
+    {
+        HtmlRuntime.Initialize();
+        var renderer = new TestBroilerRenderer();
+        string initialHtml = "<p>Initial text</p>";
+        var view = new ScrollableHtmlView(initialHtml, () => renderer, _ => { });
+        view.Measure(new BSize(800, 600));
+        view.Arrange(new BRect(0, 0, 800, 600));
+
+        string redPixel = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+        string updatedHtml = $"<p>With image</p><img src=\"{redPixel}\" width=\"24\" height=\"24\">";
+        view.Content.UpdateHtml(updatedHtml);
+        view.Measure(new BSize(800, 600));
+        view.Arrange(new BRect(0, 0, 800, 600));
+
+        var host = new TestUiHost { ViewportSize = new BSize(800, 600), Scale = 1.0 };
+        var session = new StandardUiSessionBuilder().Build(host);
+        var renderList = new BRenderList();
+        var context = new UiRenderContext(renderList, session, host);
+
+        view.Render(context);
+
+        Assert.NotEmpty(renderer.CreatedImages);
+        Assert.True(view.Content.CachedTileCount > 0);
+    }
 
     private sealed class TestBroilerRenderer : IBroilerRenderer
     {

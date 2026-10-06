@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   2
-// Annotated:        2/2
-// Exempt:           0
-// Human-reviewed:   0/2
+// Relevant units:   10
+// Annotated:        2/10
+// Exempt:           3
+// Human-reviewed:   0/10
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         2/2
 // Resource impact:  8/10 max
-// Unverified:       2
+// Unverified:       10
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -40,7 +40,7 @@ public sealed class HtmlMessagePreview(IHtmlPreviewHost host) : IMessagePreview
     public const string CloseText = "Close HTML preview";
     public const string OpeningText = "Opening HTML preview…";
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=1190B1
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=F6DEBF
     // Broiler-Falsified-If: an exception thrown by host.ShowAsync escapes the async click handler instead of becoming the HTML preview unavailable status
     // Broiler-Human:        PENDING
     public UiElement CreateContent(MailMessageBody message)

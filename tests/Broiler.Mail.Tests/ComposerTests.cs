@@ -284,8 +284,7 @@ public sealed class ComposerTests
         var account = TestDirectory.Profile() with { IncomingServer = new() { Host = "127.0.0.1", Port = server.Port, UserName = "test" } };
         var credentials = new TestCredentialStore();
         await credentials.WriteAsync(CredentialKey.For(account, MailProtocol.Imap), LocalImapServer.Password);
-        var receiver = new ImapMailReceiver(credentials, () => new MailKit.Net.Imap.ImapClient
-        { ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == server.Certificate.GetCertHashString() }, TimeSpan.FromSeconds(5));
+        var receiver = new ImapMailReceiver(credentials, (_, cert, _, _) => cert?.GetCertHashString() == server.Certificate.GetCertHashString(), TimeSpan.FromSeconds(5));
         var body = await receiver.GetBodyAsync(account, new(account.Id, "INBOX", server.UidValidity, 1));
         Assert.Equal("parent@example.test", body.Composition!.MessageId);
         Assert.Equal("reply@example.test", Assert.Single(body.Composition.ReplyTo));
@@ -307,12 +306,12 @@ public sealed class ComposerTests
             new(receiver, new ImmediateUiDispatcher()));
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().Build(new Host(width, height));
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         var keyboard = shell.CreateKeyboardNavigation(session);
         bool Dispatch(UiInputEvent input) => keyboard.Handle(input) || session.DispatchInput(input);
         Assert.True(Dispatch(Key(0x34, control: true)));
-        Assert.Equal("compose", shell.Navigation.SelectedTab!.Id);
-        var content = shell.Navigation.SelectedTab.Content!;
+        Assert.Equal("compose", shell.ActiveViewId);
+        var content = shell.ActiveContent;
         Button(content, "New message").Click();
         var fields = Descendants(content).OfType<StandardLabel>().Where(label => label.Target is StandardEdit).ToDictionary(label => label.Text);
         Assert.IsType<StandardEdit>(fields["To"].Target).Text = "to@example.test";
@@ -322,7 +321,7 @@ public sealed class ComposerTests
         var body = Descendants(content).OfType<StandardRichEdit>().Single();
         body.SetPlainText("First line");
         session.RenderFrame();
-        session.SetFocus(shell.Navigation);
+        session.SetFocus(shell.NavigationFocus);
         for (int attempt = 0; attempt < 20 && session.FocusedElement != body; attempt++) Dispatch(Key(9));
         Assert.Same(body, session.FocusedElement);
         Assert.True(Dispatch(Key(13)));
@@ -340,10 +339,10 @@ public sealed class ComposerTests
         Assert.Contains("No mail was sent", model.Composer.Status);
         Assert.Equal(new[] { "bcc@example.test" }, model.Composer.BuildDraft().Bcc);
         Assert.False(Button(content, "New message").IsEnabled);
-        Assert.True(Dispatch(Key(9, control: true)));
-        Assert.Equal("inbox", shell.Navigation.SelectedTab!.Id);
-        Assert.True(Dispatch(Key(9, shift: true, control: true)));
-        Assert.Equal("compose", shell.Navigation.SelectedTab!.Id);
+        Assert.True(Dispatch(Key(0x31, control: true)));
+        Assert.Equal("inbox", shell.ActiveViewId);
+        Assert.True(Dispatch(Key(0x34, control: true)));
+        Assert.Equal("compose", shell.ActiveViewId);
         Assert.Equal(beforeTab, body.GetPlainText());
         await DiscardUsingButton(content, model.Composer);
         Assert.False(model.Composer.HasDraft);

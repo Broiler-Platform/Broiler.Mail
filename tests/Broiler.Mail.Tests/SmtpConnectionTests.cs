@@ -2,7 +2,6 @@ using System.Diagnostics;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Mail;
-using MailKit.Net.Smtp;
 
 namespace Broiler.Mail.Tests;
 
@@ -131,7 +130,7 @@ public sealed class SmtpConnectionTests
         var account = TestDirectory.Profile() with { OutgoingServer = new() { Host = "127.0.0.1", Port = port, UserName = "test", Security = TransportSecurity.StartTls } };
         var credentials = await Credentials(account);
         // Windows retries a refused loopback connection for about two seconds; the deadline leaves room for that.
-        var tester = new SmtpConnectionTester(credentials, () => new SmtpClient(), TimeSpan.FromSeconds(15));
+        var tester = new SmtpConnectionTester(credentials, (System.Net.Security.RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(15));
         var error = await Assert.ThrowsAsync<MailConnectionException>(() => tester.TestConnectionAsync(account));
         Assert.Equal(MailConnectionFailure.Unreachable, error.Failure);
     }
@@ -279,10 +278,7 @@ public sealed class SmtpConnectionTests
 
     // Only this fixture's ephemeral certificate is trusted. No OS trust store is changed.
     private static SmtpConnectionTester Tester(ICredentialStore credentials, LocalSmtpServer server, TimeSpan? timeout = null, TimeSpan? quitBudget = null) =>
-        new(credentials, () => new SmtpClient
-        {
-            ServerCertificateValidationCallback = (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString(),
-        }, timeout ?? TimeSpan.FromSeconds(5), quitBudget);
+        new(credentials, (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString(), timeout ?? TimeSpan.FromSeconds(5), quitBudget);
 
     private sealed class UnreadableCredentialStore : ICredentialStore
     {

@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   14
-// Annotated:        14/14
-// Exempt:           21
-// Human-reviewed:   0/14
+// Relevant units:   28
+// Annotated:        13/28
+// Exempt:           44
+// Human-reviewed:   0/28
 // IP risk:          Low
 // Security risk:    High
-// Criteria:         14/9
+// Criteria:         13/9
 // Resource impact:  7/10 max
-// Unverified:       14
+// Unverified:       28
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -22,7 +22,7 @@ using Broiler.UI;
 
 namespace Broiler.Mail.Application.ViewModels;
 
-// Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=0E66E7
+// Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=CAB93C
 // Broiler-Falsified-If: a password is written under a credential key for connection details that differ from the saved profile
 // Broiler-Human:        PENDING
 /// <summary>The next action that brings an account closer to receiving mail.</summary>
@@ -44,7 +44,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     private CancellationTokenSource? _connectionCancellation;
     private int _credentialCheck;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=4B52C5
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=53AD41
     // Broiler-Falsified-If: a profile without an outgoing server opens with SMTP configuration switched on
     // Broiler-Human:        PENDING
     public AccountProfileViewModel(IAccountStore store, ICredentialStore credentials, IMailReceiver receiver,
@@ -190,7 +190,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     // Broiler-Human:        PENDING
     public bool CanCancelTest => IsBusy && _connectionCancellation is not null;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=87F27B
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=B60920
     // Broiler-Falsified-If: Profile is replaced by field values edited after the store write began rather than by the candidate the store wrote
     // Broiler-Human:        PENDING
     public Task SaveAsync(CancellationToken cancellationToken = default)
@@ -223,7 +223,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     public Task SavePasswordAsync(string password, CancellationToken cancellationToken = default) =>
         SavePasswordAsync(password, MailProtocol.Imap, cancellationToken);
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=14B721
+    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=143BC2
     // Broiler-Falsified-If: a password is written while the form host, port, user name or security differs from the saved profile instead of being refused
     // Broiler-Human:        PENDING
     public Task SavePasswordAsync(string password, MailProtocol protocol, CancellationToken cancellationToken = default) =>
@@ -239,7 +239,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     public Task ForgetPasswordAsync(CancellationToken cancellationToken = default) =>
         ForgetPasswordAsync(MailProtocol.Imap, cancellationToken);
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=EEDAAC
+    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=35354D
     // Broiler-Falsified-If: after the saved profile switches that protocol to OAuth2, Forget password is refused and the previously saved secret stays in the credential store
     // Broiler-Human:        PENDING
     public Task ForgetPasswordAsync(MailProtocol protocol, CancellationToken cancellationToken = default) =>
@@ -267,7 +267,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
         OutgoingFailureKind = null;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=FDC9C0
+    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=AF7681
     // Broiler-Falsified-If: a connection test runs while the form holds unsaved connection edits instead of being refused with the save-your-changes message
     // Broiler-Human:        PENDING
     public Task TestConnectionAsync(CancellationToken cancellationToken = default)
@@ -336,8 +336,11 @@ public sealed class AccountProfileViewModel : SaveViewModel
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=899D31
     // Broiler-Falsified-If: Cancel pressed after a test finished throws ObjectDisposedException from the disposed token source
-    // Broiler-Human:        PENDING
-    public void CancelConnectionTest() => _connectionCancellation?.Cancel();
+    public void CancelConnectionTest()
+    {
+        try { _connectionCancellation?.Cancel(); }
+        catch (Exception ex) when (ex is ObjectDisposedException or OperationCanceledException or AggregateException) { }
+    }
 
     /// <summary>
     /// The saved profile a test may use, or null after refusing the test. A test that cannot start, because of
@@ -367,7 +370,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
         return Profile;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=7565C7
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=D3A8D0
     // Broiler-Falsified-If: a host typed with a port, such as imap.example.com:993, yields a candidate profile without an ArgumentException
     // Broiler-Human:        PENDING
     private AccountProfile BuildProfile()

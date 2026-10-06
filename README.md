@@ -98,13 +98,17 @@ See [hosting package integration](docs/hosting-packages.md) for package scope an
 the app for a separate test profile. Credentials still use their account-specific
 Windows Credential Manager slots. `--help` lists startup options.
 
-To check application composition and render all four tabs without opening a window:
+To check application composition and render the inbox and all three dialogs without opening a window:
 
 ```powershell
 dotnet run --project src/Broiler.Mail.Windows --no-build -c Release -- --smoke-test
 ```
 
-The native shell has **Inbox**, **Account**, **Settings**, and **Compose** tabs. Save one account
+The inbox is the main workspace. **Mail** opens a new message or the current draft,
+**Message** offers Reply, Reply all, and Forward, and **Tools** opens the **Account**
+and **Settings** dialogs. Compose also opens in a dialog. Close or Escape returns
+to the inbox; unsaved fields and the current draft remain available when reopened.
+Use the existing Save buttons to apply account or settings changes. Save one account
 profile and its password, test the IMAP connection, receive mail, and read messages.
 Settings include a theme, Comfortable/Compact inbox row spacing, and initial window
 size. Saving row spacing updates the inbox immediately without changing text size.
@@ -112,9 +116,10 @@ The executable retains console
 output for startup diagnostics.
 
 Tab / Shift+Tab traverses enabled controls and reveals fields below the fold.
-Ctrl+1/2/3/4 selects Inbox/Account/Settings/Compose; Ctrl+Tab cycles tabs. F5 receives mail,
+F10 opens the menu; arrows and Enter select a command. Ctrl+1 returns to Inbox,
+and Ctrl+2/3/4 opens Account/Settings/Compose. F5 receives mail from the inbox,
 Ctrl+N starts a message, Ctrl+R / Ctrl+Shift+R / Ctrl+F reply, reply to all, and forward, Escape
-goes back from a narrow-window reader or cancels, Alt+Left goes back, and Enter on a selected inbox
+closes the active dialog, cancels an active connection test, or goes back from a narrow-window reader, Alt+Left goes back, and Enter on a selected inbox
 message opens it. Shortcuts need their exact modifiers, so AltGr characters type normally.
 Settings lists every shortcut. In the HTML preview window, Ctrl+= (or Ctrl+Plus), Ctrl+- and
 Ctrl+0 zoom in, zoom out, and reset, on the main keys or the number pad; Ctrl+wheel also zooms,
@@ -194,7 +199,7 @@ identifiers are included in outgoing MIME headers. Forward starts with empty rec
 fields and no reply-thread identifiers. Quotes identify truncated or HTML-derived
 text; attachments are not forwarded.
 
-Only one draft can be open. Changing tabs or inbox selection keeps it intact.
+Only one draft can be open. Closing and reopening the Compose dialog or changing inbox selection keeps it intact.
 Use **Discard draft** before starting another composition. The displayed sender is
 fixed when the draft starts; changing the saved email address does not silently
 change that draft's sender. Edits are automatically saved, including incomplete

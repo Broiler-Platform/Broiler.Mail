@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   6
-// Annotated:        6/6
+// Relevant units:   10
+// Annotated:        5/10
 // Exempt:           0
-// Human-reviewed:   0/6
+// Human-reviewed:   0/10
 // IP risk:          Low
 // Security risk:    Medium
-// Criteria:         6/0
+// Criteria:         5/0
 // Resource impact:  7/10 max
-// Unverified:       6
+// Unverified:       10
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -27,38 +27,69 @@ namespace Broiler.Mail.Application.Views;
 // Broiler-Human:        PENDING
 public sealed class MailKeyboardNavigation(UiSession session, MailShellView shell, MailShellViewModel model)
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=D11D0A
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=51E59B
     // Broiler-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
     // Broiler-Human:        PENDING
-    public bool Handle(UiInputEvent input) => MailShortcuts.Match(input) is { } shortcut && Execute(shortcut.Command);
+    public bool Handle(UiInputEvent input)
+    {
+        // Menus and combo-box popups own their arrows, Enter and Escape.
+        if (shell.Menu.IsOpen)
+        {
+            if (MailShortcuts.Match(input)?.Command == MailCommand.BackOrCancel)
+            {
+                session.DispatchInput(input);
+                shell.RestoreReaderFocus();
+                return true;
+            }
+            return false;
+        }
+        if (session.CapturedElement is not null) return false;
+        if (MailShortcuts.Match(input) is { } shortcut)
+        {
+            if (shortcut.Command == MailCommand.OpenMessage && shell.ActiveDialog is { } dialog)
+            {
+                var activeSession = dialog.Session ?? session;
+                // Route Enter to the editor/button, but never let it implicitly accept a form.
+                if (activeSession.FocusedElement is { } focused && focused != dialog && focused.IsDescendantOf(dialog)) focused.DispatchInput(input);
+                return true;
+            }
+            return Execute(shortcut.Command);
+        }
+        return false;
+    }
 
     /// <summary>Runs a shell command. Returns false when the key should still reach the focused control.</summary>
     public bool Execute(MailCommand command)
     {
-        var tabs = shell.Navigation;
         switch (command)
         {
             case MailCommand.NextField or MailCommand.PreviousField:
                 MoveFocus(command == MailCommand.NextField ? 1 : -1);
                 return true;
-            case MailCommand.NextTab or MailCommand.PreviousTab:
-                int count = tabs.Tabs.Count;
-                tabs.SelectedIndex = (tabs.SelectedIndex + (command == MailCommand.PreviousTab ? count - 1 : 1)) % count;
-                session.SetFocus(tabs);
+            case MailCommand.OpenMenu:
+                if (shell.ActiveDialog is not null) return true;
+                shell.RememberReaderFocus();
+                session.SetFocus(shell.Menu);
+                shell.Menu.Open();
+                session.CaptureInput(shell.Menu);
                 return true;
-            case >= MailCommand.InboxTab and <= MailCommand.ComposeTab:
-                tabs.SelectedIndex = command - MailCommand.InboxTab;
-                session.SetFocus(tabs);
-                return true;
+            case >= MailCommand.Inbox and <= MailCommand.Compose:
+                return shell.ShowView(command switch
+                {
+                    MailCommand.Inbox => "inbox", MailCommand.Account => "account",
+                    MailCommand.Settings => "settings", _ => "compose",
+                });
             case MailCommand.Receive:
-                tabs.SelectTab("inbox");
+                if (shell.ActiveDialog is not null) return true;
                 _ = model.Inbox.ReceiveAsync();
                 return true;
             // Composition shortcuts are consumed even when unavailable, so the chord never reaches an editor.
             case MailCommand.NewMessage:
+                if (shell.ActiveDialog is not null && shell.ActiveViewId != "compose") return true;
                 model.Compose.StartNew();
                 return true;
             case MailCommand.Reply or MailCommand.ReplyAll or MailCommand.Forward:
+                if (shell.ActiveDialog is not null) return true;
                 model.Compose.Respond(command switch
                 {
                     MailCommand.Reply => CompositionKind.Reply,
@@ -67,12 +98,16 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
                 });
                 return true;
             case MailCommand.OpenMessage:
+                // Do not let an unhandled Enter bubble into StandardDialog.Accept().
+                if (shell.ActiveDialog is not null) return true;
                 return session.FocusedElement is StandardListView && model.Inbox.SelectedMessage is not null && shell.Inbox.OpenSelected();
             case MailCommand.Back:
-                return tabs.SelectedTab?.Id == "inbox" && shell.Inbox.GoBackToList();
+                return shell.ActiveDialog is null && shell.Inbox.GoBackToList();
             case MailCommand.BackOrCancel:
                 // Escape first leaves a compact reader; with nothing to go back from, it cancels work.
-                if (!model.Inbox.IsBusy && tabs.SelectedTab?.Id == "inbox" && shell.Inbox.GoBackToList()) return true;
+                if (shell.ActiveViewId == "account" && model.Account.IsBusy) { model.Account.CancelConnectionTest(); return true; }
+                if (shell.CloseDialog()) return true;
+                if (!model.Inbox.IsBusy && shell.Inbox.GoBackToList()) return true;
                 model.Inbox.Cancel();
                 model.Account.CancelConnectionTest();
                 return true;
@@ -81,26 +116,27 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=609020
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=B660DE
     // Broiler-Falsified-If: Tab moves focus onto a disabled control or into the collapsed SMTP fields
     // Broiler-Human:        PENDING
     public void MoveFocus(int direction)
     {
+        var activeSession = shell.ActiveDialog?.Session ?? session;
         // Layout first: the adaptive inbox decides during layout which pane is collapsed (and hidden).
-        session.RenderFrame();
-        var controls = new List<UiElement> { shell.Navigation };
-        var content = shell.Navigation.SelectedTab?.Content;
+        activeSession.RenderFrame();
+        var controls = new List<UiElement> { shell.NavigationFocus };
+        var content = shell.ActiveContent;
         if (content is not null)
             controls.AddRange(TabStops(content));
-        int current = controls.IndexOf(session.FocusedElement!);
+        int current = controls.IndexOf(activeSession.FocusedElement!);
         UiElement next;
         if (current >= 0) next = controls[(current + direction + controls.Count) % controls.Count];
         // A control that is no longer a stop, such as a button disabled while its operation runs,
-        // keeps its place: Tab continues from there instead of restarting at the tabs.
-        else if (session.FocusedElement is { } focused && content is not null && focused.IsDescendantOf(content))
-            next = NextTabStop(content, focused, direction) ?? shell.Navigation;
+        // keeps its place: Tab continues from there instead of restarting at the navigation control.
+        else if (activeSession.FocusedElement is { } focused && content is not null && focused.IsDescendantOf(content))
+            next = NextTabStop(content, focused, direction) ?? shell.NavigationFocus;
         else next = direction > 0 ? controls[0] : controls[^1];
-        session.SetFocus(next);
+        activeSession.SetFocus(next);
         Reveal(next);
     }
 
@@ -139,17 +175,17 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     public static IReadOnlyList<UiElement> TabStops(UiElement content) =>
         Descendants(content).Where(IsTabStop).OrderBy(element => element.TabIndex).ToList();
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=36A581
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=5AB857
     // Broiler-Falsified-If: a focused field below the visible area of its scroll view stays out of view after Tab
     // Broiler-Human:        PENDING
-    private void Reveal(UiElement element) => FocusNavigation.Reveal(session, element);
+    private void Reveal(UiElement element) => FocusNavigation.Reveal(shell.ActiveDialog?.Session ?? session, element);
 
     // A scroll view of read-only content is a stop through StandardScrollView.FocusWhenScrollable, which
     // Mail sets on its named read-only areas: only while it has something to scroll, so a form's short
     // feedback area never takes focus invisibly with nothing for a screen reader to announce.
     private static bool IsTabStop(UiElement element) => element.CanFocus && element.IsTabStop;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=7860E1
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=563E24
     // Broiler-Falsified-If: an element inside a collapsed panel is returned
     // Broiler-Human:        PENDING
     private static IEnumerable<UiElement> Descendants(UiElement element)

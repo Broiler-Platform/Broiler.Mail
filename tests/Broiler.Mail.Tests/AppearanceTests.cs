@@ -87,7 +87,7 @@ public sealed class AppearanceTests
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         try
         {
             var first = StandardThemeTokens.HighContrastDark with { Name = "HighContrastSystem", SelectionText = BColor.FromArgb(0xFF, 0x26, 0x3B, 0x50) };
@@ -141,13 +141,13 @@ public sealed class AppearanceTests
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         try
         {
             using var appearance = new AppearanceController(session, model.Settings, host, _ => palette);
             Assert.Same(palette, appearance.Current);
-            shell.Navigation.SelectTab("account");
-            var account = shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!;
+            shell.ShowView("account");
+            var account = shell.GetContent("account");
             var save = Descendants(account).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Save account");
             var test = Descendants(account).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Test connection");
             Assert.True(save.IsDefault && save.IsEnabled && !test.IsDefault && test.IsEnabled);
@@ -251,16 +251,16 @@ public sealed class AppearanceTests
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         try
         {
             using var appearance = new AppearanceController(session, model.Settings, host);
             Assert.False(appearance.Current!.IsDark);
             Assert.True(model.Composer.StartNew());
             dispatcher.Drain();
-            shell.Navigation.SelectTab("compose");
+            shell.ShowView("compose");
             session.RenderFrame();
-            var body = Descendants(shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!).OfType<StandardRichEdit>().Single();
+            var body = Descendants(shell.GetContent("compose")).OfType<StandardRichEdit>().Single();
             body.SetPlainText("Text that must survive a theme change");
             dispatcher.Drain();
             Assert.True(body.SetEditorSelection(5, 9));
@@ -321,12 +321,12 @@ public sealed class AppearanceTests
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         try
         {
             using var appearance = new AppearanceController(session, model.Settings, host);
             session.RenderFrame();
-            var inbox = shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!;
+            var inbox = shell.GetContent("inbox");
             var receive = Descendants(inbox).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Receive mail");
             var subject = Descendants(inbox).OfType<StandardLabel>().Single(label => label.TextStyle == StandardTextStyle.Title);
             double receiveWidth = receive.DesiredSize.Width;
@@ -376,7 +376,7 @@ public sealed class AppearanceTests
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).WithClock(clock).Build(host);
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         try
         {
             using var appearance = new AppearanceController(session, model.Settings, host);
@@ -399,9 +399,9 @@ public sealed class AppearanceTests
             AssertStill("selecting a message");
 
             Assert.True(model.Composer.StartNew());
-            shell.Navigation.SelectTab("compose");
+            shell.ShowView("compose");
             AssertStill("switching tabs");
-            var compose = shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!;
+            var compose = shell.GetContent("compose");
             Descendants(compose).OfType<FormSection>().Single(section => section.Toggle is not null).Toggle!.Click();
             AssertStill("showing Cc and Bcc");
             session.SetFocus(Descendants(compose).OfType<StandardRichEdit>().Single());

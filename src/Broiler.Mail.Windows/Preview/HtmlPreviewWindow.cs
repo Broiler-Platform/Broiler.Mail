@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   48
-// Annotated:        48/48
-// Exempt:           35
-// Human-reviewed:   0/48
+// Relevant units:   110
+// Annotated:        48/110
+// Exempt:           88
+// Human-reviewed:   0/110
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         39/20
 // Resource impact:  8/10 max
-// Unverified:       48
+// Unverified:       110
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -32,6 +32,7 @@ using Broiler.Graphics.Windows;
 using Broiler.Hosting.Windows;
 using Broiler.Hosting.Windows.Accessibility;
 using Broiler.HTML.Image;
+using Broiler.Mail.Core.Diagnostics;
 using Broiler.Net.Http;
 using Broiler.Input.Keyboard;
 using Broiler.Input.Mouse;
@@ -69,7 +70,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     // Broiler-Human:        PENDING
     private static readonly HttpClient ImageHttpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=1A8942
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=AD9575
     // Broiler-Falsified-If: an embedded message image in the preview is decoded by a codec other than those ManagedImageCodecs.CreateCodecs returns, because an earlier registration made Use throw and the exception was swallowed
     // Broiler-Human:        PENDING
     static HtmlPreviewWindow()
@@ -113,6 +114,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private readonly ScrollableHtmlView _htmlView;
     private readonly StandardPanel _root;
     private WindowsAutomationBridge? _automationBridge;
+    internal WindowsAutomationBridge? AutomationBridge => _automationBridge;
 
     private bool _isShowingPlainText;
     private bool _allowRemoteImages;
@@ -143,10 +145,18 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     internal void Post(Action action) => PostToUiThread(action);
     /// <summary>UI-12: queues <paramref name="action"/> to the preview's thread; false once the window is closing.</summary>
     internal bool RunOnUiThread(Action action) => PostToUiThread(action);
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=0; Fingerprint=2829D7
+    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=0; Fingerprint=36E190
     // Broiler-Falsified-If: a CloseWindow call from the preview host's thread runs Close on that thread instead of queuing it to the preview window's own thread
     // Broiler-Human:        PENDING
-    internal void CloseWindow() => PostToUiThread(Close);
+    internal void CloseWindow()
+    {
+        _imageLoadCts?.Cancel();
+        PostToUiThread(() =>
+        {
+            _session.SetFocus(null);
+            Close();
+        });
+    }
 
     /// <summary>
     /// Re-themes the open preview, from any thread: the header, buttons, plain text, and caption follow
@@ -184,7 +194,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         FollowTextSize(theme.TextScale);
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=12DA3F
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=42FCE6
     // Broiler-Falsified-If: an ArgumentException from HtmlPreviewPolicy.Create inside LoadRemoteImagesAsync escapes the async Clicked handler of the Load remote images button and terminates the process
     // Broiler-Human:        PENDING
     public HtmlPreviewWindow(
@@ -215,6 +225,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         _rawHtml = rawHtml;
         _embeddedImages = embeddedImages;
         _measurement = measurement;
+        MailLogger.Info("HtmlPreview", $"HtmlPreviewWindow opened. Document: Embedded={_embeddedImages?.Count ?? 0}, RemoteUrls={_document.RemoteImageUrls.Count}, HasEmbeddedImages={_document.HasEmbeddedImages}.");
 
         _host = new WindowsUiHost(this, () => InputHandle);
         _dispatcher = new StandardQueuedUiDispatcher(() => PostToUiThread(DrainDispatcher));
@@ -306,7 +317,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         CloseRequested += (_, _) =>
         {
             _imageLoadCts?.Cancel();
-            Close();
+            _session.SetFocus(null);
+            PostToUiThread(Close);
         };
         Closed += (_, _) =>
         {
@@ -332,7 +344,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         return Task.CompletedTask;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Low; Resources=0; Fingerprint=E0745E
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Low; Resources=0; Fingerprint=4A1377
     // Broiler-Human:        PENDING
     public void ToggleView()
     {
@@ -370,12 +382,14 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     /// </summary>
     public HtmlResourceBatchResult? LastResourceBatchResult { get; private set; }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=F31BD1
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=955FDF
     // Broiler-Falsified-If: a remote image response larger than 5,000,000 bytes is read fully into memory before the size check discards it
     // Broiler-Human:        PENDING
     public async Task LoadRemoteImagesAsync()
     {
         if (_allowRemoteImages || string.IsNullOrEmpty(_rawHtml)) return;
+
+        MailLogger.Info("HtmlPreview", $"LoadRemoteImagesAsync initiated for {_document.RemoteImageUrls.Count} remote images.");
 
         _imageLoadCts?.Cancel();
         _imageLoadCts?.Dispose();
@@ -399,6 +413,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             LastResourceBatchResult = batchResult;
 
             token.ThrowIfCancellationRequested();
+
+            MailLogger.Info("HtmlPreview", $"LoadBatchAsync finished: Outcome={batchResult.OverallOutcome}, Succeeded={batchResult.TotalSucceeded}/{batchResult.TotalRequested}, Bytes={batchResult.TotalDownloadedBytes:N0}.");
 
             string updatedHtml = _rawHtml;
             foreach (var (url, img) in downloadedImages)
@@ -451,12 +467,25 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         }
         catch (OperationCanceledException)
         {
+            MailLogger.Info("HtmlPreview", "Remote image loading was canceled.");
             PostToUiThread(() =>
             {
                 if (IsDisposed) return;
                 _loadImagesButton.IsEnabled = true;
                 _loadImagesButton.Text = "Load remote images";
                 _status.Text = "Remote image loading canceled.";
+                Invalidate();
+            });
+        }
+        catch (Exception ex)
+        {
+            MailLogger.Error("HtmlPreview", "Failed to load remote images due to unexpected error.", ex);
+            PostToUiThread(() =>
+            {
+                if (IsDisposed) return;
+                _loadImagesButton.IsEnabled = true;
+                _loadImagesButton.Text = "Retry remote images";
+                _status.Text = "Failed to load remote images. Check your network connection and retry.";
                 Invalidate();
             });
         }
@@ -472,7 +501,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         catch (Exception) { _status.Text = "The external browser could not be opened. The preview remains isolated."; }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Low; Resources=0; Fingerprint=EDF9B0
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Low; Resources=0; Fingerprint=534967
     // Broiler-Falsified-If: after ShowFailure the HTML view is still visible or the Load remote images button is still enabled
     // Broiler-Human:        PENDING
     public void ShowFailure()
@@ -646,15 +675,19 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     internal StandardLabel Status => _status;
     internal StandardLabel TruncationNotice => _truncationNotice;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=A4CEFC
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=9A3595
     // Broiler-Falsified-If: an exception thrown by a queued UI callback escapes DrainDispatcher and aborts the frame being built or the posted-callback handler
     // Broiler-Human:        PENDING
     private void DrainDispatcher()
     {
-        try { _dispatcher.Drain(); } catch { }
+        try { _dispatcher.Drain(); }
+        catch (Exception exception)
+        {
+            GlobalExceptionHandler.LogException(exception, "HtmlPreviewWindow.DrainDispatcher");
+        }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=A6A9C3
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=695F24
     // Broiler-Falsified-If: a frame is rendered before the host has taken the new client size, so the HTML snapshot is laid out at the previous width
     // Broiler-Human:        PENDING
     protected override void OnCreated()
@@ -765,7 +798,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         recorder?.EndDispatch(started);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=17558C
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=4053CA
     // Broiler-Falsified-If: an input event the UI session reports as handled leaves the window without an invalidation, so the frame on screen stays stale
     // Broiler-Human:        PENDING
     internal void Dispatch(UiInputEvent input)
@@ -790,7 +823,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             Close();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=EDEB0C
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=BCB653
     // Broiler-Falsified-If: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
     // Broiler-Human:        PENDING
     protected override int RunCore()
@@ -814,7 +847,27 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A71644
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6D7D24
+    // Broiler-Human:        PENDING
+    protected override void CloseCore()
+    {
+        try { _imageLoadCts?.Cancel(); } catch (Exception) { }
+        try { _session?.SetFocus(null); } catch (Exception) { }
+        try
+        {
+            base.CloseCore();
+        }
+        catch (COMException)
+        {
+            // UI Automation or accessibility teardown during native window destruction
+            // may report UIA_E_ELEMENTNOTAVAILABLE (0x80040201: The element is no longer available).
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=B68F46
     // Broiler-Falsified-If: the HTML container behind the preview is left undisposed after the window is disposed
     // Broiler-Human:        PENDING
     protected override void Dispose(bool disposing)
@@ -823,7 +876,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         {
             _imageLoadCts?.Cancel();
             _imageLoadCts?.Dispose();
-            _automationBridge?.Dispose();
+            try { _automationBridge?.Dispose(); } catch (Exception) { }
+            _automationBridge = null;
             _session.Dispose();
             _htmlView.Dispose();
         }
@@ -871,7 +925,7 @@ internal sealed class ScrollableHtmlView : UiElement
     private readonly StandardScrollView _scroll = new();
     private readonly HtmlViewElement _content;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=F1BC57
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=5D5C44
     // Broiler-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the view renders
     // Broiler-Human:        PENDING
     public ScrollableHtmlView(
@@ -900,7 +954,7 @@ internal sealed class ScrollableHtmlView : UiElement
         };
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=2D6686
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=1A54E2
     // Broiler-Falsified-If: an http(s) image named in the html passed to UpdateHtml is fetched over the network when the view next renders
     // Broiler-Human:        PENDING
     public void UpdateHtml(string html)
@@ -998,7 +1052,7 @@ internal sealed class ScrollableHtmlView : UiElement
     }
     public HtmlLayoutSnapshot? Snapshot => _content.Snapshot;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=588444
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=82D3BC
     // Broiler-Falsified-If: an infinite or NaN available width sets a content width other than 800, or a width under 13 sets one below 1
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
@@ -1131,27 +1185,34 @@ internal sealed class HtmlViewElement : UiElement
     public bool IsTileCached(int row, int column = 0) => _tiles.ContainsKey((row, column));
     internal IReadOnlyCollection<(int Row, int Column)> CachedTileIndices => _tiles.Keys.ToArray();
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=EA9C6B
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=0FB8CA
     // Broiler-Falsified-If: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
     // Broiler-Human:        PENDING
     private static HtmlContainer CreateContainer(string html)
     {
         HtmlRuntime.Initialize();
         var container = new HtmlContainer();
+        container.AvoidAsyncImagesLoading = true;
+        container.AvoidImagesLateLoading = true;
         container.RequestTransport = new DenyingRequestTransport();
         container.StylesheetLoad += (_, e) => e.SetStyleSheet = string.Empty;
         container.ImageLoad += (_, e) =>
         {
             if (!string.IsNullOrEmpty(e.Src) && !e.Src.StartsWith("data:", StringComparison.OrdinalIgnoreCase))
             {
+                MailLogger.Warning("HtmlContainer", $"Blocked external image load in container: {e.Src}");
                 e.Handled = true;
+            }
+            else
+            {
+                MailLogger.Debug("HtmlContainer", $"Inline data image accepted by container (Src length: {e.Src?.Length ?? 0})");
             }
         };
         container.SetHtmlWithStyleSet(html, null, null);
         return container;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=E5E400
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=E28C87
     // Broiler-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the element renders
     // Broiler-Human:        PENDING
     public HtmlViewElement(
@@ -1171,7 +1232,7 @@ internal sealed class HtmlViewElement : UiElement
         Focusable = true;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=591A3A
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=C4589F
     // Broiler-Falsified-If: after UpdateHtml a paint or link hit-test runs against the container that UpdateHtml disposed
     // Broiler-Human:        PENDING
     public void UpdateHtml(string html)
@@ -1300,7 +1361,7 @@ internal sealed class HtmlViewElement : UiElement
     protected override UiSemanticNode GetSemanticNodeCore() =>
         base.GetSemanticNodeCore() with { Role = UiSemanticRole.Group, Name = "HTML message" };
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6565FC
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=33C3DE
     // Broiler-Falsified-If: an allocated tile texture handle is leaked or passed to ReleaseImage after invalidation
     // Broiler-Human:        PENDING
     private void InvalidateTiles()
@@ -1333,7 +1394,7 @@ internal sealed class HtmlViewElement : UiElement
         return (scale, (int)Math.Max(1, round(widthDip * scale)), (int)Math.Max(1, round(heightDip * scale)));
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=8C1F1D
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=99266D
     // Broiler-Falsified-If: layout geometry calculation ignores trailing content, leaving bare text or tail elements outside measured height
     // Broiler-Human:        PENDING
     internal HtmlLayoutSnapshot CalculateLayout(float width)
@@ -1383,7 +1444,7 @@ internal sealed class HtmlViewElement : UiElement
         return new HtmlLayoutSnapshot(width, extentWidth, contentHeight, rawHeight, isTruncated, links, diagnostics, elapsedTicks);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=F7F59D
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=A109CA
     // Broiler-Falsified-If: repeated measures with unchanged width rerun the full layout instead of reusing the cached snapshot
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
@@ -1463,7 +1524,7 @@ internal sealed class HtmlViewElement : UiElement
         statistics?.Drawn(key, painted - started, Stopwatch.GetTimestamp() - painted, _cachedTileBytes);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=98C950
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=3A0021
     // Broiler-Falsified-If: rendering tiles outside the visible viewport window allocates bitmaps for non-visible regions
     // Broiler-Human:        PENDING
     protected override void RenderCore(UiRenderContext context)
@@ -1569,7 +1630,7 @@ internal sealed class HtmlViewElement : UiElement
                 new BRect(Bounds.X + visibleLeft + 2, Bounds.Y + visibleTop + 2, Math.Max(0, viewportWidth - 4), Math.Max(0, parentViewportHeight - 4)), 4);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=2248F9
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=676D2C
     // Broiler-Falsified-If: the link callback fires for an input other than a left-button release, such as a pointer-down, a right click or a key press over a link
     // Broiler-Human:        PENDING
     protected override bool OnInput(UiInputEvent e)
@@ -1613,7 +1674,7 @@ internal sealed class HtmlViewElement : UiElement
 
     internal bool SendInput(UiInputEvent e) => OnInput(e);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=578CC2
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=AB1C79
     // Broiler-Falsified-If: disposing the element leaves cached tile image handles or the container undisposed
     // Broiler-Human:        PENDING
     protected override void Dispose(bool disposing)

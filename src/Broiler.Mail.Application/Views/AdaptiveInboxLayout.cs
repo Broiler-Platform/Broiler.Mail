@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   15
+// Annotated:        0/15
+// Exempt:           6
+// Human-reviewed:   0/15
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       15
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Graphics.Geometry;
 using Broiler.Input.Mouse;
 using Broiler.UI;

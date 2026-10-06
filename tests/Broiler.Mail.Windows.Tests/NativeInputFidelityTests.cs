@@ -284,7 +284,7 @@ public sealed class NativeInputFidelityTests
     {
         Assert.True(fixture.Ui(() => fixture.Window.Model.Compose.StartNew()));
         fixture.Layout();
-        var compose = fixture.Ui(() => fixture.Window.Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!);
+        var compose = fixture.Ui(() => fixture.Window.Shell.GetContent("compose"));
         var to = fixture.Ui(() => (StandardEdit)HiddenMailWindow.Descendants(compose).OfType<StandardLabel>().Single(label => label.Text == "To").Target!);
         var body = fixture.Ui(() => HiddenMailWindow.Descendants(compose).OfType<StandardRichEdit>().Single());
         Assert.Same(to, fixture.Ui(() => fixture.Window.Session.FocusedElement));

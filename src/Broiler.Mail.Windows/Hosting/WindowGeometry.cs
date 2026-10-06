@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   32
+// Annotated:        0/32
+// Exempt:           1
+// Human-reviewed:   0/32
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       32
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using System.Runtime.InteropServices;
 using Broiler.Mail.Core.Settings;
 using static Broiler.Native.Windows.WindowNative;

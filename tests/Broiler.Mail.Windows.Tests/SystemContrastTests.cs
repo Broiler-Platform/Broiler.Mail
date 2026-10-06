@@ -61,7 +61,7 @@ public sealed class SystemContrastTests
             Assert.Equal(WindowsTheme.CreateHighContrastTheme(WindowsSystemColors.Dusk, settings),
                 fixture.Ui(() => StandardControlPaint.GetTheme(fixture.Window.Session)));
             var save = fixture.Ui(() => HiddenMailWindow.Descendants(fixture.Window.Shell.Window).OfType<StandardButton>().Single(button => button.Text == "Save account"));
-            fixture.Ui(() => fixture.Window.Shell.Navigation.SelectTab("account"));
+            fixture.Ui(() => fixture.Window.Shell.ShowView("account"));
             AssertRingStandsOut(fixture.Ui(() => (DrawnRing(fixture.Window.Session, save), save.PrimaryBackground)));
 
             // Switching from one contrast theme to another changes only the colors, and Windows says so with

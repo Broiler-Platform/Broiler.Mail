@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   18
-// Annotated:        18/18
-// Exempt:           8
-// Human-reviewed:   0/18
+// Relevant units:   37
+// Annotated:        18/37
+// Exempt:           25
+// Human-reviewed:   0/37
 // IP risk:          Low
 // Security risk:    Critical
 // Criteria:         18/3
 // Resource impact:  7/10 max
-// Unverified:       18
+// Unverified:       37
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -30,6 +30,7 @@ using Broiler.UI.Standard;
 using Broiler.Hosting.Windows;
 using Broiler.Hosting.Windows.Accessibility;
 using Broiler.Hosting.Windows.Input;
+using Broiler.Mail.Core.Diagnostics;
 using Broiler.Mail.Windows.Measurement;
 using Broiler.Mail.Windows.Preview;
 using System.ComponentModel;
@@ -63,18 +64,19 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private double? _simulatedScale;
     // WindowsWindowSizing's default minimum client size in DIPs.
     private const int MinimumClientWidth = 640, MinimumClientHeight = 480;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=ED2638
     // Broiler-Falsified-If: IME positioning calls receive the top-level frame handle instead of the render child window that holds keyboard focus, so the composition window is placed against the wrong client origin
     // Broiler-Human:        PENDING
     // Both bridges subclass native windows, which exist only from WM_CREATE on; see OnCreated.
     private WindowsAutomationBridge? _automationBridge;
     private WindowsInputBridge? _inputBridge;
-    internal WindowsAutomationBridge? AutomationBridge => _automationBridge;
-    internal WindowsInputBridge? InputBridge => _inputBridge;
+    internal WindowsAutomationBridge? AutomationBridge => _host.ActiveHostWindow?.AutomationBridge ?? _automationBridge;
+    internal WindowsInputBridge? InputBridge => _host.ActiveHostWindow?.InputBridge ?? _inputBridge;
     internal MailShellView Shell => _shell;
     internal MailShellViewModel Model => _model;
-    internal UiSession Session => _session;
-    internal nint RenderNativeHandleForTests => RenderNativeHandle;
+    internal UiSession Session => _host.ActiveHostWindow?.Session ?? _shell.ActiveDialog?.Session ?? _session;
+    internal nint NativeHandleForTests => _host.ActiveHostWindow?.NativeHandle ?? NativeHandle;
+    internal nint RenderNativeHandleForTests => _host.ActiveHostWindow?.RenderHandle ?? RenderNativeHandle;
     internal nint InputHandle => RenderNativeHandle;
 
     // Broiler.Graphics currently exposes legacy events at this host boundary.
@@ -83,7 +85,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private readonly StandardLegacyGraphicsInputAdapter _input = new("broiler-mail-windows");
 #pragma warning restore CS0618
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=Medium; Resources=3; Fingerprint=6D2AE8
+    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=Medium; Resources=3; Fingerprint=4C47CD
     // Broiler-Falsified-If: a result posted by a background mail operation runs its callback on the posting thread instead of waiting for DrainDispatcher on the window thread
     // Broiler-Human:        PENDING
     public WindowsMailWindow(MailApplication application, DemoOptions? demo = null)
@@ -124,9 +126,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         // A preview opens with the shell's current theme, so its caption matches and its zoom starts at the text size.
         _htmlPreview = new WindowsHtmlPreviewHost(() => _appearance?.Current);
         _shell = new MailShellView(model, _htmlPreview, demo is null ? null : DemoApplication.CreateDateFormatter());
-        _session.AddRoot(_shell.Window);
+        _shell.Attach(_session);
         _keyboard = _shell.CreateKeyboardNavigation(_session);
-        _session.SetFocus(_shell.Navigation);
+        (_shell.ActiveDialog?.Session ?? _session).SetFocus(_shell.NavigationFocus);
         // Saved theme and OS appearance changes re-theme the live controls; no restart is needed. In high
         // contrast the palette comes from the system's own contrast colors.
         _appearance = new AppearanceController(_session, model.Settings, _host, MailSystemSettings.HighContrastTheme);
@@ -135,6 +137,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
             // An open HTML preview follows too; it runs its own session on its own thread.
             _htmlPreview.ApplyTheme(_appearance.Current);
+            foreach (var hostWindow in _host.HostWindows)
+                hostWindow.ApplyTheme(_appearance.Current);
             Invalidate();
         };
         if (demo is { Interactive: false })
@@ -151,7 +155,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         Closed += (_, _) => PostQuitMessage(_exitCode);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=7386EC
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=FC1AD0
     // Broiler-Falsified-If: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
     // Broiler-Human:        PENDING
     protected override int RunCore()
@@ -195,7 +199,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         return _model.Settings.RememberLayoutAsync(placement, _model.Inbox.SplitterFraction);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=F830F3
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=7E4CEC
     // Broiler-Falsified-If: the window closes although PrepareCloseAsync returned false or threw, discarding an unsaved draft
     // Broiler-Human:        PENDING
     private async void RequestClose()
@@ -213,11 +217,11 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         {
             _closePending = false;
             if (saved) Close();
-            else { _shell.Navigation.SelectTab("compose"); Invalidate(); }
+            else { _shell.ShowView("compose"); Invalidate(); }
         });
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=A6A9C3
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=1FF9DE
     // Broiler-Falsified-If: a mail result queued before a paint is not applied until a later frame, so the painted frame shows the state from before that result
     // Broiler-Human:        PENDING
     protected override BRenderList? BuildRenderList(BSize clientSize)
@@ -303,7 +307,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         Close();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=C533CD
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=2CD656
     // Broiler-Falsified-If: an exception thrown by one queued UI callback escapes Drain and ends the message loop or aborts the frame being built
     // Broiler-Human:        PENDING
     private void DrainDispatcher()
@@ -311,10 +315,14 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         // Log a failing callback as Direct2DWindow logs its own posted callbacks. The callbacks
         // after it stay queued, and the dispatcher has already asked for another drain.
         try { _dispatcher.Drain(); }
-        catch (Exception exception) { System.Diagnostics.Debug.WriteLine(exception); }
+        catch (Exception exception)
+        {
+            GlobalExceptionHandler.LogException(exception, "WindowsMailWindow.DrainDispatcher");
+            System.Diagnostics.Debug.WriteLine(exception);
+        }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=3E34D4
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=D95531
     // Broiler-Falsified-If: after a resize or DPI change the UI session lays out against the old viewport size or scale until another resize arrives
     // Broiler-Human:        PENDING
     /// <summary>
@@ -347,7 +355,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         Invalidate();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=1; Fingerprint=09320F
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=1; Fingerprint=377490
     // Broiler-Falsified-If: a WM_GETMINMAXINFO or WM_DPICHANGED addressed to a window other than NativeHandle is handed to WindowsWindowSizing.OnMessage, which then writes through that message's lParam
     // Broiler-Human:        PENDING
     protected override void OnNativeWindowMessage(nint hwnd, uint message, nint wParam, nint lParam)
@@ -365,10 +373,17 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             // only the colors, so the palette is resolved again even when the settings stay the same.
             if (message is 0x001A or 0x031A or 0x0015)
             {
-                _host.RefreshSettings();
-                _appearance.Apply();
+                OnSystemThemeOrColorChanged();
             }
         }
+    }
+
+    internal void OnSystemThemeOrColorChanged()
+    {
+        _host.RefreshSettings();
+        foreach (var hostWindow in _host.HostWindows)
+            hostWindow.RefreshSettings();
+        _appearance.Apply();
     }
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=626D97
@@ -395,7 +410,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Broiler-Falsified-If: a key release reaches MailKeyboardNavigation or the UI session as a key-down transition, repeating the action of that key
     // Broiler-Human:        PENDING
     protected override void OnKeyUp(BKeyEventArgs e) => Dispatch(_input.FromKey(e, KeyboardKeyTransition.Up));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=7E8B06
+    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=8F04BC
     // Broiler-Falsified-If: a character committed through WM_CHAR or the IME is inserted into the focused editor a number of times other than once
     // Broiler-Human:        PENDING
     protected override void OnTextInput(BTextInputEventArgs e) => _inputBridge?.ProcessTextInput(e.Character);
@@ -410,15 +425,35 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             Invalidate();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=008B02
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=D20E5E
+    // Broiler-Human:        PENDING
+    protected override void CloseCore()
+    {
+        try { (_shell.ActiveDialog?.Session ?? _session).SetFocus(null); }
+        catch (Exception) { }
+        try
+        {
+            base.CloseCore();
+        }
+        catch (COMException)
+        {
+        }
+        catch (Exception)
+        {
+        }
+    }
+
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=B11BAC
     // Broiler-Falsified-If: an HTML preview opened from this mail window stays open after the mail window is disposed
     // Broiler-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
-            _automationBridge?.Dispose();
+            try { _automationBridge?.Dispose(); } catch (Exception) { }
+            _automationBridge = null;
             _inputBridge?.Dispose();
+            _host.DisposeHostWindows();
             _htmlPreview.Dispose();
             _shell.Dispose();
             _appearance.Dispose();

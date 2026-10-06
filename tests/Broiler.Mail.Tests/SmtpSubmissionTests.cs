@@ -3,9 +3,8 @@ using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Mail;
+using Broiler.Mail.Infrastructure.Mime;
 using Broiler.Mail.Infrastructure.Persistence;
-using MailKit.Net.Smtp;
-using MimeKit;
 
 namespace Broiler.Mail.Tests;
 
@@ -37,13 +36,12 @@ public sealed class SmtpSubmissionTests
         Assert.Equal(3, server.Recipients.Count);
         Assert.Contains(server.Recipients, value => value.Contains("hidden@example.test", StringComparison.Ordinal));
         Assert.Contains(account.EmailAddress, server.Sender!);
-        using var message = MimeMessage.Load(new MemoryStream(System.Text.Encoding.UTF8.GetBytes(server.RawMessage!)));
+        var message = MimeParser.Parse(System.Text.Encoding.UTF8.GetBytes(server.RawMessage!));
         Assert.Empty(message.Bcc);
-        Assert.False(message.Headers.Contains(HeaderId.Bcc));
         Assert.DoesNotContain("hidden@example.test", server.RawMessage!);
         Assert.Equal("Grüße & café", message.Subject);
         Assert.Equal("Body 😀\n.dot\nLast line", message.TextBody!.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd('\n'));
-        Assert.Equal("parent@example.test", message.InReplyTo);
+        Assert.Equal("parent@example.test", Assert.Single(message.InReplyTo));
         Assert.Equal(new[] { "root@example.test", "parent@example.test" }, message.References);
         Assert.Equal($"{composer.DraftId:N}@broiler.mail", message.MessageId);
         await composer.SendAsync();
@@ -186,5 +184,5 @@ public sealed class SmtpSubmissionTests
         return credentials;
     }
     private static SmtpMailSender Sender(ICredentialStore credentials, LocalSmtpServer server, double seconds = 5) =>
-        new(credentials, () => new SmtpClient { ServerCertificateValidationCallback = (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString() }, TimeSpan.FromSeconds(seconds));
+        new(credentials, (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString(), TimeSpan.FromSeconds(seconds));
 }

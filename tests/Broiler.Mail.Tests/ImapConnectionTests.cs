@@ -1,7 +1,6 @@
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Mail;
-using MailKit.Net.Imap;
 
 namespace Broiler.Mail.Tests;
 
@@ -106,11 +105,7 @@ public sealed class ImapConnectionTests
     }
 
     private static ImapMailReceiver Receiver(TestCredentialStore credentials, LocalImapServer server, TimeSpan? timeout = null) =>
-        new(credentials, () => new ImapClient
-        {
-            // Only this fixture's ephemeral certificate is trusted. No OS trust store is changed.
-            ServerCertificateValidationCallback = (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString(),
-        }, timeout ?? TimeSpan.FromSeconds(5));
+        new(credentials, (_, certificate, _, _) => certificate?.GetCertHashString() == server.Certificate.GetCertHashString(), timeout ?? TimeSpan.FromSeconds(5));
 
     private static AccountProfile Profile(LocalImapServer server, TransportSecurity security) => TestDirectory.Profile() with
     {

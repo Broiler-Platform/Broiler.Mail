@@ -5,7 +5,7 @@
 // ----------------------
 // Relevant units:   3
 // Annotated:        3/3
-// Exempt:           6
+// Exempt:           7
 // Human-reviewed:   0/3
 // IP risk:          Low
 // Security risk:    Low
@@ -24,7 +24,7 @@ namespace Broiler.Mail.Application.ViewModels;
 // Broiler-Human:        PENDING
 public sealed class MailShellViewModel
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=357FC7
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=0805D1
     // Broiler-Falsified-If: a later Account.Changed leaves Inbox or Composer on the profile that was current at construction
     // Broiler-Human:        PENDING
     public MailShellViewModel(AccountProfileViewModel account, SettingsViewModel settings, InboxViewModel inbox, ComposerViewModel? composer = null)

@@ -29,17 +29,17 @@ namespace Broiler.Mail.Windows.Hosting;
 // Broiler-Human:        PENDING
 internal static class ShellSmokeCheck
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=C4CBEB
-    // Broiler-Falsified-If: a shell missing one of the inbox, account, settings or compose tabs lets Run return without an exception
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=39BBCC
+    // Broiler-Falsified-If: a shell missing one of the inbox, account, settings or compose views lets Run return without an exception
     // Broiler-Human:        PENDING
     public static void Run(MailShellView shell)
     {
         using var session = new StandardUiSessionBuilder().Build(new HeadlessHost());
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         foreach (string tabId in new[] { "inbox", "account", "settings", "compose" })
         {
-            if (!shell.Navigation.SelectTab(tabId))
-                throw new InvalidOperationException($"Missing shell tab: {tabId}");
+            if (!shell.ShowView(tabId))
+                throw new InvalidOperationException($"Missing shell view: {tabId}");
             _ = session.RenderFrame();
         }
     }

@@ -1,6 +1,7 @@
 <Solution>
   <Project Path="eng/Broiler.Mail.DependencyProbe/Broiler.Mail.DependencyProbe.csproj" />
   <Project Path="src/Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
+  <Project Path="src/Broiler.Mail.Cli/Broiler.Mail.Cli.csproj" />
   <Project Path="src/Broiler.Mail.Core/Broiler.Mail.Core.csproj" />
   <Project Path="src/Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
   <Project Path="src/Broiler.Mail.Linux/Broiler.Mail.Linux.csproj" />

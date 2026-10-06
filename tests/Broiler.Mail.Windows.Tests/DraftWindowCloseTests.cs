@@ -59,6 +59,57 @@ public sealed class DraftWindowCloseTests
         }
     }
 
+    [Fact]
+    public async Task HtmlPreviewWindow_NativeCloseDoesNotThrowComException()
+    {
+        var ready = new TaskCompletionSource<(nint Frame, nint Render)>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var doc = Broiler.Mail.Infrastructure.Preview.HtmlPreviewPolicy.Create("<p>Sample document</p>", null);
+                using var window = new Broiler.Mail.Windows.Preview.HtmlPreviewWindow(doc, "Fallback", _ => { })
+                {
+                    ShowInTaskbar = false,
+                    Opacity = 0,
+                };
+                window.Shown += async (_, _) =>
+                {
+                    try
+                    {
+                        await window.InitializeAsync();
+                        await window.Loaded.Task;
+                        ready.TrySetResult((window.NativeHandle, window.InputHandle));
+                    }
+                    catch (Exception error) { ready.TrySetException(error); }
+                };
+                window.Closed += (_, _) => closed.TrySetResult();
+                window.Run();
+            }
+            catch (Exception error)
+            {
+                ready.TrySetException(error);
+                closed.TrySetException(error);
+            }
+        }) { IsBackground = true };
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+
+        var (frame, render) = await ready.Task.WaitAsync(TimeSpan.FromSeconds(15));
+        Assert.NotEqual(0, frame);
+        Assert.NotEqual(0, render);
+
+        // Query UIA provider via WM_GETOBJECT to register native provider adapter
+        nint provider = SendMessage(render, 0x003D /* WM_GETOBJECT */, nint.Zero, (nint)(-25) /* UiaRootObjectId */);
+        Assert.NotEqual(0, provider);
+
+        // Send WM_CLOSE to trigger CloseRequested and CloseCore with UIA active
+        Assert.True(PostMessage(frame, 0x0010, 0, 0)); // WM_CLOSE
+
+        await closed.Task.WaitAsync(TimeSpan.FromSeconds(15));
+    }
+
     private sealed class BlockingDraftStore : IDraftStore
     {
         private DraftStoreState _state = new(1, new()

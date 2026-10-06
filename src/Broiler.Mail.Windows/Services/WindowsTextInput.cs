@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   7
-// Annotated:        7/7
-// Exempt:           2
-// Human-reviewed:   0/7
+// Relevant units:   13
+// Annotated:        7/13
+// Exempt:           4
+// Human-reviewed:   0/13
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         6/6
 // Resource impact:  0/10 max
-// Unverified:       7
+// Unverified:       13
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -39,7 +39,7 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
     private UiElement? _imeOffFor;
     private nint _imeOffIn;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=F8B574
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=3418AF
     // Broiler-Falsified-If: an input context from ImmGetContext is left unreleased when the scale callback or ImmSetCompositionWindow throws
     // Broiler-Human:        PENDING
     public void PublishCaret(UiTextCaretInfo caret)
@@ -69,7 +69,7 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
         finally { ImmReleaseContext(hwnd, context); }
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=1F0AE4
+    // Broiler-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=8B53CF
     // Broiler-Human:        PENDING
     public void ClearCaret(UiElement owner)
     {

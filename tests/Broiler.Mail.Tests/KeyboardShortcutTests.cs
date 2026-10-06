@@ -28,6 +28,95 @@ namespace Broiler.Mail.Tests;
 public sealed class KeyboardShortcutTests
 {
     [Fact]
+    public async Task MenuOpensSettingsAndEscapeReturnsToTheInbox()
+    {
+        using var fixture = await Fixture.OpenAsync();
+        bool Dispatch(UiInputEvent input) => fixture.Keyboard.Handle(input) || fixture.Session.DispatchInput(input);
+        fixture.Session.SetFocus(fixture.List);
+        Assert.True(Dispatch(Key(0x79))); // F10
+        Assert.True(fixture.Shell.Menu.IsOpen);
+        Assert.True(Dispatch(Key(0x27))); // Message
+        Assert.True(Dispatch(Key(0x27))); // Tools
+        Assert.True(Dispatch(Key(0x28))); // Account
+        Assert.True(Dispatch(Key(0x28))); // Settings
+        Assert.True(Dispatch(Key(0x0D)));
+        fixture.Dispatcher.Drain();
+
+        Assert.Equal("settings", fixture.Shell.ActiveViewId);
+        Assert.Same(fixture.Shell.ActiveDialog, fixture.Session.ModalElement);
+        Assert.Equal(UiSemanticRole.Dialog, fixture.Shell.ActiveDialog!.GetSemanticNode().Role);
+        Assert.True(fixture.Session.FocusedElement!.IsDescendantOf(fixture.Shell.ActiveDialog));
+        Assert.False(fixture.Shell.Menu.IsOpen);
+        Assert.Null(fixture.Session.CapturedElement);
+        Assert.True(Dispatch(Key(0x1B)));
+        Assert.Null(fixture.Session.ModalElement);
+        Assert.Equal("inbox", fixture.Shell.ActiveViewId);
+        Assert.Same(fixture.List, fixture.Session.FocusedElement);
+    }
+
+    [Fact]
+    public async Task DialogRetainsUnsavedFieldsAndTrapsTabFocus()
+    {
+        using var fixture = await Fixture.OpenAsync();
+        fixture.Shell.ShowView("account");
+        var field = Descendants(fixture.Shell.ActiveContent).OfType<StandardEdit>().First();
+        field.Text = "Unsaved account name";
+        for (int i = 0; i < 70; i++)
+        {
+            fixture.Keyboard.Execute(i < 35 ? MailCommand.NextField : MailCommand.PreviousField);
+            Assert.True(fixture.Session.FocusedElement!.IsDescendantOf(fixture.Shell.ActiveDialog!));
+        }
+        fixture.Shell.CloseDialog();
+        fixture.Shell.ShowView("account");
+        Assert.Equal("Unsaved account name", field.Text);
+        Assert.True(field.IsAttached);
+        Assert.Single(fixture.Shell.Window.OwnedWindows);
+        fixture.Shell.ShowView("account");
+        Assert.Single(fixture.Shell.Window.OwnedWindows);
+    }
+
+    [Fact]
+    public async Task DialogBlocksBackgroundCommandsAndEnterDoesNotAcceptTheForm()
+    {
+        using var fixture = await Fixture.OpenAsync();
+        fixture.Shell.ShowView("settings");
+        var dialog = fixture.Shell.ActiveDialog;
+        fixture.Session.SetFocus(Descendants(fixture.Shell.ActiveContent).OfType<StandardEdit>().First());
+        Assert.True(fixture.Keyboard.Handle(Key(0x0D)));
+        Assert.Same(dialog, fixture.Shell.ActiveDialog);
+        Assert.True(fixture.Keyboard.Execute(MailCommand.Receive));
+        Assert.True(fixture.Keyboard.Execute(MailCommand.NewMessage));
+        Assert.True(fixture.Keyboard.Execute(MailCommand.Reply));
+        Assert.False(fixture.Model.Composer.HasDraft);
+        Assert.Same(dialog, fixture.Session.ModalElement);
+    }
+
+    [Fact]
+    public async Task ClosingComposerKeepsTheDraftAndRestoresTheReadersFocus()
+    {
+        using var fixture = await Fixture.OpenAsync();
+        fixture.Session.SetFocus(fixture.List);
+        fixture.Keyboard.Execute(MailCommand.NewMessage);
+        fixture.ComposerBody.SetPlainText("Keep this unfinished message.");
+        fixture.Keyboard.Execute(MailCommand.BackOrCancel);
+        Assert.Same(fixture.List, fixture.Session.FocusedElement);
+        Assert.True(fixture.Model.Composer.HasDraft);
+        fixture.Keyboard.Execute(MailCommand.Compose);
+        Assert.Equal("Keep this unfinished message.", fixture.ComposerBody.GetPlainText());
+    }
+
+    [Fact]
+    public async Task EscapeClosesTheMenuWithoutClosingTheApplication()
+    {
+        using var fixture = await Fixture.OpenAsync();
+        fixture.Keyboard.Handle(Key(0x79));
+        Assert.True(fixture.Keyboard.Handle(Key(0x1B)));
+        Assert.False(fixture.Shell.Menu.IsOpen);
+        Assert.Null(fixture.Session.CapturedElement);
+        Assert.False(fixture.Shell.Window.IsClosed);
+    }
+
+    [Fact]
     public void EveryShortcutIsUniqueAndMatchesItsOwnGesture()
     {
         Assert.Equal(MailShortcuts.All.Count, MailShortcuts.All.Select(s => (s.Key, s.Control, s.Shift, s.Alt)).Distinct().Count());
@@ -45,13 +134,13 @@ public sealed class KeyboardShortcutTests
     public async Task AltGrCharactersAreNotTakenForTabShortcuts()
     {
         using var fixture = await Fixture.OpenAsync();
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         // AltGr is Ctrl+Alt: AltGr+2 types "²" on a German layout and must reach the editor.
         Assert.False(fixture.Keyboard.Handle(Key('2', KeyboardModifierState.Control | KeyboardModifierState.Alt | KeyboardModifierState.RightAlt)));
-        Assert.Equal("compose", fixture.Shell.Navigation.SelectedTab!.Id);
+        Assert.Equal("compose", fixture.Shell.ActiveViewId);
         // A side-specific flag counts like the generic one.
         Assert.True(fixture.Keyboard.Handle(Key('2', KeyboardModifierState.LeftControl)));
-        Assert.Equal("account", fixture.Shell.Navigation.SelectedTab!.Id);
+        Assert.Equal("account", fixture.Shell.ActiveViewId);
         // Windows-key chords belong to the system.
         Assert.False(fixture.Keyboard.Handle(Key('1', KeyboardModifierState.Control | KeyboardModifierState.LeftWindows)));
     }
@@ -67,7 +156,7 @@ public sealed class KeyboardShortcutTests
 
         Assert.True(fixture.Keyboard.Handle(Key(key, KeyboardModifierState.Control | (shift ? KeyboardModifierState.Shift : 0))));
 
-        Assert.Equal("compose", fixture.Shell.Navigation.SelectedTab!.Id);
+        Assert.Equal("compose", fixture.Shell.ActiveViewId);
         Assert.Equal(subject, fixture.Model.Composer.Subject);
         if (shift) Assert.Contains("copy@example.test", fixture.Model.Composer.Cc);
         Assert.Same(focus == "body" ? fixture.ComposerBody : fixture.ComposerTo, fixture.Session.FocusedElement);
@@ -107,7 +196,7 @@ public sealed class KeyboardShortcutTests
         Assert.All(stops, stop => Assert.False(stop.Bounds.IsEmpty));
 
         // Cycling through every stop never focuses something without bounds.
-        fixture.Session.SetFocus(fixture.Shell.Navigation);
+        fixture.Session.SetFocus(fixture.Shell.NavigationFocus);
         for (int i = 0; i < stops.Count + 2; i++)
         {
             Assert.True(fixture.Keyboard.Handle(Key(0x09)));
@@ -126,7 +215,7 @@ public sealed class KeyboardShortcutTests
         fixture.Session.RenderFrame();
         Assert.False(RowShows(list, 0));
 
-        fixture.Session.SetFocus(fixture.Shell.Navigation);
+        fixture.Session.SetFocus(fixture.Shell.NavigationFocus);
         for (int step = 0; step < 10 && fixture.Session.FocusedElement != list; step++)
             Assert.True(fixture.Keyboard.Handle(Key(0x09)));
         Assert.Same(list, fixture.Session.FocusedElement);
@@ -145,9 +234,9 @@ public sealed class KeyboardShortcutTests
         // A short window, so each form scrolls and Mail's own Tab handling brings the fields in.
         using var fixture = await Fixture.OpenAsync(width: 640, height: 300);
         if (tab == "compose") fixture.Model.Compose.StartNew();
-        fixture.Shell.Navigation.SelectTab(tab);
+        fixture.Shell.ShowView(tab);
         fixture.Session.RenderFrame();
-        var stops = MailKeyboardNavigation.TabStops(fixture.Shell.Navigation.SelectedTab!.Content!);
+        var stops = MailKeyboardNavigation.TabStops(fixture.Shell.ActiveContent);
         // An edit strokes its 2 DIP ring centered on its bounds, so 1 DIP of it lies outside them. A fixed
         // value rather than the form's inset, so Mail notices if the room goes away.
         const double ringOutside = 1;
@@ -155,7 +244,7 @@ public sealed class KeyboardShortcutTests
         bool scrolled = false;
         foreach (var modifiers in new[] { KeyboardModifierState.None, KeyboardModifierState.Shift })
         {
-            fixture.Session.SetFocus(fixture.Shell.Navigation);
+            fixture.Session.SetFocus(fixture.Shell.NavigationFocus);
             for (int step = 0; step <= stops.Count; step++)
             {
                 Assert.True(fixture.Keyboard.Handle(Key(0x09, modifiers)));
@@ -299,7 +388,7 @@ public sealed class KeyboardShortcutTests
     public async Task SettingsListsEveryShortcutFromTheTable()
     {
         using var fixture = await Fixture.OpenAsync();
-        var settings = fixture.Shell.Navigation.Tabs.Single(tab => tab.Id == "settings").Content!;
+        var settings = fixture.Shell.GetContent("settings");
         var lines = Descendants(settings).OfType<StandardLabel>().Select(label => label.Text).ToHashSet();
         foreach (var shortcut in MailShortcuts.All)
             Assert.Contains($"{shortcut.Gesture}: {shortcut.Description}", lines);
@@ -334,8 +423,8 @@ public sealed class KeyboardShortcutTests
         public MailShellView Shell { get; }
         public UiSession Session { get; }
         public MailKeyboardNavigation Keyboard { get; }
-        public UiElement InboxContent => Shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!;
-        private UiElement ComposeContent => Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!;
+        public UiElement InboxContent => Shell.GetContent("inbox");
+        private UiElement ComposeContent => Shell.GetContent("compose");
         public StandardListView List => Descendants(InboxContent).OfType<StandardListView>().Single();
         public StandardRichEdit ReaderText => Descendants(InboxContent).OfType<StandardRichEdit>().Single(edit => edit.AccessibleName == "Message text");
         public StandardRichEdit ReaderDetails => Descendants(InboxContent).OfType<StandardRichEdit>().Single(edit => edit.AccessibleName == "Sender and recipients");
@@ -370,8 +459,8 @@ public sealed class KeyboardShortcutTests
             var shell = new MailShellView(model);
             var host = new Host(width, height);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-            session.AddRoot(shell.Window);
-            shell.Navigation.SelectTab("inbox");
+            shell.Attach(session);
+            shell.ShowView("inbox");
             await model.Inbox.ReceiveAsync();
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
             if (select) await model.Inbox.SelectAsync(message.Key);

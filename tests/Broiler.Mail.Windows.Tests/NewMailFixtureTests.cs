@@ -278,7 +278,7 @@ public sealed class NewMailFixtureTests
             var model = application.CreateViewModel(dispatcher);
             var shell = new MailShellView(model, null, DemoApplication.CreateDateFormatter());
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new HeadlessHost(options.Width, options.Height));
-            session.AddRoot(shell.Window);
+            shell.Attach(session);
             var run = new FixtureRun(woken, dispatcher, model, shell, session);
             run.Render();
             var driver = DemoScenarioDriver.Start(options, model, shell, dispatcher);

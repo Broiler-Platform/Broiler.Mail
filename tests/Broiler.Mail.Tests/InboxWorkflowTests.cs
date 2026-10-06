@@ -142,6 +142,63 @@ public sealed class InboxWorkflowTests
         Assert.Equal("Second body", model.Body!.PlainText);
     }
 
+    [Fact]
+    public async Task RapidSelectionWithCancellationCallbackDoesNotThrowTaskCanceledException()
+    {
+        var account = TestDirectory.Profile();
+        var first = Message(account, 1);
+        var second = Message(account, 2);
+        var firstStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var receiver = new TestMailReceiver
+        {
+            Inbox = (_, _) => Task.FromResult(new MailInboxPage([second, first], null)),
+            Body = (key, token) =>
+            {
+                if (key == second.Key) return Task.FromResult(new MailMessageBody(key, "Second body"));
+                // Register a callback on the token that throws TaskCanceledException,
+                // simulating socket abort or linked token cancellation exceptions.
+                token.Register(() => throw new TaskCanceledException("Socket aborted"));
+                firstStarted.SetResult();
+                var tcs = new TaskCompletionSource<MailMessageBody>(TaskCreationOptions.RunContinuationsAsynchronously);
+                token.Register(() => tcs.TrySetCanceled(token));
+                return tcs.Task;
+            },
+        };
+        using var model = Model(receiver, account);
+        await model.ReceiveAsync();
+        var firstSelect = model.SelectAsync(first.Key);
+        await firstStarted.Task.WaitAsync(TimeSpan.FromSeconds(5));
+        // Stepping to the second message while the first operation is active must cancel the first
+        // without letting AggregateException / TaskCanceledException escape.
+        var secondSelect = model.SelectAsync(second.Key);
+        await secondSelect;
+        await firstSelect;
+        Assert.Equal(second, model.SelectedMessage);
+        Assert.Equal("Second body", model.Body!.PlainText);
+    }
+
+    [Fact]
+    public async Task SteppingThroughMessagesQuicklyDoesNotThrow()
+    {
+        var account = TestDirectory.Profile();
+        var messages = Enumerable.Range(1, 5).Select(i => Message(account, (uint)i)).Reverse().ToArray();
+        var receiver = new TestMailReceiver
+        {
+            Inbox = (_, _) => Task.FromResult(new MailInboxPage(messages, null)),
+            Body = async (key, token) =>
+            {
+                token.Register(() => throw new TaskCanceledException());
+                await Task.Delay(20, token);
+                return new MailMessageBody(key, $"Body of {key.Uid}");
+            },
+        };
+        using var model = Model(receiver, account);
+        await model.ReceiveAsync();
+        var tasks = messages.Select(m => model.SelectAsync(m.Key)).ToArray();
+        await Task.WhenAll(tasks);
+        Assert.Equal(messages.Last(), model.SelectedMessage);
+    }
+
     [Theory]
     [InlineData("cancel")]
     [InlineData("account")]

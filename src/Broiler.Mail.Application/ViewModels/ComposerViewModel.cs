@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   30
-// Annotated:        30/30
-// Exempt:           20
-// Human-reviewed:   0/30
+// Relevant units:   36
+// Annotated:        30/36
+// Exempt:           25
+// Human-reviewed:   0/36
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         25/5
 // Resource impact:  7/10 max
-// Unverified:       30
+// Unverified:       36
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -127,7 +127,7 @@ public sealed class ComposerViewModel : IDisposable
         _journal.IsPersistent ? "Draft saved locally." : "Demo/headless draft is in memory only.");
     public FeedbackKind StorageKind => _loadError is not null || _journal.Error is not null ? FeedbackKind.Error :
         !_journal.IsSaved ? FeedbackKind.Progress : FeedbackKind.Information;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=376603
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=1EDCB9
     // Broiler-Human:        PENDING
     /// <summary>Why an editable draft cannot be sent, or null. Shown instead of a permanent instruction.</summary>
     public string? SendUnavailableReason => !CanEdit ? null
@@ -167,7 +167,7 @@ public sealed class ComposerViewModel : IDisposable
     private ITimer? _successTimer;
     private int _statusVersion;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=5A97FB
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=194891
     // Broiler-Falsified-If: after the saved account changes its SMTP server, a send still uses the previous AccountProfile
     // Broiler-Human:        PENDING
     public void SetAccount(AccountProfile? account)
@@ -187,7 +187,7 @@ public sealed class ComposerViewModel : IDisposable
     public bool StartNew() => Start(null, null);
     public bool StartFromMessage(MailMessageBody body, CompositionKind kind) => Start(body, kind);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=661BA7
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=1D649B
     // Broiler-Falsified-If: a reply whose original sender address has a quoted local part containing a comma becomes two recipients when the joined To text is parsed again
     // Broiler-Human:        PENDING
     private bool Start(MailMessageBody? body, CompositionKind? kind)
@@ -214,7 +214,7 @@ public sealed class ComposerViewModel : IDisposable
         return true;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=CF549E
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=3B9524
     // Broiler-Falsified-If: an Edit on an Accepted or Unknown draft resets the submission state to Editing so the message can be sent again
     // Broiler-Human:        PENDING
     public void Edit(string to, string cc, string bcc, string subject, string body)
@@ -244,7 +244,7 @@ public sealed class ComposerViewModel : IDisposable
         return draft;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=4313D4
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=CF0FFB
     // Broiler-Falsified-If: an invalid recipient makes CheckDraft throw instead of setting the validation message as the status
     // Broiler-Human:        PENDING
     public void CheckDraft()
@@ -319,7 +319,7 @@ public sealed class ComposerViewModel : IDisposable
         return saved;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=57BE7C
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=60DA3B
     // Broiler-Falsified-If: a discard whose tombstone write fails still clears the composer fields and loses the draft text
     // Broiler-Human:        PENDING
     public async Task<bool> DiscardAsync()
@@ -353,7 +353,7 @@ public sealed class ComposerViewModel : IDisposable
         return saved;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=BEF7BA
+    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=8AF411
     // Broiler-Falsified-If: the sender is invoked before the draft store has written the Sending snapshot
     // Broiler-Human:        PENDING
     public async Task SendAsync(CancellationToken cancellationToken = default)
@@ -481,7 +481,7 @@ public sealed class ComposerViewModel : IDisposable
     // Broiler-Falsified-If: Changed is raised after Dispose
     // Broiler-Human:        PENDING
     private void Notify() { if (!_disposed) Changed?.Invoke(this, EventArgs.Empty); }
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=56EEDB
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=0F0BB8
     // Broiler-Falsified-If: a draft write completing after Dispose still raises Changed on the disposed view model
     // Broiler-Human:        PENDING
     public void Dispose() { _disposed = true; _journal.Changed -= OnStorageChanged; _successTimer?.Dispose(); }

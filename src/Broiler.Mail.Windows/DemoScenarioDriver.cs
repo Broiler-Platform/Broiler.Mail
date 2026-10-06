@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   12
+// Annotated:        0/12
+// Exempt:           5
+// Human-reviewed:   0/12
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       12
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
 using Broiler.UI;
@@ -31,7 +48,7 @@ internal sealed class DemoScenarioDriver
 
     public static DemoScenarioDriver Start(DemoOptions options, MailShellViewModel model, MailShellView shell, IUiDispatcher dispatcher)
     {
-        shell.Navigation.SelectTab(options.InitialTab);
+        shell.ShowView(options.InitialView);
         var driver = new DemoScenarioDriver(model, dispatcher, Steps(options.Scenario, model, shell));
         model.Inbox.Changed += driver.OnInboxChanged;
         dispatcher.Post(driver.RunNext);
@@ -138,7 +155,7 @@ internal sealed class DemoScenarioDriver
         }
     }
 
-    private static UiElement Tab(MailShellView shell, string id) => shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
+    private static UiElement Tab(MailShellView shell, string id) => shell.GetContent(id);
 
     private static StandardEdit Field(MailShellView shell, string tab, string label) =>
         Descendants(Tab(shell, tab)).OfType<StandardLabel>().Where(item => item.Text == label).Select(item => item.Target).OfType<StandardEdit>().Single();

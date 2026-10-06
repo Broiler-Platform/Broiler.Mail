@@ -1,7 +1,23 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   5
+// Annotated:        0/5
+// Exempt:           0
+// Human-reviewed:   0/5
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       5
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.UI;
 using Broiler.UI.ListView;
 using Broiler.UI.ScrollView.Standard;
-using Broiler.UI.TabView;
 
 namespace Broiler.Mail.Application.Views;
 
@@ -16,17 +32,15 @@ internal static class FocusNavigation
 
     /// <summary>
     /// Whether an asynchronous result may move focus into <paramref name="area"/>: only while the area
-    /// is on screen and focus is inside it, on a container that holds it (such as the tab strip of the
-    /// tab showing it), or nowhere. A result that arrives after the user moved on
-    /// must not pull them back to another tab or away from what they are typing.
+    /// is on screen and focus is inside it, on a container that holds it, or nowhere.
+    /// A result that arrives after the user moved on must not pull them away from what they are typing.
     /// </summary>
     public static bool MayTakeFocus(UiSession session, UiElement area)
     {
+        if (session.ModalElement is { } modal && area != modal && !area.IsDescendantOf(modal)) return false;
         for (UiElement child = area; child.Parent is { } parent; child = parent)
         {
             if (child.Visibility != UiVisibility.Visible || child.IsHiddenFromAccessibility) return false;
-            // A tab view keeps every tab's content attached and visible, but shows only the selected one.
-            if (parent is UiTabView tabs && tabs.SelectedTab?.Content != child) return false;
         }
         return session.FocusedElement is not { } focused || focused == area || focused.IsDescendantOf(area) || area.IsDescendantOf(focused);
     }

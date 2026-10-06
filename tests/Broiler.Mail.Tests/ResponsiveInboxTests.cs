@@ -226,12 +226,12 @@ public sealed class ResponsiveInboxTests
             new ComposerViewModel(dispatcher: dispatcher));
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(500, 600));
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         var keyboard = shell.CreateKeyboardNavigation(session);
-        shell.Navigation.SelectTab("inbox");
+        shell.ShowView("inbox");
         Assert.True(model.Composer.StartNew());
         model.Composer.Edit("kept@example.test", "", "", "Draft", "Text");
-        shell.Navigation.SelectTab("inbox");
+        shell.ShowView("inbox");
         await model.Inbox.ReceiveAsync();
         dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
         await model.Inbox.SelectAsync(messages[2].Key);
@@ -280,8 +280,8 @@ public sealed class ResponsiveInboxTests
         using var shell = new MailShellView(model);
         var host = new Host(640, 480);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-        session.AddRoot(shell.Window);
-        shell.Navigation.SelectTab("inbox");
+        shell.Attach(session);
+        shell.ShowView("inbox");
         void Settle()
         {
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
@@ -404,8 +404,8 @@ public sealed class ResponsiveInboxTests
         using var shell = new MailShellView(model);
         var host = new Host(640, 480);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-        session.AddRoot(shell.Window);
-        shell.Navigation.SelectTab("inbox");
+        shell.Attach(session);
+        shell.ShowView("inbox");
         void Settle()
         {
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
@@ -480,8 +480,8 @@ public sealed class ResponsiveInboxTests
         using var shell = new MailShellView(model);
         var host = new Host(640, 480);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-        session.AddRoot(shell.Window);
-        shell.Navigation.SelectTab("inbox");
+        shell.Attach(session);
+        shell.ShowView("inbox");
         void Settle()
         {
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
@@ -579,8 +579,8 @@ public sealed class ResponsiveInboxTests
             new ComposerViewModel(dispatcher: dispatcher));
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(640, 480));
-        session.AddRoot(shell.Window);
-        shell.Navigation.SelectTab("inbox");
+        shell.Attach(session);
+        shell.ShowView("inbox");
         void Settle()
         {
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
@@ -595,7 +595,7 @@ public sealed class ResponsiveInboxTests
         await model.Inbox.ReceiveAsync();
         Settle();
         var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
-        var inbox = shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!;
+        var inbox = shell.GetContent("inbox");
         StandardButton Button(string text) => Descendants(inbox).OfType<StandardButton>().Single(button => button.Text == text);
         const string above = "Mail could not be received. Details and Retry are above the list.";
         Assert.Equal(above, shell.Footer.Text);
@@ -1505,8 +1505,8 @@ public sealed class ResponsiveInboxTests
                 received is null ? null : new MessageDateFormatter(culture: CultureInfo.GetCultureInfo("en-US")));
             var host = new Host(width, height);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
-            session.AddRoot(shell.Window);
-            shell.Navigation.SelectTab("inbox");
+            shell.Attach(session);
+            shell.ShowView("inbox");
             await model.Inbox.ReceiveAsync();
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
             await model.Inbox.SelectAsync(messages[0].Key);

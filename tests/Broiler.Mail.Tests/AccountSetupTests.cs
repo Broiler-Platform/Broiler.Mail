@@ -137,8 +137,8 @@ public sealed class AccountSetupTests
             new(receiver, dispatcher), new ComposerViewModel(dispatcher: dispatcher));
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host());
-        session.AddRoot(shell.Window);
-        shell.Navigation.SelectTab("account");
+        shell.Attach(session);
+        shell.ShowView("account");
         dispatcher.DrainUntil(() => model.Account.HasPassword is not null);
         await model.Account.TestConnectionAsync();
         dispatcher.DrainUntil(() => !model.Account.IsBusy);
@@ -146,8 +146,25 @@ public sealed class AccountSetupTests
 
         open.Click();
         dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
-        Assert.Equal("inbox", shell.Navigation.SelectedTab!.Id);
+        Assert.Equal("inbox", shell.ActiveViewId);
         Assert.Equal(1, receives);
+    }
+
+    [Fact]
+    public void SetupHintsCanBeDismissedAndRestored()
+    {
+        using var fixture = new Fixture(profile: null);
+        Assert.NotEmpty(fixture.StepLines);
+        var dismissButton = fixture.Button("Dismiss hints");
+        Assert.NotNull(dismissButton);
+
+        fixture.Click(dismissButton);
+        Assert.Empty(fixture.StepLines);
+        Assert.Equal("Show hints", dismissButton.Text);
+
+        fixture.Click(dismissButton);
+        Assert.NotEmpty(fixture.StepLines);
+        Assert.Equal("Dismiss hints", dismissButton.Text);
     }
 
     private static IEnumerable<UiElement> Descendants(UiElement root)

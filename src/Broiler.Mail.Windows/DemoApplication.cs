@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   13
-// Annotated:        13/13
-// Exempt:           7
-// Human-reviewed:   0/13
+// Relevant units:   36
+// Annotated:        13/36
+// Exempt:           11
+// Human-reviewed:   0/36
 // IP risk:          Low
 // Security risk:    Low
 // Criteria:         5/0
 // Resource impact:  2/10 max
-// Unverified:       13
+// Unverified:       36
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -35,7 +35,7 @@ internal static class DemoApplication
     private static readonly DateTimeOffset Newest = new(2026, 9, 28, 10, 0, 0, TimeSpan.FromHours(2));
     private static readonly AccountId DemoAccount = new(new Guid("6d1f3a52-4b8e-4c27-9a3e-1f2b8c7d5e01"));
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=C94815
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=E50FAC
     // Broiler-Falsified-If: the returned application uses a receiver, sender or store other than the in-memory demo implementations
     // Broiler-Human:        PENDING
     public static MailApplication Create(DemoOptions? options = null)
@@ -127,13 +127,13 @@ internal static class DemoApplication
         public override TimeZoneInfo LocalTimeZone => Zone;
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=C2528C
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=37BD7B
     // Broiler-Human:        PENDING
     private sealed class DemoSender(DemoScenario scenario) : IMailSender
     {
         // Only the rejected-send fixture offers Send; its synthetic server refuses the recipient.
         public bool IsAvailable => scenario == DemoScenario.SendRejected;
-        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=1C0B22
+        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=EDABFE
         // Broiler-Falsified-If: a demo send returns Accepted or Unknown, so a draft is marked sent although nothing was submitted
         // Broiler-Human:        PENDING
         public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default) =>
@@ -142,7 +142,7 @@ internal static class DemoApplication
                 : "Demo mode never sends mail."));
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=23AE4F
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=108CBA
     // Broiler-Human:        PENDING
     private sealed class DemoStore(DemoOptions options) : IAccountStore, ISettingsStore, ICredentialStore
     {
@@ -175,7 +175,7 @@ internal static class DemoApplication
         // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=45FDAE
         // Broiler-Human:        PENDING
         Task<ApplicationSettings> ISettingsStore.LoadAsync(CancellationToken cancellationToken) => Task.FromResult(_settings);
-        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=E06FD6
+        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=E20A30
         // Broiler-Human:        PENDING
         public Task SaveAsync(ApplicationSettings settings, CancellationToken cancellationToken = default)
         {
@@ -210,7 +210,7 @@ internal static class DemoApplication
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=73E97D
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=7B92C8
     // Broiler-Human:        PENDING
     private sealed class DemoReceiver(DemoScenario scenario, bool interactive, DemoServerChange change) : IMailReceiver
     {
@@ -253,7 +253,7 @@ internal static class DemoApplication
             throw new MailConnectionException("Demo mode does not connect to a server. Restart without --demo to test an account.");
         }
 
-        // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=A77D43
+        // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=6AF2AE
         // Broiler-Falsified-If: following the returned cursor repeats or skips a synthetic message
         // Broiler-Human:        PENDING
         public async Task<MailInboxPage> GetInboxAsync(AccountProfile account, int maximumCount, MailInboxCursor? older = null, CancellationToken cancellationToken = default)
@@ -292,7 +292,7 @@ internal static class DemoApplication
             return new(messages, start == 0 ? null : new(account.Id, 1, (uint)total + 1, total, start - 1));
         }
 
-        // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=0A215B
+        // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=F6CA84
         // Broiler-Human:        PENDING
         public async Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default)
         {
@@ -346,7 +346,7 @@ internal static class DemoApplication
                     string.Join("\n\n", Enumerable.Range(1, 20).Select(index => $"Paragraph {index}: {LongSubject}.")))
                 { Composition = composition };
             }
-            return new(message, "Welcome to Broiler.Mail version 1.\n\nThis is a synthetic message. Demo mode never accesses your account, saved password, or network.\n\nUse Receive mail, Load older, and select a message.\n\nKeyboard: Tab / Shift+Tab moves focus, Ctrl+1 to Ctrl+4 switch tabs, F5 receives, Ctrl+R replies, and Escape goes back or cancels. Settings lists every shortcut.\n\n" +
+            return new(message, "Welcome to Broiler.Mail version 1.\n\nThis is a synthetic message. Demo mode never accesses your account, saved password, or network.\n\nUse Receive mail, Load older, and select a message.\n\nKeyboard: Tab / Shift+Tab moves focus, F10 opens the menu; Ctrl+1 returns to Inbox and Ctrl+2 to Ctrl+4 open dialogs, F5 receives, Ctrl+R replies, and Escape goes back or cancels. Settings lists every shortcut.\n\n" +
                 string.Join("\n\n", Enumerable.Range(1, 35).Select(index => $"Paragraph {index}: The reading pane wraps and scrolls. Grüße, café, and literal ampersands & remain readable."))) { Composition = composition };
         }
     }

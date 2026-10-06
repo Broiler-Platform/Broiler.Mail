@@ -32,7 +32,7 @@ public sealed class FeedbackPolicyTests
     {
         using var fixture = Fixture.Open();
         fixture.Model.Composer.StartNew();
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Settle();
         fixture.Announced.Clear();
 
@@ -121,7 +121,7 @@ public sealed class FeedbackPolicyTests
         using var fixture = Fixture.Open(SubmissionStatus.Rejected);
         fixture.Model.Composer.StartNew();
         fixture.Model.Composer.Edit("to@example.test", "", "", "Plans", "Body");
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Settle();
         fixture.Announced.Clear();
 
@@ -146,7 +146,7 @@ public sealed class FeedbackPolicyTests
         fixture.Sender.Message = "550 Mailbox unavailable.";
         fixture.Model.Composer.StartNew();
         fixture.Model.Composer.Edit("to@example.test", "", "", "Plans", "Body");
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Settle();
         fixture.Announced.Clear();
 
@@ -161,7 +161,7 @@ public sealed class FeedbackPolicyTests
     {
         using var fixture = Fixture.Open();
         var settings = fixture.Model.Settings;
-        fixture.Shell.Navigation.SelectTab("settings");
+        fixture.Shell.ShowView("settings");
         fixture.Settle();
         fixture.Announced.Clear();
 
@@ -221,13 +221,13 @@ public sealed class FeedbackPolicyTests
         using var fixture = Fixture.Open();
         fixture.Model.Composer.StartNew();
         var settings = fixture.Model.Settings;
-        fixture.Shell.Navigation.SelectTab("settings");
+        fixture.Shell.ShowView("settings");
         fixture.Settle();
         settings.WindowWidth = "wide";
 
         // The save fails validation only after the user has moved to the composer and started typing.
         var saving = settings.SaveAsync();
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Session.SetFocus(fixture.ComposerBody);
         fixture.Settle();
         await saving;
@@ -235,14 +235,14 @@ public sealed class FeedbackPolicyTests
         await fixture.ReceiveAsync();
 
         Assert.Equal("WindowWidth", settings.ValidationField);
-        Assert.Equal("compose", fixture.Shell.Navigation.SelectedTab?.Id);
+        Assert.Equal("compose", fixture.Shell.ActiveViewId);
         Assert.Same(fixture.ComposerBody, fixture.Session.FocusedElement);
 
         // On the form itself, the same failure takes focus to the field it concerns, from the Save
         // button or from the tab strip showing the form.
-        fixture.Shell.Navigation.SelectTab("settings");
-        var save = Descendants(fixture.Shell.Navigation.Tabs.Single(tab => tab.Id == "settings").Content!).OfType<StandardButton>().Single(button => button.Text == "Save settings");
-        foreach (var start in new UiElement[] { save, fixture.Shell.Navigation })
+        fixture.Shell.ShowView("settings");
+        var save = Descendants(fixture.Shell.GetContent("settings")).OfType<StandardButton>().Single(button => button.Text == "Save settings");
+        foreach (var start in new UiElement[] { save, fixture.Shell.ActiveDialog! })
         {
             fixture.Session.SetFocus(start);
             await settings.SaveAsync();
@@ -256,9 +256,9 @@ public sealed class FeedbackPolicyTests
     {
         using var fixture = Fixture.Open();
         fixture.Model.Composer.StartNew();
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Settle();
-        var copies = Descendants(fixture.Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!).OfType<FormSection>().Single(section => section.Toggle is not null);
+        var copies = Descendants(fixture.Shell.GetContent("compose")).OfType<FormSection>().Single(section => section.Toggle is not null);
         copies.Toggle!.Click();
         fixture.Settle();
         var cc = Descendants(copies.Content).OfType<StandardEdit>().First();
@@ -275,7 +275,7 @@ public sealed class FeedbackPolicyTests
     {
         using var fixture = Fixture.Open();
         var account = fixture.Model.Account;
-        fixture.Shell.Navigation.SelectTab("account");
+        fixture.Shell.ShowView("account");
         await account.SavePasswordAsync("app password");
         fixture.Settle();
         await account.TestConnectionAsync();
@@ -294,7 +294,7 @@ public sealed class FeedbackPolicyTests
         var tester = new TestOutgoingTester();
         using var fixture = Fixture.Open(outgoing: tester);
         var account = fixture.Model.Account;
-        fixture.Shell.Navigation.SelectTab("account");
+        fixture.Shell.ShowView("account");
         fixture.Settle();
         fixture.Announced.Clear();
 
@@ -322,7 +322,7 @@ public sealed class FeedbackPolicyTests
         };
         fixture.Model.Composer.StartNew();
         var testing = account.TestOutgoingConnectionAsync();
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Session.SetFocus(fixture.ComposerBody);
         fixture.Dispatcher.Drain();
         fixture.Session.RenderFrame();
@@ -330,12 +330,12 @@ public sealed class FeedbackPolicyTests
         pending.SetResult();
         await testing;
         fixture.Settle();
-        Assert.Equal("compose", fixture.Shell.Navigation.SelectedTab?.Id);
+        Assert.Equal("compose", fixture.Shell.ActiveViewId);
         Assert.Same(fixture.ComposerBody, fixture.Session.FocusedElement);
         Assert.Equal(["Error: SMTP sign-in test failed: The SMTP server rejected the sign-in."], fixture.Announced);
 
         // The footer names the problem and points to the details instead of repeating them.
-        fixture.Shell.Navigation.SelectTab("account");
+        fixture.Shell.ShowView("account");
         fixture.Settle();
         Assert.Equal("SMTP sign-in test failed. Details are below the buttons.", fixture.Footer.Text);
     }
@@ -346,9 +346,9 @@ public sealed class FeedbackPolicyTests
         // Short feedback: Tab goes from the last action back to the tabs, not into the feedback area.
         using var fixture = Fixture.Open();
         fixture.Model.Composer.StartNew();
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Settle();
-        var stops = MailKeyboardNavigation.TabStops(fixture.Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!);
+        var stops = MailKeyboardNavigation.TabStops(fixture.Shell.GetContent("compose"));
         Assert.IsType<StandardButton>(stops[^1]);
 
         // Feedback taller than its area scrolls, so the keyboard needs a stop there, with a name to announce.
@@ -386,7 +386,7 @@ public sealed class FeedbackPolicyTests
         using var fixture = Fixture.Open(outgoing: tester, width: 640, height: 480);
         var account = fixture.Model.Account;
         fixture.Model.Composer.StartNew();
-        fixture.Shell.Navigation.SelectTab("account");
+        fixture.Shell.ShowView("account");
         fixture.Settle();
         string detail = string.Join(" ", Enumerable.Repeat("The SMTP server closed the connection before it answered the sign-in.", 12));
         tester.Test = _ => throw new MailConnectionException(detail, MailConnectionFailure.Unspecified);
@@ -407,7 +407,7 @@ public sealed class FeedbackPolicyTests
         // The stop before it on the same page, which the user stays on.
         Assert.Same(stops[^2], fixture.Session.FocusedElement);
         Assert.Same(fixture.Button("Test connection", "account"), fixture.Session.FocusedElement);
-        Assert.Equal("account", fixture.Shell.Navigation.SelectedTab?.Id);
+        Assert.Equal("account", fixture.Shell.ActiveViewId);
     }
 
     [Fact]
@@ -417,7 +417,7 @@ public sealed class FeedbackPolicyTests
         var composer = fixture.Model.Composer;
         composer.StartNew();
         composer.Edit("to@example.test", "", "", "Plans", "Body");
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Settle();
         fixture.Announced.Clear();
 
@@ -455,7 +455,7 @@ public sealed class FeedbackPolicyTests
         var composer = fixture.Model.Composer;
         composer.StartNew();
         composer.Edit("team.example.test", "", "", "Plans", "Body");
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Settle();
 
         fixture.Button("Check draft").Click();
@@ -523,7 +523,7 @@ public sealed class FeedbackPolicyTests
         using var fixture = layout == Wide ? Fixture.Open(outgoing: outgoing) : Fixture.Open(outgoing: outgoing, width: 640, height: 480);
         var model = fixture.Model;
         var session = fixture.Session;
-        void Show(string id) { fixture.Shell.Navigation.SelectTab(id); fixture.Settle(); }
+        void Show(string id) { fixture.Shell.ShowView(id); fixture.Settle(); }
         void Press(StandardButton button) { session.SetFocus(button); button.Click(); fixture.Settle(); }
         // Tab there, as a user would, which also scrolls the form to it.
         void TabTo(UiElement target)
@@ -731,7 +731,7 @@ public sealed class FeedbackPolicyTests
                 throw new ArgumentOutOfRangeException(nameof(outcome));
         }
 
-        Assert.Equal(tab, fixture.Shell.Navigation.SelectedTab?.Id);
+        Assert.Equal(tab, fixture.Shell.ActiveViewId);
         Assert.Same(expected, session.FocusedElement);
         Assert.True(expected.CanFocus);
         AssertScrolledIntoView(session, expected, entirelyInView);
@@ -739,7 +739,7 @@ public sealed class FeedbackPolicyTests
         int index = stops.IndexOf(expected);
         Assert.True(index >= 0, "The focused control is not a tab stop of its tab.");
         fixture.Shell.CreateKeyboardNavigation(session).MoveFocus(1);
-        Assert.Same(index + 1 < stops.Count ? stops[index + 1] : fixture.Shell.Navigation, session.FocusedElement);
+        Assert.Same(index + 1 < stops.Count ? stops[index + 1] : fixture.Shell.NavigationFocus, session.FocusedElement);
     }
 
     /// <summary>
@@ -831,7 +831,7 @@ public sealed class FeedbackPolicyTests
     {
         using var fixture = Fixture.Open();
         fixture.Model.Composer.StartNew();
-        fixture.Shell.Navigation.SelectTab("compose");
+        fixture.Shell.ShowView("compose");
         fixture.Settle();
         var check = fixture.Button("Check draft");
         var save = fixture.Button("Save draft");
@@ -891,7 +891,7 @@ public sealed class FeedbackPolicyTests
         public MailShellViewModel Model { get; }
         public MailShellView Shell { get; }
         public UiSession Session { get; }
-        public UiElement Tab(string id) => Shell.Navigation.Tabs.Single(tab => tab.Id == id).Content!;
+        public UiElement Tab(string id) => Shell.GetContent(id);
         public StandardRichEdit ComposerBody => Descendants(Tab("compose")).OfType<StandardRichEdit>().Single();
         public StandardButton Button(string text, string tab = "compose") => Descendants(Tab(tab)).OfType<StandardButton>().Single(button => button.Text == text);
         /// <summary>
@@ -927,8 +927,8 @@ public sealed class FeedbackPolicyTests
                 new ComposerViewModel(dispatcher: dispatcher, sender: sender) { Clock = clock });
             var shell = new MailShellView(model);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host(width, height));
-            session.AddRoot(shell.Window);
-            shell.Navigation.SelectTab("inbox");
+            shell.Attach(session);
+            shell.ShowView("inbox");
             session.RenderFrame();
             return new Fixture(directory, dispatcher, receiver, sender, clock, model, shell, session);
         }

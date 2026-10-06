@@ -46,7 +46,7 @@ public sealed class InboxDensityTests
             using var shell = new MailShellView(model);
             var host = new Host(width, textScale);
             using var session = new StandardUiSessionBuilder().Build(host);
-            session.AddRoot(shell.Window);
+            shell.Attach(session);
             using var appearance = new AppearanceController(session, settings, host);
             await model.Inbox.ReceiveAsync();
             await model.Inbox.SelectAsync(messages[30].Key);

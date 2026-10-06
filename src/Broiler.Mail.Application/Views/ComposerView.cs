@@ -5,7 +5,7 @@
 // ----------------------
 // Relevant units:   2
 // Annotated:        2/2
-// Exempt:           0
+// Exempt:           3
 // Human-reviewed:   0/2
 // IP risk:          Low
 // Security risk:    High
@@ -35,7 +35,7 @@ using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=3F7FB2
+// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=62EDC3
 // Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
 // Broiler-Human:        PENDING
 public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, CompositionCommands? commands = null)
@@ -47,7 +47,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
     /// <summary>The body editor, available after <see cref="CreateContent"/>; focused for replies.</summary>
     public UiElement? Body { get; private set; }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=31C5F3
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=B451E6
     // Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
@@ -208,7 +208,13 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             // The summary stands in for collapsed fields; expanded, the fields show the same thing.
             copies.Summary = copies.IsExpanded ? "" : string.Join(" · ", new[] { model.Cc.Length > 0 ? "Cc recipients included" : "", model.Bcc.Length > 0 ? "Bcc recipients included" : "" }.Where(text => text.Length > 0));
         }
-        if (copies.Toggle is { } toggle) toggle.Clicked += (_, _) => ShowCopiesSummary();
+        if (copies.Toggle is { } toggle) toggle.Clicked += (_, _) =>
+        {
+            ShowCopiesSummary();
+            // A short dialog can leave the disclosure above the viewport after its fields collapse.
+            if (surface.Session is { } session && session.FocusedElement == toggle)
+                FocusNavigation.FocusAndReveal(session, toggle);
+        };
         void Capture()
         {
             if (!updating) model.Edit(to.Text, cc.Text, bcc.Text, subject.Text, body.GetPlainText());

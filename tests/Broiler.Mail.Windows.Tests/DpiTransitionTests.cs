@@ -37,7 +37,7 @@ public sealed class DpiTransitionTests
             Assert.True(w.Model.Composer.StartNew());
             found.DraftBody.SetPlainText("Dear team,\n\nthis draft stays as it is while the display scale changes.");
             Assert.True(found.DraftBody.SetEditorSelection(6, 10));
-            w.Shell.Navigation.SelectTab("inbox");
+            w.Shell.ShowView("inbox");
             w.Session.RenderFrame();
             Assert.True(found.Layout.IsCompact);
             Assert.False(found.Layout.ShowsReaderOnly);
@@ -132,8 +132,8 @@ public sealed class DpiTransitionTests
     {
         public static Controls Find(WindowsMailWindow window)
         {
-            var inbox = window.Shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!;
-            var compose = window.Shell.Navigation.Tabs.Single(tab => tab.Id == "compose").Content!;
+            var inbox = window.Shell.GetContent("inbox");
+            var compose = window.Shell.GetContent("compose");
             var reader = Descendants(inbox).OfType<ScrollableMessageText>().Single();
             return new(Descendants(inbox).OfType<AdaptiveInboxLayout>().Single(), Descendants(inbox).OfType<StandardListView>().Single(),
                 reader, Descendants(reader).OfType<StandardScrollView>().Single(), Descendants(compose).OfType<StandardRichEdit>().Single());

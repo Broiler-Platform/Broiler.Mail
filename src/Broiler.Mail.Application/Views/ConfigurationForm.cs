@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   5
-// Annotated:        5/5
+// Relevant units:   8
+// Annotated:        4/8
 // Exempt:           0
-// Human-reviewed:   0/5
+// Human-reviewed:   0/8
 // IP risk:          Low
 // Security risk:    Low
 // Criteria:         2/0
 // Resource impact:  1/10 max
-// Unverified:       5
+// Unverified:       8
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -41,14 +41,14 @@ internal static class ConfigurationForm
         return field;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=1B2906
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=B8F9CF
     // Broiler-Human:        PENDING
     public static void AddLabeledControl(StandardPanel panel, string label, UiElement control)
     {
         panel.AddChild(new FormField(label, control));
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=957C75
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=0380A5
     // Broiler-Human:        PENDING
     public static StandardLabel AddText(StandardPanel panel, string text)
     {

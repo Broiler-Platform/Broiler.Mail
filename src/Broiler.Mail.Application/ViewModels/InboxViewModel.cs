@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   17
-// Annotated:        17/17
-// Exempt:           11
-// Human-reviewed:   0/17
+// Relevant units:   37
+// Annotated:        17/37
+// Exempt:           21
+// Human-reviewed:   0/37
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         15/0
 // Resource impact:  7/10 max
-// Unverified:       17
+// Unverified:       37
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -23,7 +23,7 @@ using Broiler.UI;
 namespace Broiler.Mail.Application.ViewModels;
 
 /// <summary>Owns the in-memory inbox. All state changes are published on the UI dispatcher.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=CAE5A8
+// Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=8045C6
 // Broiler-Falsified-If: a body fetched for an earlier selection is committed after SelectAsync has picked another message, so Body no longer belongs to SelectedMessage
 // Broiler-Human:        PENDING
 /// <summary>Which pane an inbox problem belongs to, so its explanation and Retry appear beside it.</summary>
@@ -139,7 +139,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=3; Fingerprint=CC9274
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=3; Fingerprint=BF24EC
     // Broiler-Falsified-If: a receive started before SetAccount switches to another profile still commits its messages afterwards
     // Broiler-Human:        PENDING
     public void SetAccount(AccountProfile? account)
@@ -169,7 +169,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
     // Broiler-Human:        PENDING
     public Task LoadOlderAsync() => CanLoadOlder ? LoadPageAsync(_older) : Task.CompletedTask;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=7011AE
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=D87A42
     // Broiler-Falsified-If: a page that repeats a message key already loaded leaves two entries with that key in Messages
     // Broiler-Human:        PENDING
     private Task LoadPageAsync(MailInboxCursor? cursor)
@@ -222,7 +222,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         return "The open message is older than the newest page and stays open. Use Load older to show it in the list.";
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=89C93F
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=F7BF9B
     // Broiler-Falsified-If: a body whose Key differs from the requested key is committed to Body
     // Broiler-Human:        PENDING
     public Task SelectAsync(MailMessageKey key)
@@ -247,7 +247,7 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         }, "Loading message…", InboxProblemScope.Message);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=5ABAE9
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=3F339A
     // Broiler-Falsified-If: a result that completes after Cancel still replaces Messages or Body
     // Broiler-Human:        PENDING
     public void Cancel()
@@ -284,13 +284,22 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         MessageProblem = null;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=687E68
+    private void CancelPending()
+    {
+        var active = _operation;
+        _operation = null;
+        if (active is null) return;
+        try { active.Cancel(); }
+        catch (Exception ex) when (ex is ObjectDisposedException or OperationCanceledException or AggregateException) { }
+    }
+
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=05A835
     // Broiler-Falsified-If: a callback from an operation superseded by a later RunAsync or StopPending still commits its result on the dispatcher
     // Broiler-Human:        PENDING
     private async Task RunAsync<T>(Func<CancellationToken, Task<T>> operation, Action<T> commit, string busy, InboxProblemScope scope)
     {
         // A newer selection invalidates callbacks even if a receiver completes after cancellation.
-        try { _operation?.Cancel(); } catch (ObjectDisposedException) { }
+        CancelPending();
         using var cancellation = new CancellationTokenSource();
         _operation = cancellation;
         int generation = ++_generation;
@@ -336,15 +345,14 @@ public sealed class InboxViewModel(IMailReceiver receiver, IUiDispatcher dispatc
         catch (ObjectDisposedException) { /* The native window has closed. */ }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=1; Fingerprint=571C94
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=1; Fingerprint=C714C0
     // Broiler-Falsified-If: StopPending does not advance the generation, so a commit already queued on the dispatcher still runs
     // Broiler-Human:        PENDING
     private void StopPending()
     {
         ++_generation;
         // A dispatcher callback may be queued after the worker disposed its source.
-        try { _operation?.Cancel(); } catch (ObjectDisposedException) { }
-        _operation = null;
+        CancelPending();
         IsBusy = _loadingPage = false;
     }
 

@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   2
-// Annotated:        2/2
+// Relevant units:   3
+// Annotated:        2/3
 // Exempt:           0
-// Human-reviewed:   0/2
+// Human-reviewed:   0/3
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         2/2
 // Resource impact:  7/10 max
-// Unverified:       2
+// Unverified:       3
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -26,6 +26,7 @@ using Broiler.UI.Label.Standard;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
 using Broiler.UI.Panel.Standard;
+using Broiler.UI.TabView.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
@@ -37,7 +38,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
     /// <summary>Raised by the setup checklist's final action, once the account is ready to receive mail.</summary>
     public event EventHandler? InboxRequested;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=F9436B
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=3FA8B6
     // Broiler-Falsified-If: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
@@ -54,23 +55,49 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         var connectionStep = Step();
         var outgoingStep = Step();
         var next = new StandardButton();
-        setup.Content.AddChild(FormSurface.ActionBar(next));
+        var dismissHints = new StandardButton { Text = "Dismiss hints", AccessibleName = "Dismiss setup hints", IsTabStop = false };
+        setup.Content.AddChild(FormSurface.ActionBar(next, dismissHints));
+        bool hintsDismissed = false;
+        dismissHints.Clicked += (_, _) =>
+        {
+            hintsDismissed = !hintsDismissed;
+            dismissHints.Text = hintsDismissed ? "Show hints" : "Dismiss hints";
+            dismissHints.AccessibleName = hintsDismissed ? "Show setup hints" : "Dismiss setup hints";
+            RefreshSetup();
+        };
+
         var identity = ConfigurationForm.AddSection(panel, "Account identity");
         var name = ConfigurationForm.AddField(identity, "Display name", model.DisplayName);
         var email = ConfigurationForm.AddField(identity, "Email address", model.EmailAddress);
-        var incoming = ConfigurationForm.AddSection(panel, "Incoming mail — IMAP");
-        var host = ConfigurationForm.AddField(incoming, "IMAP server (hostname only)", model.Host);
-        var port = ConfigurationForm.AddField(incoming, "IMAP port", model.Port);
-        var user = ConfigurationForm.AddField(incoming, "Username", model.UserName);
+
+        var tabs = new StandardTabView();
+        panel.AddChild(tabs);
+
+        // Tab 1: Incoming mail — IMAP
+        var incomingPanel = new StandardPanel { Spacing = 16 };
+        var host = new StandardEdit { Text = model.Host, MaxLength = 320 };
+        var port = new StandardEdit { Text = model.Port, MaxLength = 320 };
+        incomingPanel.AddChild(new FormRow(
+            new FormField("IMAP server (hostname only)", host),
+            new FormField("IMAP port", port),
+            0.72));
+
+        var user = ConfigurationForm.AddField(incomingPanel, "Username", model.UserName);
+
         var security = new StandardComboBox();
         security.SetItems([new UiComboBoxItem("Tls", "TLS (usually port 993)"), new UiComboBoxItem("StartTls", "Required STARTTLS (usually port 143)")]);
         security.SelectedIndex = model.Security == TransportSecurity.StartTls ? 1 : 0;
-        ConfigurationForm.AddLabeledControl(incoming, "Connection security", security);
+
         var authentication = new StandardComboBox();
         authentication.SetItems([new UiComboBoxItem("Password", "Password or app password")]);
         authentication.SelectedIndex = 0;
-        ConfigurationForm.AddLabeledControl(incoming, "Authentication (OAuth sign-in is not available yet)", authentication);
-        var credentials = ConfigurationForm.AddSection(panel, "IMAP password", "Stored in this device's credential store and never shown again. Saving new server details requires saving the password again.");
+
+        incomingPanel.AddChild(new FormRow(
+            new FormField("Connection security", security),
+            new FormField("Authentication (OAuth sign-in is not available yet)", authentication),
+            0.5));
+
+        var credentials = ConfigurationForm.AddSection(incomingPanel, "IMAP password", "Stored in this device's credential store and never shown again. Saving new server details requires saving the password again.");
         var password = ConfigurationForm.AddField(credentials, "Password / app password", string.Empty);
         password.IsPassword = true;
         password.MaxLength = 1280;
@@ -78,20 +105,32 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         var forgetPassword = new StandardButton { Text = "Forget saved password" };
         credentials.AddChild(FormSurface.ActionBar(savePassword, forgetPassword));
 
-        var outgoing = ConfigurationForm.AddSection(panel, "Outgoing mail — SMTP", "Optional, needed only for sending. It has its own password.");
+        var incomingCard = new Inset(incomingPanel, 12, 12);
+        tabs.AddTab("incoming", "Incoming (IMAP)", incomingCard);
+
+        // Tab 2: Outgoing mail — SMTP
+        var outgoingPanel = new StandardPanel { Spacing = 12 };
         var smtpSetup = new StandardComboBox();
         smtpSetup.SetItems([new UiComboBoxItem("None", "Not configured"), new UiComboBoxItem("Smtp", "Configure SMTP")]);
         smtpSetup.SelectedIndex = model.ConfigureSmtp ? 1 : 0;
-        ConfigurationForm.AddLabeledControl(outgoing, "Outgoing mail setup", smtpSetup);
-        var smtpFields = new StandardPanel { Spacing = 8 };
-        outgoing.AddChild(smtpFields);
-        var smtpHost = ConfigurationForm.AddField(smtpFields, "SMTP server (hostname only)", model.SmtpHost);
-        var smtpPort = ConfigurationForm.AddField(smtpFields, "SMTP port", model.SmtpPort);
+        ConfigurationForm.AddLabeledControl(outgoingPanel, "Outgoing mail setup", smtpSetup);
+
+        var smtpFields = new StandardPanel { Spacing = 12 };
+        outgoingPanel.AddChild(smtpFields);
+
+        var smtpHost = new StandardEdit { Text = model.SmtpHost, MaxLength = 320 };
+        var smtpPort = new StandardEdit { Text = model.SmtpPort, MaxLength = 320 };
+        smtpFields.AddChild(new FormRow(
+            new FormField("SMTP server (hostname only)", smtpHost),
+            new FormField("SMTP port", smtpPort),
+            0.72));
+
         var smtpUser = ConfigurationForm.AddField(smtpFields, "SMTP username", model.SmtpUserName);
+
         var smtpSecurity = new StandardComboBox();
         smtpSecurity.SetItems([new UiComboBoxItem("Tls", "TLS (usually port 465)"), new UiComboBoxItem("StartTls", "Required STARTTLS (usually port 587)")]);
         smtpSecurity.SelectedIndex = model.SmtpSecurity == TransportSecurity.StartTls ? 1 : 0;
-        ConfigurationForm.AddLabeledControl(smtpFields, "SMTP connection security", smtpSecurity);
+
         var smtpAuthentication = new StandardComboBox();
         var loadedSmtpAuthentication = model.SmtpAuthentication;
         // Preserve a previously stored unsupported mode; editing another field must not change its identity.
@@ -99,17 +138,21 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             ? [new UiComboBoxItem("Password", "Password or app password")]
             : [new UiComboBoxItem("Password", "Password or app password"), new UiComboBoxItem("Unsupported", $"{model.SmtpAuthentication} (not available yet)")]);
         smtpAuthentication.SelectedIndex = model.SmtpAuthentication == AuthenticationMethod.Password ? 0 : 1;
-        ConfigurationForm.AddLabeledControl(smtpFields, "SMTP authentication (OAuth sign-in is not available yet)", smtpAuthentication);
+
+        smtpFields.AddChild(new FormRow(
+            new FormField("SMTP connection security", smtpSecurity),
+            new FormField("SMTP authentication (OAuth sign-in is not available yet)", smtpAuthentication),
+            0.5));
+
         var smtpPassword = ConfigurationForm.AddField(smtpFields, "SMTP password / app password", string.Empty);
         smtpPassword.IsPassword = true;
         smtpPassword.MaxLength = 1280;
         var saveSmtpPassword = new StandardButton { Text = "Save SMTP password" };
         var forgetSmtpPassword = new StandardButton { Text = "Forget SMTP password" };
-        // Beside the SMTP password, inside the SMTP fields: it is no Tab stop while outgoing mail is off,
-        // and the bottom bar keeps its order. Without a tester the app offers no SMTP test at all.
         var testSmtp = new StandardButton { Text = "Test SMTP sign-in" };
         smtpFields.AddChild(FormSurface.ActionBar(saveSmtpPassword, forgetSmtpPassword, testSmtp));
         ConfigurationForm.AddText(smtpFields, "Forget the SMTP password before removing outgoing setup.");
+
         var advanced = new FormSection("Sent-copy settings", collapsible: true, expanded: model.SentCopyMode != SentCopyMode.NotConfigured)
         {
             // "Sent" keeps its capital: it names the Sent folder, as everywhere else in the app.
@@ -118,6 +161,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         // Named for the toggle that controls it, and apart from the section's own name, as the composer's Cc and Bcc fields are.
         advanced.Content.AccessibleName = "Sent-copy handling and folder";
         smtpFields.AddChild(advanced);
+
         var sentCopy = new StandardComboBox();
         sentCopy.SetItems([new UiComboBoxItem("None", "Not configured — no app copy"),
             new UiComboBoxItem("Provider", "Provider saves a copy automatically"),
@@ -126,6 +170,18 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         ConfigurationForm.AddLabeledControl(advanced.Content, "Sent-copy handling", sentCopy);
         var sentFolder = ConfigurationForm.AddField(advanced.Content, "Sent folder path (exact IMAP path)", model.SentFolder);
         ConfigurationForm.AddText(advanced.Content, "Choose append only after confirming that your provider does not save sent mail automatically. The folder must already exist; no folders are created. A failed or uncertain copy never resends mail or automatically retries the copy.");
+
+        var outgoingCard = new Inset(outgoingPanel, 12, 12);
+        tabs.AddTab("smtp", "Outgoing (SMTP)", outgoingCard);
+
+        void SelectIncomingTab() => tabs.SelectedIndex = 0;
+        void SelectOutgoingTab() => tabs.SelectedIndex = 1;
+
+        if (model.ConfigureSmtp && (model.OutgoingStep == OutgoingSetupStep.Test || model.OutgoingStep == OutgoingSetupStep.SavePassword || model.NextStep == AccountSetupStep.Ready))
+            SelectOutgoingTab();
+        else
+            SelectIncomingTab();
+
         var save = new StandardButton { Text = "Save account", IsDefault = true };
         var test = new StandardButton { Text = "Test connection" };
         var cancel = new StandardButton { Text = "Cancel test" };
@@ -158,15 +214,32 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             bool returnFocus = !model.CanCancelTest && surface.Session?.FocusedElement == cancel;
             cancel.Visibility = model.CanCancelTest ? UiVisibility.Visible : UiVisibility.Collapsed;
             RefreshSetup();
+            if (model.ValidationField is { } valField)
+            {
+                if (valField.StartsWith("OutgoingServer", StringComparison.Ordinal) || valField.StartsWith("SentFolder", StringComparison.Ordinal))
+                    SelectOutgoingTab();
+                else if (valField.StartsWith("IncomingServer", StringComparison.Ordinal))
+                    SelectIncomingTab();
+            }
             // Focus goes back to the test that ran, or to Test connection when that one cannot take it. The SMTP
             // test sits in the scrolling form, which may have scrolled away from it meanwhile, so it is revealed
             // once the checklist above it has its new text.
             if (returnFocus && surface.Session is { } session)
+            {
+                if (model.LastTest == MailProtocol.Smtp)
+                    SelectOutgoingTab();
+                else
+                    SelectIncomingTab();
                 FocusNavigation.FocusAndReveal(session, model.LastTest == MailProtocol.Smtp && testSmtp.CanFocus ? testSmtp : test);
+            }
             // A command that stays disabled once its work is done hands focus on: an SMTP test that found
             // no saved password to the SMTP password, which comes next. Focus stays while it runs.
             else if (!model.IsBusy && surface.Session is { } focusSession)
+            {
+                if (focusSession.FocusedElement == testSmtp)
+                    SelectOutgoingTab();
                 FocusNavigation.KeepFocusUsable(focusSession, surface, focusSession.FocusedElement == testSmtp ? smtpPassword : null);
+            }
         }
         void RefreshSetup()
         {
@@ -218,10 +291,26 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
                 AccountSetupStep.TestConnection => model.CanManagePassword && model.ConnectionCheck != ConnectionCheck.Running,
                 _ => true,
             };
+            if (model.ConnectionCheck == ConnectionCheck.Failed || model.OutgoingCheck == ConnectionCheck.Failed)
+            {
+                hintsDismissed = false;
+                dismissHints.Text = "Dismiss hints";
+                dismissHints.AccessibleName = "Dismiss setup hints";
+            }
             bool ready = step == AccountSetupStep.Ready;
             detailsStep.Text = ready ? "Ready — this account can receive mail." : detailsStep.Text;
-            foreach (var line in new[] { passwordStep, connectionStep })
-                line.Visibility = ready ? UiVisibility.Collapsed : UiVisibility.Visible;
+            if (hintsDismissed)
+            {
+                foreach (var line in new[] { detailsStep, passwordStep, connectionStep, outgoingStep })
+                    line.Visibility = UiVisibility.Collapsed;
+            }
+            else
+            {
+                detailsStep.Visibility = UiVisibility.Visible;
+                outgoingStep.Visibility = UiVisibility.Visible;
+                foreach (var line in new[] { passwordStep, connectionStep })
+                    line.Visibility = ready ? UiVisibility.Collapsed : UiVisibility.Visible;
+            }
         }
         model.Changed += (_, _) => RefreshState();
         ConfigurationForm.BindFeedback(model, surface, status, new Dictionary<string, StandardEdit>
@@ -247,6 +336,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
                     break;
                 case AccountSetupStep.SavePassword:
                     // The password is typed by the user; the step only takes them there.
+                    SelectIncomingTab();
                     if (surface.Session is { } session) FocusNavigation.FocusAndReveal(session, password);
                     break;
                 case AccountSetupStep.TestConnection:
@@ -258,7 +348,15 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             }
             await Task.CompletedTask;
         };
-        smtpSetup.SelectionChanged += (_, _) => { smtpPassword.Text = string.Empty; CaptureFields(); model.NotifyEdited(); RefreshState(); };
+        smtpSetup.SelectionChanged += (_, _) =>
+        {
+            if (smtpSetup.SelectedIndex == 1)
+                SelectOutgoingTab();
+            smtpPassword.Text = string.Empty;
+            CaptureFields();
+            model.NotifyEdited();
+            RefreshState();
+        };
         sentCopy.SelectionChanged += (_, _) => RefreshState();
         void CaptureFields()
         {
@@ -287,6 +385,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         };
         saveSmtpPassword.Clicked += async (_, _) =>
         {
+            SelectOutgoingTab();
             CaptureFields();
             string secret = smtpPassword.Text;
             smtpPassword.Text = string.Empty;
@@ -294,12 +393,14 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         };
         forgetSmtpPassword.Clicked += async (_, _) =>
         {
+            SelectOutgoingTab();
             CaptureFields();
             smtpPassword.Text = string.Empty;
             await model.ForgetPasswordAsync(MailProtocol.Smtp);
         };
         savePassword.Clicked += async (_, _) =>
         {
+            SelectIncomingTab();
             CaptureFields();
             string secret = password.Text;
             password.Text = string.Empty;
@@ -307,18 +408,21 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         };
         forgetPassword.Clicked += async (_, _) =>
         {
+            SelectIncomingTab();
             CaptureFields();
             password.Text = string.Empty;
             await model.ForgetPasswordAsync();
         };
         test.Clicked += async (_, _) =>
         {
+            SelectIncomingTab();
             CaptureFields();
             password.Text = string.Empty;
             await model.TestConnectionAsync();
         };
         testSmtp.Clicked += async (_, _) =>
         {
+            SelectOutgoingTab();
             CaptureFields();
             smtpPassword.Text = string.Empty;
             await model.TestOutgoingConnectionAsync();

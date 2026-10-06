@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   25
+// Annotated:        0/25
+// Exempt:           23
+// Human-reviewed:   0/25
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       25
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using System.Diagnostics;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.Windowing;
@@ -132,7 +149,7 @@ internal sealed class MeasurementRun
                 break;
             case MeasureWorkload.Scroll:
             {
-                var list = Find<StandardListView>(shell.Navigation.SelectedTab!.Content!);
+                var list = Find<StandardListView>(shell.ActiveContent);
                 BPoint over = default;
                 Ui(() => over = new(list.Bounds.X + list.Bounds.Width / 2, list.Bounds.Y + list.Bounds.Height / 2));
                 for (int i = 0; i < 150; i++) Step(() => _window.DispatchMeasured(_input.FromMouseWheel(new BMouseWheelEventArgs(over, -1, BMouseButtons.None))));
@@ -141,7 +158,7 @@ internal sealed class MeasurementRun
             }
             case MeasureWorkload.Select:
             {
-                var list = Find<StandardListView>(shell.Navigation.SelectedTab!.Content!);
+                var list = Find<StandardListView>(shell.ActiveContent);
                 Ui(() => _window.Session.SetFocus(list));
                 for (int i = 0; i < 40; i++) Step(() => Key(0x28)); // Down selects the next message and loads its body.
                 break;
@@ -150,11 +167,11 @@ internal sealed class MeasurementRun
             {
                 Ui(() =>
                 {
-                    shell.Navigation.SelectTab("compose");
+                    shell.ShowView("compose");
                     if (!_window.Model.Composer.HasDraft) _window.Model.Composer.StartNew();
                 });
                 Thread.Sleep(300);
-                var body = Find<StandardRichEdit>(shell.Navigation.SelectedTab!.Content!);
+                var body = Find<StandardRichEdit>(shell.ActiveContent);
                 Ui(() => _window.Session.SetFocus(body));
                 const string text = "The quick brown fox jumps over the lazy dog. ";
                 for (int i = 0; i < 600; i++)
@@ -187,7 +204,7 @@ internal sealed class MeasurementRun
             }
             case MeasureWorkload.Splitter:
             {
-                var splitter = Find<UiSplitter>(shell.Navigation.SelectedTab!.Content!);
+                var splitter = Find<UiSplitter>(shell.ActiveContent);
                 Ui(() => _window.Session.SetFocus(splitter));
                 for (int i = 0; i < 60; i++) Step(() => Key(i / 15 % 2 == 0 ? 0x27 : 0x25)); // Right, then Left, in runs of 15.
                 break;
@@ -262,7 +279,7 @@ internal sealed class MeasurementRun
     private HtmlPreviewWindow OpenPreview()
     {
         var frames = _preview!.Frames;
-        var open = Find<StandardButton>(_window.Shell.Navigation.SelectedTab!.Content!, button => button.Text == HtmlMessagePreview.OpenText);
+        var open = Find<StandardButton>(_window.Shell.ActiveContent, button => button.Text == HtmlMessagePreview.OpenText);
         long clicked = 0;
         Ui(() =>
         {

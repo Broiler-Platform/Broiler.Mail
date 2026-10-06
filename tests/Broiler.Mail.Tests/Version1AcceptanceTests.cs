@@ -21,7 +21,6 @@ using Broiler.UI.Label.Standard;
 using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
-using MailKit.Net.Imap;
 
 namespace Broiler.Mail.Tests;
 
@@ -42,8 +41,7 @@ public sealed class Version1AcceptanceTests
         var credentials = new TestCredentialStore();
         var accounts = new JsonAccountStore(directory.File("accounts.json"));
         var settings = new JsonSettingsStore(directory.File("settings.json"));
-        var receiver = new ImapMailReceiver(credentials, () => new ImapClient
-        { ServerCertificateValidationCallback = (_, cert, _, _) => cert?.GetCertHashString() == server.Certificate.GetCertHashString() }, TimeSpan.FromSeconds(5));
+        var receiver = new ImapMailReceiver(credentials, (_, cert, _, _) => cert?.GetCertHashString() == server.Certificate.GetCertHashString(), TimeSpan.FromSeconds(5));
         var profile = new AccountProfileViewModel(accounts, credentials, receiver, new ImmediateUiDispatcher(), null, null)
         {
             DisplayName = "Acceptance test", EmailAddress = "test@example.test", Host = "127.0.0.1",
@@ -111,7 +109,7 @@ public sealed class Version1AcceptanceTests
         await app.InitializeAsync();
         using var shell = app.CreateShell();
         using var session = new StandardUiSessionBuilder().Build(new Host(width, height));
-        session.AddRoot(shell.Window);
+        shell.Attach(session);
         var keyboard = shell.CreateKeyboardNavigation(session);
         var text = Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
         text.Text = string.Join("\n", Enumerable.Repeat("A readable message with words & symbols.", 40));
@@ -130,11 +128,11 @@ public sealed class Version1AcceptanceTests
             Assert.True(label.Bounds.Height < 3000, "Text was wrapped into a narrow column.");
         }
 
-        shell.Navigation.SelectTab("account");
+        shell.ShowView("account");
         session.RenderFrame();
-        var edits = Descendants(shell.Navigation.SelectedTab!.Content!).OfType<StandardEdit>().ToArray();
-        Assert.True(edits[0].Bounds.Width > width - 40);
-        session.SetFocus(shell.Navigation);
+        var edits = Descendants(shell.ActiveContent).OfType<StandardEdit>().ToArray();
+        Assert.True(edits[0].Bounds.Width > shell.ActiveDialog!.Bounds.Width - 40);
+        session.SetFocus(shell.NavigationFocus);
         // The setup checklist's next action is the first stop, then the first field.
         Assert.True(keyboard.Handle(Key(9)));
         var nextStep = Assert.IsType<StandardButton>(session.FocusedElement);
@@ -144,30 +142,30 @@ public sealed class Version1AcceptanceTests
         Assert.True(keyboard.Handle(Key(9, shift: true)));
         Assert.Same(nextStep, session.FocusedElement);
         Assert.True(keyboard.Handle(Key(9, shift: true)));
-        Assert.Same(shell.Navigation, session.FocusedElement);
+        Assert.Same(shell.NavigationFocus, session.FocusedElement);
         if (smtp)
         {
-            var smtpHost = Descendants(shell.Navigation.SelectedTab.Content!).OfType<StandardLabel>()
+            var smtpHost = Descendants(shell.ActiveContent).OfType<StandardLabel>()
                 .Single(item => item.Text == "SMTP server (hostname only)").Target;
             for (int attempt = 0; attempt < 20 && session.FocusedElement != smtpHost; attempt++)
                 Assert.True(keyboard.Handle(Key(9)));
             Assert.Same(smtpHost, session.FocusedElement);
-            var formScroll = Descendants(shell.Navigation.SelectedTab.Content!).OfType<FormSurface>().Single().Content.Scroll;
+            var formScroll = Descendants(shell.ActiveContent).OfType<FormSurface>().Single().Content.Scroll;
             Assert.InRange(smtpHost!.Bounds.Top, formScroll.ContentBounds.Top - 1, formScroll.ContentBounds.Bottom);
             Assert.InRange(smtpHost.Bounds.Bottom, formScroll.ContentBounds.Top, formScroll.ContentBounds.Bottom + 1);
-            session.SetFocus(shell.Navigation);
+            session.SetFocus(shell.NavigationFocus);
         }
         // Backward traversal reaches the persistent action bar, outside the scrolling fields.
         Assert.True(keyboard.Handle(Key(9, shift: true)));
         var button = Assert.IsType<StandardButton>(session.FocusedElement);
         Assert.Equal("Test connection", button.Text);
-        var scroll = Descendants(shell.Navigation.SelectedTab.Content!).OfType<FormSurface>().Single().Content.Scroll;
+        var scroll = Descendants(shell.ActiveContent).OfType<FormSurface>().Single().Content.Scroll;
         Assert.InRange(button.Bounds.Top, scroll.Bounds.Bottom, height);
         Assert.InRange(button.Bounds.Bottom, button.Bounds.Top, height);
         Assert.False(scroll.HasHorizontalScrollbar);
         Assert.True(keyboard.Handle(Key(0x33, control: true)));
-        Assert.Equal("settings", shell.Navigation.SelectedTab!.Id);
-        Assert.Same(shell.Navigation, session.FocusedElement);
+        Assert.Equal("settings", shell.ActiveViewId);
+        Assert.Same(shell.NavigationFocus, session.FocusedElement);
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
     }
 
@@ -182,14 +180,14 @@ public sealed class Version1AcceptanceTests
         using var shell = app.CreateShell();
         var host = new Host(1100, 720);
         using var session = new StandardUiSessionBuilder().Build(host);
-        session.AddRoot(shell.Window);
-        Assert.Equal("account", shell.Navigation.SelectedTab!.Id);
+        shell.Attach(session);
+        Assert.Equal("account", shell.ActiveViewId);
         Assert.All(Descendants(shell.Window).OfType<StandardEdit>().Where(edit => edit.IsPassword), edit => Assert.False(edit.IsEnabled));
         await accounts.SaveAsync(TestDirectory.Profile());
         await app.InitializeAsync();
         using var configured = app.CreateShell();
         session.AddRoot(configured.Window);
-        configured.Navigation.SelectTab("account");
+        configured.ShowView("account");
         var password = (StandardEdit)Descendants(configured.Window).OfType<StandardLabel>().Single(label => label.Text == "Password / app password").Target!;
         Assert.True(password.IsEnabled);
         password.Text = "synthetic-secret";

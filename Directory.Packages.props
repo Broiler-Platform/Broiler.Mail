@@ -8,13 +8,12 @@
     <BroilerHostingVersion>0.1.0-preview.7</BroilerHostingVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="MailKit" Version="4.18.1" />
     <PackageVersion Include="Broiler.Hosting.Windows" Version="$(BroilerHostingVersion)" />
     <PackageVersion Include="Broiler.Hosting.Linux" Version="$(BroilerHostingVersion)" />
     <PackageVersion Include="Broiler.Hosting.Android" Version="$(BroilerHostingVersion)" />
-    <PackageVersion Include="Broiler.HTML.Core" Version="0.1.0-preview.9" />
-    <PackageVersion Include="Broiler.HTML.Image" Version="0.1.0-preview.9" />
-    <PackageVersion Include="Broiler.HTML.Image.Compat" Version="0.1.0-preview.9" />
+    <PackageVersion Include="Broiler.HTML.Core" Version="0.1.0-preview.16" />
+    <PackageVersion Include="Broiler.HTML.Image" Version="0.1.0-preview.16" />
+    <PackageVersion Include="Broiler.HTML.Image.Compat" Version="0.1.0-preview.16" />
     <PackageVersion Include="Broiler.Media.Image.Managed" Version="0.1.0-preview.14" />
     <PackageVersion Include="Broiler.UI" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.Graphics" Version="$(BroilerGraphicsVersion)" />
@@ -40,6 +39,8 @@
     <PackageVersion Include="Broiler.UI.Forms.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Button.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.ComboBox.Standard" Version="$(BroilerUiVersion)" />
+    <PackageVersion Include="Broiler.UI.Dialog.Standard" Version="$(BroilerUiVersion)" />
+    <PackageVersion Include="Broiler.UI.Menu.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Edit.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.Label.Standard" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.UI.ListView.Standard" Version="$(BroilerUiVersion)" />

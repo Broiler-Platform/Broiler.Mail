@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   3
-// Annotated:        3/3
-// Exempt:           5
-// Human-reviewed:   0/3
+// Relevant units:   5
+// Annotated:        3/5
+// Exempt:           8
+// Human-reviewed:   0/5
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         2/0
 // Resource impact:  2/10 max
-// Unverified:       3
+// Unverified:       5
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -30,7 +30,7 @@ public sealed class SettingsViewModel : SaveViewModel
     private readonly ISettingsStore _store;
     private readonly SemaphoreSlim _layoutWrites = new(1, 1);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=ACF155
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6171D5
     // Broiler-Human:        PENDING
     public SettingsViewModel(ISettingsStore store, IUiDispatcher dispatcher, ApplicationSettings settings, string? loadError)
         : base(dispatcher, loadError)
@@ -83,7 +83,7 @@ public sealed class SettingsViewModel : SaveViewModel
     public string WindowWidth { get; set; }
     public string WindowHeight { get; set; }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=9F7D12
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=0EABB5
     // Broiler-Falsified-If: a non-numeric window width, or one outside 640 to 7680, reaches the settings store
     // Broiler-Human:        PENDING
     public Task SaveAsync(CancellationToken cancellationToken = default)

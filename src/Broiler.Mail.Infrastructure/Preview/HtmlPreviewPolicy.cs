@@ -17,8 +17,9 @@
 
 using System.Net;
 using System.Text;
+using Broiler.Mail.Core.Diagnostics;
 using Broiler.Mail.Core.Messages;
-using MimeKit.Text;
+using Broiler.Mail.Infrastructure.Html;
 
 namespace Broiler.Mail.Infrastructure.Preview;
 
@@ -86,27 +87,46 @@ public static class HtmlPreviewPolicy
                 {
                     var src = tag.Attributes.FirstOrDefault(a => a.Name.Equals("src", StringComparison.OrdinalIgnoreCase))?.Value;
                     var alt = tag.Attributes.FirstOrDefault(a => a.Name.Equals("alt", StringComparison.OrdinalIgnoreCase))?.Value;
+                    var width = tag.Attributes.FirstOrDefault(a => a.Name.Equals("width", StringComparison.OrdinalIgnoreCase))?.Value;
+                    var height = tag.Attributes.FirstOrDefault(a => a.Name.Equals("height", StringComparison.OrdinalIgnoreCase))?.Value;
                     string? safeAlt = alt is { Length: > 0 and <= 256 } && !alt.Any(char.IsControl) ? WebUtility.HtmlEncode(alt) : null;
+                    string? safeWidth = GetSafeDimension(width);
+                    string? safeHeight = GetSafeDimension(height);
                     if (src is not null && src.StartsWith("cid:", StringComparison.OrdinalIgnoreCase))
                     {
-                        string cid = src[4..].Trim().Trim('<', '>');
-                        if (embeddedImages is not null && embeddedImages.TryGetValue(cid, out var image))
+                        string cid = src[4..].Trim().Trim('<', '>', '"', '\'');
+                        string unescapedCid = Uri.UnescapeDataString(cid);
+                        MailEmbeddedImage? image = null;
+                        if (embeddedImages is not null &&
+                            (embeddedImages.TryGetValue(cid, out image) ||
+                             embeddedImages.TryGetValue(unescapedCid, out image)))
                         {
                             hasEmbeddedImages = true;
-                            output.Append("<img src=\"data:").Append(image.ContentType).Append(";base64,")
-                                .Append(Convert.ToBase64String(image.Data)).Append('\"');
-                            if (safeAlt is not null) output.Append(" alt=\"").Append(safeAlt).Append('\"');
-                            output.Append(" style=\"max-width:100%;height:auto\">");
+                            AppendImageTag(output, $"data:{image.ContentType};base64,{Convert.ToBase64String(image.Data)}", safeAlt, safeWidth, safeHeight);
                         }
+                    }
+                    else if (src is not null && TryValidateSafeDataImageUri(src, out string? safeDataUri))
+                    {
+                        hasEmbeddedImages = true;
+                        AppendImageTag(output, safeDataUri!, safeAlt, safeWidth, safeHeight);
                     }
                     else if (TryExternalLink(src, out var uri))
                     {
                         remoteImages.Add(uri!.AbsoluteUri);
                         if (allowRemoteImages)
                         {
-                            output.Append("<img src=\"").Append(WebUtility.HtmlEncode(uri.AbsoluteUri)).Append('\"');
-                            if (safeAlt is not null) output.Append(" alt=\"").Append(safeAlt).Append('\"');
-                            output.Append(" style=\"max-width:100%;height:auto\">");
+                            MailEmbeddedImage? downloaded = null;
+                            if (embeddedImages is not null &&
+                                (embeddedImages.TryGetValue(uri.AbsoluteUri, out downloaded) ||
+                                 (src is not null && embeddedImages.TryGetValue(src, out downloaded))))
+                            {
+                                hasEmbeddedImages = true;
+                                AppendImageTag(output, $"data:{downloaded.ContentType};base64,{Convert.ToBase64String(downloaded.Data)}", safeAlt, safeWidth, safeHeight);
+                            }
+                            else
+                            {
+                                AppendImageTag(output, WebUtility.HtmlEncode(uri.AbsoluteUri), safeAlt, safeWidth, safeHeight);
+                            }
                         }
                         else
                         {
@@ -114,6 +134,13 @@ public static class HtmlPreviewPolicy
                                 .Append(safeAlt is not null ? $": {safeAlt}" : "")
                                 .Append("]</span>");
                         }
+                    }
+                    else if (src is not null && embeddedImages is not null &&
+                             (embeddedImages.TryGetValue(src, out var relImage) ||
+                              embeddedImages.TryGetValue(src.TrimStart('.', '/'), out relImage)))
+                    {
+                        hasEmbeddedImages = true;
+                        AppendImageTag(output, $"data:{relImage.ContentType};base64,{Convert.ToBase64String(relImage.Data)}", safeAlt, safeWidth, safeHeight);
                     }
                     continue;
                 }
@@ -136,7 +163,91 @@ public static class HtmlPreviewPolicy
             else if (suppressed is null && token is HtmlDataToken data) output.Append(WebUtility.HtmlEncode(data.Data));
         }
         output.Append("</body></html>");
+        MailLogger.Debug("HtmlPolicy", $"Sanitized preview: Links={links.Count}, RemoteImages={remoteImages.Count}, HasEmbeddedImages={hasEmbeddedImages}, OutputLength={output.Length}");
         return new(output.ToString(), links, remoteImages, hasEmbeddedImages);
+    }
+
+    private static readonly HashSet<string> AllowedDataImageSubtypes = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "png", "jpeg", "jpg", "gif", "webp", "bmp", "x-png", "pjpeg", "x-ms-bmp"
+    };
+
+    /// <summary>
+    /// Validates and normalizes an inline data: URI image. Ensures safe raster formats only (no SVG or active content),
+    /// strictly prevents attribute breakout by rejecting quotes and tags, and canonicalizes the base64 content.
+    /// </summary>
+    public static bool TryValidateSafeDataImageUri(string? dataUri, out string? safeUri)
+    {
+        safeUri = null;
+        if (string.IsNullOrWhiteSpace(dataUri)) return false;
+        if (dataUri.Length > 10_000_000) return false;
+
+        if (!dataUri.StartsWith("data:image/", StringComparison.OrdinalIgnoreCase)) return false;
+
+        int semicolonIndex = dataUri.IndexOf(';');
+        if (semicolonIndex <= 11) return false;
+
+        string subtype = dataUri.Substring(11, semicolonIndex - 11).Trim().ToLowerInvariant();
+        if (!AllowedDataImageSubtypes.Contains(subtype)) return false;
+
+        int commaIndex = dataUri.IndexOf(',', semicolonIndex);
+        if (commaIndex < 0) return false;
+
+        string encodingPart = dataUri.Substring(semicolonIndex + 1, commaIndex - semicolonIndex - 1).Trim();
+        if (!encodingPart.Equals("base64", StringComparison.OrdinalIgnoreCase)) return false;
+
+        string base64Data = dataUri.Substring(commaIndex + 1).Trim();
+        if (base64Data.Length == 0) return false;
+
+        foreach (char c in base64Data)
+        {
+            if (char.IsWhiteSpace(c)) continue;
+            if (c is (>= 'A' and <= 'Z') or (>= 'a' and <= 'z') or (>= '0' and <= '9') or '+' or '/' or '=')
+            {
+                continue;
+            }
+            return false;
+        }
+
+        if (subtype is "jpg" or "pjpeg") subtype = "jpeg";
+        else if (subtype is "x-png") subtype = "png";
+        else if (subtype is "x-ms-bmp") subtype = "bmp";
+
+        string cleanBase64 = base64Data.Replace("\r", "").Replace("\n", "").Replace(" ", "").Replace("\t", "");
+        safeUri = $"data:image/{subtype};base64,{cleanBase64}";
+        return true;
+    }
+
+    private static string? GetSafeDimension(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value) || value.Length > 16) return null;
+        value = value.Trim();
+        bool allDigits = true;
+        for (int i = 0; i < value.Length; i++)
+        {
+            char c = value[i];
+            if (char.IsDigit(c)) continue;
+            if ((c == 'p' || c == 'P') && i + 1 < value.Length && (value[i + 1] == 'x' || value[i + 1] == 'X') && i + 2 == value.Length)
+            {
+                return value;
+            }
+            if (c == '%' && i + 1 == value.Length)
+            {
+                return value;
+            }
+            allDigits = false;
+            break;
+        }
+        return allDigits ? value : null;
+    }
+
+    private static void AppendImageTag(StringBuilder output, string src, string? safeAlt, string? safeWidth, string? safeHeight)
+    {
+        output.Append("<img src=\"").Append(src).Append('\"');
+        if (safeAlt is not null) output.Append(" alt=\"").Append(safeAlt).Append('\"');
+        if (safeWidth is not null) output.Append(" width=\"").Append(safeWidth).Append('\"');
+        if (safeHeight is not null) output.Append(" height=\"").Append(safeHeight).Append('\"');
+        output.Append(" style=\"max-width:100%;height:auto\">");
     }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=2; Fingerprint=6D2504

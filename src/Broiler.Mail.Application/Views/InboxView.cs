@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   3
-// Annotated:        3/3
-// Exempt:           0
-// Human-reviewed:   0/3
+// Relevant units:   9
+// Annotated:        3/9
+// Exempt:           3
+// Human-reviewed:   0/9
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         3/0
 // Resource impact:  7/10 max
-// Unverified:       3
+// Unverified:       9
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -41,7 +41,7 @@ using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=721087
+// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=AC6BE6
 // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
 // Broiler-Human:        PENDING
 public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, CompositionCommands? commands = null, SettingsViewModel? settings = null)
@@ -71,7 +71,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
     public bool ShowsPaneOf(InboxProblemScope scope) => _layout is not { IsCompact: true } layout
         || (scope == InboxProblemScope.Message ? layout.ShowsReaderOnly : !layout.ShowsReaderOnly);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=A38929
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=146B5E
     // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
@@ -467,14 +467,18 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             if (model.SelectedMessage is not { } item) return;
             var loading = model.SelectAsync(item.Key);
             OpenReader();
-            await loading;
+            try { await loading; }
+            catch (OperationCanceledException) { }
         };
         cancel.Clicked += (_, _) => model.Cancel();
         list.SelectionChanged += async (_, _) =>
         {
             if (!updating && !model.CanSelect) { Update(); return; }
             if (!updating && model.Messages.FirstOrDefault(item => Id(item) == list.SelectedItemId) is { } item)
-                await model.SelectAsync(item.Key);
+            {
+                try { await model.SelectAsync(item.Key); }
+                catch (OperationCanceledException) { }
+            }
         };
         list.ItemActivated += async (_, e) =>
         {
@@ -482,7 +486,8 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
             {
                 var loading = model.SelectAsync(item.Key);
                 OpenReader();
-                await loading;
+                try { await loading; }
+                catch (OperationCanceledException) { }
             }
         };
         if (commands is not null)
@@ -498,7 +503,7 @@ public sealed class InboxView(InboxViewModel model, IHtmlPreviewHost? htmlPrevie
         return panel;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=C55E43
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=3F7EE3
     // Broiler-Falsified-If: two loaded messages with different keys get the same Id, so choosing one row opens the other
     // Broiler-Human:        PENDING
     private static IEnumerable<string> HeaderDetails(MailMessageSummary message, MailCompositionSource? headers)

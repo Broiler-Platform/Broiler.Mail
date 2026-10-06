@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   5
-// Annotated:        5/5
-// Exempt:           0
-// Human-reviewed:   0/5
-// IP risk:          Low
-// Security risk:    High
-// Criteria:         5/5
-// Resource impact:  6/10 max
-// Unverified:       5
+// Relevant units:   13
+// Annotated:        0/13
+// Exempt:           14
+// Human-reviewed:   0/13
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       13
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -22,6 +22,7 @@ using System.Linq;
 using System.Net.Http;
 using System.Threading;
 using System.Threading.Tasks;
+using Broiler.Mail.Core.Diagnostics;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Infrastructure.Preview;
 using Broiler.Media;
@@ -292,12 +293,14 @@ public static class HtmlResourceLoader
                     ? HtmlResourceOutcomeKind.BudgetExceeded
                     : HtmlResourceOutcomeKind.Failed;
 
+                MailLogger.Warning("HtmlResourceLoader", $"Image inspection failed for {url}: {inspection.Reason} ({inspection.Detail})");
                 return (new HtmlResourceResult(url, outcome, inspection.Reason,
                     BytesLoaded: imageBytes.Length,
                     ImageInfo: inspection.Info,
                     ErrorDetail: inspection.Detail), null);
             }
 
+            MailLogger.Info("HtmlResourceLoader", $"Image verified for {url}: {imageBytes.Length:N0} bytes, {inspection.Info?.Width}x{inspection.Info?.Height} {inspection.Info?.MediaType}.");
             return (new HtmlResourceResult(url, HtmlResourceOutcomeKind.Rendered, HtmlResourceFailureReason.None,
                 BytesLoaded: imageBytes.Length,
                 ImageInfo: inspection.Info), imageBytes);
@@ -308,6 +311,7 @@ public static class HtmlResourceLoader
         }
         catch (Exception ex)
         {
+            MailLogger.Warning("HtmlResourceLoader", $"Network or processing error for {url}: {ex.Message}");
             return (new HtmlResourceResult(url, HtmlResourceOutcomeKind.Failed, HtmlResourceFailureReason.NetworkError,
                 ErrorDetail: ex.Message), null);
         }

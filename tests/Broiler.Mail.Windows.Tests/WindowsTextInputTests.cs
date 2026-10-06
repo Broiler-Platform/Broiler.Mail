@@ -154,9 +154,9 @@ public sealed class WindowsTextInputTests
     public void TheAccountPasswordTakesNoImeAndTheNextFieldGetsItBack()
     {
         using var fixture = HiddenMailWindow.Start();
-        fixture.Ui(() => fixture.Window.Shell.Navigation.SelectTab("account"));
+        fixture.Ui(() => fixture.Window.Shell.ShowView("account"));
         fixture.Layout();
-        var account = fixture.Ui(() => fixture.Window.Shell.Navigation.Tabs.Single(tab => tab.Id == "account").Content!);
+        var account = fixture.Ui(() => fixture.Window.Shell.GetContent("account"));
         StandardEdit Field(string label) => fixture.Ui(() =>
             (StandardEdit)HiddenMailWindow.Descendants(account).OfType<StandardLabel>().Single(item => item.Text == label).Target!);
         var password = Field("Password / app password");
@@ -180,12 +180,10 @@ public sealed class WindowsTextInputTests
     public void TheImeIsOnlyOnWhileAWritableEditorHasFocus()
     {
         using var fixture = HiddenMailWindow.Start();
-        // The window opens with the tab strip focused, which draws no composition.
+        // The window opens with the menu focused, which draws no composition.
         Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
-        var (to, _) = NativeInputFidelityTests.StartDraft(fixture);
-        Assert.True(fixture.Ui(() => HasInputContext(fixture.Render)));
 
-        var inbox = fixture.Ui(() => fixture.Window.Shell.Navigation.Tabs.Single(tab => tab.Id == "inbox").Content!);
+        var inbox = fixture.Ui(() => fixture.Window.Shell.GetContent("inbox"));
         var list = fixture.Ui(() => HiddenMailWindow.Descendants(inbox).OfType<StandardListView>().Single());
         var reader = fixture.Ui(() => HiddenMailWindow.Descendants(inbox).OfType<StandardRichEdit>().Single(editor => editor.AccessibleName == "Message text"));
         fixture.Ui(() => fixture.Window.Session.SetFocus(list));
@@ -194,11 +192,15 @@ public sealed class WindowsTextInputTests
         fixture.Layout();
         Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
 
+        var (to, _) = NativeInputFidelityTests.StartDraft(fixture);
+        Assert.True(fixture.Ui(() => HasInputContext(fixture.Render)));
+
+        fixture.Ui(() => fixture.Window.Session.SetFocus(fixture.Window.Shell.NavigationFocus));
+        Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
+
         // Back in a field of the composer, the IME is on again at once, before the next frame.
         fixture.Ui(() => fixture.Window.Session.SetFocus(to));
         Assert.True(fixture.Ui(() => HasInputContext(fixture.Render)));
-        fixture.Ui(() => fixture.Window.Session.SetFocus(fixture.Window.Shell.Navigation));
-        Assert.False(fixture.Ui(() => HasInputContext(fixture.Render)));
     }
 
     [Fact]
