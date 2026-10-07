@@ -54,7 +54,7 @@ dotnet publish src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj -c Release -
   `claude/ui-13-acceptance` pushed first, which needs no upstream release, or its source copied
   there. The adoption build also needs the published packages, or the local feed copied with it.
 - Use the published app: `./scripts/Publish-Windows.ps1` (or `-Runtime win-arm64` on an ARM64
-  machine) writes `artifacts/Broiler.Mail-2.0.0-<runtime>/Broiler.Mail.Windows.exe`.
+  machine) writes `artifacts/Broiler.Mail-2.0.0-<runtime>-self-contained/Broiler.Mail.Windows.exe`.
 - Most checks use demo fixtures: `Broiler.Mail.Windows.exe --demo <fixture>`, optionally with
   `--size 640x480` for the compact layout. They need no account, network, or saved data, and the
   window title names the fixture. Demo drafts are kept in memory only.

@@ -1,0 +1,155 @@
+name: Publish
+
+# Dispatch-only. Every run publishes the Windows application for win-x64 and win-arm64 in two
+# variants, stamps them with the next preview version, attaches them to the run as artifacts,
+# then drafts a GitHub pre-release carrying them:
+#
+#   Broiler.Mail-<version>-<runtime>-self-contained.zip       NativeAOT, no .NET runtime needed
+#   Broiler.Mail-<version>-<runtime>-framework-dependent.zip  IL build, runs on .NET 10
+#
+# each with a .sha256 beside it. scripts/Publish-Windows.ps1 does the work - the same script CI
+# and developers run - so every package carries its notices and build manifest and is
+# smoke-tested (--smoke-test) on a runner of its own architecture before it is uploaded.
+#
+# Only the Windows head ships. Broiler.Mail.Linux has no interactive window yet (its Main
+# returns at once) and Broiler.Mail.Cli is a diagnostics and validation tool, not the
+# application, so neither is packaged.
+#
+# Nothing is pushed to a feed, and every package restores from nuget.org (NuGet.config). The
+# draft release (eng/release-draft.sh) stays private until someone publishes it; the builds
+# are unsigned and the HTML renderer is not yet isolated (docs/html-renderer-security.md),
+# which the release notes state.
+#
+# The version is BroilerMailVersion (Directory.Build.props) as a preview line, raised past
+# every earlier run's mail-v* tag, and a successful run tags its commit, so preview numbers
+# only ever increase and never name two builds. See eng/resolve-preview-version.mjs.
+on:
+  workflow_dispatch:
+    inputs:
+      version-suffix:
+        description: >-
+          Optional preview.N override (unused, and at least the next preview). Empty picks
+          the next preview automatically.
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+# One run at a time, so two runs cannot pick the same preview number.
+concurrency:
+  group: publish
+  cancel-in-progress: false
+
+env:
+  DOTNET_CLI_TELEMETRY_OPTOUT: '1'
+  DOTNET_NOLOGO: '1'
+
+jobs:
+  version:
+    name: Resolve preview version
+    runs-on: ubuntu-24.04
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-node@v7
+        with:
+          node-version: '24'
+      - name: Test the version resolver
+        run: node --test eng/resolve-preview-version.test.mjs
+      - name: Resolve version
+        id: version
+        env:
+          VERSION_SUFFIX: ${{ inputs.version-suffix }}
+        run: node eng/resolve-preview-version.mjs
+
+  build:
+    name: ${{ matrix.runtime }} (${{ matrix.variant }})
+    needs: version
+    strategy:
+      fail-fast: true
+      matrix:
+        # The publisher smoke-tests what it built, so each runtime publishes on a runner of
+        # its own architecture. Both images carry the MSVC tools NativeAOT links with.
+        runtime: [win-x64, win-arm64]
+        variant: [self-contained, framework-dependent]
+        include:
+          - runtime: win-x64
+            runner: windows-2025
+          - runtime: win-arm64
+            runner: windows-11-arm
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      # BroilerMailVersion flows into Version, so the file version, the package name and
+      # build-manifest.json all match the release.
+      - name: Publish and smoke-test
+        shell: pwsh
+        run: ./scripts/Publish-Windows.ps1 -Runtime '${{ matrix.runtime }}' -Variant '${{ matrix.variant }}' -Version $env:VERSION
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: broiler-mail-${{ matrix.runtime }}-${{ matrix.variant }}-${{ env.VERSION }}
+          path: |
+            artifacts/Broiler.Mail-${{ env.VERSION }}-${{ matrix.runtime }}-${{ matrix.variant }}.zip
+            artifacts/Broiler.Mail-${{ env.VERSION }}-${{ matrix.runtime }}-${{ matrix.variant }}.zip.sha256
+          if-no-files-found: error
+
+  release:
+    name: Tag and draft release ${{ needs.version.outputs.tag }}
+    needs: [version, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      TAG: ${{ needs.version.outputs.tag }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Only after every build succeeded: a failed run leaves its number free. The tag is
+      # pushed here rather than left to the release, because a draft release does not create
+      # its tag until it is published - and the next run counts tags.
+      - name: Tag the commit
+        run: |
+          git tag "$TAG" "$GITHUB_SHA"
+          git push origin "refs/tags/$TAG"
+
+      - name: Download the packages
+        uses: actions/download-artifact@v8
+        with:
+          pattern: broiler-mail-*-${{ env.VERSION }}
+          path: artifacts
+          merge-multiple: true
+
+      # A draft pre-release: nothing is public until someone reviews and publishes it.
+      - name: Draft the release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: bash eng/release-draft.sh "$VERSION" artifacts
+
+      - name: Summary
+        run: |
+          {
+            echo "### Broiler.Mail $VERSION"
+            echo
+            echo "Dependencies restored from nuget.org; commit tagged \`$TAG\`."
+            echo
+            echo "A draft pre-release **Broiler Mail $VERSION** was created with the"
+            echo "self-contained and framework-dependent packages for win-x64 and win-arm64."
+            echo "Review it under Releases and publish it there."
+          } >> "$GITHUB_STEP_SUMMARY"
