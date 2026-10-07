@@ -12,7 +12,7 @@ packages are unsigned validation artifacts, not security-approved releases.
 ## Run
 
 Build the current source or extract the published release package:
-- Package: `artifacts/Broiler.Mail-2.0.0-win-x64.zip` (or the matching ARM64 package)
+- Package: `artifacts/Broiler.Mail-2.0.0-win-x64-self-contained.zip` (or the matching ARM64 package)
 - Application executable: `Broiler.Mail.Windows.exe`
 - Demo preview: `Broiler.Mail.Windows.exe --demo`
 

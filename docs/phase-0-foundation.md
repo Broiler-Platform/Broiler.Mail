@@ -42,7 +42,7 @@ The potential extraction is the portable portion of `ScrollableHtmlView`, `HtmlV
 
 The workflow has read-only repository permissions, pinned action revisions, and no signing/publishing secrets. Its NuGet cache starts empty on each hosted runner. [NuGet.config](../NuGet.config) excludes local feeds and fallback folders; `Directory.Build.props` explicitly selects it for restore, including on case-sensitive systems. Artifacts contain the SDK/runner/revision record, API probe JSON, dependency graph, and TRX results. `Confirm-TestResults.ps1` rejects missing, empty, failed, or skipped suites and writes actual counts to the job summary.
 
-Windows packaging waits for the complete test matrix. `Publish-Windows.ps1` rejects a mismatched OS/process architecture before publishing, uses a fresh output directory, and runs the published EXE's headless smoke check. Packages include `build-manifest.json` with the source revision, dirty-tree flag, SDK/runtime, smoke scope, unsigned status, and pending renderer-isolation status. A checksum is not a signature. No GitHub Release is created by Phase 0 CI.
+Windows packaging waits for the complete test matrix. `Publish-Windows.ps1` rejects a mismatched OS/process architecture before publishing, uses a fresh output directory, and runs the published EXE's headless smoke check. Packages include `build-manifest.json` with the source revision, dirty-tree flag, SDK/runtime, smoke scope, unsigned status, and pending renderer-isolation status. A checksum is not a signature. No GitHub Release is created by Phase 0 CI; the separate, dispatch-only Publish workflow drafts an unpublished pre-release from the same script.
 
 Local commands (PowerShell; the Windows suite/publish command require Windows):
 

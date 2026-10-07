@@ -37,8 +37,8 @@ The first three milestones are:
 ## Build and run
 
 The portable Windows x64 build is generated under
-`artifacts/Broiler.Mail-2.0.0-win-x64/`. Open `Broiler.Mail.Windows.exe` from that
-folder, or extract the matching ZIP. The NativeAOT executable needs no installed .NET runtime.
+`artifacts/Broiler.Mail-2.0.0-win-x64-self-contained/`. Open `Broiler.Mail.Windows.exe` from
+that folder, or extract the matching ZIP. The NativeAOT executable needs no installed .NET runtime.
 See [Start here / provider checklist](docs/version-2-acceptance.md).
 
 Install the .NET 10 SDK. The native application currently targets Windows.
@@ -93,6 +93,17 @@ C++ desktop build tools (including the Windows SDK), on the matching Windows arc
 ```
 
 The publisher includes dependency notices and smoke-tests the resulting executable.
+`-Variant framework-dependent` builds the smaller IL package that runs on an installed
+.NET 10 runtime instead (no C++ tools needed), and `-Version` overrides `BroilerMailVersion`
+from `Directory.Build.props`.
+
+The dispatch-only [Publish workflow](.github/workflows/publish.yml) runs the same script for
+`win-x64` and `win-arm64` in both variants, each on a runner of its own architecture, stamps
+them with the next `mail-v*` preview of `BroilerMailVersion`
+([`eng/resolve-preview-version.mjs`](eng/resolve-preview-version.mjs)), tags the commit, and
+drafts a GitHub pre-release carrying `Broiler.Mail-<version>-<runtime>-<variant>.zip` and its
+`.sha256` ([`eng/release-draft.sh`](eng/release-draft.sh)). The draft stays private until
+someone publishes it. Packages restore from nuget.org only; nothing is pushed to a feed.
 See [hosting package integration](docs/hosting-packages.md) for package scope and validation.
 `--data-directory <path>` selects an explicit configuration directory when running
 the app for a separate test profile. Credentials still use their account-specific

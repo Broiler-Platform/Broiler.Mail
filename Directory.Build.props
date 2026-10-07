@@ -6,6 +6,9 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <IsPackable>false</IsPackable>
     <RestoreConfigFile>$(MSBuildThisFileDirectory)NuGet.config</RestoreConfigFile>
-    <Version>2.0.0</Version>
+    <!-- The release line. Local builds carry it as it is; the Publish workflow passes
+         BroilerMailVersion=<this>-preview.N, see eng/resolve-preview-version.mjs. -->
+    <BroilerMailVersion Condition="'$(BroilerMailVersion)' == ''">2.0.0</BroilerMailVersion>
+    <Version>$(BroilerMailVersion)</Version>
   </PropertyGroup>
 </Project>
