@@ -41,12 +41,11 @@ The portable Windows x64 build is generated under
 that folder, or extract the matching ZIP. The NativeAOT executable needs no installed .NET runtime.
 See [Start here / provider checklist](docs/version-2-acceptance.md).
 
-Install the .NET 10 SDK. The native application currently targets Windows.
-Dependencies restore from NuGet.org, including Broiler.UI **0.1.0-preview.17** and
-its shared forms package, plus Broiler.Hosting **0.1.0-preview.5** for Windows,
-Linux, and the Android API probe. Sibling Broiler checkouts and a local package feed are
-not required. The next update, to Broiler.UI 0.1.0-preview.18 and Broiler.Hosting
-0.1.0-preview.7, waits for those packages to be published (see the roadmap status).
+Install the .NET 10 SDK pinned in `global.json`. The native application supports Windows
+and Android; the Linux head is still a placeholder. Dependencies restore from NuGet.org,
+with versions pinned in `Directory.Packages.props`. Sibling Broiler checkouts and a local
+package feed are not required. Android has a separate solution so the desktop solution
+does not require the Android workload. See [Android build and device checks](docs/android.md).
 See the [C-04 implementation notes](docs/c04-forms/README.md)
 for validation evidence and remaining accessibility checks.
 

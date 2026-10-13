@@ -3,6 +3,7 @@
     <IsTestProject>true</IsTestProject>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../src/Broiler.Mail.Android/MailSession.cs" Link="Android/MailSession.cs" />
     <ProjectReference Include="../../src/Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
     <ProjectReference Include="../../src/Broiler.Mail.Cli/Broiler.Mail.Cli.csproj" />
     <ProjectReference Include="../../src/Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />

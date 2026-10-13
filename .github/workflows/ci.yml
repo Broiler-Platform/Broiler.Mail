@@ -25,6 +25,39 @@ defaults:
     shell: pwsh
 
 jobs:
+  android:
+    name: Android packages
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+      - name: Install Android workload
+        run: dotnet workload install android
+      - name: Build Android solution (ARM64 and x64)
+        run: dotnet build Broiler.Android.Mail.slnx -c Release
+      - name: Package installable ARM64 APK
+        run: ./scripts/Publish-Android.ps1
+      - name: Package Android App Bundle
+        run: ./scripts/Publish-Android.ps1 -Format aab -Runtime all
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: android-validation-packages
+          path: |
+            artifacts/*.apk
+            artifacts/*.aab
+            artifacts/*.apk.sha256
+            artifacts/*.aab.sha256
+          if-no-files-found: error
+
   tests:
     name: Tests and API probe (${{ matrix.runner }})
     strategy:

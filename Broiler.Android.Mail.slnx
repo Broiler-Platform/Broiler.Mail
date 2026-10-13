@@ -1,0 +1,8 @@
+<Solution>
+  <Project Path="src/Broiler.Mail.Android/Broiler.Mail.Android.csproj">
+    <Deploy Solution="Debug|*" />
+  </Project>
+  <Project Path="src/Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
+  <Project Path="src/Broiler.Mail.Core/Broiler.Mail.Core.csproj" />
+  <Project Path="src/Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
+</Solution>

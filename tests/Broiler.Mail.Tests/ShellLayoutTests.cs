@@ -18,6 +18,9 @@ public sealed class ShellLayoutTests
     private static readonly string[] ViewIds = ["inbox", "compose", "account", "settings"];
 
     [Theory]
+    [InlineData(360, 640, 1.0)]
+    [InlineData(412, 400, 1.0)]
+    [InlineData(360, 640, 1.3)]
     [InlineData(640, 480, 1.0)]
     [InlineData(640, 480, 2.0)]
     [InlineData(1100, 720, 1.0)]
