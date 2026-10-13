@@ -36,8 +36,9 @@ over one another. Uninstalling removes local accounts, passwords, and drafts. St
 distribution requires a stable private signing key and increasing version codes using
 the standard .NET Android signing properties; no signing secrets are stored here.
 
-CI builds the Android solution and uploads APK/AAB validation artifacts. The existing
-dispatch-only Publish workflow continues to draft Windows releases.
+CI builds the Android solution and uploads APK/AAB validation artifacts. The
+dispatch-only Publish workflow drafts pre-releases containing both Windows and Android
+(ARM64 APK and App Bundle) packages.
 
 ## Behavior and storage
 

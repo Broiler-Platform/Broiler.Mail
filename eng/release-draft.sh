@@ -3,13 +3,16 @@
 #
 #   eng/release-draft.sh <version> <artifacts-dir>
 #
-# <artifacts-dir> holds the packages scripts/Publish-Windows.ps1 wrote in the Publish
-# workflow, downloaded side by side (actions/download-artifact with merge-multiple):
+# <artifacts-dir> holds the packages scripts/Publish-Windows.ps1 and
+# scripts/Publish-Android.ps1 wrote in the Publish workflow, downloaded
+# side by side (actions/download-artifact with merge-multiple):
 #
 #   Broiler.Mail-<version>-<runtime>-<variant>.zip   (+ .zip.sha256)
+#   Broiler.Mail-<version>-android-arm64.apk         (+ .apk.sha256)
+#   Broiler.Mail-<version>-all.aab                   (+ .aab.sha256)
 #
 # for <runtime> win-x64 and win-arm64 and <variant> self-contained and framework-dependent.
-# Every one of the eight files must be there; they are attached as they are.
+# Every one of the twelve files must be there; they are attached as they are.
 #
 # The tag mail-v<version> must already exist on the remote; the release is created for it
 # as a draft, so nothing is public until someone publishes it. Needs the GitHub CLI with
@@ -32,6 +35,14 @@ for runtime in win-x64 win-arm64; do
   done
 done
 
+for android_pkg in "Broiler.Mail-$version-android-arm64.apk" "Broiler.Mail-$version-all.aab"; do
+  file="$artifacts/$android_pkg"
+  for f in "$file" "$file.sha256"; do
+    [ -f "$f" ] || { echo "missing $f" >&2; exit 1; }
+    assets+=("$f")
+  done
+done
+
 cat > "$out/notes.md" <<EOF
 Broiler Mail **$version**, an unsigned preview build for evaluation and testing, not for
 production use. The HTML preview is not yet process-isolated (see
@@ -45,12 +56,15 @@ production use. The HTML preview is not yet process-isolated (see
 | Windows x64 | \`Broiler.Mail-$version-win-x64-framework-dependent.zip\` | install the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0), unzip, start \`Broiler.Mail.Windows.exe\` |
 | Windows ARM64 | \`Broiler.Mail-$version-win-arm64-self-contained.zip\` | unzip, start \`Broiler.Mail.Windows.exe\` |
 | Windows ARM64 | \`Broiler.Mail-$version-win-arm64-framework-dependent.zip\` | install the [.NET 10 runtime](https://dotnet.microsoft.com/download/dotnet/10.0), unzip, start \`Broiler.Mail.Windows.exe\` |
+| Android (ARM64) | \`Broiler.Mail-$version-android-arm64.apk\` | install on device (\`adb install -r\`) |
+| Android (All) | \`Broiler.Mail-$version-all.aab\` | app bundle for distribution |
 
 The self-contained packages carry a NativeAOT executable: no .NET runtime to install. The
 framework-dependent packages are the smaller download for machines that already have the
 .NET 10 runtime. Each zip has a \`.sha256\` beside it, and carries \`START-HERE.md\`,
 \`build-manifest.json\` and the third-party notices. A checksum is not a signature: the
 executables are not code-signed, so Windows SmartScreen may ask before the first start.
+The Android packages are development-key signed validation builds.
 EOF
 
 gh release create "$tag" "${assets[@]}" \

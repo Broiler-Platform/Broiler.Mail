@@ -37,7 +37,7 @@ The first three milestones are:
 ## Build and run
 
 The portable Windows x64 build is generated under
-`artifacts/Broiler.Mail-2.0.0-win-x64-self-contained/`. Open `Broiler.Mail.Windows.exe` from
+`artifacts/Broiler.Mail-0.1.0-preview.1-win-x64-self-contained/`. Open `Broiler.Mail.Windows.exe` from
 that folder, or extract the matching ZIP. The NativeAOT executable needs no installed .NET runtime.
 See [Start here / provider checklist](docs/version-2-acceptance.md).
 
@@ -96,12 +96,13 @@ The publisher includes dependency notices and smoke-tests the resulting executab
 .NET 10 runtime instead (no C++ tools needed), and `-Version` overrides `BroilerMailVersion`
 from `Directory.Build.props`.
 
-The dispatch-only [Publish workflow](.github/workflows/publish.yml) runs the same script for
-`win-x64` and `win-arm64` in both variants, each on a runner of its own architecture, stamps
-them with the next `mail-v*` preview of `BroilerMailVersion`
+The dispatch-only [Publish workflow](.github/workflows/publish.yml) runs the publishing scripts
+for Windows (`win-x64` and `win-arm64` in both variants) and Android (ARM64 APK and App Bundle),
+each on a runner of its own architecture, stamps them with the next `mail-v*` preview of `BroilerMailVersion`
 ([`eng/resolve-preview-version.mjs`](eng/resolve-preview-version.mjs)), tags the commit, and
-drafts a GitHub pre-release carrying `Broiler.Mail-<version>-<runtime>-<variant>.zip` and its
-`.sha256` ([`eng/release-draft.sh`](eng/release-draft.sh)). The draft stays private until
+drafts a GitHub pre-release carrying `Broiler.Mail-<version>-<runtime>-<variant>.zip`,
+Android packages (`Broiler.Mail-<version>-android-arm64.apk` and `Broiler.Mail-<version>-all.aab`), and their
+`.sha256` checksums ([`eng/release-draft.sh`](eng/release-draft.sh)). The draft stays private until
 someone publishes it. Packages restore from nuget.org only; nothing is pushed to a feed.
 See [hosting package integration](docs/hosting-packages.md) for package scope and validation.
 `--data-directory <path>` selects an explicit configuration directory when running

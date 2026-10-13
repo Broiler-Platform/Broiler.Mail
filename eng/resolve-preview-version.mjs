@@ -14,7 +14,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 
 export const tagPrefix = 'mail-v';
 
-function parsePreview(version) {
+export function parsePreview(version) {
   const match = /^(\d+\.\d+\.\d+)-preview\.([1-9]\d*)$/.exec(version);
   if (!match) throw new Error(`Only X.Y.Z-preview.N versions (N >= 1) may be published: '${version}'.`);
   return { prefix: match[1], number: BigInt(match[2]) };
@@ -75,10 +75,14 @@ function main() {
   const version = chooseVersion(configured, versionsFromTags(tags), {
     suffix: process.env.VERSION_SUFFIX || '',
   });
-  console.log(`Version: ${version} (${tags.length} earlier tags)`);
+  // Android's versionCode has to grow with every release (an update installs only over a
+  // lower or equal one, and Play accepts an upload only above the last). The preview number
+  // does exactly that.
+  const versionCode = parsePreview(version).number.toString();
+  console.log(`Version: ${version} (versionCode ${versionCode}, ${tags.length} earlier tags)`);
   if (process.env.GITHUB_OUTPUT) {
     appendFileSync(process.env.GITHUB_OUTPUT,
-      `version=${version}\ntag=${tagPrefix}${version}\n`);
+      `version=${version}\nversion-code=${versionCode}\ntag=${tagPrefix}${version}\n`);
   }
 }
 

@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { chooseVersion, versionsFromTags } from './resolve-preview-version.mjs';
+import { chooseVersion, parsePreview, versionsFromTags } from './resolve-preview-version.mjs';
 
 test('a plain release line starts at preview.1 and increments numerically', () => {
   assert.equal(chooseVersion('2.0.0', []), '2.0.0-preview.1');
@@ -13,6 +13,9 @@ test('a configured preview is a floor and other release lines do not affect it',
     '2.0.0-preview.1', '2.1.0-preview.99', '2.0.0', '2.0.0-rc.9',
   ]), '2.0.0-preview.4');
   assert.equal(chooseVersion('2.0.0-preview.4', ['2.0.0-preview.4']), '2.0.0-preview.5');
+  assert.equal(chooseVersion('0.1.0-preview.1', ['2.0.0-preview.1']), '0.1.0-preview.1');
+  assert.equal(chooseVersion('0.1.0-preview.1', ['0.1.0-preview.1', '2.0.0-preview.1']), '0.1.0-preview.2');
+  assert.equal(parsePreview('0.1.0-preview.1').number.toString(), '1');
 });
 
 test('only unused previews on the configured release line are accepted', () => {

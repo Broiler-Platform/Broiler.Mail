@@ -8,7 +8,7 @@
     <RestoreConfigFile>$(MSBuildThisFileDirectory)NuGet.config</RestoreConfigFile>
     <!-- The release line. Local builds carry it as it is; the Publish workflow passes
          BroilerMailVersion=<this>-preview.N, see eng/resolve-preview-version.mjs. -->
-    <BroilerMailVersion Condition="'$(BroilerMailVersion)' == ''">2.0.0</BroilerMailVersion>
+    <BroilerMailVersion Condition="'$(BroilerMailVersion)' == ''">0.1.0-preview.1</BroilerMailVersion>
     <Version>$(BroilerMailVersion)</Version>
   </PropertyGroup>
 </Project>

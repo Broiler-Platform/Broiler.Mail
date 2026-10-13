@@ -5,7 +5,7 @@
     <SupportedOSPlatformVersion>24</SupportedOSPlatformVersion>
     <ApplicationId>org.broiler.mail</ApplicationId>
     <ApplicationTitle>Broiler Mail</ApplicationTitle>
-    <ApplicationVersion>1</ApplicationVersion>
+    <ApplicationVersion Condition="'$(ApplicationVersion)' == ''">1</ApplicationVersion>
     <ApplicationDisplayVersion>$(Version)</ApplicationDisplayVersion>
     <!-- Keep ABI overrides local to this head, rather than imposing RIDs on shared libraries. -->
     <BroilerAndroidAbis Condition="'$(BroilerAndroidAbis)' == ''">android-arm64;android-x64</BroilerAndroidAbis>
