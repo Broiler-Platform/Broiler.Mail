@@ -8,23 +8,23 @@
     <BroilerHostingVersion>0.1.0-preview.7</BroilerHostingVersion>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="Broiler.Hosting.Windows" Version="0.1.0-preview.9" />
-    <PackageVersion Include="Broiler.Hosting.Linux" Version="0.1.0-preview.9" />
-    <PackageVersion Include="Broiler.Hosting.Android" Version="0.1.0-preview.9" />
-    <PackageVersion Include="Broiler.HTML.Core" Version="0.1.0-preview.28" />
-    <PackageVersion Include="Broiler.HTML.Image" Version="0.1.0-preview.28" />
-    <PackageVersion Include="Broiler.HTML.Image.Compat" Version="0.1.0-preview.28" />
+    <PackageVersion Include="Broiler.Hosting.Windows" Version="0.1.0-preview.10" />
+    <PackageVersion Include="Broiler.Hosting.Linux" Version="0.1.0-preview.10" />
+    <PackageVersion Include="Broiler.Hosting.Android" Version="0.1.0-preview.10" />
+    <PackageVersion Include="Broiler.HTML.Core" Version="0.1.0-preview.29" />
+    <PackageVersion Include="Broiler.HTML.Image" Version="0.1.0-preview.29" />
+    <PackageVersion Include="Broiler.HTML.Image.Compat" Version="0.1.0-preview.29" />
     <PackageVersion Include="Broiler.Media.Image.Managed" Version="0.1.0-preview.15" />
     <PackageVersion Include="Broiler.UI" Version="$(BroilerUiVersion)" />
     <PackageVersion Include="Broiler.Graphics" Version="$(BroilerGraphicsVersion)" />
-    <PackageVersion Include="Broiler.Graphics.Windows" Version="0.1.0-preview.12" />
+    <PackageVersion Include="Broiler.Graphics.Windows" Version="0.1.0-preview.13" />
     <PackageVersion Include="Broiler.Graphics.Linux" Version="$(BroilerGraphicsVersion)" />
-    <PackageVersion Include="Broiler.Graphics.Linux.OpenGL" Version="0.1.0-preview.12" />
-    <PackageVersion Include="Broiler.Graphics.Android" Version="0.1.0-preview.12" />
+    <PackageVersion Include="Broiler.Graphics.Linux.OpenGL" Version="0.1.0-preview.13" />
+    <PackageVersion Include="Broiler.Graphics.Android" Version="0.1.0-preview.13" />
     <PackageVersion Include="Broiler.Native" Version="$(BroilerNativeVersion)" />
-    <PackageVersion Include="Broiler.Native.Windows" Version="0.1.0-preview.8" />
-    <PackageVersion Include="Broiler.Native.Linux" Version="0.1.0-preview.8" />
-    <PackageVersion Include="Broiler.Native.Android" Version="0.1.0-preview.8" />
+    <PackageVersion Include="Broiler.Native.Windows" Version="0.1.0-preview.9" />
+    <PackageVersion Include="Broiler.Native.Linux" Version="0.1.0-preview.9" />
+    <PackageVersion Include="Broiler.Native.Android" Version="0.1.0-preview.9" />
     <PackageVersion Include="Broiler.Input" Version="$(BroilerInputVersion)" />
     <PackageVersion Include="Broiler.Input.Keyboard" Version="$(BroilerInputVersion)" />
     <PackageVersion Include="Broiler.Input.Keyboard.Windows" Version="$(BroilerInputVersion)" />
@@ -36,21 +36,21 @@
     <PackageVersion Include="Broiler.Input.Touch.Android" Version="0.1.0-preview.6" />
     <PackageVersion Include="Broiler.Input.Text.Android" Version="0.1.0-preview.6" />
     <PackageVersion Include="Broiler.Input.Keyboard.Android" Version="0.1.0-preview.6" />
-    <PackageVersion Include="Broiler.UI.Forms.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Button.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.ComboBox.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Dialog.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Menu.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Edit.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Label.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.ListView.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Panel.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.RichEdit.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.ScrollView.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Splitter.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.TabView.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Toolbar.Standard" Version="0.1.0-preview.21" />
-    <PackageVersion Include="Broiler.UI.Window.Standard" Version="0.1.0-preview.21" />
+    <PackageVersion Include="Broiler.UI.Forms.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Button.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.ComboBox.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Dialog.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Menu.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Edit.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Label.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.ListView.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Panel.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.RichEdit.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.ScrollView.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Splitter.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.TabView.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Toolbar.Standard" Version="0.1.0-preview.22" />
+    <PackageVersion Include="Broiler.UI.Window.Standard" Version="0.1.0-preview.22" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.0.1" />
     <PackageVersion Include="xunit" Version="2.9.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="3.1.5" />
