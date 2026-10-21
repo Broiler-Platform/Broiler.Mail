@@ -1,6 +1,10 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <EmbeddedResource Include="..\..\icon-256.png" LogicalName="Broiler.Mail.About.png" />
     <ProjectReference Include="../Broiler.Mail.Core/Broiler.Mail.Core.csproj" />
+    <PackageReference Include="Broiler.Media.Image.Managed" />
+    <PackageReference Include="Broiler.UI.AboutDialog" />
+    <PackageReference Include="Broiler.UI.AboutDialog.Standard" />
     <PackageReference Include="Broiler.UI.Forms.Standard" />
     <PackageReference Include="Broiler.UI.Button.Standard" />
     <PackageReference Include="Broiler.UI.ComboBox.Standard" />

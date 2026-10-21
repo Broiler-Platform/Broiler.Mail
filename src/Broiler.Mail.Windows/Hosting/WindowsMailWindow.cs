@@ -70,11 +70,12 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Both bridges subclass native windows, which exist only from WM_CREATE on; see OnCreated.
     private WindowsAutomationBridge? _automationBridge;
     private WindowsInputBridge? _inputBridge;
+    private MailWindowIcon? _icon;
     internal WindowsAutomationBridge? AutomationBridge => _host.ActiveHostWindow?.AutomationBridge ?? _automationBridge;
     internal WindowsInputBridge? InputBridge => _host.ActiveHostWindow?.InputBridge ?? _inputBridge;
     internal MailShellView Shell => _shell;
     internal MailShellViewModel Model => _model;
-    internal UiSession Session => _host.ActiveHostWindow?.Session ?? _shell.ActiveDialog?.Session ?? _session;
+    internal UiSession Session => _host.ActiveHostWindow?.Session ?? _shell.ActiveAboutDialog?.Session ?? _shell.ActiveDialog?.Session ?? _session;
     internal nint NativeHandleForTests => _host.ActiveHostWindow?.NativeHandle ?? NativeHandle;
     internal nint RenderNativeHandleForTests => _host.ActiveHostWindow?.RenderHandle ?? RenderNativeHandle;
     internal nint InputHandle => RenderNativeHandle;
@@ -96,7 +97,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private WindowsMailWindow(MailApplication application, DemoOptions? demo, WindowRestorePlan restore)
         : base(new BWindowOptions
         {
-            Title = demo is null ? "Broiler.Mail" : demo.WindowTitle,
+            Title = demo is null ? "Broiler Mail" : demo.WindowTitle,
             // Remembered geometry, already clamped to the current monitors; otherwise the initial size, centered.
             ClientWidth = restore.ClientWidth,
             ClientHeight = restore.ClientHeight,
@@ -333,6 +334,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     protected override void OnCreated()
     {
         base.OnCreated();
+        _icon = MailWindowIcon.TryAttach(NativeHandle);
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _shell.Window, () => DpiScale);
         _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboard.Handle, () => DpiScale, Invalidate);
         // The focus was set before the render window existed; its IME state follows it from now on.
@@ -450,6 +452,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     {
         if (disposing)
         {
+            _icon?.Dispose();
             try { _automationBridge?.Dispose(); } catch (Exception) { }
             _automationBridge = null;
             _inputBridge?.Dispose();

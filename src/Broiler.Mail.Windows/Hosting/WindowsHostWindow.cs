@@ -22,6 +22,7 @@ using Broiler.Graphics.Geometry;
 using Broiler.Graphics.Imaging;
 using Broiler.Graphics.Rendering;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Resources;
 using Broiler.Graphics.Windowing;
 using Broiler.Graphics.Windows;
 using Broiler.Hosting.Windows;
@@ -40,7 +41,7 @@ namespace Broiler.Mail.Windows.Hosting;
 /// Serviced by the main message loop with owner-drawn chrome.
 /// </summary>
 [SupportedOSPlatform("windows7.0")]
-internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWindowChromeHost, IUiClipboardHost, IUiTextInputHost, IUiSystemSettingsHost
+internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWindowChromeHost, IUiClipboardHost, IUiTextInputHost, IUiSystemSettingsHost, IUiImageHost
 {
     private readonly Direct2DWindow _owner;
     private readonly WindowsClipboard _clipboard;
@@ -57,7 +58,7 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
     public WindowsHostWindow(Direct2DWindow owner, UiHostWindowRequest request)
         : base(new BWindowOptions
         {
-            Title = string.IsNullOrWhiteSpace(request.Title) ? "Broiler.Mail" : request.Title,
+            Title = string.IsNullOrWhiteSpace(request.Title) ? "Broiler Mail" : request.Title,
             ClientWidth = ToClientExtent(request.Placement.Width, 940),
             ClientHeight = ToClientExtent(request.Placement.Height, 680),
             Left = request.Placement.IsEmpty ? null : request.Placement.X,
@@ -173,6 +174,29 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
     public void PublishCaret(UiTextCaretInfo caret) => _textInput.PublishCaret(caret);
 
     public void ClearCaret(UiElement owner) => _textInput.ClearCaret(owner);
+
+    // IUiImageHost
+    public BImageHandle CreateImage(ReadOnlySpan<byte> encodedImage)
+    {
+        if (encodedImage.IsEmpty || Renderer is not { } renderer)
+            return BImageHandle.Invalid;
+        try { return renderer.CreateImage(encodedImage); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return BImageHandle.Invalid; }
+    }
+
+    public BImageHandle CreateImage(BPixelBuffer pixels)
+    {
+        if (Renderer is not { } renderer)
+            return BImageHandle.Invalid;
+        try { return renderer.CreateImage(pixels); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return BImageHandle.Invalid; }
+    }
+
+    public void ReleaseImage(BImageHandle image)
+    {
+        if (image.IsValid)
+            Renderer?.ReleaseImage(image);
+    }
 
     // IUiSystemSettingsHost
     public UiSystemSettings Settings => _settings;

@@ -22,6 +22,7 @@ using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.Button.Standard;
+using Broiler.UI.AboutDialog.Standard;
 using Broiler.UI.Dialog.Standard;
 using Broiler.UI.Menu;
 using Broiler.UI.Menu.Standard;
@@ -43,12 +44,14 @@ namespace Broiler.Mail.Application.Views;
 public sealed class MailShellView : IDisposable
 {
     private readonly MailShellViewModel _model;
+    private readonly Action<Uri>? _openUrl;
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=ADE6BB
     // Broiler-Falsified-If: with an unconfigured account the Account setup dialog is not opened
     // Broiler-Human:        PENDING
-    public MailShellView(MailShellViewModel model, IHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null)
+    public MailShellView(MailShellViewModel model, IHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, Action<Uri>? openUrl = null)
     {
         _model = model;
+        _openUrl = openUrl;
         Window = new StandardWindow { Title = model.Title };
         Window.ApplyTheme(StandardControlPaint.Theme);
         var layout = _layout;
@@ -139,6 +142,12 @@ public sealed class MailShellView : IDisposable
                 dialog.TitleBarHeight = Math.Max(28, BTextMeasurer.GetLineHeight(dialog.TitleFont) + 8);
             }
             if (ActiveDialog is { IsBrokenOut: false } && size != _ownerSize) ActiveDialog.SetPlacement(DialogPlacement(size));
+            if (ActiveAboutDialog is { IsBrokenOut: false } about && size != _ownerSize)
+            {
+                double aboutWidth = Math.Min(about.PreferredSize.Width, Math.Max(0, size.Width - 32));
+                double aboutHeight = Math.Min(about.PreferredSize.Height, Math.Max(0, size.Height - 32));
+                about.SetPlacement(new BRect(Math.Max(0, (size.Width - aboutWidth) / 2), Math.Max(0, (size.Height - aboutHeight) / 2), aboutWidth, aboutHeight));
+            }
             _ownerSize = size;
         }));
     }
@@ -240,7 +249,37 @@ public sealed class MailShellView : IDisposable
             foreach (var descendant in Descendants(child)) yield return descendant;
     }
 
-    public bool CloseDialog() => ActiveDialog?.Cancel() ?? false;
+    public bool CloseDialog()
+    {
+        if (ActiveAboutDialog is { } about)
+            return about.Cancel();
+        return ActiveDialog?.Cancel() ?? false;
+    }
+
+    public bool ShowAbout()
+    {
+        if (Window.Session is not { IsDisposed: false } session) return false;
+        if (ActiveAboutDialog is not null) return true;
+        CloseDialog();
+        RememberReaderFocus();
+        var viewport = _ownerSize == BSize.Empty ? session.Host.ViewportSize : _ownerSize;
+        var dialog = MailAbout.Show(Window, viewport, typeof(MailShellView).Assembly, _openUrl);
+        if (dialog is null) return false;
+        ActiveAboutDialog = dialog;
+        var activeSession = dialog.Session ?? session;
+        StandardThemeController.ApplyToSubtree(dialog, StandardControlPaint.GetTheme(Window));
+        dialog.Closed += (_, _) =>
+        {
+            ActiveAboutDialog = null;
+            if (_disposing || session.IsDisposed) return;
+            session.SetFocus(_readerFocus is { CanFocus: true } ? _readerFocus : Menu);
+            _readerFocus = null;
+            _refreshStatus();
+        };
+        session.RenderFrame();
+        if (activeSession != session) activeSession.RenderFrame();
+        return true;
+    }
 
     internal void RememberReaderFocus()
     {
@@ -280,7 +319,9 @@ public sealed class MailShellView : IDisposable
         var tools = new UiMenuItem("tools", "Tools");
         tools.Children.Add(Item("account", "Account...", MailCommand.Account));
         tools.Children.Add(Item("settings", "Settings...", MailCommand.Settings));
-        menu.SetItems([mail, message, tools]);
+        var help = new UiMenuItem("help", "Help");
+        help.Children.Add(new UiMenuItem("about", "About Broiler Mail"));
+        menu.SetItems([mail, message, tools, help]);
         menu.ItemInvoked += (_, e) =>
         {
             // StandardMenu restores focus after ItemInvoked. Dispatch afterward so it cannot
@@ -288,6 +329,11 @@ public sealed class MailShellView : IDisposable
             Window.Session?.Dispatcher.Post(() =>
             {
                 if (_disposing || Window.Session is not { IsDisposed: false } session) return;
+                if (e.Item.Id == "about")
+                {
+                    ShowAbout();
+                    return;
+                }
                 var command = e.Item.Id switch
                 {
                     "inbox" => MailCommand.Inbox, "new" => MailCommand.NewMessage,
@@ -350,6 +396,7 @@ public sealed class MailShellView : IDisposable
     public StandardWindow Window { get; }
     public StandardMenu Menu { get; }
     public StandardDialog? ActiveDialog { get; private set; }
+    public StandardAboutDialog? ActiveAboutDialog { get; private set; }
     public string ActiveViewId { get; private set; } = "inbox";
     public UiElement ActiveContent => GetContent(ActiveViewId);
     public UiElement NavigationFocus => (UiElement?)_dialogClose ?? Menu;

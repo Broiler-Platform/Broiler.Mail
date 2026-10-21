@@ -40,7 +40,7 @@ public sealed class MailShellViewModel
         Inbox.SetAccount(account.Profile);
         Account.Changed += (_, _) => { Inbox.SetAccount(Account.Profile); Composer.SetAccount(Account.Profile); };
     }
-    public string Title => "Broiler.Mail";
+    public string Title => "Broiler Mail";
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=6B5558
     // Broiler-Human:        PENDING
     public AccountProfile? CurrentAccount => Account.Profile;

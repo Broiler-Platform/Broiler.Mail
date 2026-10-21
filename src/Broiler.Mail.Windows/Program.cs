@@ -15,11 +15,14 @@
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
+using Broiler.Graphics.Imaging;
 using Broiler.Hosting.Windows;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Diagnostics;
 using Broiler.Mail.Windows.Hosting;
 using Broiler.Mail.Windows.Services;
+using Broiler.Media;
+using Broiler.Media.Image.Managed;
 using Broiler.UI.Standard;
 using System.Text;
 
@@ -63,6 +66,8 @@ internal static class Program
     private static int Main(string[] args)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
+        try { BImageCodecs.Use(new MediaCodecCatalog(ManagedImageCodecs.CreateCodecs())); }
+        catch (InvalidOperationException) { }
         GlobalExceptionHandler.Install();
         bool smoke = args.SequenceEqual(["--smoke-test"]);
         bool demo = DemoOptions.TryParse(args, out var demoOptions);

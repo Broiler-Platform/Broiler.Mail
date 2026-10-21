@@ -16,7 +16,9 @@
 // GENERATED - DO NOT EDIT MANUALLY
 
 using Broiler.Graphics.Geometry;
+using Broiler.Graphics.Imaging;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Resources;
 using Broiler.Graphics.Windows;
 using Broiler.Hosting.Windows;
 using Broiler.Mail.Windows.Services;
@@ -27,7 +29,7 @@ namespace Broiler.Mail.Windows.Hosting;
 // Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=3; Fingerprint=FB603E
 // Broiler-Falsified-If: a paste reads clipboard memory past the size GlobalSize reports for a block another process placed there
 // Broiler-Human:        PENDING
-internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandle) : IUiHost, IUiClipboardHost, IUiTextInputHost, IUiSystemSettingsHost, IUiWindowHost
+internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandle) : IUiHost, IUiClipboardHost, IUiTextInputHost, IUiSystemSettingsHost, IUiWindowHost, IUiImageHost
 {
     private readonly WindowsClipboard _clipboard = new(() => window.NativeHandle);
     private readonly WindowsTextInput _textInput = new(inputHandle, () => window.DpiScale);
@@ -111,6 +113,29 @@ internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandl
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=582842
     // Broiler-Human:        PENDING
     public void ClearCaret(UiElement owner) => _textInput.ClearCaret(owner);
+
+    public BImageHandle CreateImage(ReadOnlySpan<byte> encodedImage)
+    {
+        if (encodedImage.IsEmpty || window.Renderer is not { } renderer)
+            return BImageHandle.Invalid;
+        try { return renderer.CreateImage(encodedImage); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return BImageHandle.Invalid; }
+    }
+
+    public BImageHandle CreateImage(BPixelBuffer pixels)
+    {
+        if (window.Renderer is not { } renderer)
+            return BImageHandle.Invalid;
+        try { return renderer.CreateImage(pixels); }
+        catch (Exception ex) when (ex is not OutOfMemoryException) { return BImageHandle.Invalid; }
+    }
+
+    public void ReleaseImage(BImageHandle image)
+    {
+        if (image.IsValid)
+            window.Renderer?.ReleaseImage(image);
+    }
+
     public BSize ViewportSize { get; private set; } = new(1100, 720);
     public double Scale { get; private set; } = 1;
 

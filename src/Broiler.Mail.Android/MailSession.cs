@@ -60,7 +60,7 @@ internal sealed class MailSession : IDisposable
             Session.ReleaseInputCapture(Shell.Menu);
             return true;
         }
-        if (Shell.ActiveDialog is not null || Model.Inbox.IsBusy || Model.Account.IsBusy)
+        if (Shell.ActiveDialog is not null || Shell.ActiveAboutDialog is not null || Model.Inbox.IsBusy || Model.Account.IsBusy)
             return _keyboard.Execute(MailCommand.BackOrCancel);
         return Shell.Inbox.GoBackToList();
     }

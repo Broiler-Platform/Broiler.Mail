@@ -44,6 +44,7 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
             return false;
         }
         if (session.CapturedElement is not null) return false;
+        if (shell.ActiveAboutDialog is not null) return false;
         if (MailShortcuts.Match(input) is { } shortcut)
         {
             if (shortcut.Command == MailCommand.OpenMessage && shell.ActiveDialog is { } dialog)
