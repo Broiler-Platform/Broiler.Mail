@@ -94,8 +94,8 @@ public sealed class PersistenceTests
         var first = TestDirectory.Profile();
         var second = TestDirectory.Profile();
         var outcomes = await Task.WhenAll(
-            Record.ExceptionAsync(() => new JsonAccountStore(path).SaveAsync(first)),
-            Record.ExceptionAsync(() => new JsonAccountStore(path).SaveAsync(second)));
+            Record.ExceptionAsync(() => new JsonAccountStore(path).SaveAsync(first)).AsTask(),
+            Record.ExceptionAsync(() => new JsonAccountStore(path).SaveAsync(second)).AsTask());
         Assert.Single(outcomes, result => result is null);
         Assert.IsType<InvalidOperationException>(Assert.Single(outcomes, result => result is not null));
         var saved = Assert.Single(await new JsonAccountStore(path).LoadAsync());

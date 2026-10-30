@@ -3,13 +3,15 @@
     <TargetFramework>net10.0-windows</TargetFramework>
     <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <IsTestProject>true</IsTestProject>
+    <IsTestingPlatformApplication>false</IsTestingPlatformApplication>
+    <NoWarn>$(NoWarn);xUnit1069;xUnit1051</NoWarn>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="../../src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj" />
     <PackageReference Include="Broiler.Hosting.Windows" />
     <PackageReference Include="Broiler.UI.TabView.Standard" />
     <PackageReference Include="Microsoft.NET.Test.Sdk" />
-    <PackageReference Include="xunit" />
+    <PackageReference Include="xunit.v3" />
     <PackageReference Include="xunit.runner.visualstudio" PrivateAssets="all" />
     <Using Include="Xunit" />
   </ItemGroup>
