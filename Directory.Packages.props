@@ -8,6 +8,10 @@
     <BroilerHostingVersion>0.1.0-preview.10</BroilerHostingVersion>
   </PropertyGroup>
   <ItemGroup>
+    <!-- M1 durable cache and the M0 storage-provider probe use the same provider. -->
+    <PackageVersion Include="Microsoft.Data.Sqlite" Version="10.0.14" />
+    <!-- Probe the same Net version already consumed transitively by Mail's renderer. -->
+    <PackageVersion Include="Broiler.Net" Version="0.1.0-preview.4" />
     <PackageVersion Include="Broiler.Hosting.Windows" Version="0.1.0-preview.10" />
     <PackageVersion Include="Broiler.Hosting.Linux" Version="0.1.0-preview.10" />
     <PackageVersion Include="Broiler.Hosting.Android" Version="0.1.0-preview.10" />

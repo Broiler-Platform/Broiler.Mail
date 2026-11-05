@@ -23,6 +23,8 @@ using Broiler.Mail.Core.Messages;
 using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Edit.Standard;
+using Broiler.UI.ComboBox;
+using Broiler.UI.ComboBox.Standard;
 using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel;
@@ -67,12 +69,16 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var forward = new StandardButton { Text = "Forward" };
         foreach (var button in new[] { create, reply, replyAll, forward }) actions.AddChild(button);
         panel.Add(actions);
+        if (model.SupportsDraftLibrary) panel.Add(SavedDraftsView.Create(model));
         // Shown only without a draft: why Reply is unavailable, or how to enable it.
         var hint = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Role = StandardLabelRole.Muted };
         panel.Add(hint);
         // Sender identity and the routine autosave state share one quiet line; save failures use feedback below.
         var sender = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false };
         panel.Add(sender);
+        var senderChoice = new StandardComboBox { AccessibleName = "Sender address for new draft", PreferredSize = new BSize(320, 32) };
+        panel.Add(senderChoice); string[] shownSenders = [];
+
         // Validate rather than truncate: imported recipients and prefixed subjects must remain intact.
         StandardEdit Field(string placeholder) => new() { MaxLength = int.MaxValue, PlaceholderText = placeholder };
         var to = Field("name@example.com, another@example.com");
@@ -95,8 +101,29 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         copies.Content.AddChild(ccField);
         copies.Content.AddChild(bccField);
         var recipientFields = new[] { ("To", toField), ("Cc", ccField), ("Bcc", bccField) };
+        if (model.RecipientBook is not null) panel.Add(SavedRecipientsView.Create(model, field =>
+        {
+            if (field != "To") copies.IsExpanded = true;
+            var destination = field == "To" ? to : field == "Cc" ? cc : bcc;
+            if (destination.Session is { } session) FocusNavigation.FocusAndReveal(session, destination);
+        }));
         var subject = Field("");
         panel.Add(new FormField("Subject", subject));
+        var attachments = new FormSection("Attachments", "Add up to four files, 8 MiB total per draft. Files are copied into the saved draft.", collapsible: true, expanded: false)
+        { ShowText = "Show attachments", HideText = "Hide attachments" };
+        attachments.Content.AccessibleName = "Draft attachment controls";
+        panel.Add(attachments);
+        var attachmentPath = new StandardEdit { MaxLength = 32767 };
+        ConfigurationForm.AddLabeledControl(attachments.Content, "Absolute attachment file path", attachmentPath);
+        var attachmentPicker = new StandardComboBox { AccessibleName = "Draft attachments" };
+        attachments.Content.AddChild(attachmentPicker);
+        var attachmentActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Spacing = 6 };
+        attachments.Content.AddChild(attachmentActions);
+        var addAttachment = new StandardButton { Text = "Add attachment" };
+        var removeAttachment = new StandardButton { Text = "Remove selected attachment" };
+        var cancelAttachment = new StandardButton { Text = "Cancel attachment read" };
+        foreach (var button in new[] { addAttachment, removeAttachment, cancelAttachment }) attachmentActions.AddChild(button);
+        IReadOnlyList<DraftAttachment>? shownAttachments = null;
         var body = new StandardRichEdit { AcceptsReturn = true, PreferredSize = new BSize(520, 120), PlaceholderText = "Write your message. Only plain text is kept." };
         body.ApplyTheme(StandardControlPaint.Theme);
         var bodyArea = new FillLastStack { Spacing = 4, MinimumFillHeight = 120 };
@@ -109,15 +136,18 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         var discard = new StandardButton { Text = "Discard draft" };
         var save = new StandardButton { Text = "Save draft" };
         var send = new StandardButton { Text = "Send", IsDefault = true };
+        var cancelSend = new StandardButton { Text = "Cancel send", Visibility = UiVisibility.Collapsed };
+        CancellationTokenSource? submissionCancellation = null;
         var submission = new InlineFeedback();
         var sendHint = new InlineFeedback();
+        var attachmentHint = new InlineFeedback();
         var sentCopy = new InlineFeedback();
         var storage = new InlineFeedback();
         var status = new InlineFeedback();
         var feedback = new StandardPanel { Spacing = 4 };
         feedback.AddChild(submission); feedback.AddChild(sendHint); feedback.AddChild(sentCopy);
-        feedback.AddChild(storage); feedback.AddChild(status);
-        var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(send, check, save, discard), feedback));
+        feedback.AddChild(attachmentHint); feedback.AddChild(storage); feedback.AddChild(status);
+        var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(send, cancelSend, check, save, discard), feedback));
         Guid? shown = null;
         string? markedField = null;
         bool updating = false;
@@ -128,11 +158,18 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             updating = true;
             if (shown != model.DraftId)
             {
+                attachmentPath.Text = "";
+                attachments.IsExpanded = false;
                 shown = model.DraftId;
                 to.Text = model.To; cc.Text = model.Cc; bcc.Text = model.Bcc;
                 subject.Text = model.Subject; body.SetPlainText(model.PlainText);
                 copies.IsExpanded = model.Cc.Length > 0 || model.Bcc.Length > 0;
             }
+            to.Text = model.To; cc.Text = model.Cc; bcc.Text = model.Bcc;
+            var choices = model.SenderChoices.ToArray();
+            if (!shownSenders.SequenceEqual(choices)) { shownSenders = choices; senderChoice.SetItems(choices.Select(value => new UiComboBoxItem(value, value))); }
+            senderChoice.Visibility = !model.HasDraft && choices.Length > 1 ? UiVisibility.Visible : UiVisibility.Collapsed;
+            senderChoice.SelectedIndex = Array.IndexOf(choices, model.FromAddress); senderChoice.IsEnabled = model.CanStart;
             create.IsEnabled = model.CanStart;
             // Starting another message is impossible while a draft exists, so the row gives way to writing.
             actions.Visibility = model.HasDraft ? UiVisibility.Collapsed : UiVisibility.Visible;
@@ -140,11 +177,26 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             foreach (var field in new[] { to, cc, bcc, subject }) { field.IsEnabled = model.HasDraft; field.IsReadOnly = !model.CanEdit; }
             body.IsEnabled = model.HasDraft;
             body.IsReadOnly = !model.CanEdit;
+            attachments.Visibility = model.HasDraft ? UiVisibility.Visible : UiVisibility.Collapsed;
+            var parts = model.Attachments;
+            if (!ReferenceEquals(shownAttachments, parts))
+            {
+                shownAttachments = parts;
+                attachmentPicker.SetItems(parts.Select((part, index) => new UiComboBoxItem(index.ToString(), $"{part.FileName} ({part.Content.Length:N0} bytes)")));
+                attachmentPicker.SelectedIndex = -1;
+            }
+            attachmentPath.IsEnabled = model.CanAddAttachment;
+            attachmentPicker.IsEnabled = model.HasDraft && parts.Count > 0;
+            UpdateAttachmentActions();
             // A submitted draft can no longer change, so there is nothing left to check.
             check.IsEnabled = model.CanEdit;
             discard.IsEnabled = model.CanDiscard;
             save.IsEnabled = model.HasDraft && !model.IsBusy;
             send.IsEnabled = model.CanSend;
+            bool submitting = submissionCancellation is not null && model.SubmissionState == DraftSubmissionState.Sending;
+            cancelSend.Visibility = submitting ? UiVisibility.Visible : UiVisibility.Collapsed;
+            cancelSend.IsEnabled = submitting && submissionCancellation?.IsCancellationRequested == false;
+            attachmentHint.Set(model.AttachmentReminderText ?? "", FeedbackKind.Warning);
             ShowCopiesSummary();
             submission.Set(model.HasDraft && model.SubmissionState != DraftSubmissionState.Editing ? model.SubmissionText : "",
                 model.SubmissionState switch { DraftSubmissionState.Failed => FeedbackKind.Error, DraftSubmissionState.Unknown => FeedbackKind.Warning,
@@ -154,7 +206,8 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
                     SentCopyState.Pending => FeedbackKind.Progress, SentCopyState.Saved => FeedbackKind.Success, _ => FeedbackKind.Information });
             bool storageProblem = model.StorageKind == FeedbackKind.Error;
             storage.Set(storageProblem && (model.HasDraft || model.HasLoadError) ? model.StorageStatus : "", model.StorageKind);
-            sender.Text = model.HasDraft && !storageProblem ? $"From: {model.FromAddress} · {model.StorageStatus}" : $"From: {model.FromAddress}";
+            string senderLabel = string.IsNullOrWhiteSpace(model.FromDisplayName) ? model.FromAddress : $"{model.FromDisplayName} <{model.FromAddress}>";
+            sender.Text = model.HasDraft && !storageProblem ? $"From: {senderLabel} · {model.StorageStatus}" : $"From: {senderLabel}";
             sendHint.Set(model.SendUnavailableReason ?? "", FeedbackKind.Information);
             hint.Text = model.HasDraft ? "" : inbox.Body is { } loaded
                 ? loaded.CompositionUnavailableReason ?? (loaded.Composition is null ? "Read the message again to load its reply headers." : "")
@@ -163,7 +216,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             // Routine information goes to the shell footer; results, warnings, and errors stay beside the draft.
             // Once a draft has been submitted, the outcome lines above report the work in progress:
             // repeating it here would be read twice.
-            status.Set(model.IsBusy ? model.SubmissionState == DraftSubmissionState.Editing ? "Updating draft…" : ""
+            status.Set(model.IsBusy ? model.IsAddingAttachment ? model.AttachmentReadProgress : model.SubmissionState == DraftSubmissionState.Editing ? "Updating draft…" : ""
                 : model.StatusKind == FeedbackKind.Information ? "" : model.Status,
                 model.IsBusy ? FeedbackKind.Progress : model.StatusKind);
             ShowProblemsFirst();
@@ -188,12 +241,28 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
                 FocusNavigation.KeepFocusUsable(session, surface, create);
             updating = false;
         }
+        void UpdateAttachmentActions()
+        {
+            addAttachment.IsEnabled = model.CanAddAttachment && !string.IsNullOrWhiteSpace(attachmentPath.Text);
+            removeAttachment.IsEnabled = model.CanEdit && attachmentPicker.SelectedIndex >= 0;
+            cancelAttachment.IsEnabled = model.IsAddingAttachment;
+        }
+        attachmentPath.TextChanged += (_, _) => UpdateAttachmentActions();
+        attachmentPicker.SelectionChanged += (_, _) => UpdateAttachmentActions();
+        addAttachment.Clicked += async (_, _) =>
+        {
+            int before = model.Attachments.Count;
+            await model.AddAttachmentAsync(attachmentPath.Text.Trim());
+            if (!surface.IsDisposed && model.Attachments.Count > before) attachmentPath.Text = "";
+        };
+        removeAttachment.Clicked += (_, _) => model.RemoveAttachment(attachmentPicker.SelectedIndex);
+        cancelAttachment.Clicked += (_, _) => model.CancelAttachment();
         void ShowProblemsFirst()
         {
             // The area is capped and scrolls at a large text size, so it starts with errors, then
             // warnings, then the other lines in their usual order: a hint or a success above an error
             // would push the error out of view. Moving a line keeps its text, so it is not announced again.
-            var lines = new[] { submission, sendHint, sentCopy, storage, status }.OrderBy(Rank).ToArray();
+            var lines = new[] { submission, sendHint, sentCopy, storage, attachmentHint, status }.OrderBy(Rank).ToArray();
             for (int index = 0; index < lines.Length; index++) feedback.MoveChild(lines[index], index);
             // The area may have been scrolled down to a line below, so a new problem is brought into view
             // at its top, once and without moving focus; scrolling it afterwards is left to the user.
@@ -220,6 +289,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
             if (!updating) model.Edit(to.Text, cc.Text, bcc.Text, subject.Text, body.GetPlainText());
         }
         foreach (var field in new[] { to, cc, bcc, subject }) field.TextChanged += (_, _) => Capture();
+        senderChoice.SelectionChanged += (_, _) => { if (!updating && senderChoice.SelectedIndex >= 0 && senderChoice.SelectedIndex < shownSenders.Length) model.SelectSender(shownSenders[senderChoice.SelectedIndex]); };
         body.DocumentChanged += (_, _) => Capture();
         create.Clicked += (_, _) => _commands.StartNew();
         reply.Clicked += (_, _) => _commands.Respond(CompositionKind.Reply);
@@ -228,7 +298,15 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         check.Clicked += (_, _) => model.CheckDraft();
         discard.Clicked += async (_, _) => await model.DiscardAsync();
         save.Clicked += async (_, _) => await model.SaveAsync();
-        send.Clicked += async (_, _) => await model.SendAsync();
+        send.Clicked += async (_, _) =>
+        {
+            if (submissionCancellation is not null || !model.CanSend) return;
+            using var cancellation = new CancellationTokenSource();
+            submissionCancellation = cancellation;
+            try { await model.SendAsync(cancellation.Token); }
+            finally { submissionCancellation = null; if (!surface.IsDisposed) Refresh(); }
+        };
+        cancelSend.Clicked += (_, _) => { submissionCancellation?.Cancel(); cancelSend.IsEnabled = false; };
         model.Changed += (_, _) => Refresh();
         inbox.Changed += (_, _) => Refresh();
         Refresh();

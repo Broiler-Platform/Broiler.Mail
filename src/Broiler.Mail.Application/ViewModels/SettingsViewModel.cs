@@ -32,10 +32,12 @@ public sealed class SettingsViewModel : SaveViewModel
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6171D5
     // Broiler-Human:        PENDING
-    public SettingsViewModel(ISettingsStore store, IUiDispatcher dispatcher, ApplicationSettings settings, string? loadError)
+    public SettingsViewModel(ISettingsStore store, IUiDispatcher dispatcher, ApplicationSettings settings, string? loadError,
+        ProfileStorageViewModel? storage = null)
         : base(dispatcher, loadError)
     {
         _store = store;
+        Storage = storage;
         Settings = settings;
         Theme = settings.Theme;
         InboxDensity = settings.InboxDensity;
@@ -44,6 +46,7 @@ public sealed class SettingsViewModel : SaveViewModel
     }
 
     public ApplicationSettings Settings { get; private set; }
+    public ProfileStorageViewModel? Storage { get; }
 
     /// <summary>The last background layout save failure, if any. It is never shown while the user works.</summary>
     public string? LayoutSaveError { get; private set; }
@@ -77,6 +80,14 @@ public sealed class SettingsViewModel : SaveViewModel
             LayoutSaveError = error.Message;
         }
         finally { _layoutWrites.Release(); }
+    }
+
+    /// <summary>Serializes reader preference with background geometry writes.</summary>
+    public Task RememberReaderModeAsync(bool preferPlainText)
+    {
+        if (HasLoadError || Settings.PreferPlainText == preferPlainText) return Task.CompletedTask;
+        Settings = Settings with { PreferPlainText = preferPlainText };
+        return WriteLayoutAsync();
     }
     public AppTheme Theme { get; set; }
     public InboxDensity InboxDensity { get; set; }

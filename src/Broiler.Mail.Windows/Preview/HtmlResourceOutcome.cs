@@ -216,7 +216,9 @@ public static class HtmlResourceLoader
         MediaLimits limits,
         long currentTotalBytes,
         long maxTotalBytes,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        Func<int, bool>? acceptTransferredBytes = null,
+        Func<ImageInfo, bool>? acceptImage = null)
     {
         if (!HtmlPreviewPolicy.TryExternalLink(url, out var uri) || uri is null)
         {
@@ -261,6 +263,9 @@ public static class HtmlResourceLoader
             int bytesRead;
             while ((bytesRead = await stream.ReadAsync(chunk, 0, chunk.Length, cancellationToken).ConfigureAwait(false)) > 0)
             {
+                if (acceptTransferredBytes is not null && !acceptTransferredBytes(bytesRead))
+                    return (new HtmlResourceResult(url, HtmlResourceOutcomeKind.BudgetExceeded, HtmlResourceFailureReason.ByteBudgetExceeded,
+                        BytesLoaded: buffer.Length, ErrorDetail: "The batch response-body transfer limit was reached."), null);
                 if (buffer.Length + bytesRead > limits.MaxEncodedBytes)
                 {
                     return (new HtmlResourceResult(url, HtmlResourceOutcomeKind.BudgetExceeded, HtmlResourceFailureReason.ByteBudgetExceeded,
@@ -293,14 +298,21 @@ public static class HtmlResourceLoader
                     ? HtmlResourceOutcomeKind.BudgetExceeded
                     : HtmlResourceOutcomeKind.Failed;
 
-                MailLogger.Warning("HtmlResourceLoader", $"Image inspection failed for {url}: {inspection.Reason} ({inspection.Detail})");
+                MailLogger.Warning("HtmlResourceLoader", $"Image header inspection failed: {inspection.Reason} ({inspection.Detail})");
                 return (new HtmlResourceResult(url, outcome, inspection.Reason,
                     BytesLoaded: imageBytes.Length,
                     ImageInfo: inspection.Info,
                     ErrorDetail: inspection.Detail), null);
             }
 
-            MailLogger.Info("HtmlResourceLoader", $"Image verified for {url}: {imageBytes.Length:N0} bytes, {inspection.Info?.Width}x{inspection.Info?.Height} {inspection.Info?.MediaType}.");
+            if (inspection.Info is { } info && acceptImage?.Invoke(info) == false)
+            {
+                MailLogger.Info("HtmlResourceLoader", $"Image header recognized as {info.MediaType}; format excluded by preview policy.");
+                return (new HtmlResourceResult(url, HtmlResourceOutcomeKind.Blocked, HtmlResourceFailureReason.PolicyBlocked,
+                    BytesLoaded: imageBytes.Length, ImageInfo: info, ErrorDetail: "This preview does not permit the detected image format."), null);
+            }
+
+            MailLogger.Info("HtmlResourceLoader", $"Image header accepted: {imageBytes.Length:N0} bytes, {inspection.Info?.Width}x{inspection.Info?.Height} {inspection.Info?.MediaType}.");
             return (new HtmlResourceResult(url, HtmlResourceOutcomeKind.Rendered, HtmlResourceFailureReason.None,
                 BytesLoaded: imageBytes.Length,
                 ImageInfo: inspection.Info), imageBytes);
@@ -327,7 +339,9 @@ public static class HtmlResourceLoader
         IReadOnlyDictionary<string, MailEmbeddedImage>? initialImages,
         MediaLimits? limits = null,
         long maxTotalBytes = DefaultMaxTotalBytes,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        long? maxTransferredBytes = null,
+        Func<ImageInfo, bool>? acceptImage = null)
     {
         limits ??= DefaultMailLimits;
         var downloadedImages = new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase);
@@ -338,6 +352,7 @@ public static class HtmlResourceLoader
 
         var results = new List<HtmlResourceResult>();
         long totalDownloadedBytes = 0;
+        long transferredBytes = 0;
 
         foreach (string url in urls)
         {
@@ -349,8 +364,16 @@ public static class HtmlResourceLoader
                 continue;
             }
 
+            if (maxTransferredBytes is { } ceiling && transferredBytes >= ceiling)
+            {
+                results.Add(new HtmlResourceResult(url, HtmlResourceOutcomeKind.BudgetExceeded, HtmlResourceFailureReason.ByteBudgetExceeded));
+                continue;
+            }
+
             var (res, data) = await FetchAndValidateImageAsync(
-                client, url, limits, totalDownloadedBytes, maxTotalBytes, cancellationToken).ConfigureAwait(false);
+                client, url, limits, totalDownloadedBytes, maxTotalBytes, cancellationToken,
+                count => { transferredBytes += count; return maxTransferredBytes is null || transferredBytes <= maxTransferredBytes.Value; },
+                acceptImage).ConfigureAwait(false);
 
             results.Add(res);
 

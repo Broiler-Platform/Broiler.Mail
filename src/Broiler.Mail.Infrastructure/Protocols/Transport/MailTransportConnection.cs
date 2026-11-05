@@ -82,7 +82,7 @@ public sealed class MailTransportConnection : IAsyncDisposable, IDisposable
     /// <summary>
     /// Reads a single line terminated by CRLF or LF.
     /// </summary>
-    public async Task<string> ReadLineAsync(CancellationToken cancellationToken)
+    public async Task<string> ReadLineAsync(CancellationToken cancellationToken, int maximumLength = int.MaxValue)
     {
         if (_stream is null) throw new InvalidOperationException("Not connected.");
         var sb = new StringBuilder();
@@ -110,6 +110,7 @@ public sealed class MailTransportConnection : IAsyncDisposable, IDisposable
                 }
                 return line;
             }
+            if (sb.Length >= maximumLength) throw new IOException("Protocol line exceeds the reading limit.");
             sb.Append((char)b);
         }
     }
@@ -117,7 +118,7 @@ public sealed class MailTransportConnection : IAsyncDisposable, IDisposable
     /// <summary>
     /// Reads raw bytes of a specified length into a stream.
     /// </summary>
-    public async Task ReadExactBytesAsync(Stream destination, int length, CancellationToken cancellationToken)
+    public async Task ReadExactBytesAsync(Stream destination, int length, CancellationToken cancellationToken, Action<int>? progress = null)
     {
         if (_stream is null) throw new InvalidOperationException("Not connected.");
         int remaining = length;
@@ -129,6 +130,7 @@ public sealed class MailTransportConnection : IAsyncDisposable, IDisposable
             await destination.WriteAsync(_readBuffer.AsMemory(_bufferPos, toTake), cancellationToken).ConfigureAwait(false);
             _bufferPos += toTake;
             remaining -= toTake;
+            progress?.Invoke(length - remaining);
         }
 
         byte[] temp = new byte[Math.Min(8192, Math.Max(1024, remaining))];
@@ -139,6 +141,7 @@ public sealed class MailTransportConnection : IAsyncDisposable, IDisposable
             if (read == 0) throw new IOException("Unexpected end of stream while reading payload.");
             await destination.WriteAsync(temp.AsMemory(0, read), cancellationToken).ConfigureAwait(false);
             remaining -= read;
+            progress?.Invoke(length - remaining);
         }
     }
 

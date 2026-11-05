@@ -67,7 +67,13 @@ public sealed class ImapSentCopyWriter : ISentCopyWriter
             if (string.IsNullOrWhiteSpace(account.SentFolder))
                 return SentCopyState.Failed;
 
-            byte[] messageBytes = MimeSerializer.Serialize(account, draft, includeBcc: true);
+            var chunks = MimeSerializer.CreateChunks(account, draft, includeBcc: true);
+            int messageLength = 0;
+            foreach (var chunk in chunks)
+            {
+                deadline.Token.ThrowIfCancellationRequested();
+                messageLength = checked(messageLength + chunk.Length);
+            }
             string? secret = await _credentials.ReadAsync(CredentialKey.For(account, MailProtocol.Imap), deadline.Token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(secret)) return SentCopyState.Failed;
 
@@ -84,7 +90,7 @@ public sealed class ImapSentCopyWriter : ISentCopyWriter
             deadline.Token.ThrowIfCancellationRequested();
             appending = true;
             // APPEND needs no SELECT or CREATE. Preserve Bcc in this private copy only.
-            await client.AppendAsync(account.SentFolder, messageBytes, seen: true, draft.SubmissionDate, deadline.Token).ConfigureAwait(false);
+            await client.AppendAsync(account.SentFolder, chunks, messageLength, seen: true, deadline.Token).ConfigureAwait(false);
             saved = true;
             return SentCopyState.Saved; // A missing APPENDUID is still success after tagged OK.
         }

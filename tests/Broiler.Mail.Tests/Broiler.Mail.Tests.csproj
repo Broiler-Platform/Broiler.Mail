@@ -5,6 +5,7 @@
     <NoWarn>$(NoWarn);xUnit1069;xUnit1051</NoWarn>
   </PropertyGroup>
   <ItemGroup>
+    <Compile Include="../../eng/Broiler.Mail.ProviderProbe/SelfSendAcceptance.cs" Link="ProviderProbe/SelfSendAcceptance.cs" />
     <Compile Include="../../src/Broiler.Mail.Android/MailSession.cs" Link="Android/MailSession.cs" />
     <ProjectReference Include="../../src/Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
     <ProjectReference Include="../../src/Broiler.Mail.Cli/Broiler.Mail.Cli.csproj" />

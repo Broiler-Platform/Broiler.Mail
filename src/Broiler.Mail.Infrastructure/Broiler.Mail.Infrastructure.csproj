@@ -1,6 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <PackageReference Include="Microsoft.Data.Sqlite" />
     <InternalsVisibleTo Include="Broiler.Mail.Tests" />
+    <InternalsVisibleTo Include="Broiler.Mail.ProtocolProbe" />
     <ProjectReference Include="../Broiler.Mail.Core/Broiler.Mail.Core.csproj" />
   </ItemGroup>
 </Project>

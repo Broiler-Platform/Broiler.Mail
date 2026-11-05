@@ -111,7 +111,7 @@ public sealed class Version1AcceptanceTests
         using var session = new StandardUiSessionBuilder().Build(new Host(width, height));
         shell.Attach(session);
         var keyboard = shell.CreateKeyboardNavigation(session);
-        var text = Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
+        var text = Descendants(shell.GetContent("inbox")).OfType<ScrollableMessageText>().Single();
         text.Text = string.Join("\n", Enumerable.Repeat("A readable message with words & symbols.", 40));
         session.RenderFrame();
         var layout = Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();

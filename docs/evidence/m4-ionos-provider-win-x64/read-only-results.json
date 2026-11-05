@@ -1,0 +1,53 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-11-04T13:39:15.8630658+00:00",
+  "runtime": "win-x64",
+  "imapHost": "imap.ionos.de",
+  "smtpHost": "smtp.ionos.de",
+  "accountFingerprint": "47d69f6e580c2d0da2dfc341c79967bcc9e6a5d4a71ab1a5293bde8bffbfc09b",
+  "stages": [
+    {
+      "name": "load-existing-account",
+      "status": "passed",
+      "failure": null,
+      "count": null
+    },
+    {
+      "name": "imap-tls-auth",
+      "status": "passed",
+      "failure": null,
+      "count": null
+    },
+    {
+      "name": "imap-folder-discovery",
+      "status": "passed",
+      "failure": null,
+      "count": 5
+    },
+    {
+      "name": "imap-examine-header-page",
+      "status": "passed",
+      "failure": null,
+      "count": 3
+    },
+    {
+      "name": "imap-body-peek",
+      "status": "passed",
+      "failure": null,
+      "count": null
+    },
+    {
+      "name": "imap-original-peek-size-verification",
+      "status": "passed",
+      "failure": null,
+      "count": null
+    },
+    {
+      "name": "smtp-tls-auth-quit",
+      "status": "passed",
+      "failure": null,
+      "count": null
+    }
+  ],
+  "scope": "Read-only EXAMINE/BODY.PEEK and SMTP authentication/QUIT only; no send, flags, moves, deletion, APPEND, cache/profile or credential writes. No credentials, addresses, message headers/bodies, UIDs or protocol transcripts are recorded."
+}

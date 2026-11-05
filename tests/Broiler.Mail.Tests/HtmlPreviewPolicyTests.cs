@@ -9,6 +9,16 @@ namespace Broiler.Mail.Tests;
 public sealed class HtmlPreviewPolicyTests
 {
     [Fact]
+    public void ApprovedOnlyResourcesNeverLeaveUnresolvedRemoteImageSourcesInMarkup()
+    {
+        var document = HtmlPreviewPolicy.Create("<p>Readable</p><img src='https://images.example.test/missing'>",
+            new Dictionary<string, MailEmbeddedImage>(), allowRemoteImages: true, approvedRemoteImagesOnly: true);
+        Assert.Contains("Remote image unavailable", document.Html);
+        Assert.DoesNotContain("src=\"https:", document.Html);
+        Assert.Contains("img-src 'self' data:;", document.Html);
+    }
+
+    [Fact]
     public void ReducesHostileMarkupToPassiveFormattingAndExplicitWebLinks()
     {
         const string html = "<html><head><meta http-equiv=refresh content='0;url=file:///secret'><base href='https://attacker.test'><link rel=stylesheet href='https://attacker.test/x'></head><body onload='steal()'><h1>Hello &amp; welcome</h1><p style='background:url(file:///secret)' onclick='steal()'>Text <b>bold</b></p><script>alert(1)</script><iframe srcdoc='<script>steal()</script>'>frame</iframe><form action='https://attacker.test'><input autofocus><button>Submit</button></form><svg><a href='javascript:alert(1)'>svg link</a></svg><object data='file:///secret'></object><img src='cid:secret' onerror='steal()'><audio src='https://attacker.test'></audio><a href='https://example.test/a?b=1&amp;c=2' ping='https://attacker.test' download>Good link</a><a href='javascript:alert(1)'>Bad link</a></body></html>";

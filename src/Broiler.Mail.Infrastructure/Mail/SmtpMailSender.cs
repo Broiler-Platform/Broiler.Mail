@@ -29,7 +29,7 @@ namespace Broiler.Mail.Infrastructure.Mail;
 // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=8FC6AB
 // Broiler-Falsified-If: an SMTP server configured for STARTTLS that does not offer it receives the AUTH password over the unencrypted connection
 // Broiler-Human:        PENDING
-public sealed class SmtpMailSender : IMailSender
+public sealed class SmtpMailSender : IProgressMailSender
 {
     static SmtpMailSender()
     {
@@ -63,7 +63,13 @@ public sealed class SmtpMailSender : IMailSender
     // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=86DE37
     // Broiler-Falsified-If: a disconnect, timeout or cancellation after client.SendAsync has begun is reported as Rejected instead of Unknown
     // Broiler-Human:        PENDING
-    public async Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)
+    public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)
+        => SendCoreAsync(account, draft, null, cancellationToken);
+
+    public Task<SendResult> SendWithProgressAsync(AccountProfile account, MailDraft draft, Action<long> bytesSent, CancellationToken cancellationToken = default)
+        => SendCoreAsync(account, draft, bytesSent, cancellationToken);
+
+    private async Task<SendResult> SendCoreAsync(AccountProfile account, MailDraft draft, Action<long>? bytesSent, CancellationToken cancellationToken)
     {
         bool submissionStarted = false;
         bool accepted = false;
@@ -78,7 +84,7 @@ public sealed class SmtpMailSender : IMailSender
             if (server is null) return Rejected("Configure and save the SMTP server first.");
             if (server.Authentication != AuthenticationMethod.Password)
                 return Rejected("SMTP OAuth sign-in is not implemented. Use password or app-password authentication.");
-            byte[] messageBytes = MimeSerializer.Serialize(account, draft, includeBcc: false);
+            var messageChunks = MimeSerializer.CreateChunks(account, draft);
             var recipients = draft.To.Concat(draft.Cc).Concat(draft.Bcc).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
             string? secret = await _credentials.ReadAsync(CredentialKey.For(account, MailProtocol.Smtp), deadline.Token).ConfigureAwait(false);
             if (string.IsNullOrEmpty(secret)) return Rejected("Save an SMTP password for the current outgoing server in Account first.");
@@ -90,7 +96,7 @@ public sealed class SmtpMailSender : IMailSender
             submissionStarted = true;
 
             // Bcc exists only in the explicit envelope. No Bcc header is ever constructed.
-            await client.SendMailAsync(draft.FromAddress, recipients, messageBytes, deadline.Token).ConfigureAwait(false);
+            await client.SendMailAsync(draft.FromAddress, recipients, messageChunks, deadline.Token, bytesSent).ConfigureAwait(false);
             accepted = true;
             // No QUIT round trip after acceptance: a later connection failure must not suggest a retry.
             return Accepted();

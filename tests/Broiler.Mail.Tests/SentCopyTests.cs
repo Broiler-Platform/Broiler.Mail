@@ -33,6 +33,11 @@ public sealed class SentCopyTests
             return await Writer(credentials, imap).AppendAsync(account, draft);
         });
         using var model = Compose(profile, store, sender, writer);
+        directory.Create();
+        byte[] attachmentBytes = Enumerable.Range(0, 32_000).Select(value => (byte)value).ToArray();
+        string attachmentPath = directory.File("Grüße.bin");
+        await File.WriteAllBytesAsync(attachmentPath, attachmentBytes);
+        await model.AddAttachmentAsync(attachmentPath);
         await model.SendAsync();
         Assert.Equal(DraftSubmissionState.Accepted, model.SubmissionState);
         Assert.Equal(SentCopyState.Saved, model.SentCopy);
@@ -50,6 +55,12 @@ public sealed class SentCopyTests
         Assert.Equal(submitted.References, copied.References);
         Assert.Empty(submitted.Bcc);
         Assert.Equal("hidden@example.test", Assert.Single(copied.Bcc));
+        var submittedPart = Assert.Single(submitted.Parts, part => part.IsAttachment);
+        var copiedPart = Assert.Single(copied.Parts, part => part.IsAttachment);
+        Assert.Equal("Grüße.bin", copiedPart.FileName);
+        Assert.Equal(submittedPart.FileName, copiedPart.FileName);
+        Assert.Equal(attachmentBytes, copiedPart.Data);
+        Assert.Equal(attachmentBytes, submittedPart.Data);
         await model.SendAsync();
         using var recovered = new ComposerViewModel(store, await store.LoadAsync(), sender: sender, sentCopies: writer);
         recovered.SetAccount(profile);

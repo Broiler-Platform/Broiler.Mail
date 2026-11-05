@@ -45,4 +45,9 @@ public sealed record DraftSnapshot
 // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=5EF0C8
 // Broiler-Falsified-If: a stored state without Revision loads as revision 0 instead of being refused, letting a stale writer recreate a discarded draft
 // Broiler-Human:        PENDING
-public sealed record DraftStoreState([property: JsonRequired] long Revision, [property: JsonRequired] DraftSnapshot? Draft);
+public sealed record DraftStoreState([property: JsonRequired] long Revision, [property: JsonRequired] DraftSnapshot? Draft)
+{
+    // Omitted for legacy single-draft files; older strict readers refuse a populated library safely.
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<DraftSnapshot>? SavedDrafts { get; init; }
+}

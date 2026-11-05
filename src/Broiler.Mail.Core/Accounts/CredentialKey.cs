@@ -39,6 +39,13 @@ public sealed record CredentialKey
     public MailProtocol Protocol { get; }
     public string Binding { get; }
 
+    /// <summary>For DeleteAsync only: removes the account/protocol slot even without current server details.</summary>
+    public static CredentialKey ForDeletion(AccountId accountId, MailProtocol protocol)
+    {
+        if (accountId.Value == Guid.Empty || !Enum.IsDefined(protocol)) throw new ArgumentException("A valid account and protocol are required.");
+        return new(accountId, protocol, "deletion-only");
+    }
+
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=9EA806
     // Broiler-Falsified-If: a profile whose server host, port, username, security or authentication changed yields the same Binding as before, so the old secret is released to the new server
     // Broiler-Human:        PENDING

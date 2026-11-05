@@ -23,9 +23,10 @@ namespace Broiler.Mail.Infrastructure.Persistence;
 // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=07E003
 // Broiler-Falsified-If: a save based on a stale revision overwrites a newer stored draft
 // Broiler-Human:        PENDING
-public sealed class JsonDraftStore(string path) : IDraftStore
+public sealed partial class JsonDraftStore(string path) : IDraftLibraryStore
 {
-    private readonly JsonConfigurationFile<DraftStoreState> _file = new(path, () => new(0, null), Validate, ConfigurationJsonContext.Storage.Drafts, 4 * 1024 * 1024);
+    internal const int MaximumFileBytes = 32 * 1024 * 1024;
+    private readonly JsonConfigurationFile<DraftStoreState> _file = new(path, () => new(0, null), Validate, ConfigurationJsonContext.Storage.Drafts, MaximumFileBytes);
     public bool IsPersistent => true;
     // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=4; Fingerprint=BC3C29
     // Broiler-Falsified-If: a corrupt or oversized drafts file loads as an empty store (revision 0, no draft) instead of throwing
@@ -40,7 +41,7 @@ public sealed class JsonDraftStore(string path) : IDraftStore
         await _file.UpdateAsync(current =>
         {
             if (current.Revision != expectedRevision) throw new DraftConflictException();
-            return saved = new(checked(current.Revision + 1), draft);
+            return saved = current with { Revision = checked(current.Revision + 1), Draft = draft };
         }, cancellationToken).ConfigureAwait(false);
         return saved!;
     }
@@ -51,7 +52,22 @@ public sealed class JsonDraftStore(string path) : IDraftStore
     private static void Validate(DraftStoreState state)
     {
         if (state.Revision < 0 || state.Revision == long.MaxValue) throw new ArgumentException("Invalid draft revision.");
-        if (state.Draft is not { } snapshot) return;
+        var rows = (state.SavedDrafts ?? []).ToList();
+        if (rows.Count > 20) throw new ArgumentException("Keep at most 20 saved drafts in the library.");
+        if (state.Draft is not null) rows.Add(state.Draft);
+        var ids = new HashSet<Guid>();
+        int attachmentBytes = 0;
+        foreach (var snapshot in rows)
+        {
+            if (snapshot?.Draft is null || !ids.Add(snapshot.Draft.Id)) throw new ArgumentException("Invalid or duplicate draft in the library.");
+            ValidateSnapshot(snapshot);
+            attachmentBytes += snapshot.Draft.Attachments?.Sum(part => part.Content.Length) ?? 0;
+            if (attachmentBytes > DraftAttachment.MaximumProfileBytes) throw new ArgumentException("The draft library attachment quota is full.");
+        }
+    }
+
+    private static void ValidateSnapshot(DraftSnapshot snapshot)
+    {
         var draft = snapshot.Draft;
         if (!Enum.IsDefined(snapshot.SentCopy) || snapshot.SentCopy != SentCopyState.NotRequested && snapshot.State != DraftSubmissionState.Accepted)
             throw new ArgumentException("Invalid saved Sent-copy state.");
@@ -65,8 +81,10 @@ public sealed class JsonDraftStore(string path) : IDraftStore
             if (value is null || value.Length > limit) throw new ArgumentException("The draft exceeds the local storage limit.");
         }
         Text(draft.FromAddress, 320);
+        if (draft.FromDisplayName is { } displayName) Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSenderDisplayName(displayName);
         Text(draft.Subject, 16_000);
         Text(draft.PlainText, 400_000);
+        DraftAttachment.Validate(draft.Attachments);
         Text(snapshot.ToText, 32_000); Text(snapshot.CcText, 32_000); Text(snapshot.BccText, 32_000);
         if (draft.InReplyTo is { } parent) Text(parent, 998);
         foreach (var list in new[] { draft.To, draft.Cc, draft.Bcc, draft.References })

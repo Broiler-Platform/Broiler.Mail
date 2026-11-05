@@ -29,29 +29,47 @@ namespace Broiler.Mail.Application.ViewModels;
 // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=9A6344
 // Broiler-Falsified-If: a draft whose submission ended Accepted or Unknown is handed to the sender a second time
 // Broiler-Human:        PENDING
-public sealed class ComposerViewModel : IDisposable
+public sealed partial class ComposerViewModel : IDisposable
 {
     private AccountProfile? _account;
+    private string? _selectedSender;
+    private bool _senderWasExplicit;
+    public IReadOnlyList<string> SenderChoices => _account?.SenderAddresses().Where(value => value.Length > 0).ToArray() ?? [];
+    public bool SelectSender(string address)
+    {
+        if (!CanStart || _account?.HasSenderAddress(address) != true) return false;
+        _selectedSender = address; _senderWasExplicit = true; Notify(); return true;
+    }
     private MailDraft? _seed;
-    private readonly DraftJournal _journal;
+    private DraftJournal _journal;
+    private readonly IDraftStore _draftStore;
     private readonly IUiDispatcher _dispatcher;
     private readonly IMailSender? _sender;
     private readonly ISentCopyWriter? _sentCopies;
     private readonly string? _loadError;
     private bool _disposed;
     private bool _closing;
+    private bool _profileStorageBusy;
+    public void SetProfileStorageBusy(bool busy) { if (_profileStorageBusy == busy) return; _profileStorageBusy = busy; Notify(); }
     // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=Medium; Resources=4; Fingerprint=6DD1B6
     // Broiler-Falsified-If: a draft saved in the Sending state reopens as Editing and can be sent again
     // Broiler-Human:        PENDING
     public ComposerViewModel(IDraftStore? store = null, DraftStoreState? initial = null,
-        IUiDispatcher? dispatcher = null, IMailSender? sender = null, string? loadError = null, ISentCopyWriter? sentCopies = null)
+        IUiDispatcher? dispatcher = null, IMailSender? sender = null, string? loadError = null, ISentCopyWriter? sentCopies = null, IRecipientBook? recipientBook = null)
     {
         initial ??= new(0, null);
-        _journal = new(store ?? new MemoryDraftStore(), initial);
+        _draftStore = store ?? new MemoryDraftStore();
+        _journal = new(_draftStore, initial);
+        _savedDrafts = initial.SavedDrafts ?? [];
         _dispatcher = dispatcher ?? new ImmediateUiDispatcher();
         _sender = sender;
         _sentCopies = sentCopies;
         _loadError = loadError;
+        if (recipientBook is not null)
+        {
+            RecipientBook = new(recipientBook, _dispatcher);
+            RecipientBook.Changed += (_, _) => Notify();
+        }
         if (initial.Draft is { } saved)
         {
             _seed = saved.Draft;
@@ -74,10 +92,12 @@ public sealed class ComposerViewModel : IDisposable
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=D61F57
     // Broiler-Human:        PENDING
     public bool HasDraft => _seed is not null;
+    public AccountId? DraftAccountId => _seed?.AccountId;
+    public bool HasUnreadableDraft => _loadError is not null;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=F7FD23
     // Broiler-Falsified-If: Start is offered while a saved draft exists, so a new message would replace it
     // Broiler-Human:        PENDING
-    public bool CanStart => !_disposed && !_closing && _loadError is null && !IsBusy && !HasDraft && _account is { IsEnabled: true };
+    public bool CanStart => !_disposed && !_closing && !_profileStorageBusy && _loadError is null && !IsBusy && !HasDraft && _account is { IsEnabled: true };
     public bool IsBusy { get; private set; }
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=7702C6
     // Broiler-Human:        PENDING
@@ -85,15 +105,16 @@ public sealed class ComposerViewModel : IDisposable
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=DFD2EA
     // Broiler-Falsified-If: CanEdit is true for a draft in the Accepted or Unknown state
     // Broiler-Human:        PENDING
-    public bool CanEdit => !_disposed && _loadError is null && !_closing && HasDraft && !IsBusy && SubmissionState is DraftSubmissionState.Editing or DraftSubmissionState.Failed;
+    public bool CanEdit => !_disposed && !_profileStorageBusy && _loadError is null && !_closing && HasDraft && !IsBusy && SubmissionState is DraftSubmissionState.Editing or DraftSubmissionState.Failed;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=81BEA1
     // Broiler-Falsified-If: Discard is offered while a send or discard is still in progress
     // Broiler-Human:        PENDING
-    public bool CanDiscard => !_disposed && _loadError is null && !_closing && HasDraft && !IsBusy;
+    public bool CanDiscard => !_disposed && !_profileStorageBusy && _loadError is null && !_closing && HasDraft && !IsBusy;
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=28DC6C
     // Broiler-Falsified-If: CanSend is true for an account that has no outgoing server
     // Broiler-Human:        PENDING
-    public bool CanSend => CanEdit && _sender?.IsAvailable == true && _account?.OutgoingServer is not null;
+    public bool CanSend => CanEdit && _sender?.IsAvailable == true && _account is { IsEnabled: true, OutgoingServer: not null } &&
+        _seed is not null && _account.Id == _seed.AccountId && _account.HasSenderAddress(_seed.FromAddress);
     public DraftSubmissionState SubmissionState { get; private set; }
     public SentCopyState SentCopy { get; private set; }
     public string? SentCopyFolder { get; private set; }
@@ -112,9 +133,10 @@ public sealed class ComposerViewModel : IDisposable
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=36133A
     // Broiler-Falsified-If: the Unknown submission state is described as a failure that may be retried
     // Broiler-Human:        PENDING
+    private long _submissionBytes;
     public string SubmissionText => SubmissionState switch
     {
-        DraftSubmissionState.Sending => "Sending… Do not close the app.",
+        DraftSubmissionState.Sending => _submissionBytes > 0 ? $"Sending… {_submissionBytes:N0} bytes uploaded. Server acceptance is pending." : "Sending… Do not close the app.",
         DraftSubmissionState.Accepted => "Accepted by the server. Delivery is not guaranteed. This draft will not be sent again.",
         DraftSubmissionState.Failed => "Sending failed before acceptance. The draft is retained; retry only when ready.",
         DraftSubmissionState.Unknown => "Sending outcome unknown. Check the recipient/provider before starting another message; automatic resend is disabled.",
@@ -133,12 +155,15 @@ public sealed class ComposerViewModel : IDisposable
     public string? SendUnavailableReason => !CanEdit ? null
         : _sender?.IsAvailable != true ? "Sending is not available in this mode."
         : _account?.OutgoingServer is null ? "Add outgoing mail (SMTP) settings in Account to send this draft." : null;
-    public string FromAddress => _seed?.FromAddress ?? _account?.EmailAddress ?? "No saved account";
+    public string? FromDisplayName => _seed is null ? _account?.SenderDisplayName(FromAddress) : _seed.FromDisplayName;
+    public string FromAddress => _seed?.FromAddress ?? _selectedSender ?? _account?.EmailAddress ?? "No saved account";
     public string To { get; private set; } = "";
     public string Cc { get; private set; } = "";
     public string Bcc { get; private set; } = "";
     public string Subject { get; private set; } = "";
     public string PlainText { get; private set; } = "";
+    public string? AttachmentReminderText => CanEdit && Attachments.Count == 0 && AttachmentReminder.IsMentioned(Subject, PlainText)
+        ? "This draft mentions an attachment. It will send plain text only unless you add a file under Attachments." : null;
     private string _status = "Save an account, then start a new message or read a message to reply.";
     public FeedbackKind StatusKind { get; private set; }
     public string Status
@@ -175,7 +200,8 @@ public sealed class ComposerViewModel : IDisposable
         if (_account == account) return;
         // Only a change of account needs the retention notice; the first assignment keeps, for example, the recovery message.
         bool changed = _account is not null;
-        _account = account;
+        _removeSaved = null; SelectedOutboxFilter = OutboxFilter.All;
+        _account = account; _selectedSender = account?.DefaultSender; _senderWasExplicit = false;
         if (HasDraft) { if (changed) Status = "Your draft and its original sender are retained."; }
         else Status = CanStart ? "Start a new message, or read a message in Inbox to reply or forward." : "Save and enable an account to compose mail.";
         Notify();
@@ -198,8 +224,25 @@ public sealed class ComposerViewModel : IDisposable
             Notify();
             return false;
         }
-        try { _seed = body is null ? MailComposition.Create(_account!) : MailComposition.Create(_account!, body, kind!.Value); }
+        try
+        {
+            Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSignature(_account!.Signature);
+            Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSignature(_account.ReplySignature);
+            string? sender = _selectedSender;
+            bool replying = kind is CompositionKind.Reply or CompositionKind.ReplyAll;
+            if (replying && _account.ReplyFromReceivingAlias && !_senderWasExplicit && body?.Composition is { } source)
+            {
+                var visible = source.To.Concat(source.Cc).ToHashSet(StringComparer.OrdinalIgnoreCase);
+                var matching = _account.SenderAddresses().Where(visible.Contains).Distinct(StringComparer.OrdinalIgnoreCase).Take(2).ToArray();
+                if (matching.Length == 1) sender = matching[0];
+            }
+            var created = body is null ? MailComposition.Create(_account, sender) : MailComposition.Create(_account, body, kind!.Value, sender);
+            string signature = _account.SenderSignature(created.FromAddress, replying).Replace("\r\n", "\n", StringComparison.Ordinal).Replace('\r', '\n');
+            _seed = string.IsNullOrWhiteSpace(signature) ? created : created with
+                { PlainText = "\n\n-- \n" + signature + (created.PlainText.Length > 0 ? "\n\n" + created.PlainText : "") };
+        }
         catch (ArgumentException error) { Status = error.Message; StatusKind = FeedbackKind.Error; Notify(); return false; }
+        _selectedSender = _account!.DefaultSender; _senderWasExplicit = false;
         To = string.Join(", ", _seed.To);
         Cc = string.Join(", ", _seed.Cc);
         Bcc = string.Join(", ", _seed.Bcc);
@@ -234,7 +277,7 @@ public sealed class ComposerViewModel : IDisposable
     public MailDraft BuildDraft()
     {
         if (_seed is null) throw new InvalidOperationException("Start a draft first.");
-        if (_account is not { IsEnabled: true } || _account.Id != _seed.AccountId || _account.EmailAddress != _seed.FromAddress)
+        if (_account is not { IsEnabled: true } || _account.Id != _seed.AccountId || !_account.HasSenderAddress(_seed.FromAddress))
             throw new InvalidOperationException("The saved sender changed. This draft retains its original sender; restore that account identity or start a new draft.");
         var to = MailComposition.ParseRecipients(To);
         var cc = MailComposition.ParseRecipients(Cc);
@@ -367,6 +410,7 @@ public sealed class ComposerViewModel : IDisposable
         _seed = _seed! with { SubmissionDate = draft.SubmissionDate };
         IsBusy = true;
         SubmissionState = DraftSubmissionState.Sending;
+        _submissionBytes = 0;
         SentCopy = SentCopyState.NotRequested;
         SentCopyFolder = account.SentCopyMode == SentCopyMode.AppendToFolder ? account.SentFolder : null;
         Persist();
@@ -389,7 +433,11 @@ public sealed class ComposerViewModel : IDisposable
         string? outcomeMessage = null;
         try
         {
-            var result = await Task.Run(() => _sender!.SendAsync(account, draft, cancellationToken), cancellationToken).ConfigureAwait(false);
+            var result = await Task.Run(() => cancellationToken.IsCancellationRequested
+                ? Task.FromResult(new SendResult(SubmissionStatus.Rejected, "Canceled before connecting. The draft is retained."))
+                : _sender is IProgressMailSender progressSender
+                    ? progressSender.SendWithProgressAsync(account, draft, Report, cancellationToken)
+                    : _sender!.SendAsync(account, draft, cancellationToken)).ConfigureAwait(false);
             outcomeMessage = result.StatusMessage;
             outcome = result.Status switch
             {
@@ -444,6 +492,20 @@ public sealed class ComposerViewModel : IDisposable
                 : outcome == DraftSubmissionState.Failed ? FeedbackKind.Error : FeedbackKind.Warning;
             Notify();
         }).ConfigureAwait(false);
+
+        void Report(long bytes)
+        {
+            try
+            {
+                _dispatcher.Post(() =>
+                {
+                    if (_disposed || DraftId != draft.Id || SubmissionState != DraftSubmissionState.Sending || cancellationToken.IsCancellationRequested) return;
+                    _submissionBytes = bytes;
+                    Notify();
+                });
+            }
+            catch (ObjectDisposedException) { }
+        }
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=654915
@@ -480,9 +542,9 @@ public sealed class ComposerViewModel : IDisposable
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=E8AC04
     // Broiler-Falsified-If: Changed is raised after Dispose
     // Broiler-Human:        PENDING
-    private void Notify() { if (!_disposed) Changed?.Invoke(this, EventArgs.Empty); }
+    private void Notify() { if (!_disposed) { RecipientBook?.SetAccount(DraftAccountId ?? _account?.Id); Changed?.Invoke(this, EventArgs.Empty); } }
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=0F0BB8
     // Broiler-Falsified-If: a draft write completing after Dispose still raises Changed on the disposed view model
     // Broiler-Human:        PENDING
-    public void Dispose() { _disposed = true; _journal.Changed -= OnStorageChanged; _successTimer?.Dispose(); }
+    public void Dispose() { RecipientBook?.Dispose(); _disposed = true; CancelAttachment(); _journal.Changed -= OnStorageChanged; _successTimer?.Dispose(); }
 }

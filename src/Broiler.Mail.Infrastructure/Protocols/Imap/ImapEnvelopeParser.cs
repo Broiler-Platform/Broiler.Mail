@@ -14,6 +14,8 @@ public sealed class ImapMessageSummaryInfo
 {
     public int SequenceNumber { get; set; }
     public uint Uid { get; set; }
+    public bool IsDeleted { get; set; }
+    public bool IsFlagged { get; set; }
     public bool IsSeen { get; set; }
     public DateTimeOffset? InternalDate { get; set; }
     public DateTimeOffset? EnvelopeDate { get; set; }
@@ -133,6 +135,8 @@ public static class ImapEnvelopeParser
                 var flagsExp = exp.Children[++i];
                 if (flagsExp.IsList && flagsExp.Children is not null)
                 {
+                    summary.IsDeleted = flagsExp.Children.Any(f => f.Value?.Equals("\\Deleted", StringComparison.OrdinalIgnoreCase) == true);
+                    summary.IsFlagged = flagsExp.Children.Any(f => f.Value?.Equals("\\Flagged", StringComparison.OrdinalIgnoreCase) == true);
                     summary.IsSeen = flagsExp.Children.Any(f => f.Value?.Equals("\\Seen", StringComparison.OrdinalIgnoreCase) == true);
                 }
             }

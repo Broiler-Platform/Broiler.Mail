@@ -1,0 +1,15 @@
+# M3 optional unified saved inbox
+
+Implemented 2026-11-04 in the Windows shell: Mail → **Unified saved inbox**, or **Ctrl+7**. This is an explicit offline view, separate from the ordinary account inbox, and does not switch the active account or a draft's pinned sender.
+
+Open and **Refresh unified saved inbox** to aggregate up to 50 newest saved INBOX UIDs from each configured account (maximum 32 accounts / 1600 candidate headers). Disabled accounts' saved mail is included. Rows are sorted by received instant descending (unknown last), then stable account ID and UID descending. This is a bounded candidate window, not a claim of complete mailbox coverage or a frozen content/flag snapshot. Use an account's ordinary inbox for older mail, other folders and receiving.
+
+Every row identifies its account name, address and stable ID. Choose a row and **Read selected saved text** to open only that exact cached account/mailbox/UIDVALIDITY/UID body. The preview repeats the full account/message identity and explains truncation/HTML-extracted text. A missing body is explicitly unavailable; this view never downloads one. The ordinary account inbox retains HTML and mail actions. No receiving, sending, read/star changes, moves or deletion are exposed here.
+
+Each account query has its own ten-second cancellation budget. One failed/malformed account page does not suppress other accounts. Returned heads, header count/order/uniqueness/full keys and post-read epochs are checked. Body reads check identity and epoch both before and after retrieval. Caller cancellation stops waiting even if a cache implementation ignores its token; queued/late work cannot repaint a closed view, changed account set or another selected row. Errors show account attribution and coarse codes, not raw provider/SQL diagnostics.
+
+The view does not refresh, select or read automatically. Closing it clears rows and preview, cancels work and releases dynamic reader controls. Reopening requires an explicit Refresh. Profile/account changes invalidate the snapshot; a new account set can proceed while old ignored work finishes. Hosts without a local cache explain unavailability and keep actions disabled. Dynamic text readers follow the session theme/text scale and use the selectable/copyable text alternative.
+
+Regression covers real SQLite current epochs, INBOX-only scope, the 50-per-account limit, disabled accounts, duplicate UIDs across accounts, sorting, per-account failure isolation, malformed pages, missing/wrong bodies, epoch races, cancellation/late/queued/context guards and 100%/200% rendering. Published smoke opens the real Ctrl+7 view, reads a disabled second account with the same UID, verifies that the active account and pinned draft remain unchanged, renders and clears it on close. No real provider is contacted by those fixtures.
+
+[Windows x64 evidence](evidence/m3-unified-saved-inbox-win-x64/README.md). Live multi-account receive/scheduling, unified write actions, cross-account search, broader accessibility/desktop acceptance and renderer containment remain open. This closes the optional saved-inbox navigation item, not all of M3 or M0–M4.

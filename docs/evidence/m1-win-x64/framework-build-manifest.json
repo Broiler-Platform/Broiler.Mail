@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "applicationVersion": "0.1.0-preview.1",
+  "runtime": "win-x64",
+  "variant": "framework-dependent",
+  "compilation": "IL (framework-dependent)",
+  "runtimeVersion": "10.0.0",
+  "processArchitecture": "x64",
+  "sdkVersion": "10.0.403",
+  "sourceRevision": "fc1f74ffc5e8d3dae03b8fd81c39aa851bdf5c23",
+  "workingTreeDirty": true,
+  "builtAtUtc": "2026-11-02T10:14:34.5883935+00:00",
+  "signingStatus": "unsigned",
+  "smokeTest": "passed",
+  "smokeScope": "Versioned profile, persisted quota/download policy and SQLite header/body/CID/reply-metadata second-process reopen, verified backup/restore and recovery-backed cleanup, OS credential round trip, multipart MIME parsing, actual HTML layout/raster, headless composition and UI layout; no protocol fixture, provider or native-window acceptance. Separate M0 probes cover protocol fixtures.",
+  "htmlRendererIsolation": "not-implemented",
+  "releaseReady": false
+}

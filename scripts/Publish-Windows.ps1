@@ -2,7 +2,7 @@ param(
     [ValidateSet('win-x64', 'win-arm64')]
     [string]$Runtime = 'win-x64',
 
-    # self-contained: one NativeAOT executable that needs no .NET runtime.
+    # self-contained: NativeAOT executable plus required native libraries; no installed .NET runtime.
     # framework-dependent: the IL build with its assemblies, run on an installed .NET 10 runtime.
     [ValidateSet('self-contained', 'framework-dependent')]
     [string]$Variant = 'self-contained',
@@ -49,6 +49,8 @@ try {
         dotnet publish src/Broiler.Mail.Windows/Broiler.Mail.Windows.csproj -c Release -r $Runtime --self-contained false -p:PublishAot=false "-p:BroilerMailVersion=$version" -o $output
     }
     if ($LASTEXITCODE -ne 0) { throw "Publishing failed (exit $LASTEXITCODE)." }
+    & "$PSScriptRoot/Confirm-NativeDependencies.ps1" -AssetsPath 'src/Broiler.Mail.Windows/obj/project.assets.json' -Runtime $Runtime
+    & "$PSScriptRoot/Confirm-RendererAotAudit.ps1" -AssetsPath 'src/Broiler.Mail.Windows/obj/project.assets.json'
     $runtimeConfig = Join-Path $output 'Broiler.Mail.Windows.runtimeconfig.json'
     if ($selfContained -and (Test-Path -LiteralPath $runtimeConfig)) { throw 'The self-contained build is not NativeAOT: a runtimeconfig.json was emitted.' }
     if (!$selfContained) {
@@ -144,7 +146,7 @@ try {
         builtAtUtc = [DateTimeOffset]::UtcNow.ToString('o')
         signingStatus = 'unsigned'
         smokeTest = 'passed'
-        smokeScope = 'Headless composition and UI rendering; no provider or native-window acceptance.'
+        smokeScope = 'Versioned profile, persisted quota/download policy and SQLite header/body/CID/reply-metadata second-process reopen, versioned account-collection import/order/selection/reopen and backup restore, selected-account startup/switching, selector layout, explicit two-slot account receive queue with scoped failure/cancellation/cache publication and maintenance/pinned-draft guards, enable/disable/order controls, pinned draft sender, recovery-backed confirmed account removal and both OS credential slots, verified backup/restore including a 4 MiB draft attachment and recovery-backed cleanup, OS credential round trip, local-original MIME text/source switching/import/exact export/Keep-first backed-up removal and separate-profile restore, retained-body FTS tail search and independent sender filter with preview separation/coverage, complete-header snapshot/checkpoint/absent-mail retention and disabled local inspection with restore/account cleanup, multipart MIME parsing, actual HTML layout/raster/zoom and passive local-original HTML raster with links and images removed, synthetic cookie-free Broiler.Net image broker/private-redirect rejection and inline per-message consent state, headless composition and UI layout; no live HTTP, protocol fixture, provider or native-window acceptance. Separate M0 probes cover protocol fixtures.'
         htmlRendererIsolation = 'not-implemented'
         releaseReady = $false
     } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $output 'build-manifest.json') -Encoding utf8

@@ -67,6 +67,17 @@ public sealed class SettingsView(SettingsViewModel model)
                 Text = $"{shortcut.Gesture}: {shortcut.Description}", UseMnemonic = false,
                 Wrapping = UiTextWrapping.Wrap,
             });
+        shortcuts.Content.AddChild(new StandardLabel
+        {
+            Text = "HTML reader: Ctrl+= / Ctrl+Plus and Ctrl+- zoom; Ctrl+0 resets. Ctrl+wheel zooms over the HTML body. Tab reaches links; Enter opens the focused link. Space / Shift+Space pages the focused HTML document.",
+            UseMnemonic = false, Wrapping = UiTextWrapping.Wrap,
+        });
+        if (model.Storage is { } storage)
+        {
+            var section = new FormSection("Local mail storage", "Profile, offline mail, backups and recovery.", collapsible: true, expanded: false);
+            section.Content.AddChild(new ProfileStorageView(storage).CreateContent());
+            panel.AddChild(section);
+        }
         var save = new StandardButton { Text = "Save settings", IsDefault = true };
         var status = new InlineFeedback();
         var surface = ConfigurationForm.NameFeedback(new FormSurface(panel, FormSurface.ActionBar(save), status));
@@ -75,11 +86,12 @@ public sealed class SettingsView(SettingsViewModel model)
         {
             if (panel.IsDisposed)
                 return;
-            theme.IsEnabled = model.CanSave;
-            density.IsEnabled = model.CanSave;
-            width.IsEnabled = height.IsEnabled = save.IsEnabled = model.CanSave;
+            bool canSave = model.CanSave && model.Storage?.IsSnapshotBusy != true;
+            theme.IsEnabled = density.IsEnabled = canSave;
+            width.IsEnabled = height.IsEnabled = save.IsEnabled = canSave;
         }
         model.Changed += (_, _) => RefreshState();
+        if (model.Storage is { } storageState) storageState.Changed += (_, _) => RefreshState();
         ConfigurationForm.BindFeedback(model, surface, status, new Dictionary<string, Broiler.UI.Edit.Standard.StandardEdit>
         { ["WindowWidth"] = width, ["WindowHeight"] = height });
         save.Clicked += async (_, _) =>

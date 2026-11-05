@@ -25,5 +25,7 @@ public sealed record MailMessageSummary
     public required string Sender { get; init; }
     public required string Subject { get; init; }
     public DateTimeOffset? ReceivedAt { get; init; }
+    public bool IsStarred { get; init; }
     public bool IsRead { get; init; }
+    public bool IsBodyCached { get; init; }
 }

@@ -20,6 +20,31 @@ namespace Broiler.Mail.Tests;
 [Collection("UI theme")]
 public sealed class FormExperienceTests
 {
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task SignatureEditorCapturesPlainTextAndSavesItWithAccount(double scale)
+    {
+        using var directory = new TestDirectory(); var profile = TestDirectory.Profile();
+        var store = new JsonAccountStore(directory.File("account.json"));
+        var model = new AccountProfileViewModel(store, new TestCredentialStore(), new TestMailReceiver(), new ImmediateUiDispatcher(), profile, null);
+        using var root = new AccountProfileView(model).CreateContent();
+        using var session = new StandardUiSessionBuilder().Build(new Host(640, 480)); session.AddRoot(root);
+        var theme = StandardThemeTokens.Light.WithTextScale(scale); StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme);
+        session.RenderFrame();
+        var editor = Descendants(root).OfType<Broiler.UI.RichEdit.Standard.StandardRichEdit>().Single(control => control.AccessibleName == "Account signature");
+        var aliases = Descendants(root).OfType<Broiler.UI.RichEdit.Standard.StandardRichEdit>().Single(control => control.AccessibleName == "Sender aliases (one address per line)");
+        aliases.SetPlainText("alias@example.test"); Assert.Equal("alias@example.test", model.SenderAliases);
+        var defaults = Descendants(root).OfType<FormSection>().Single(section => section.GetSemanticNode().Name == "Composition defaults"); defaults.Expand();
+        Descendants(defaults).OfType<StandardEdit>().Single().Text = "alias@example.test";
+        var policies = Descendants(defaults).OfType<StandardComboBox>().ToArray(); policies[0].SelectedIndex = 1; policies[1].SelectedIndex = 1;
+        var replySignature = Descendants(defaults).OfType<Broiler.UI.RichEdit.Standard.StandardRichEdit>().Single(); replySignature.SetPlainText("Reply fixture");
+        Assert.Equal("alias@example.test", model.DefaultSenderAddress); Assert.True(model.ReplyFromReceivingAlias); Assert.True(model.UseSeparateReplySignature); Assert.Equal("Reply fixture", model.ReplySignature);
+        editor.SetPlainText("Kind regards\nSignature fixture");
+        Assert.Equal(editor.GetPlainText(), model.Signature); Assert.False(editor.IsReadOnly);
+        await model.SaveAsync(); var saved = (await store.LoadAsync()).Single(); Assert.Equal(model.Signature, saved.Signature); Assert.Equal("alias@example.test", saved.SenderAliases); Assert.Equal("alias@example.test", saved.DefaultSenderAddress); Assert.True(saved.ReplyFromReceivingAlias); Assert.Equal("Reply fixture", saved.ReplySignature);
+    }
+
     [Fact]
     public async Task InvalidAdvancedFieldExpandsAndConnectionCancellationRemainsReachable()
     {
@@ -32,7 +57,7 @@ public sealed class FormExperienceTests
         using var surface = new AccountProfileView(model).CreateContent();
         using var session = new StandardUiSessionBuilder().Build(new Host(640, 480));
         session.AddRoot(surface);
-        var advanced = Descendants(surface).OfType<FormSection>().Single(s => s.Toggle is not null);
+        var advanced = Descendants(surface).OfType<FormSection>().Single(s => s.GetSemanticNode().Name == "Sent-copy settings");
         var handling = Descendants(advanced).OfType<StandardComboBox>().Single();
         handling.SelectedIndex = (int)SentCopyMode.AppendToFolder;
         model.SentCopyMode = SentCopyMode.AppendToFolder;
@@ -88,6 +113,29 @@ public sealed class FormExperienceTests
         Assert.Equal(FeedbackKind.Success, model.StatusKind);
         Assert.Equal(0.63, model.Settings.InboxSplitterFraction);
         Assert.Equal(720, model.Settings.WindowHeight);
+    }
+
+    [Theory]
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task InvalidFolderOverrideExpandsMappingAndRevealsItsField(double scale)
+    {
+        using var directory = new TestDirectory(); var profile = TestDirectory.Profile();
+        var model = new AccountProfileViewModel(new JsonAccountStore(directory.File("account.json")),
+            new TestCredentialStore(), new TestMailReceiver(), new ImmediateUiDispatcher(), profile, null);
+        using var surface = new AccountProfileView(model).CreateContent();
+        using var session = new StandardUiSessionBuilder().Build(new Host(640, 480)); session.AddRoot(surface);
+        var theme = StandardThemeTokens.Light.WithTextScale(scale);
+        StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(surface, theme); session.RenderFrame();
+        var section = Descendants(surface).OfType<FormSection>().Single(item => item.GetSemanticNode().Name == "Special-folder mapping");
+        var edit = Assert.IsType<StandardEdit>(Descendants(section).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Trash role override")).Target);
+        edit.Text = " "; section.IsExpanded = false;
+        await model.SaveAsync(); session.RenderFrame();
+        Assert.Equal("FolderOverrides.Trash", model.ValidationField); Assert.True(section.IsExpanded);
+        Assert.Same(edit, session.FocusedElement);
+        var scroll = Assert.IsType<FormSurface>(surface).Content.Scroll;
+        Assert.InRange(edit.Bounds.Top, scroll.ContentBounds.Top - 1, scroll.ContentBounds.Bottom);
+        Assert.InRange(edit.Bounds.Bottom, scroll.ContentBounds.Top, scroll.ContentBounds.Bottom + 1);
     }
 
     private static IEnumerable<UiElement> Descendants(UiElement element)

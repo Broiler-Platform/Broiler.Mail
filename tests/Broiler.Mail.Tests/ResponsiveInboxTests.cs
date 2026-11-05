@@ -1444,7 +1444,7 @@ public sealed class ResponsiveInboxTests
 
         public AdaptiveInboxLayout Layout => Descendants(shell.Window).OfType<AdaptiveInboxLayout>().Single();
         public BoundedScrollArea Header => Descendants(shell.Window).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
-        public ScrollableMessageText Text => Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
+        public ScrollableMessageText Text => Descendants(shell.GetContent("inbox")).OfType<ScrollableMessageText>().Single();
         /// <summary>The reader pane: the header, the commands below it, the line, and the message text.</summary>
         public UiElement Pane => Descendants(shell.Window).OfType<StandardSplitContainer>().Single().SecondPane!;
         public Divider Divider => Descendants(Pane).OfType<Divider>().Single();
@@ -1469,7 +1469,7 @@ public sealed class ResponsiveInboxTests
         }
 
         /// <param name="message">
-        /// "plain"; "html", which also has HTML, so the header ends with the HTML preview's row; "long",
+        /// "plain"; "html", which adds an HTML unavailability notice; "long",
         /// with a long subject and sender, as the long-message fixture; "longer", with a subject of six
         /// lines at 1100x720, as in ShellLayoutTests; or "error" and "long error", whose body fails to load,
         /// so the reader has no message text, only the problem and Retry.
@@ -1491,8 +1491,9 @@ public sealed class ResponsiveInboxTests
             receiver.Body = (key, _) => message.EndsWith("error", StringComparison.Ordinal)
                 ? throw new MailConnectionException(message == "error" ? "The connection closed."
                     : "The server closed the connection while sending this message. It may be busy or restarting. Check the connection, then retry.")
-                : Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20)), html ? "<p>HTML body</p>" : null)
+                : Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20)), null)
                 {
+                    HtmlUnavailableReason = html ? "HTML exceeds the preview limits. The text reader remains available." : null,
                     Composition = new MailCompositionSource { From = ["sender@example.test"], To = [account.EmailAddress], Subject = "Subject", MessageId = "message@example.test" },
                 });
             var dispatcher = new TestQueueDispatcher();
@@ -1501,7 +1502,7 @@ public sealed class ResponsiveInboxTests
                 new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
                 new(receiver, dispatcher),
                 new ComposerViewModel(dispatcher: dispatcher));
-            var shell = new MailShellView(model, html ? new NoPreviewHost() : null,
+            var shell = new MailShellView(model, null,
                 received is null ? null : new MessageDateFormatter(culture: CultureInfo.GetCultureInfo("en-US")));
             var host = new Host(width, height);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
@@ -1526,15 +1527,6 @@ public sealed class ResponsiveInboxTests
             shell.Dispose();
             directory.Dispose();
         }
-    }
-
-    private sealed class NoPreviewHost : IHtmlPreviewHost
-    {
-        public event EventHandler<HtmlPreviewChange>? Changed { add { } remove { } }
-        public MailMessageKey? Current => null;
-        public Task<string> ShowAsync(MailMessageBody message) => Task.FromResult("");
-        public void Close() { }
-        public void Dispose() { }
     }
 
     private sealed class Host(int width, int height) : IUiHost

@@ -98,7 +98,7 @@ public sealed class ComposerLayoutTests
         fixture.Composer.SetAccount(fixture.Account with { DisplayName = "Renamed" });
         await fixture.Inbox.ReceiveAsync();
         fixture.Dispatcher.DrainUntil(() => !fixture.Inbox.IsBusy);
-        var copies = Descendants(fixture.Surface).OfType<FormSection>().Single();
+        var copies = Descendants(fixture.Surface).OfType<FormSection>().Single(section => section.GetSemanticNode().Name == "Cc and Bcc");
         copies.Toggle!.Click();
         fixture.Render();
         copies.Toggle.Click();
@@ -242,7 +242,7 @@ public sealed class ComposerLayoutTests
         using var fixture = new Fixture(1100, 720);
         Assert.True(fixture.Composer.StartNew());
         fixture.Composer.Edit("to@example.test", "cc@example.test", "", "Subject", "Body");
-        var copies = Descendants(fixture.Surface).OfType<FormSection>().Single();
+        var copies = Descendants(fixture.Surface).OfType<FormSection>().Single(section => section.GetSemanticNode().Name == "Cc and Bcc");
         Assert.False(copies.IsExpanded);
         Assert.Equal("Cc recipients included", copies.Summary);
 

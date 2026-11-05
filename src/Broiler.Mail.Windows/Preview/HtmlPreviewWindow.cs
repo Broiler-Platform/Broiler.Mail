@@ -920,8 +920,71 @@ internal readonly record struct HtmlReadingAnchor(int Index, string TagName, dou
 // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=35E864
 // Broiler-Falsified-If: a document shown through this view has an http(s) image or stylesheet it names fetched over the network instead of denied
 // Broiler-Human:        PENDING
-internal sealed class ScrollableHtmlView : UiElement
+internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReaderViewport, IInlineRemoteImages, IInlineRemoteImageReset, IInlineReaderInput
 {
+    private string _sourceHtml;
+    private StandardThemeTokens? _readerTheme;
+    private BColor _pageBackground = new(255, 255, 255);
+    internal void ApplyReaderTheme(StandardThemeTokens theme)
+    {
+        SetDefaultZoom(theme.TextScale);
+        if (_readerTheme?.Surface == theme.Surface && _readerTheme.Text == theme.Text &&
+            _readerTheme.TextMuted == theme.TextMuted && _readerTheme.Border == theme.Border &&
+            _readerTheme.BorderStrong == theme.BorderStrong && _readerTheme.AccentText == theme.AccentText &&
+            _readerTheme.IsHighContrast == theme.IsHighContrast) return;
+        _readerTheme = theme;
+        _pageBackground = theme.Surface;
+        UpdateHtml(_sourceHtml, preserveReadingPosition: true);
+    }
+    private readonly PreviewZoomWheel _inlineZoomWheel = new();
+    public bool HandleReaderInput(UiInputEvent input)
+    {
+        if (IsDisposed || Visibility != UiVisibility.Visible || !PreviewModifiers.Control(input.KeyModifiers) || PreviewModifiers.Alt(input.KeyModifiers)) return false;
+        if (input.Kind == UiInputEventKind.PointerWheel && input.WheelAxis == MouseWheelAxis.Vertical)
+        {
+            int steps = _inlineZoomWheel.Add(input.WheelDeltaNotches);
+            for (int i = 0; i < Math.Abs(steps); i++) ZoomBy(Math.Sign(steps));
+            return true;
+        }
+        if (input.Kind != UiInputEventKind.KeyboardKey || input.KeyTransition != KeyboardKeyTransition.Down) return false;
+        switch (input.NativeKeyCode)
+        {
+            case 0xBB or 0x6B: ZoomBy(1); return true;
+            case 0xBD or 0x6D: ZoomBy(-1); return true;
+            case 0x30 or 0x60: ResetZoom(); return true;
+            default: return false;
+        }
+    }
+    private InlineRemoteImageSession? _remoteImages;
+    public event EventHandler? RemoteImagesChanged;
+    public RemoteImageState RemoteImages => _remoteImages?.State ?? new(0, 0, false, false, "");
+    public Task LoadRemoteImagesAsync() => _remoteImages?.LoadAsync() ?? Task.CompletedTask;
+    public void CancelRemoteImages() => _remoteImages?.Cancel();
+    public void BlockRemoteImages() => _remoteImages?.Block();
+    internal void HideAfterResourceResetFailure()
+    {
+        if (IsDisposed) return;
+        _scroll.Visibility = UiVisibility.Collapsed;
+        RenderingFailed?.Invoke(this, EventArgs.Empty);
+    }
+    internal void ConfigureRemoteImages(string rawHtml, IReadOnlyDictionary<string, MailEmbeddedImage> embedded, int total, Func<RemoteImageBroker> factory)
+    {
+        _remoteImages = new(this, rawHtml, embedded, total, factory);
+        _remoteImages.Changed += (_, _) => RemoteImagesChanged?.Invoke(this, EventArgs.Empty);
+    }
+    private double _defaultZoom = 1;
+    private bool _followDefaultZoom = true;
+    public event EventHandler? ViewChanged;
+    public event EventHandler? RenderingFailed;
+    public bool CanZoomIn => !PreviewZoom.IsAtMaximum(Zoom);
+    public bool CanZoomOut => !PreviewZoom.IsAtMinimum(Zoom);
+    public void ZoomBy(int direction) { _followDefaultZoom = false; SetZoom(PreviewZoom.Next(Zoom, direction, _defaultZoom)); }
+    public void ResetZoom() { _followDefaultZoom = true; SetZoom(_defaultZoom); }
+    internal void SetDefaultZoom(double value)
+    {
+        _defaultZoom = PreviewZoom.Clamp(value);
+        if (_followDefaultZoom) SetZoom(_defaultZoom);
+    }
     private readonly StandardScrollView _scroll = new();
     private readonly HtmlViewElement _content;
 
@@ -933,9 +996,12 @@ internal sealed class ScrollableHtmlView : UiElement
         Func<IBroilerRenderer?> rendererProvider,
         Action<string> onLinkClicked,
         Func<double>? dpiScaleProvider = null,
-        Func<string, bool>? canOpenLink = null)
+        Func<string, bool>? canOpenLink = null,
+        bool recoverManagedFailures = false)
     {
+        _sourceHtml = html;
         _content = new HtmlViewElement(html, rendererProvider, onLinkClicked, dpiScaleProvider, canOpenLink);
+        if (recoverManagedFailures) _content.RenderingFailed += (_, _) => RenderingFailed?.Invoke(this, EventArgs.Empty);
         _scroll.AddChild(_content);
         AddChild(_scroll);
         _scroll.OffsetChanged += (_, change) =>
@@ -957,13 +1023,17 @@ internal sealed class ScrollableHtmlView : UiElement
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=1A54E2
     // Broiler-Falsified-If: an http(s) image named in the html passed to UpdateHtml is fetched over the network when the view next renders
     // Broiler-Human:        PENDING
-    public void UpdateHtml(string html)
+    public void UpdateHtml(string html, bool preserveReadingPosition = false)
     {
-        _content.UpdateHtml(html);
+        if (preserveReadingPosition) _readFraction = ReadingPosition;
+        _sourceHtml = html;
+        _content.UpdateHtml(_readerTheme is { } theme ? InlineReaderTheme.Apply(html, theme) : html);
+        if (preserveReadingPosition) { _newDocument = false; _zoomAnchor = null; return; }
         _scroll.ScrollToStart();
         // A new document starts at its top, at the same zoom; that is the one deliberate reset of the
         // reading position.
         _newDocument = true;
+        _restoreFraction = null; _readFraction = 0;
         _zoomAnchor = null;
     }
 
@@ -987,15 +1057,28 @@ internal sealed class ScrollableHtmlView : UiElement
             _zoomAnchorShift = new BPoint(_scroll.HorizontalOffset / _content.Zoom, 0);
         }
         _content.Zoom = next;
+        ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=AB27B5
     // Broiler-Human:        PENDING
-    public void ScrollToStart() => _scroll.ScrollToStart();
+    public void ScrollToStart()
+    {
+        _restoreFraction = null; _zoomAnchor = null; _readFraction = 0;
+        _scroll.ScrollToStart();
+    }
+    public double ReadingPosition => _restoreFraction ?? _readFraction;
+    public void RestoreReadingPosition(double fraction)
+    {
+        if (!double.IsFinite(fraction)) throw new ArgumentOutOfRangeException(nameof(fraction));
+        _restoreFraction = _readFraction = Math.Clamp(fraction, 0, 1); _newDocument = false; _zoomAnchor = null;
+        Invalidate(UiInvalidationKind.Measure | UiInvalidationKind.Render);
+    }
     internal HtmlViewElement Content => _content;
     internal StandardScrollView Scroll => _scroll;
 
     private double _readFraction;
+    private double? _restoreFraction;
     private double _arrangedExtent;
     private bool _newDocument = true;
     private bool _inLayout;
@@ -1025,7 +1108,12 @@ internal sealed class ScrollableHtmlView : UiElement
         // Keep the reader at the same relative place rather than at the same, now unrelated, offset.
         double extent = _scroll.ExtentSize.Height;
         double range = extent - _scroll.ViewportSize.Height;
-        if (_newDocument) { _newDocument = false; _readFraction = 0; _zoomAnchor = null; }
+        if (_restoreFraction is { } requested)
+        {
+            _restoreFraction = null; _newDocument = false; _zoomAnchor = null;
+            if (_scroll.SetOffset(new BPoint(_scroll.HorizontalOffset, Math.Round(requested * Math.Max(0, range))))) ArrangeScroll(finalRect);
+        }
+        else if (_newDocument) { _newDocument = false; _readFraction = 0; _zoomAnchor = null; }
         else if (_zoomAnchor is { } anchor)
         {
             // A zoom puts the same text back at the top; a block the new layout lacks falls back to the
@@ -1040,6 +1128,7 @@ internal sealed class ScrollableHtmlView : UiElement
             if (_scroll.SetOffset(new BPoint(_scroll.HorizontalOffset, Math.Round(_readFraction * range)))) ArrangeScroll(finalRect);
         }
         _arrangedExtent = extent;
+        _readFraction = ReadFraction();
     }
 
     // Offsets the scroll view sets meanwhile are layout, not the reader scrolling. ArrangeCore arranges
@@ -1067,7 +1156,7 @@ internal sealed class ScrollableHtmlView : UiElement
     // stays white below a short document instead of showing the shell's (possibly dark) surface.
     protected override void RenderCore(UiRenderContext context)
     {
-        context.RenderList.FillRect(Bounds, new BColor(255, 255, 255));
+        context.RenderList.FillRect(Bounds, _pageBackground);
         base.RenderCore(context);
     }
 
@@ -1077,6 +1166,7 @@ internal sealed class ScrollableHtmlView : UiElement
     {
         if (disposing)
         {
+            _remoteImages?.Dispose();
             _content.Dispose();
             _scroll.Dispose();
         }
@@ -1089,6 +1179,8 @@ internal sealed class ScrollableHtmlView : UiElement
 // Broiler-Human:        PENDING
 internal sealed class HtmlViewElement : UiElement
 {
+    internal event EventHandler? RenderingFailed;
+    private bool _renderingFailed;
     public const int DefaultTileHeight = 1024;
     // The height the document is cut at, in CSS pixels, at 100 % and below; see BudgetHeight.
     public const float MaxBudgetHeight = 32768f;
@@ -1107,6 +1199,7 @@ internal sealed class HtmlViewElement : UiElement
     private const int BytesPerPixel = 4;
 
     private readonly Func<IBroilerRenderer?> _rendererProvider;
+    private IBroilerRenderer? _tileRenderer;
     private readonly Action<string> _onLinkClicked;
     private readonly Func<double>? _dpiScaleProvider;
     private readonly Func<string, bool>? _canOpenLink;
@@ -1367,17 +1460,19 @@ internal sealed class HtmlViewElement : UiElement
     private void InvalidateTiles()
     {
         Statistics?.Discarded(_tiles.Count);
-        var renderer = _rendererProvider();
+        var renderer = _tileRenderer;
         foreach (var entry in _tiles.Values)
         {
             if (entry.Handle.IsValid && renderer is not null)
             {
-                renderer.ReleaseImage(entry.Handle);
+                try { renderer.ReleaseImage(entry.Handle); }
+                catch (Exception error) when (_renderingFailed && error is not OutOfMemoryException) { }
             }
         }
         _tiles.Clear();
         _lruTiles.Clear();
         _cachedTileBytes = 0;
+        _tileRenderer = null;
     }
 
     /// <summary>
@@ -1449,6 +1544,18 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
     {
+        if (_renderingFailed) return new BSize(1, 1);
+        try { return MeasureDocument(availableSize); }
+        catch (Exception error) when (RenderingFailed is not null && error is not OutOfMemoryException)
+        {
+            _renderingFailed = true;
+            RenderingFailed.Invoke(this, EventArgs.Empty);
+            return new BSize(1, 1);
+        }
+    }
+
+    private BSize MeasureDocument(BSize availableSize)
+    {
         _viewportWidth = double.IsFinite(availableSize.Width) && availableSize.Width > 50 ? availableSize.Width : ContentWidth;
         EnsureLayout(LayoutWidth);
         var snapshot = _layoutSnapshot!;
@@ -1469,16 +1576,21 @@ internal sealed class HtmlViewElement : UiElement
     internal HtmlBitmap PaintTile(double layoutTop, double scale, int pixelWidth, int pixelHeight, double layoutLeft = 0)
     {
         var bitmap = new HtmlBitmap(pixelWidth, pixelHeight);
-        _container.ViewportZoom = (float)scale;
-        _container.ScrollOffset = new PointF(-(float)layoutLeft, -(float)layoutTop);
-        _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelWidth, pixelHeight));
-        _container.ScrollOffset = PointF.Empty;
-        _container.ViewportZoom = 1.0f;
-        return bitmap;
+        try
+        {
+            _container.ViewportZoom = (float)scale;
+            _container.ScrollOffset = new PointF(-(float)layoutLeft, -(float)layoutTop);
+            _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelWidth, pixelHeight));
+            return bitmap;
+        }
+        catch { bitmap.Dispose(); throw; }
+        finally { _container.ScrollOffset = PointF.Empty; _container.ViewportZoom = 1.0f; }
     }
 
     private void EnsureTile((int Row, int Column) key, double pageWidth, double columnWidth, double dpiScale, IBroilerRenderer renderer)
     {
+        if (_tileRenderer is not null && !ReferenceEquals(_tileRenderer, renderer)) InvalidateTiles();
+        _tileRenderer = renderer;
         if (_tiles.ContainsKey(key))
         {
             _lruTiles.Remove(key);
@@ -1528,6 +1640,17 @@ internal sealed class HtmlViewElement : UiElement
     // Broiler-Falsified-If: rendering tiles outside the visible viewport window allocates bitmaps for non-visible regions
     // Broiler-Human:        PENDING
     protected override void RenderCore(UiRenderContext context)
+    {
+        if (_renderingFailed) return;
+        try { RenderDocument(context); }
+        catch (Exception error) when (RenderingFailed is not null && error is not OutOfMemoryException)
+        {
+            _renderingFailed = true;
+            RenderingFailed.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private void RenderDocument(UiRenderContext context)
     {
         // The width measure laid the document out at; the arranged width also holds any overflow.
         if (_viewportWidth <= 0) _viewportWidth = Math.Max(1, Bounds.Width);
@@ -1637,6 +1760,7 @@ internal sealed class HtmlViewElement : UiElement
     {
         // Space and Shift+Space page through the document, as in a browser; other keys reach the scroll view.
         if (e.Kind == UiInputEventKind.KeyboardKey && e.KeyTransition == KeyboardKeyTransition.Down && e.NativeKeyCode == 0x20
+            && !PreviewModifiers.ControlOrAlt(e.KeyModifiers)
             && Parent is StandardScrollView pager)
         {
             double page = pager.ViewportSize.Height * pager.PageScrollFraction;

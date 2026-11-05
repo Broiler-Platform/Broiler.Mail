@@ -45,7 +45,7 @@ public sealed class DpiTransitionTests
             found.List.ScrollIntoView(20);
             w.Session.RenderFrame();
             Assert.True(found.List.VerticalOffset > 0);
-            found.List.SelectedItemId = "1:40";
+            found.List.SelectedItemId = found.List.Items.Single(item => Assert.IsType<MailMessageSummary>(item.Tag).Key.Uid == 40).Id;
             return found;
         });
         await window.WaitUntilAsync(w => !w.Model.Inbox.IsBusy && w.Model.Inbox.Body?.Key.Uid == 40);
@@ -65,7 +65,8 @@ public sealed class DpiTransitionTests
         Assert.Equal(new BSize(Width, Height), start.Viewport);
         Assert.Equal(1.5, start.Scale);
         Assert.True(start.Compact && start.ReaderOnly && start.FocusInReader);
-        Assert.Equal(("1:40", 40u), (start.ListSelection, start.Selected?.Uid));
+        Assert.Equal(40u, start.Selected?.Uid);
+        Assert.Equal(start.Selected, Assert.IsType<MailMessageSummary>(controls.List.Items.Single(item => item.Id == start.ListSelection).Tag).Key);
         Assert.True(start.ListOffset > 0 && start.ReaderOffset > 0);
         Assert.False(start.ReaderSelection.IsEmpty || start.DraftSelection.IsEmpty);
 

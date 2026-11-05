@@ -28,6 +28,31 @@ public sealed class ComposerTests
     private const string Headers = "From: Sender <sender@example.test>\r\nReply-To: Reply Desk <reply@example.test>\r\nTo: test@example.test, other@example.test, reply@example.test\r\nCc: other@example.test, cc@example.test, TEST@example.test\r\nBcc: hidden@example.test\r\nMessage-Id: <parent@example.test>\r\nReferences: <root@example.test> <middle@example.test>\r\nSubject: Topic & details\r\nMIME-Version: 1.0\r\nContent-Type: text/plain; charset=utf-8\r\n\r\nFirst line\r\nGrüße & hello";
 
     [Fact]
+    public void SenderPickerPinsAliasBeforeDraftAndCannotRewriteAnExistingDraft()
+    {
+        using var model = new ComposerViewModel(); using var inbox = new InboxViewModel(new TestMailReceiver(), new ImmediateUiDispatcher());
+        model.SetAccount(TestDirectory.Profile() with { SenderAliases = "alias@example.test" });
+        using var root = new ComposerView(model, inbox).CreateContent();
+        var picker = Descendants(root).OfType<Broiler.UI.ComboBox.Standard.StandardComboBox>().Single(control => control.AccessibleName == "Sender address for new draft");
+        picker.SelectedIndex = 1; Assert.Equal("alias@example.test", model.FromAddress);
+        Assert.True(model.StartNew()); Assert.Equal("alias@example.test", model.FromAddress); Assert.Equal(UiVisibility.Collapsed, picker.Visibility);
+        Assert.False(model.SelectSender("other@example.test")); Assert.Equal("alias@example.test", model.FromAddress);
+    }
+
+    [Fact]
+    public void AttachmentReminderAppearsAndClearsAsBodyEditorChanges()
+    {
+        var dispatcher = new TestQueueDispatcher();
+        using var model = new ComposerViewModel(dispatcher: dispatcher); using var inbox = new InboxViewModel(new TestMailReceiver(), dispatcher);
+        model.SetAccount(TestDirectory.Profile()); model.StartNew();
+        var view = new ComposerView(model, inbox); using var root = view.CreateContent();
+        var editor = Assert.IsType<StandardRichEdit>(view.Body); editor.SetPlainText("See attached report."); dispatcher.Drain();
+        Assert.Contains(Descendants(root).OfType<InlineFeedback>(), feedback => feedback.Message.Contains("plain text only", StringComparison.Ordinal));
+        editor.SetPlainText("> Quoted attachment"); dispatcher.Drain();
+        Assert.DoesNotContain(Descendants(root).OfType<InlineFeedback>(), feedback => feedback.Message.Contains("plain text only", StringComparison.Ordinal));
+    }
+
+    [Fact]
     public async Task ReplyAllUsesParsedReplyToDeduplicatesVisibleRecipientsAndCarriesThread()
     {
         var account = TestDirectory.Profile();
@@ -211,8 +236,12 @@ public sealed class ComposerTests
         var expected = new Dictionary<string, string>
         {
             ["Cc and Bcc"] = "Cc and Bcc fields",
+            ["Attachments"] = "Draft attachment controls",
             ["Keyboard shortcuts"] = "Keyboard shortcut list",
             ["Sent-copy settings"] = "Sent-copy handling and folder",
+            ["Sender aliases"] = "Configured sender addresses",
+            ["Composition defaults"] = "Sender and reply signature defaults",
+            ["Special-folder mapping"] = "Special-folder role overrides",
         };
         var sections = Descendants(shell.Window).OfType<FormSection>().Where(section => section.Toggle is not null).ToArray();
         Assert.Equal(expected.Keys.Order(), sections.Select(section => section.GetSemanticNode().Name).Order());
@@ -245,8 +274,12 @@ public sealed class ComposerTests
         var expected = new Dictionary<string, (string Show, string Hide)>
         {
             ["Cc and Bcc"] = ("Show Cc and Bcc", "Hide Cc and Bcc"),
+            ["Attachments"] = ("Show attachments", "Hide attachments"),
             ["Keyboard shortcuts"] = ("Show keyboard shortcuts", "Hide keyboard shortcuts"),
             ["Sent-copy settings"] = ("Show Sent-copy settings", "Hide Sent-copy settings"),
+            ["Sender aliases"] = ("Show sender aliases", "Hide sender aliases"),
+            ["Composition defaults"] = ("Show composition defaults", "Hide composition defaults"),
+            ["Special-folder mapping"] = ("Show special-folder mapping", "Hide special-folder mapping"),
         };
         var sections = Descendants(shell.Window).OfType<FormSection>().Where(section => section.Toggle is not null).ToArray();
         Assert.Equal(expected.Keys.Order(), sections.Select(section => section.GetSemanticNode().Name).Order());
@@ -300,10 +333,12 @@ public sealed class ComposerTests
         var account = TestDirectory.Profile();
         var credentials = new TestCredentialStore();
         var receiver = new TestMailReceiver();
+        // Match the native host's serialized UI callbacks; immediate background autosave refreshes can race text edits.
+        var composerDispatcher = new TestQueueDispatcher();
         var model = new MailShellViewModel(
             new(new JsonAccountStore(directory.File("accounts.json")), credentials, receiver, new ImmediateUiDispatcher(), account, null),
             new(new JsonSettingsStore(directory.File("settings.json")), new ImmediateUiDispatcher(), new(), null),
-            new(receiver, new ImmediateUiDispatcher()));
+            new(receiver, new ImmediateUiDispatcher()), new ComposerViewModel(dispatcher: composerDispatcher));
         using var shell = new MailShellView(model);
         using var session = new StandardUiSessionBuilder().Build(new Host(width, height));
         shell.Attach(session);
@@ -320,6 +355,7 @@ public sealed class ComposerTests
         Assert.IsType<StandardEdit>(fields["Subject"].Target).Text = "Editable subject";
         var body = Descendants(content).OfType<StandardRichEdit>().Single();
         body.SetPlainText("First line");
+        composerDispatcher.Drain();
         session.RenderFrame();
         session.SetFocus(shell.NavigationFocus);
         for (int attempt = 0; attempt < 20 && session.FocusedElement != body; attempt++) Dispatch(Key(9));
@@ -344,7 +380,9 @@ public sealed class ComposerTests
         Assert.True(Dispatch(Key(0x34, control: true)));
         Assert.Equal("compose", shell.ActiveViewId);
         Assert.Equal(beforeTab, body.GetPlainText());
-        await DiscardUsingButton(content, model.Composer);
+        var discard = DiscardUsingButton(content, model.Composer);
+        while (!discard.IsCompleted) { composerDispatcher.Drain(); await Task.WhenAny(discard, Task.Delay(1)); }
+        await discard;
         Assert.False(model.Composer.HasDraft);
         Assert.Empty(body.GetPlainText());
     }

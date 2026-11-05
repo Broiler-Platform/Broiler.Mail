@@ -1,0 +1,27 @@
+# M4 local .eml opening and import
+
+Implemented 2026-11-04 in Saved originals (Mail menu / Ctrl+6), below cataloged server exports. This adds local byte-source opening/import; it does not claim that all M0–M4 work is complete.
+
+Enter an absolute `.eml` path and choose **Open local .eml source**. This reads a regular file without changing or launching it. The reader displays an explicitly labeled escaped ASCII source prefix (64 KiB), not decoded MIME or executable HTML. The original bytes remain intact. The extension does not establish MIME validity or sender authenticity. Remote files mounted by the operating system may involve filesystem networking; Mail does not send protocol or HTTP requests here.
+
+**Import opened original** is a separate action. It copies the opened byte snapshot, even if the external file later changes, into `local-originals.json`. **List local imports**, choose a row, then **Open selected import** to reverify and inspect it. There is no automatic list, selection, file reading, import or sending. Disabled configured accounts work. Imports use independent local GUIDs and account IDs; no fake mailbox/UID is assigned, and the server cache is untouched.
+
+Limits: 2 MiB per original, 16 copies and 4 MiB decoded bytes across the profile, with JSON capped at 8 MiB. Explicit duplicate imports consume separate slots. A writer lock and flushed atomic replacement prevent partial collection publication and concurrent lost updates. Invalid or future schemas, changed checksums, wrong receipts and exceeded quotas fail without resetting existing entries. Larger messages and printing remain open.
+
+**Read decoded text** explicitly decodes the current snapshot's MIME text and bounded subject/sender. HTML-only mail uses a text alternative that excludes scripts/styles and loads no resources. Text attachments are excluded from the reading body. The 32,000-character limit, truncation and incomplete-part status are displayed. **Show source bytes** returns to the byte inspection view; decoding does not change the snapshot available for import.
+
+On Windows, **Show local HTML** appears after decoding a supported HTML body up to 128,000 characters. It displays passive formatting in a scrollable inline panel and keeps the selectable text below it. Scripts, images and link destinations are removed before rendering. This view has no remote-image permission control. **Hide local HTML** and **Show source bytes** close the panel. Changing the selected original, switching accounts or leaving the library disposes the panel. If rendering fails, decoded text remains available.
+
+**Export selected import** requires a new absolute `.eml` destination in an existing directory. It rechecks the exact receipt, writes and flushes a temporary file, then promotes it without overwriting. The result gives a selectable path, byte count and checksum; nothing launches automatically.
+
+**Remove selected import…** requires profile recovery support. The confirmation focuses **Keep imported original** first. Confirmation creates a verified whole-profile recovery backup and checks that this exact receipt and its bytes are in that backup before atomically removing only the selected import. A failed/missing-target backup or changed receipt prevents removal. Other imports/accounts and external input/export files remain intact. The resulting backup path is selectable; restore into a separate profile with the existing profile restore workflow. Backups include other persisted profile data and consume disk space. No automatic backup expiry is introduced.
+
+Imported originals are irreplaceable local data. Verified profile backups include them under the same configuration locks and validate their exact sizes/checksums on restore. Ordinary/selected-account/orphan downloaded-mail cleanup preserves them. Account removal retains imports and its recovery backup; browse them with the original configured account ID or restore that backup. Broader orphan metadata management remains open. A backup containing this optional new file requires a compatible restore build; older backups without it remain supported. These files are plaintext like cached mail, protected by the profile's filesystem permissions rather than OS credential encryption.
+
+Closing the library, switching accounts or disposing clears the displayed content and cancels operations. Queued/late results cannot repaint another context; a new account can proceed while an old provider ignores cancellation. Cancellation cannot undo an import, export or removal already committed; re-list imports and check the chosen output/recovery paths before retrying. Changing the path or selected row clears the active snapshot. No source paths are persisted.
+
+[Validation evidence](evidence/m0-m4-local-originals-win-x64/README.md). The larger [completion audit](m0-m4-completion-status.md) retains all unfinished gates.
+
+The follow-up [management evidence](evidence/m4-local-original-management-win-x64/README.md) covers decoded reading, exact export and recovery-backed removal.
+
+The 2026-11-05 inline HTML follow-up passed the full shared suite (1,640 tests), 73 focused Windows tests and Windows x64 NativeAOT package smoke. The smoke fixture lays out and rasterizes a local HTML table, checks that image and link geometry are absent, and rejects image broker creation. The shared tests cover explicit rendering, fallback, source switching and disposal.

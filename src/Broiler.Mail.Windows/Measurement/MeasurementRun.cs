@@ -19,7 +19,6 @@ using System.Diagnostics;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.Windowing;
 using Broiler.Input.Keyboard;
-using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Windows.Hosting;
 using Broiler.Mail.Windows.Preview;
@@ -102,7 +101,6 @@ internal sealed class MeasurementRun
             {
                 // Previews opened from now on record their frames and tiles, at the simulated scale if there is one.
                 _preview = new PreviewMeasurement(new FrameRecorder(options.Detail), new HtmlTileStatistics(), options.ScalePercent / 100.0);
-                _window.HtmlPreview.Measurement = _preview;
                 _frameTimeout = PreviewFrameTimeout;
             }
             using var sampler = AllocationSampler.Requested ? new AllocationSampler() : null;
@@ -273,22 +271,25 @@ internal sealed class MeasurementRun
     }
 
     /// <summary>
-    /// Selects the reader's Open HTML preview and waits for the preview's first frame and for its opening
+    /// Opens the measurement window and waits for its first frame and for its opening
     /// frames to end. The opening is reported apart; the workload's frames start after it.
     /// </summary>
     private HtmlPreviewWindow OpenPreview()
     {
         var frames = _preview!.Frames;
-        var open = Find<StandardButton>(_window.Shell.ActiveContent, button => button.Text == HtmlMessagePreview.OpenText);
         long clicked = 0;
+        Task<HtmlPreviewWindow?>? opening = null;
         Ui(() =>
         {
+            var body = _window.Model.Inbox.Body;
+            if (body?.HtmlText is null) throw new InvalidOperationException("The measurement fixture has no open HTML message.");
             clicked = Stopwatch.GetTimestamp();
-            open.Click(UiButtonActivationReason.Pointer);
+            opening = _window.HtmlMeasurement.OpenAsync(body, _preview);
         });
+        _previewWindow = opening!.WaitAsync(PreviewFrameTimeout).GetAwaiter().GetResult()
+            ?? throw new InvalidOperationException("The HTML measurement window did not open.");
         if (!frames.WaitForFrame(0, PreviewFrameTimeout)) throw new TimeoutException("The HTML preview drew no frame.");
         _openToFirstFrameMs = Stopwatch.GetElapsedTime(clicked, frames.FirstFrameAt!.Value).TotalMilliseconds;
-        _previewWindow = _window.HtmlPreview.Window ?? throw new InvalidOperationException("The HTML preview closed while opening.");
         var deadline = Stopwatch.StartNew();
         while (frames.WaitForFrame(frames.Frames, PreviewQuiet))
             if (deadline.Elapsed > PreviewFrameTimeout) throw new TimeoutException("The HTML preview kept drawing after it opened.");
@@ -318,11 +319,10 @@ internal sealed class MeasurementRun
     /// <summary>Closes a preview this run opened and waits until its thread has let it go.</summary>
     private void ClosePreview()
     {
-        if (_previewWindow is null) return;
-        _window.HtmlPreview.Close();
+        if (_preview is null) return;
+        _window.HtmlMeasurement.Close();
         var deadline = Stopwatch.StartNew();
-        while (_window.HtmlPreview.Window is not null && deadline.Elapsed < PreviewFrameTimeout) Thread.Sleep(20);
-        _window.HtmlPreview.Measurement = null;
+        while (_window.HtmlMeasurement.Window is not null && deadline.Elapsed < PreviewFrameTimeout) Thread.Sleep(20);
     }
 
     private void Step(Action action) => Step(Ui, action);

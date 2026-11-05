@@ -46,35 +46,72 @@ internal static class MessageTextDecoder
     public static async Task<MailMessageBody> DecodeAsync(MailMessageKey key, Stream stream, CancellationToken token)
     {
         var message = await MimeParser.ParseAsync(stream, token).ConfigureAwait(false);
+        return Decode(key, message, token);
+    }
+
+    internal static MailMessageBody DecodeReceived(MailMessageKey key, byte[] bytes, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        return Decode(key, MimeParser.ParseForReader(bytes), token);
+    }
+
+    private static MailMessageBody Decode(MailMessageKey key, ParsedMimeMessage message, CancellationToken token)
+    {
+        var decoded = DecodeText(message, token);
+        string? retained = null;
+        if (!message.HasIncompleteParts)
+        {
+            var full = DecodeText(message, token, MailMessageBody.MaximumRetainedTextCharacters, placeholder: false);
+            if (!full.Truncated) retained = full.Text;
+        }
+        string? htmlBody = message.HtmlBody;
+        MailCompositionSource? composition = null;
+        string? compositionError = null;
+        try { composition = CompositionHeaders(message); }
+        catch (ArgumentException) { compositionError = "Reply headers are invalid or exceed the composition limits. Start a new message instead."; }
+        return new(key, decoded.Text,
+            htmlBody is { Length: <= HtmlPreviewPolicy.MaximumHtmlCharacters } ? htmlBody : null)
+        {
+            RetainedBodyText = retained,
+            HtmlUnavailableReason = htmlBody?.Length > HtmlPreviewPolicy.MaximumHtmlCharacters ? "HTML exceeds the 128,000-character preview limit. The text preview remains available." : null,
+            IsHtmlFallback = decoded.Fallback, IsTruncated = decoded.Truncated,
+            Composition = composition, CompositionUnavailableReason = compositionError,
+            EmbeddedImages = message.EmbeddedImages,
+        };
+    }
+
+    internal static async Task<Broiler.Mail.Core.Services.LocalOriginalPreview> DecodeLocalAsync(Stream stream, CancellationToken token)
+    {
+        var message = await MimeParser.ParseAsync(stream, token).ConfigureAwait(false);
+        var text = DecodeText(message, token);
+        return new(Header(message.Subject, "(No subject)"), Header(string.Join(", ", message.From.Take(20)), "(Unknown sender)"),
+            text.Text, text.Fallback, text.Truncated, message.HasIncompleteParts)
+        {
+            HtmlText = message.HtmlBody is { Length: > 0 and <= Broiler.Mail.Core.Services.LocalOriginalPreview.MaximumHtmlCharacters } html ? html : null,
+            HtmlExceedsLimit = message.HtmlBody?.Length > Broiler.Mail.Core.Services.LocalOriginalPreview.MaximumHtmlCharacters,
+        };
+    }
+    private static (string Text, bool Fallback, bool Truncated) DecodeText(ParsedMimeMessage message, CancellationToken token,
+        int maximum = MaximumTextCharacters, bool placeholder = true)
+    {
         string? text = message.TextBody;
         string? htmlBody = message.HtmlBody;
         bool fallback = false;
         if (text is null && htmlBody is { } html)
         {
             fallback = true;
-            text = ExtractHtmlText(html, token);
+            text = ExtractHtmlText(html, token, maximum);
         }
         token.ThrowIfCancellationRequested();
-        text = Clean(text ?? "", MaximumTextCharacters + 1, multiline: true);
-        bool truncated = text.Length > MaximumTextCharacters;
+        text = Clean(text ?? "", maximum + 1, multiline: true);
+        bool truncated = text.Length > maximum;
         if (truncated)
         {
-            int length = MaximumTextCharacters;
+            int length = maximum;
             if (char.IsHighSurrogate(text[length - 1])) length--;
             text = text[..length];
         }
-        MailCompositionSource? composition = null;
-        string? compositionError = null;
-        try { composition = CompositionHeaders(message); }
-        catch (ArgumentException) { compositionError = "Reply headers are invalid or exceed the composition limits. Start a new message instead."; }
-        return new(key, string.IsNullOrWhiteSpace(text) ? "(No readable text in this message.)" : text,
-            htmlBody is { Length: <= HtmlPreviewPolicy.MaximumHtmlCharacters } ? htmlBody : null)
-        {
-            HtmlUnavailableReason = htmlBody?.Length > HtmlPreviewPolicy.MaximumHtmlCharacters ? "HTML exceeds the 128,000-character preview limit. The text preview remains available." : null,
-            IsHtmlFallback = fallback, IsTruncated = truncated,
-            Composition = composition, CompositionUnavailableReason = compositionError,
-            EmbeddedImages = message.EmbeddedImages,
-        };
+        return (placeholder && string.IsNullOrWhiteSpace(text) ? "(No readable text in this message.)" : text, fallback, truncated);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=5BC1DA
@@ -147,13 +184,13 @@ internal static class MessageTextDecoder
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=4; Fingerprint=6153AD
     // Broiler-Falsified-If: an HTML-only message that omits the optional </head> end tag yields no readable text because everything after <head> stays suppressed
     // Broiler-Human:        PENDING
-    private static string ExtractHtmlText(string html, CancellationToken token)
+    private static string ExtractHtmlText(string html, CancellationToken token, int maximum)
     {
         using var reader = new StringReader(html);
         var tokenizer = new HtmlTokenizer(reader) { DecodeCharacterReferences = true };
         var result = new StringBuilder();
         string? suppressed = null;
-        while (result.Length <= MaximumTextCharacters && tokenizer.ReadNextToken(out var part))
+        while (result.Length <= maximum && tokenizer.ReadNextToken(out var part))
         {
             token.ThrowIfCancellationRequested();
             if (part is HtmlTagToken tag)
@@ -179,7 +216,7 @@ internal static class MessageTextDecoder
             {
                 foreach (char c in data.Data)
                 {
-                    if (result.Length > MaximumTextCharacters) break;
+                    if (result.Length > maximum) break;
                     if (char.IsWhiteSpace(c))
                     {
                         if (result.Length > 0 && !char.IsWhiteSpace(result[^1])) result.Append(' ');

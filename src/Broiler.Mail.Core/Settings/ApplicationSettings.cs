@@ -24,6 +24,8 @@ public sealed record ApplicationSettings
 {
     public AppTheme Theme { get; init; } = AppTheme.System;
     public InboxDensity InboxDensity { get; init; } = InboxDensity.Comfortable;
+    /// <summary>False prefers available HTML; true always starts with the selectable text reader.</summary>
+    public bool PreferPlainText { get; init; }
     public int WindowWidth { get; init; } = 1100;
     public int WindowHeight { get; init; } = 720;
     public double InboxSplitterFraction { get; init; } = 0.35;

@@ -258,7 +258,7 @@ public sealed class FeedbackPolicyTests
         fixture.Model.Composer.StartNew();
         fixture.Shell.ShowView("compose");
         fixture.Settle();
-        var copies = Descendants(fixture.Shell.GetContent("compose")).OfType<FormSection>().Single(section => section.Toggle is not null);
+        var copies = Descendants(fixture.Shell.GetContent("compose")).OfType<FormSection>().Single(section => section.GetSemanticNode().Name == "Cc and Bcc");
         copies.Toggle!.Click();
         fixture.Settle();
         var cc = Descendants(copies.Content).OfType<StandardEdit>().First();
@@ -532,8 +532,8 @@ public sealed class FeedbackPolicyTests
             for (int step = 0; step < 40 && session.FocusedElement != target; step++) navigation.MoveFocus(1);
             Assert.Same(target, session.FocusedElement);
         }
-        FormSection SentCopy() => Descendants(fixture.Tab("account")).OfType<FormSection>().Single(section => section.Toggle is not null);
-        FormSection Copies() => Descendants(fixture.Tab("compose")).OfType<FormSection>().Single(section => section.Toggle is not null);
+        FormSection SentCopy() => Descendants(fixture.Tab("account")).OfType<FormSection>().Single(section => section.GetSemanticNode().Name == "Sent-copy settings");
+        FormSection Copies() => Descendants(fixture.Tab("compose")).OfType<FormSection>().Single(section => section.GetSemanticNode().Name == "Cc and Bcc");
         void AppendSentCopies()
         {
             // Chosen in the form, as a user would; the folder field is then required.

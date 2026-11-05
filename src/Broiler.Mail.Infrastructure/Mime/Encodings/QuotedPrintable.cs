@@ -93,10 +93,10 @@ public static class QuotedPrintable
     /// <summary>
     /// Encodes a string as RFC 2047 'Q' encoding if necessary, or returns the original string if all ASCII.
     /// </summary>
-    public static string EncodeQWord(string text, string charset = "utf-8")
+    public static string EncodeQWord(string text, string charset = "utf-8", bool force = false)
     {
         if (string.IsNullOrEmpty(text)) return text;
-        bool hasNonAscii = false;
+        bool hasNonAscii = force;
         foreach (char c in text)
         {
             if (c is < ' ' or > '~' or '?' or '=' or '_')

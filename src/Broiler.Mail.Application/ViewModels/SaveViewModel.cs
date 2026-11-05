@@ -35,7 +35,14 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=0E18E7
     // Broiler-Falsified-If: CanSave is true while loadError is set
     // Broiler-Human:        PENDING
-    public bool CanSave => !IsBusy && loadError is null;
+    public bool CanSave => !IsBusy && !AdditionalBusy && loadError is null;
+    protected virtual bool AdditionalBusy => false;
+    protected void ResetFeedback(string text)
+    {
+        ValidationField = ValidationMessage = null;
+        SetStatus(text, FeedbackKind.Information);
+        NotifyChanged();
+    }
     /// <summary>A file that failed to load is never overwritten, not even by background saves.</summary>
     protected bool HasLoadError => loadError is not null;
 

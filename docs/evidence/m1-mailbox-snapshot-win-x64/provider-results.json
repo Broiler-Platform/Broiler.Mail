@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-11-04T20:14:33.4919264+00:00",
+  "runtime": "win-x64",
+  "imapHost": "imap.ionos.de",
+  "smtpHost": null,
+  "accountFingerprint": "47d69f6e580c2d0da2dfc341c79967bcc9e6a5d4a71ab1a5293bde8bffbfc09b",
+  "stages": [
+    {
+      "name": "load-existing-account",
+      "status": "passed",
+      "failure": null,
+      "count": null
+    },
+    {
+      "name": "imap-complete-header-snapshot",
+      "status": "passed",
+      "failure": null,
+      "count": 11
+    }
+  ],
+  "scope": "Explicit read-only INBOX full-header observation only: EXAMINE/UID SEARCH ALL/header FETCH with before/after census validation, platform TLS and OS credential reads. No bodies, source, attachments, SMTP, send, flags, moves, deletion, APPEND, profile/cache adoption/migration/write or credential writes. Only provider host, one-way account fingerprint, coarse outcomes and count are recorded; no addresses, headers, UIDs, UID hashes or transcripts."
+}

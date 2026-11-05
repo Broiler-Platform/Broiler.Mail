@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "applicationVersion": "0.1.0-preview.1",
+  "runtime": "win-x64",
+  "variant": "self-contained",
+  "compilation": "NativeAOT",
+  "runtimeVersion": "10.0.14",
+  "processArchitecture": "x64",
+  "sdkVersion": "10.0.403",
+  "sourceRevision": "fc1f74ffc5e8d3dae03b8fd81c39aa851bdf5c23",
+  "workingTreeDirty": true,
+  "builtAtUtc": "2026-11-04T21:23:25.3607680+00:00",
+  "signingStatus": "unsigned",
+  "smokeTest": "passed",
+  "smokeScope": "Versioned profile, persisted quota/download policy and SQLite header/body/CID/reply-metadata second-process reopen, versioned account-collection import/order/selection/reopen and backup restore, selected-account startup/switching, selector layout, explicit two-slot account receive queue with scoped failure/cancellation/cache publication and maintenance/pinned-draft guards, enable/disable/order controls, pinned draft sender, recovery-backed confirmed account removal and both OS credential slots, verified backup/restore and recovery-backed cleanup, OS credential round trip, local-original MIME text/source switching/import/exact export/Keep-first backed-up removal and separate-profile restore, retained-body FTS tail search and independent sender filter with preview separation/coverage, complete-header snapshot/checkpoint/absent-mail retention and disabled local inspection with restore/account cleanup, multipart MIME parsing, actual HTML layout/raster/zoom, synthetic cookie-free Broiler.Net image broker/private-redirect rejection and inline per-message consent state, headless composition and UI layout; no live HTTP, protocol fixture, provider or native-window acceptance. Separate M0 probes cover protocol fixtures.",
+  "htmlRendererIsolation": "not-implemented",
+  "releaseReady": false
+}

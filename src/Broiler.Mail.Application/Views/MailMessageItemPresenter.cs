@@ -32,7 +32,7 @@ namespace Broiler.Mail.Application.Views;
 /// date rather than crowd the sender out; the row's semantic name always carries the full sender and
 /// received time.
 /// </summary>
-public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null) : IUiListItemPresenter
+public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null, bool showMailbox = false) : IUiListItemPresenter
 {
     private readonly MessageDateFormatter _dates = dates ?? MessageDateFormatter.Default;
     public static readonly MailMessageItemPresenter Instance = new();
@@ -56,7 +56,7 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null)
             var displayItem = new UiListItem(
                 context.Item.Id,
                 RowSender(message.Sender, date, unread, context.Bounds.Width, context.Font),
-                message.Subject,
+                (showMailbox ? "[" + message.Key.MailboxId + "] " : "") + (message.IsStarred ? "★ " : "") + message.Subject,
                 date,
                 message.IsRead,
                 message);
@@ -83,7 +83,7 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null)
                 state |= UiSemanticState.Focused;
 
             string unread = message.IsRead ? string.Empty : "Unread, ";
-            string label = $"{unread}From: {message.Sender}, Subject: {message.Subject}, Received: {_dates.Detail(message.ReceivedAt)}";
+            string label = (showMailbox ? $"Folder: {message.Key.MailboxId}, " : "") + $"{(message.IsStarred ? "Starred, " : "")}{unread}From: {message.Sender}, Subject: {message.Subject}, Received: {_dates.Detail(message.ReceivedAt)}";
 
             return new UiSemanticNode(
                 UiSemanticRole.ListItem,

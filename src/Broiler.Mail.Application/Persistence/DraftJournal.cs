@@ -37,6 +37,7 @@ public sealed class DraftJournal(IDraftStore store, DraftStoreState initial)
     // Broiler-Human:        PENDING
     public event EventHandler? Changed;
     public bool IsPersistent => store.IsPersistent;
+    public long SavedRevision { get { lock (_gate) return _revision; } }
     // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=0; Fingerprint=4ABDDC
     // Broiler-Falsified-If: IsSaved reports true after an Update with save disabled whose snapshot the store has not written
     // Broiler-Human:        PENDING

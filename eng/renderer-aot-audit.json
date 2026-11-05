@@ -1,0 +1,31 @@
+{
+  "reviewedOn": "2026-11-02",
+  "normalizedSubstitutionsSha256": "710723948b63a4fc81dc2f0d55430755e04975611b94ea2e8d95eaf1e720e6c3",
+  "packages": [
+    {
+      "identity": "Broiler.HTML.Image/0.1.0-preview.30",
+      "asset": "lib/net10.0/Broiler.HTML.Image.dll",
+      "sha256": "725f5a771c9b6962c79dbe8dd317564109d36e44036ee7d41d2a98ad8baa016d"
+    },
+    {
+      "identity": "Broiler.HTML.Image.Compat/0.1.0-preview.30",
+      "asset": "lib/net10.0/Broiler.HTML.Image.Compat.dll",
+      "sha256": "a5e14b240f3f6fa63959f15d0f8ed121a59fc3c6058ad8b492fe9e90983b62df"
+    },
+    {
+      "identity": "Broiler.HTML.Core/0.1.0-preview.30",
+      "asset": "lib/net10.0/Broiler.HTML.Core.dll",
+      "sha256": "522b91ec22405703fcc1f9887cfe502cb5a3ccaa957d6b61eb10f24119bf6f05"
+    },
+    {
+      "identity": "Broiler.HTML.Dom/0.1.0-preview.30",
+      "asset": "lib/net10.0/Broiler.HTML.Dom.dll",
+      "sha256": "522b613d9850eb157410ab2e92265adcfd77dee22f9af7948244b09afffae8f3"
+    },
+    {
+      "identity": "Broiler.HTML.Orchestration/0.1.0-preview.30",
+      "asset": "lib/net10.0/Broiler.HTML.Orchestration.dll",
+      "sha256": "be2084a052fea1fa5d201594a6c1fe427e56dccc5be93371afaa72f670894b04"
+    }
+  ]
+}

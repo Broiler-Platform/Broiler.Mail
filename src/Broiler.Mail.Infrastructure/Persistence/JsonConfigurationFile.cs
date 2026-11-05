@@ -67,6 +67,13 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
         cancellationToken.ThrowIfCancellationRequested();
         Directory.CreateDirectory(Path.GetDirectoryName(_path)!);
         await using var lease = await AcquireWriteLockAsync(cancellationToken).ConfigureAwait(false);
+        await UpdateWithLockHeldAsync(update, cancellationToken).ConfigureAwait(false);
+    }
+
+    // Only profile maintenance may call this while holding this exact configuration's write lock.
+    internal async Task UpdateWithLockHeldAsync(Func<T, T> update, CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
         // Read and validate before writing, so corrupt or future-version files are never reset silently.
         var data = update(await ReadAsync(cancellationToken).ConfigureAwait(false));
         validate(data);

@@ -29,11 +29,66 @@ public static class ConfigurationValidator
     // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=ADB9F9
     // Broiler-Falsified-If: a profile whose EmailAddress carries a display name, such as Eve <eve@example.com>, passes Validate
     // Broiler-Human:        PENDING
+    public static void ValidateSenderAliases(AccountProfile profile)
+    {
+        if (profile.SenderAliases.Length > 6000) throw new ConfigurationValidationException("SenderAliases", "Use at most 16 sender aliases, one address per line.");
+        var aliases = profile.SenderAliases.Split('\n', StringSplitOptions.RemoveEmptyEntries).Select(value => value.Trim()).Where(value => value.Length > 0).ToArray();
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { profile.EmailAddress };
+        if (aliases.Length > 16) throw new ConfigurationValidationException("SenderAliases", "Use at most 16 sender aliases.");
+        foreach (var alias in aliases)
+            if (alias.Length > 320 || alias.Any(char.IsControl) || !MailAddress.TryCreate(alias, out var parsed) || parsed.Address != alias || !seen.Add(alias))
+                throw new ConfigurationValidationException("SenderAliases", "Enter distinct email addresses without display names, one per line, excluding the primary address.");
+    }
+
+    public static void ValidateSenderIdentities(AccountProfile profile)
+    {
+        var rows = profile.SenderIdentities;
+        if (rows is null) return;
+        if (rows.Count > 17) throw new ConfigurationValidationException("SenderIdentities", "Use at most 17 sender identity overrides.");
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var row in rows)
+        {
+            if (row is null || row.Address is null || !profile.HasSenderAddress(row.Address) || !seen.Add(row.Address))
+                throw new ConfigurationValidationException("SenderIdentities", "Identity settings must name distinct, already configured sender addresses.");
+            if (row.DisplayName is { } name) ValidateSenderDisplayName(name);
+            try
+            {
+                if (row.Signature is { } signature) ValidateSignature(signature);
+                if (row.ReplySignature is { } reply) ValidateSignature(reply);
+            }
+            catch (ConfigurationValidationException error) { throw new ConfigurationValidationException("SenderIdentities", error.Message); }
+        }
+    }
+    public static void ValidateSenderDisplayName(string name)
+    {
+        if (name.Length > 200 || name.Any(char.IsControl))
+            throw new ConfigurationValidationException("SenderIdentities", "Use at most 200 display-name characters without controls.");
+        for (int i = 0; i < name.Length; i++)
+            if (char.IsSurrogate(name[i]) && (!char.IsHighSurrogate(name[i]) || ++i >= name.Length || !char.IsLowSurrogate(name[i])))
+                throw new ConfigurationValidationException("SenderIdentities", "Enter valid Unicode display-name text.");
+    }
+
+    public static void ValidateSignature(string signature)
+    {
+        if (signature.Length > 4000 || signature.Any(c => char.IsControl(c) && c is not ('\r' or '\n' or '\t')))
+            throw new ConfigurationValidationException("Signature", "Use at most 4,000 plain-text characters without unsupported controls.");
+        for (int i = 0; i < signature.Length; i++)
+            if (char.IsSurrogate(signature[i]) && (!char.IsHighSurrogate(signature[i]) || ++i >= signature.Length || !char.IsLowSurrogate(signature[i])))
+                throw new ConfigurationValidationException("Signature", "Enter valid Unicode signature text.");
+    }
+
     public static void Validate(AccountProfile profile)
     {
         ArgumentNullException.ThrowIfNull(profile);
         if (profile.Id.Value == Guid.Empty)
             throw new ArgumentException("The account must have an identity.");
+        ValidateSenderAliases(profile);
+        ValidateSenderIdentities(profile);
+        ValidateSignature(profile.Signature);
+        try { ValidateSignature(profile.ReplySignature); }
+        catch (ConfigurationValidationException error) { throw new ConfigurationValidationException("ReplySignature", error.Message); }
+        if (profile.DefaultSenderAddress is null || !profile.HasSenderAddress(profile.DefaultSender))
+            throw new ConfigurationValidationException("DefaultSenderAddress", "Choose the primary address or a configured alias as the default sender.");
         RequireText(profile.DisplayName, "Display name", 200, "DisplayName");
         RequireText(profile.EmailAddress, "Email address", 320, "EmailAddress");
         if (!MailAddress.TryCreate(profile.EmailAddress, out var address) || address.Address != profile.EmailAddress)
@@ -41,6 +96,19 @@ public static class ConfigurationValidator
         ValidateServer(profile.IncomingServer, "IncomingServer");
         if (profile.OutgoingServer is not null)
             ValidateServer(profile.OutgoingServer, "OutgoingServer");
+        if (profile.FolderOverrides is not { } folders)
+            throw new ConfigurationValidationException("FolderOverrides", "Folder mapping must be present.");
+        foreach (var (role, value) in new[] { ("Sent", folders.Sent), ("Drafts", folders.Drafts),
+            ("Archive", folders.Archive), ("Trash", folders.Trash), ("Junk", folders.Junk) })
+        {
+            if (value is null) continue;
+            string field = "FolderOverrides." + role;
+            RequireText(value, role + " folder override", 1024, field);
+            for (int index = 0; index < value.Length; index++)
+                if (char.IsSurrogate(value[index]) && (!char.IsHighSurrogate(value[index]) ||
+                    ++index >= value.Length || !char.IsLowSurrogate(value[index])))
+                    throw new ConfigurationValidationException(field, "Enter a valid Unicode mailbox identity.");
+        }
         if (!Enum.IsDefined(profile.SentCopyMode)) throw new ArgumentException("Choose a supported Sent-copy mode.");
         if (profile.SentCopyMode == SentCopyMode.AppendToFolder)
             RequireText(profile.SentFolder, "Sent folder path", 512, "SentFolder");

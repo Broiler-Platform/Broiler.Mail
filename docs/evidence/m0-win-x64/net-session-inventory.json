@@ -1,0 +1,33 @@
+{
+  "runtime": "win-x64",
+  "probe": "NetSessionProbe",
+  "packages": [
+    {
+      "package": "Broiler.Net/0.1.0-preview.4",
+      "license": "Apache-2.0 AND MPL-2.0",
+      "licenseUrl": "https://licenses.nuget.org/Apache-2.0%20AND%20MPL-2.0"
+    },
+    {
+      "package": "Microsoft.DotNet.ILCompiler/10.0.14",
+      "license": "MIT",
+      "licenseUrl": "https://licenses.nuget.org/MIT"
+    },
+    {
+      "package": "Microsoft.NET.ILLink.Tasks/10.0.14",
+      "license": "MIT",
+      "licenseUrl": "https://licenses.nuget.org/MIT"
+    },
+    {
+      "package": "runtime.win-x64.Microsoft.DotNet.ILCompiler/10.0.14",
+      "license": "MIT",
+      "licenseUrl": "https://licenses.nuget.org/MIT"
+    }
+  ],
+  "publishedFiles": [
+    {
+      "path": "Broiler.Mail.NetSessionProbe.exe",
+      "bytes": 7592448,
+      "sha256": "a2d8ed6a2183534c2f84e8a3ad2b219f9b0fc62f710479c2cdd75f6956eb3d51"
+    }
+  ]
+}

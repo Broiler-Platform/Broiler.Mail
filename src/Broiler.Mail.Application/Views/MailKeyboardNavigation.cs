@@ -45,6 +45,7 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         }
         if (session.CapturedElement is not null) return false;
         if (shell.ActiveAboutDialog is not null) return false;
+        if (shell.ActiveDialog is null && shell.ActiveViewId == "inbox" && shell.Inbox.HandleReaderInput(input)) return true;
         if (MailShortcuts.Match(input) is { } shortcut)
         {
             if (shortcut.Command == MailCommand.OpenMessage && shell.ActiveDialog is { } dialog)
@@ -74,6 +75,12 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
                 shell.Menu.Open();
                 session.CaptureInput(shell.Menu);
                 return true;
+            case MailCommand.UnifiedSavedInbox:
+                return shell.ShowView("unified");
+            case MailCommand.SavedOriginals:
+                return shell.ShowView("originals");
+            case MailCommand.Outbox:
+                return shell.ShowView("outbox");
             case >= MailCommand.Inbox and <= MailCommand.Compose:
                 return shell.ShowView(command switch
                 {
@@ -126,6 +133,8 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         // Layout first: the adaptive inbox decides during layout which pane is collapsed (and hidden).
         activeSession.RenderFrame();
         var controls = new List<UiElement> { shell.NavigationFocus };
+        if (shell.ActiveDialog is null && shell.AccountSelectionContent is { } accounts)
+            controls.AddRange(TabStops(accounts));
         var content = shell.ActiveContent;
         if (content is not null)
             controls.AddRange(TabStops(content));

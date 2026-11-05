@@ -334,8 +334,8 @@ public sealed class DemoGalleryTests
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
         try
         {
-            // The app's preview host, which the HTML preview's row needs; nothing is opened.
-            Run(scenario, width, height, new NoPreviewHost(), (model, shell, render) =>
+            // This layout check measures the selectable text reader.
+            Run(scenario, width, height, null, (model, shell, render) =>
             {
                 Assert.True(shell.Inbox.OpenSelected());
                 render();
@@ -751,7 +751,7 @@ public sealed class DemoGalleryTests
     // Mirrors WindowsMailWindow: a queued dispatcher drained on the owning thread, then a rendered frame.
     // Verification runs before the shell is disposed, because disposal also disables the view models. It
     // can render again after an action, as the window does.
-    private static void Run(DemoScenario scenario, int width, int height, IHtmlPreviewHost? preview, Action<MailShellViewModel, MailShellView, Action> verify)
+    private static void Run(DemoScenario scenario, int width, int height, IInlineHtmlPreviewHost? preview, Action<MailShellViewModel, MailShellView, Action> verify)
     {
         var options = new DemoOptions(scenario, AppTheme.Light, width, height);
         var application = DemoApplication.Create(options);
@@ -783,15 +783,6 @@ public sealed class DemoGalleryTests
             dispatcher.Drain();
             session.RenderFrame();
         });
-    }
-
-    private sealed class NoPreviewHost : IHtmlPreviewHost
-    {
-        public event EventHandler<HtmlPreviewChange>? Changed { add { } remove { } }
-        public MailMessageKey? Current => null;
-        public Task<string> ShowAsync(MailMessageBody message) => Task.FromResult("");
-        public void Close() { }
-        public void Dispose() { }
     }
 
     private sealed class HeadlessHost(int width, int height) : IUiHost

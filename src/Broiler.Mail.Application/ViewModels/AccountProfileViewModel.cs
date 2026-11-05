@@ -37,7 +37,40 @@ public enum OutgoingSetupStep { NotConfigured, SavePassword, Test, Ready }
 public sealed class AccountProfileViewModel : SaveViewModel
 {
     private readonly IAccountStore _store;
-    private readonly AccountId _id;
+    private AccountId _id;
+    private bool _selectionBusy;
+    internal bool IsSelectionBusy => _selectionBusy;
+    protected override bool AdditionalBusy => _selectionBusy;
+    public event EventHandler? ProfileSelected;
+    public event EventHandler? ProfileSaved;
+    internal void SetSelectionBusy(bool busy) { _selectionBusy = busy; NotifyChanged(); }
+
+    internal void SelectProfile(AccountProfile? profile)
+    {
+        if (IsBusy) throw new InvalidOperationException("Finish the account operation before switching.");
+        ++_credentialCheck;
+        Profile = profile; _id = profile?.Id ?? AccountId.New();
+        DisplayName = profile?.DisplayName ?? ""; EmailAddress = profile?.EmailAddress ?? "";
+        Host = profile?.IncomingServer.Host ?? ""; Port = (profile?.IncomingServer.Port ?? 993).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        UserName = profile?.IncomingServer.UserName ?? ""; Security = profile?.IncomingServer.Security ?? TransportSecurity.Tls;
+        Authentication = profile?.IncomingServer.Authentication ?? AuthenticationMethod.Password;
+        ConfigureSmtp = profile?.OutgoingServer is not null; SmtpHost = profile?.OutgoingServer?.Host ?? "";
+        SmtpPort = (profile?.OutgoingServer?.Port ?? 587).ToString(System.Globalization.CultureInfo.InvariantCulture);
+        SmtpUserName = profile?.OutgoingServer?.UserName ?? ""; SmtpSecurity = profile?.OutgoingServer?.Security ?? TransportSecurity.StartTls;
+        SmtpAuthentication = profile?.OutgoingServer?.Authentication ?? AuthenticationMethod.Password;
+        SentCopyMode = profile?.SentCopyMode ?? SentCopyMode.NotConfigured; SentFolder = profile?.SentFolder ?? "";
+        HasPassword = HasSmtpPassword = null; ConnectionCheck = OutgoingCheck = ConnectionCheck.NotRun;
+        ConnectionFailure = OutgoingFailure = null; OutgoingFailureKind = null; LastTest = null;
+        DefaultSenderAddress = profile?.DefaultSenderAddress ?? ""; ReplyFromReceivingAlias = profile?.ReplyFromReceivingAlias ?? false;
+        UseSeparateReplySignature = profile?.UseSeparateReplySignature ?? false; ReplySignature = profile?.ReplySignature ?? "";
+        SenderAliases = profile?.SenderAliases ?? "";
+        SenderIdentities = profile?.SenderIdentities;
+        Signature = profile?.Signature ?? "";
+        LoadFolderOverrides(profile);
+        ProfileSelected?.Invoke(this, EventArgs.Empty);
+        ResetFeedback(profile is null ? "Enter details for the new account." : "Account details loaded.");
+        RefreshCredentialState();
+    }
     private readonly ICredentialStore _credentials;
     private readonly IMailReceiver _receiver;
     private readonly IOutgoingConnectionTester? _outgoingTester;
@@ -72,6 +105,12 @@ public sealed class AccountProfileViewModel : SaveViewModel
         SmtpAuthentication = profile?.OutgoingServer?.Authentication ?? AuthenticationMethod.Password;
         SentCopyMode = profile?.SentCopyMode ?? SentCopyMode.NotConfigured;
         SentFolder = profile?.SentFolder ?? string.Empty;
+        DefaultSenderAddress = profile?.DefaultSenderAddress ?? ""; ReplyFromReceivingAlias = profile?.ReplyFromReceivingAlias ?? false;
+        UseSeparateReplySignature = profile?.UseSeparateReplySignature ?? false; ReplySignature = profile?.ReplySignature ?? "";
+        SenderAliases = profile?.SenderAliases ?? "";
+        SenderIdentities = profile?.SenderIdentities;
+        Signature = profile?.Signature ?? "";
+        LoadFolderOverrides(profile);
         if (loadError is null) RefreshCredentialState();
     }
 
@@ -161,6 +200,13 @@ public sealed class AccountProfileViewModel : SaveViewModel
     }
 
     public AccountProfile? Profile { get; private set; }
+    public string DefaultSenderAddress { get; set; } = "";
+    public bool ReplyFromReceivingAlias { get; set; }
+    public bool UseSeparateReplySignature { get; set; }
+    public string ReplySignature { get; set; } = "";
+    public string SenderAliases { get; set; } = "";
+    public IReadOnlyList<SenderIdentitySettings>? SenderIdentities { get; set; }
+    public string Signature { get; set; } = "";
     public string DisplayName { get; set; }
     public string EmailAddress { get; set; }
     public string Host { get; set; }
@@ -176,6 +222,17 @@ public sealed class AccountProfileViewModel : SaveViewModel
     public AuthenticationMethod SmtpAuthentication { get; set; }
     public SentCopyMode SentCopyMode { get; set; }
     public string SentFolder { get; set; }
+    public string FolderSent { get; set; } = "";
+    public string FolderDrafts { get; set; } = "";
+    public string FolderArchive { get; set; } = "";
+    public string FolderTrash { get; set; } = "";
+    public string FolderJunk { get; set; } = "";
+    private void LoadFolderOverrides(AccountProfile? profile)
+    {
+        FolderSent = profile?.FolderOverrides.Sent ?? ""; FolderDrafts = profile?.FolderOverrides.Drafts ?? "";
+        FolderArchive = profile?.FolderOverrides.Archive ?? ""; FolderTrash = profile?.FolderOverrides.Trash ?? "";
+        FolderJunk = profile?.FolderOverrides.Junk ?? "";
+    }
     // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=C124B9
     // Broiler-Falsified-If: the password controls are enabled while no profile has been saved
     // Broiler-Human:        PENDING
@@ -205,6 +262,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
         {
             var previous = Profile;
             Profile = candidate!;
+            ProfileSaved?.Invoke(this, EventArgs.Empty);
             if (candidate == previous) return;
             // Server settings are part of the credential binding, so a protocol's presence and test result start
             // over when its own settings change. Each protocol is judged on its own: adding outgoing mail does not
@@ -390,7 +448,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
         }
         var candidate = new AccountProfile
         {
-            Id = _id, DisplayName = DisplayName.Trim(), EmailAddress = EmailAddress.Trim(),
+            Id = _id, DisplayName = DisplayName.Trim(), EmailAddress = EmailAddress.Trim(), Signature = Signature, SenderAliases = SenderAliases, SenderIdentities = SenderIdentities,
+            DefaultSenderAddress = DefaultSenderAddress.Trim(), ReplyFromReceivingAlias = ReplyFromReceivingAlias,
+            UseSeparateReplySignature = UseSeparateReplySignature, ReplySignature = ReplySignature,
             IncomingServer = new MailServerSettings
             {
                 Host = Host.Trim(), Port = port, UserName = UserName.Trim(), Security = Security, Authentication = Authentication,
@@ -398,6 +458,12 @@ public sealed class AccountProfileViewModel : SaveViewModel
             OutgoingServer = outgoingServer,
             SentCopyMode = ConfigureSmtp ? SentCopyMode : SentCopyMode.NotConfigured,
             SentFolder = ConfigureSmtp && SentCopyMode == SentCopyMode.AppendToFolder ? SentFolder.Trim() : null,
+            FolderOverrides = new()
+            {
+                Sent = FolderSent.Length == 0 ? null : FolderSent, Drafts = FolderDrafts.Length == 0 ? null : FolderDrafts,
+                Archive = FolderArchive.Length == 0 ? null : FolderArchive, Trash = FolderTrash.Length == 0 ? null : FolderTrash,
+                Junk = FolderJunk.Length == 0 ? null : FolderJunk,
+            },
             IsEnabled = Profile?.IsEnabled ?? true,
         };
         ConfigurationValidator.Validate(candidate);

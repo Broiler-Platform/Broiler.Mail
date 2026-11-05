@@ -22,6 +22,11 @@ namespace Broiler.Mail.Core.Messages;
 // Broiler-Human:        PENDING
 public sealed record MailMessageBody(MailMessageKey Key, string PlainText, string? HtmlText = null)
 {
+    public const int MaximumRetainedTextCharacters = 1_048_576;
+    /// <summary>Complete supported decoded reader-body text, separate from the bounded display preview.
+    /// Null for older cached previews, incomplete MIME or text exceeding the retention limit. Excludes attachments and raw HTML.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public string? RetainedBodyText { get; init; }
     public bool IsHtmlFallback { get; init; }
     public bool IsTruncated { get; init; }
     public string? HtmlUnavailableReason { get; init; }

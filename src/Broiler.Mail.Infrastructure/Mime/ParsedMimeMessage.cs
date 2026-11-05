@@ -11,6 +11,7 @@ namespace Broiler.Mail.Infrastructure.Mime;
 /// </summary>
 public sealed class ParsedMimeMessage
 {
+    internal bool SkipAttachmentPayloads { get; init; }
     public string? Subject { get; set; }
     public string? MessageId { get; set; }
     public DateTimeOffset? Date { get; set; }
@@ -27,6 +28,8 @@ public sealed class ParsedMimeMessage
 
     public Dictionary<string, MailEmbeddedImage> EmbeddedImages { get; } = new(StringComparer.OrdinalIgnoreCase);
 
+    public bool HasIncompleteParts { get; set; }
+    internal bool StrictAttachmentDecoding { get; init; }
     public List<MimePartInfo> Parts { get; } = [];
     public List<KeyValuePair<string, string>> RawHeaders { get; } = [];
 }
@@ -35,6 +38,8 @@ public sealed class ParsedMimeMessage
 public sealed class MimePartInfo
 {
     public string MediaType { get; set; } = "text/plain";
+    public bool IsAttachment { get; set; }
+    public string? Disposition { get; set; }
     public string? ContentId { get; set; }
     public string? ContentLocation { get; set; }
     public string? FileName { get; set; }

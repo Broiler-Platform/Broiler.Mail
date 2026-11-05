@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-11-04T16:21:24.6734315+00:00",
+  "runtime": "win-x64",
+  "checks": [
+    {
+      "name": "public-png",
+      "url": "https://www.w3.org/Icons/w3c_home.png",
+      "passed": true,
+      "loaded": 1,
+      "payloadBytes": 1848,
+      "outcome": "None",
+      "tlsOutcome": "Authenticated"
+    },
+    {
+      "name": "expired-certificate-endpoint",
+      "url": "https://expired.badssl.com/favicon.ico",
+      "passed": true,
+      "loaded": 0,
+      "payloadBytes": 0,
+      "outcome": "NetworkError",
+      "tlsOutcome": "AuthenticationRejected"
+    },
+    {
+      "name": "hostname-mismatch-endpoint",
+      "url": "https://wrong.host.badssl.com/favicon.ico",
+      "passed": true,
+      "loaded": 0,
+      "payloadBytes": 0,
+      "outcome": "NetworkError",
+      "tlsOutcome": "AuthenticationRejected"
+    },
+    {
+      "name": "self-signed-endpoint",
+      "url": "https://self-signed.badssl.com/favicon.ico",
+      "passed": true,
+      "loaded": 0,
+      "payloadBytes": 0,
+      "outcome": "NetworkError",
+      "tlsOutcome": "AuthenticationRejected"
+    }
+  ],
+  "scope": "Explicit fixed public fixtures only; production SocketsHttpHandler/public-DNS pinning; no handler/resolver/TLS overrides, cookies, credentials, account/profile/mail input or renderer. A separate default SslStream handshake over the production DNS-pinned connector verifies authentication success/rejection without certificate callbacks or custom trust; broker failures remain coarse NetworkError. No startup/CI invocation."
+}

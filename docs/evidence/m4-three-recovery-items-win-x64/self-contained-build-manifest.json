@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "applicationVersion": "0.1.0-preview.1",
+  "runtime": "win-x64",
+  "variant": "self-contained",
+  "compilation": "NativeAOT",
+  "runtimeVersion": "10.0.14",
+  "processArchitecture": "x64",
+  "sdkVersion": "10.0.403",
+  "sourceRevision": "fc1f74ffc5e8d3dae03b8fd81c39aa851bdf5c23",
+  "workingTreeDirty": true,
+  "builtAtUtc": "2026-11-03T10:24:46.6618907+00:00",
+  "signingStatus": "unsigned",
+  "smokeTest": "passed",
+  "smokeScope": "Versioned profile, persisted quota/download policy and SQLite header/body/CID/reply-metadata second-process reopen, versioned account-collection import/order/selection/reopen and backup restore, selected-account startup/switching, selector layout, enable/disable/order controls, pinned draft sender, recovery-backed confirmed account removal and both OS credential slots, verified backup/restore and recovery-backed cleanup, OS credential round trip, multipart MIME parsing, actual HTML layout/raster/zoom, synthetic cookie-free Broiler.Net image broker/private-redirect rejection and inline per-message consent state, headless composition and UI layout; no live HTTP, protocol fixture, provider or native-window acceptance. Separate M0 probes cover protocol fixtures.",
+  "htmlRendererIsolation": "not-implemented",
+  "releaseReady": false
+}

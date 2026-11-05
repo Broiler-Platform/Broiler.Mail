@@ -402,7 +402,7 @@ public sealed class AppearanceTests
             shell.ShowView("compose");
             AssertStill("switching tabs");
             var compose = shell.GetContent("compose");
-            Descendants(compose).OfType<FormSection>().Single(section => section.Toggle is not null).Toggle!.Click();
+            Descendants(compose).OfType<FormSection>().Single(section => section.GetSemanticNode().Name == "Cc and Bcc").Toggle!.Click();
             AssertStill("showing Cc and Bcc");
             session.SetFocus(Descendants(compose).OfType<StandardRichEdit>().Single());
             AssertStill("focusing the message body");

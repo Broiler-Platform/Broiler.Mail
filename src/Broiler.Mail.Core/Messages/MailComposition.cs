@@ -53,7 +53,11 @@ public static class MailComposition
     // Broiler-Human:        PENDING
     public static void ValidateDraft(AccountProfile account, MailDraft draft)
     {
-        if (!account.IsEnabled || draft.AccountId != account.Id || draft.FromAddress != account.EmailAddress || draft.Id == Guid.Empty)
+        DraftAttachment.Validate(draft.Attachments);
+        Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSenderAliases(account);
+        Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSenderIdentities(account);
+        if (draft.FromDisplayName is { } displayName) Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSenderDisplayName(displayName);
+        if (!account.IsEnabled || draft.AccountId != account.Id || !account.HasSenderAddress(draft.FromAddress) || draft.Id == Guid.Empty)
             throw new InvalidOperationException("The saved sender changed. This draft retains its original sender; restore that account identity or start a new draft.");
         var recipients = draft.To.Concat(draft.Cc).Concat(draft.Bcc).ToArray();
         if (recipients.Length is 0 or > MaximumRecipients)
@@ -72,15 +76,21 @@ public static class MailComposition
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=5934D2
     // Broiler-Falsified-If: the new draft's AccountId or FromAddress differs from the account it was created for
     // Broiler-Human:        PENDING
-    public static MailDraft Create(AccountProfile account) => new()
+    public static MailDraft Create(AccountProfile account, string? fromAddress = null)
     {
-        AccountId = account.Id, FromAddress = account.EmailAddress,
-    };
+        Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSenderAliases(account);
+        string sender = fromAddress ?? account.DefaultSender;
+        if (!account.IsEnabled || !account.HasSenderAddress(sender)) throw new ArgumentException("Choose an enabled account's configured sender address.");
+        Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSenderIdentities(account);
+        string displayName = account.SenderDisplayName(sender);
+        Broiler.Mail.Core.Validation.ConfigurationValidator.ValidateSenderDisplayName(displayName);
+        return new() { AccountId = account.Id, FromAddress = sender, FromDisplayName = displayName };
+    }
 
     // Broiler-AI:           Origin=AI; Spec=RFC-5322 s3.6.4; IP=Low; Security=High; Resources=3; Fingerprint=0BAEC6
     // Broiler-Falsified-If: a reply-all to a received message that lists the account's own address in To or Cc, in any letter case, puts that address among the new recipients
     // Broiler-Human:        PENDING
-    public static MailDraft Create(AccountProfile account, MailMessageBody body, CompositionKind kind)
+    public static MailDraft Create(AccountProfile account, MailMessageBody body, CompositionKind kind, string? fromAddress = null)
     {
         if (body.Key.AccountId != account.Id)
             throw new ArgumentException("The selected message belongs to another account.");
@@ -88,7 +98,7 @@ public static class MailComposition
         var source = body.Composition ?? throw new ArgumentException(body.CompositionUnavailableReason ?? "Read the message again to load its reply headers.");
         string note = body.IsTruncated ? "[Quoted preview is truncated.]\n" : "";
         if (body.IsHtmlFallback) note += "[Quoted text was extracted from HTML.]\n";
-        var draft = Create(account);
+        var draft = Create(account, fromAddress);
         if (kind == CompositionKind.Forward)
             return draft with
             {
@@ -97,7 +107,7 @@ public static class MailComposition
             };
 
         // Reply-To replaces From. Reply-all also includes visible original recipients; never Bcc.
-        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { account.EmailAddress };
+        var seen = new HashSet<string>(account.SenderAddresses(), StringComparer.OrdinalIgnoreCase);
         string[] to = Unique(source.ReplyTo.Count > 0 ? source.ReplyTo : source.From, seen);
         if (kind == CompositionKind.ReplyAll) to = to.Concat(Unique(source.To, seen)).ToArray();
         string[] cc = kind == CompositionKind.ReplyAll ? Unique(source.Cc, seen) : [];

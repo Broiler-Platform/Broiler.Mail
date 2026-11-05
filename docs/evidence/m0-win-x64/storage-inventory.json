@@ -1,0 +1,63 @@
+{
+  "runtime": "win-x64",
+  "probe": "StorageProbe",
+  "packages": [
+    {
+      "package": "Microsoft.Data.Sqlite/10.0.14",
+      "license": "MIT",
+      "licenseUrl": "https://licenses.nuget.org/MIT"
+    },
+    {
+      "package": "Microsoft.Data.Sqlite.Core/10.0.14",
+      "license": "MIT",
+      "licenseUrl": "https://licenses.nuget.org/MIT"
+    },
+    {
+      "package": "Microsoft.DotNet.ILCompiler/10.0.14",
+      "license": "MIT",
+      "licenseUrl": "https://licenses.nuget.org/MIT"
+    },
+    {
+      "package": "Microsoft.NET.ILLink.Tasks/10.0.14",
+      "license": "MIT",
+      "licenseUrl": "https://licenses.nuget.org/MIT"
+    },
+    {
+      "package": "runtime.win-x64.Microsoft.DotNet.ILCompiler/10.0.14",
+      "license": "MIT",
+      "licenseUrl": "https://licenses.nuget.org/MIT"
+    },
+    {
+      "package": "SQLitePCLRaw.bundle_e_sqlite3/2.1.13",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
+    },
+    {
+      "package": "SQLitePCLRaw.core/2.1.13",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
+    },
+    {
+      "package": "SQLitePCLRaw.lib.e_sqlite3/2.1.13",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
+    },
+    {
+      "package": "SQLitePCLRaw.provider.e_sqlite3/2.1.13",
+      "license": "Apache-2.0",
+      "licenseUrl": "https://licenses.nuget.org/Apache-2.0"
+    }
+  ],
+  "publishedFiles": [
+    {
+      "path": "Broiler.Mail.StorageProbe.exe",
+      "bytes": 3471872,
+      "sha256": "ae01587db3a52e217164cbb68deb00791176dfb3ccc0111559240cb851d81075"
+    },
+    {
+      "path": "e_sqlite3.dll",
+      "bytes": 1978880,
+      "sha256": "b7385d722c83fb52142a00477a726723745916d22a555711ee89834c1111fb2e"
+    }
+  ]
+}

@@ -30,7 +30,15 @@ internal sealed class ConfigurationEnvelope<T> where T : class
     public required T Data { get; init; }
 }
 
+[JsonSerializable(typeof(ConfigurationEnvelope<LocalOriginalState>), TypeInfoPropertyName = "LocalOriginals")]
+[JsonSerializable(typeof(ConfigurationEnvelope<SourceExportCatalogState>), TypeInfoPropertyName = "SourceExportCatalog")]
+[JsonSerializable(typeof(ConfigurationEnvelope<AccountNavigationState>), TypeInfoPropertyName = "NavigationPreferences")]
+[JsonSerializable(typeof(ConfigurationEnvelope<OfflineFolderState>), TypeInfoPropertyName = "OfflineFolders")]
+[JsonSerializable(typeof(ConfigurationEnvelope<RecipientBookState>), TypeInfoPropertyName = "Recipients")]
+[JsonSerializable(typeof(ConfigurationEnvelope<MutationIntentState>), TypeInfoPropertyName = "MutationIntents")]
+[JsonSerializable(typeof(ConfigurationEnvelope<CacheRecoveryState>), TypeInfoPropertyName = "CacheRecovery")]
 [JsonSerializable(typeof(ConfigurationEnvelope<AccountProfile[]>), TypeInfoPropertyName = "Accounts")]
+[JsonSerializable(typeof(ConfigurationEnvelope<AccountCollectionState>), TypeInfoPropertyName = "AccountCollection")]
 [JsonSerializable(typeof(ConfigurationEnvelope<ApplicationSettings>), TypeInfoPropertyName = "Settings")]
 [JsonSerializable(typeof(ConfigurationEnvelope<DraftStoreState>), TypeInfoPropertyName = "Drafts")]
 internal partial class ConfigurationJsonContext : JsonSerializerContext

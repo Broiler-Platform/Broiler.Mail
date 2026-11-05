@@ -9,6 +9,8 @@ using Broiler.Mail.Application.Views;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.UI;
+using Broiler.UI.Button.Standard;
+using Broiler.UI.Label.Standard;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.ScrollView.Standard;
 using Broiler.UI.Standard;
@@ -151,6 +153,9 @@ public sealed class RefreshContinuityTests
         await model.SelectAsync(open.Key);
         _ = session.RenderFrame();
 
+        Descendants(content).OfType<StandardButton>().Single(button => button.Text == "Plain text").Click();
+        _ = session.RenderFrame();
+
         var list = Descendants(content).OfType<StandardListView>().Single();
         list.ScrollIntoView(30);
         _ = session.RenderFrame();
@@ -166,7 +171,7 @@ public sealed class RefreshContinuityTests
         new StandardInputRoute(session).Dispatch(SelectAll());
         var selection = reader.Editor.Selection;
         Assert.False(selection.IsEmpty);
-        int closes = preview.Closes;
+        Assert.Equal(1, preview.Created);
 
         // Two new messages arrive above the anchored rows.
         receiver.Inbox = (_, _) => Task.FromResult(new MailInboxPage([Message(account, 42), Message(account, 41), .. messages], null));
@@ -175,10 +180,10 @@ public sealed class RefreshContinuityTests
 
         Assert.Equal(42, list.Items.Count);
         Assert.Equal(firstVisibleId, list.Items[list.FirstVisibleIndex].Id);
-        Assert.Equal($"7:{open.Key.Uid}", list.SelectedItemId);
+        Assert.Equal(open.Key, Assert.IsType<MailMessageSummary>(list.Items.Single(item => item.Id == list.SelectedItemId).Tag).Key);
         Assert.Equal(readerOffset, scroll.VerticalOffset);
         Assert.Equal(selection, reader.Editor.Selection);
-        Assert.Equal(closes, preview.Closes);
+        Assert.Equal(1, preview.Created);
     }
 
     private static TestMailReceiver Receiver(IReadOnlyList<MailMessageSummary> newest, MailInboxCursor? older) => new()
@@ -207,14 +212,15 @@ public sealed class RefreshContinuityTests
 
     private static IEnumerable<UiElement> Descendants(UiElement element) => element.Children.SelectMany(child => new[] { child }.Concat(Descendants(child)));
 
-    private sealed class CountingPreviewHost : IHtmlPreviewHost
+    private sealed class CountingPreviewHost : IInlineHtmlPreviewHost
     {
-        public int Closes { get; private set; }
-        public event EventHandler<HtmlPreviewChange>? Changed { add { } remove { } }
-        public MailMessageKey? Current => null;
-        public Task<string> ShowAsync(MailMessageBody message) => Task.FromResult("Shown.");
-        public void Close() => Closes++;
-        public void Dispose() { }
+        public int Created { get; private set; }
+
+        public UiElement CreateInlineContent(MailMessageBody message)
+        {
+            Created++;
+            return new StandardLabel { Text = "Fixture HTML" };
+        }
     }
 
     private sealed class Host(int width, int height) : IUiHost

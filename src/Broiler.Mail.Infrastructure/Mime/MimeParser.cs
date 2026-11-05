@@ -58,11 +58,14 @@ public static class MimeParser
     /// <summary>
     /// Parses RFC 5322 / MIME bytes into a <see cref="ParsedMimeMessage"/>.
     /// </summary>
-    public static ParsedMimeMessage Parse(byte[] bytes)
+    public static ParsedMimeMessage Parse(byte[] bytes) => ParseCore(bytes, false);
+    public static ParsedMimeMessage ParseForAttachmentExport(byte[] bytes) => ParseCore(bytes, true);
+    internal static ParsedMimeMessage ParseForReader(byte[] bytes) => ParseCore(bytes, false, skipAttachmentPayloads: true);
+    private static ParsedMimeMessage ParseCore(byte[] bytes, bool strictAttachments, bool skipAttachmentPayloads = false)
     {
-        var message = new ParsedMimeMessage();
+        var message = new ParsedMimeMessage { StrictAttachmentDecoding = strictAttachments, SkipAttachmentPayloads = skipAttachmentPayloads };
         int headerEnd = FindHeaderBoundary(bytes, 0, out int bodyStart);
-        var headers = ParseHeaders(bytes, 0, headerEnd);
+        var headers = ParseBoundedHeaders(message, bytes, headerEnd);
 
         foreach (var header in headers)
         {
@@ -114,8 +117,10 @@ public static class MimeParser
 
     private static void ParseEntity(ParsedMimeMessage message, List<KeyValuePair<string, string>> headers, ReadOnlySpan<byte> bodyBytes, int depth)
     {
+        if (message.Parts.Count >= 256) { message.HasIncompleteParts = true; return; }
         if (depth > MaxMimeDepth)
         {
+            message.HasIncompleteParts = true;
             MailLogger.Warning("MimeParser", $"MIME nesting depth limit ({MaxMimeDepth}) reached. Halting deeper entity parsing.");
             return;
         }
@@ -127,22 +132,27 @@ public static class MimeParser
         string? contentId = GetHeader(headers, "content-id");
         string? contentLocation = GetHeader(headers, "content-location");
         string? contentDisposition = GetHeader(headers, "content-disposition");
-        string? filename = null;
+        string? filename = MimeFileNameParameters.Read(contentDisposition, "filename", message.StrictAttachmentDecoding)
+            ?? MimeFileNameParameters.Read(contentType, "name", message.StrictAttachmentDecoding);
 
-        if (contentDisposition is not null)
+        string disposition = contentDisposition?.Split(';', 2)[0].Trim().ToLowerInvariant() ?? "";
+        bool attachment = disposition == "attachment" || !string.IsNullOrEmpty(filename) && disposition != "inline" && string.IsNullOrWhiteSpace(contentId) && string.IsNullOrWhiteSpace(contentLocation);
+        if (attachment && message.SkipAttachmentPayloads)
         {
-            ParseParameters(contentDisposition, out _, out var dispParams);
-            if (dispParams.TryGetValue("filename", out string? fn)) filename = fn;
+            message.Parts.Add(new MimePartInfo { IsAttachment = true, Disposition = disposition, MediaType = mediaType, FileName = filename });
+            return;
         }
-        if (filename is null && parameters.TryGetValue("name", out string? nameParam))
+        if (attachment && mediaType.StartsWith("multipart/", StringComparison.OrdinalIgnoreCase))
         {
-            filename = nameParam;
+            if (message.StrictAttachmentDecoding) throw new InvalidDataException("Multipart attachment containers are not supported for extraction; keep the original .eml.");
+            message.Parts.Add(new MimePartInfo { IsAttachment = true, Disposition = disposition, MediaType = mediaType, FileName = filename, TransferEncoding = transferEncoding, Data = bodyBytes.ToArray() });
+            return;
         }
-
         if (mediaType.StartsWith("multipart/", StringComparison.OrdinalIgnoreCase))
         {
             if (!parameters.TryGetValue("boundary", out string? boundary) || string.IsNullOrEmpty(boundary))
             {
+                message.HasIncompleteParts = true;
                 // Malformed multipart: treat body as text
                 AddTextPart(message, mediaType, parameters, transferEncoding, bodyBytes);
                 return;
@@ -153,9 +163,9 @@ public static class MimeParser
         else
         {
             // Leaf entity
-            byte[] rawBytes = DecodeTransferEncoding(bodyBytes, transferEncoding);
+            byte[] rawBytes = attachment && message.StrictAttachmentDecoding ? DecodeAttachment(bodyBytes, transferEncoding) : DecodeTransferEncoding(bodyBytes, transferEncoding);
 
-            if (mediaType.Equals("text/plain", StringComparison.OrdinalIgnoreCase))
+            if (!attachment && mediaType.Equals("text/plain", StringComparison.OrdinalIgnoreCase))
             {
                 string text = DecodeText(rawBytes, parameters.GetValueOrDefault("charset"));
                 if (message.TextBody is null)
@@ -163,7 +173,7 @@ public static class MimeParser
                     message.TextBody = text;
                 }
             }
-            else if (mediaType.Equals("text/html", StringComparison.OrdinalIgnoreCase))
+            else if (!attachment && mediaType.Equals("text/html", StringComparison.OrdinalIgnoreCase))
             {
                 string html = DecodeText(rawBytes, parameters.GetValueOrDefault("charset"));
                 if (message.HtmlBody is null)
@@ -171,7 +181,7 @@ public static class MimeParser
                     message.HtmlBody = html;
                 }
             }
-            else if (SupportedImageTypes.Contains(mediaType))
+            else if (disposition != "attachment" && SupportedImageTypes.Contains(mediaType))
             {
                 ExtractEmbeddedImage(message, mediaType, contentId, contentLocation, filename, rawBytes);
             }
@@ -179,6 +189,7 @@ public static class MimeParser
             message.Parts.Add(new MimePartInfo
             {
                 MediaType = mediaType,
+                IsAttachment = attachment, Disposition = disposition,
                 ContentId = contentId,
                 ContentLocation = contentLocation,
                 FileName = filename,
@@ -194,8 +205,9 @@ public static class MimeParser
         byte[] delimiter = Encoding.ASCII.GetBytes("--" + boundary);
         byte[] endDelimiter = Encoding.ASCII.GetBytes("--" + boundary + "--");
 
-        int current = IndexOf(bodyBytes, delimiter, 0);
-        if (current < 0) return;
+        int current = FindBoundary(bodyBytes, delimiter, 0);
+        if (current < 0) { message.HasIncompleteParts = true; return; }
+        if (current + endDelimiter.Length <= bodyBytes.Length && bodyBytes.Slice(current,endDelimiter.Length).SequenceEqual(endDelimiter)) return;
 
         current += delimiter.Length;
         // Skip trailing CRLF or spaces
@@ -203,8 +215,8 @@ public static class MimeParser
 
         while (current < bodyBytes.Length)
         {
-            int next = IndexOf(bodyBytes, delimiter, current);
-            if (next < 0) break;
+            int next = FindBoundary(bodyBytes, delimiter, current);
+            if (next < 0) { message.HasIncompleteParts = true; return; }
 
             // Extract part bytes between current and next (excluding preceding CRLF)
             int partLength = next - current;
@@ -221,7 +233,7 @@ public static class MimeParser
             {
                 ReadOnlySpan<byte> partSpan = bodyBytes.Slice(current, partLength);
                 int partHeaderEnd = FindHeaderBoundary(partSpan, 0, out int partBodyStart);
-                var partHeaders = ParseHeaders(partSpan, 0, partHeaderEnd);
+                var partHeaders = ParseBoundedHeaders(message, partSpan, partHeaderEnd);
                 ReadOnlySpan<byte> partBody = partSpan.Slice(partBodyStart);
 
                 ParseEntity(message, partHeaders, partBody, depth);
@@ -231,12 +243,52 @@ public static class MimeParser
             if (next + endDelimiter.Length <= bodyBytes.Length &&
                 bodyBytes.Slice(next, endDelimiter.Length).SequenceEqual(endDelimiter))
             {
-                break;
+                return;
             }
 
             current = next + delimiter.Length;
             current = SkipToNextLine(bodyBytes, current);
         }
+        message.HasIncompleteParts = true;
+    }
+
+    private static int FindBoundary(ReadOnlySpan<byte> bytes, ReadOnlySpan<byte> delimiter, int start)
+    {
+        for (int current = start; current <= bytes.Length - delimiter.Length;)
+        {
+            int candidate = IndexOf(bytes, delimiter, current); if (candidate < 0) return -1;
+            int tail = candidate + delimiter.Length;
+            if (tail + 1 < bytes.Length && bytes[tail] == '-' && bytes[tail + 1] == '-') tail += 2;
+            while (tail < bytes.Length && bytes[tail] is 32 or 9) tail++;
+            bool end = tail == bytes.Length || bytes[tail] == 10 || bytes[tail] == 13 && tail + 1 < bytes.Length && bytes[tail + 1] == 10;
+            if ((candidate == 0 || bytes[candidate - 1] == 10) && end) return candidate;
+            current = candidate + 1;
+        }
+        return -1;
+    }
+    private static byte[] DecodeAttachment(ReadOnlySpan<byte> bytes, string encoding)
+    {
+        if (encoding is "7bit" or "8bit" or "binary") return bytes.ToArray();
+        if (encoding == "base64")
+        {
+            foreach (byte value in bytes) if (value > 127) throw new InvalidDataException("Invalid attachment base64 bytes.");
+            try { return Convert.FromBase64String(Encoding.ASCII.GetString(bytes)); }
+            catch (FormatException error) { throw new InvalidDataException("Attachment base64 is invalid; no decoded attachment was accepted.", error); }
+        }
+        if (encoding == "quoted-printable")
+        {
+            for (int index = 0; index < bytes.Length; index++)
+            {
+                if (bytes[index] != '=') continue;
+                if (index + 1 < bytes.Length && bytes[index + 1] == 10) { index++; continue; }
+                if (index + 2 < bytes.Length && bytes[index + 1] == 13 && bytes[index + 2] == 10) { index += 2; continue; }
+                if (index + 2 >= bytes.Length || !Uri.IsHexDigit((char)bytes[index + 1]) || !Uri.IsHexDigit((char)bytes[index + 2]))
+                    throw new InvalidDataException("Attachment quoted-printable is invalid; no decoded attachment was accepted.");
+                index += 2;
+            }
+            return QuotedPrintable.Decode(bytes);
+        }
+        throw new InvalidDataException("Attachment transfer encoding is unsupported; no bytes were saved.");
     }
 
     private static void ExtractEmbeddedImage(
@@ -330,6 +382,14 @@ public static class MimeParser
     {
         Encoding enc = Rfc2047Decoder.ResolveEncoding(charset ?? "utf-8");
         return enc.GetString(bytes);
+    }
+
+    private static List<KeyValuePair<string,string>> ParseBoundedHeaders(ParsedMimeMessage message,ReadOnlySpan<byte> bytes,int end)
+    {
+        if(message.StrictAttachmentDecoding && end>64*1024)throw new InvalidDataException("Attachment MIME header section exceeds 64 KiB.");
+        var headers=ParseHeaders(bytes,0,end);
+        if(message.StrictAttachmentDecoding && headers.Count>256)throw new InvalidDataException("Attachment MIME entity exceeds 256 headers.");
+        return headers;
     }
 
     private static List<KeyValuePair<string, string>> ParseHeaders(ReadOnlySpan<byte> bytes, int start, int end)
@@ -484,6 +544,13 @@ public static class MimeParser
         var result = new List<string>();
         if (string.IsNullOrWhiteSpace(header)) return result;
 
+        // Parse mailbox syntax before decoding names: decoded/quoted commas belong to names, not new recipients.
+        try
+        {
+            var addresses = new System.Net.Mail.MailAddressCollection(); addresses.Add(header);
+            return addresses.Select(address => address.Address).ToList();
+        }
+        catch (FormatException) { /* Keep the existing permissive fallback for malformed/provider-specific headers. */ }
         string decoded = Rfc2047Decoder.Decode(header);
         var parts = decoded.Split(',');
         foreach (string part in parts)

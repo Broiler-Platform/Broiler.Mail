@@ -55,7 +55,7 @@ public sealed class InboxDensityTests
             list.ScrollIntoView(30);
             session.RenderFrame();
             int first = list.FirstVisibleIndex;
-            var reader = Descendants(shell.Window).OfType<ScrollableMessageText>().Single();
+            var reader = Descendants(shell.GetContent("inbox")).OfType<ScrollableMessageText>().Single();
             Assert.True(reader.Editor.SetEditorSelection(0, 4));
             var selection = reader.Editor.Selection;
             var body = model.Inbox.Body;

@@ -32,3 +32,8 @@ public interface IMailSender
     // Broiler-Human:        PENDING
     Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default);
 }
+
+public interface IProgressMailSender : IMailSender
+{
+    Task<SendResult> SendWithProgressAsync(AccountProfile account, MailDraft draft, Action<long> bytesSent, CancellationToken cancellationToken = default);
+}

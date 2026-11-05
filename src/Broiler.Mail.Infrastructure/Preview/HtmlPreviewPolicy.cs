@@ -56,11 +56,13 @@ public static class HtmlPreviewPolicy
     public static HtmlPreviewDocument Create(
         string html,
         IReadOnlyDictionary<string, MailEmbeddedImage>? embeddedImages,
-        bool allowRemoteImages = false)
+        bool allowRemoteImages = false,
+        bool approvedRemoteImagesOnly = false,
+        bool textAndFormattingOnly = false)
     {
         ArgumentNullException.ThrowIfNull(html);
         if (html.Length > MaximumHtmlCharacters) throw new ArgumentException("HTML exceeds the preview limit.");
-        string imageCsp = allowRemoteImages ? "img-src 'self' data: https: http:;" : "img-src 'self' data:;";
+        string imageCsp = allowRemoteImages && !approvedRemoteImagesOnly ? "img-src 'self' data: https: http:;" : "img-src 'self' data:;";
         var output = new StringBuilder("<!doctype html><html><head><meta charset=\"utf-8\"><meta http-equiv=\"Content-Security-Policy\" content=\"default-src 'none'; script-src 'none'; style-src 'unsafe-inline'; ")
             .Append(imageCsp)
             .Append(" font-src 'none'; connect-src 'none'; media-src 'none'; object-src 'none'; frame-src 'none'; child-src 'none'; worker-src 'none'; form-action 'none'; base-uri 'none'\"><meta name=\"referrer\" content=\"no-referrer\"><style>body{font:16px system-ui,sans-serif;line-height:1.5;margin:24px;overflow-wrap:anywhere;color:#202124;background:white}img{max-width:100%;height:auto;vertical-align:middle}table{border-collapse:collapse;max-width:100%}td,th{border:1px solid #ccc;padding:6px}blockquote{border-left:3px solid #aaa;padding-left:12px}pre{white-space:pre-wrap}a{color:#185abc}</style></head><body>");
@@ -85,6 +87,7 @@ public static class HtmlPreviewPolicy
                 if (!tag.IsEndTag && SuppressedTags.Contains(name)) { suppressed = name; continue; }
                 if (name == "img" && !tag.IsEndTag)
                 {
+                    if (textAndFormattingOnly) continue;
                     var src = tag.Attributes.FirstOrDefault(a => a.Name.Equals("src", StringComparison.OrdinalIgnoreCase))?.Value;
                     var alt = tag.Attributes.FirstOrDefault(a => a.Name.Equals("alt", StringComparison.OrdinalIgnoreCase))?.Value;
                     var width = tag.Attributes.FirstOrDefault(a => a.Name.Equals("width", StringComparison.OrdinalIgnoreCase))?.Value;
@@ -123,6 +126,10 @@ public static class HtmlPreviewPolicy
                                 hasEmbeddedImages = true;
                                 AppendImageTag(output, $"data:{downloaded.ContentType};base64,{Convert.ToBase64String(downloaded.Data)}", safeAlt, safeWidth, safeHeight);
                             }
+                            else if (approvedRemoteImagesOnly)
+                            {
+                                output.Append("<span>[Remote image unavailable]</span>");
+                            }
                             else
                             {
                                 AppendImageTag(output, WebUtility.HtmlEncode(uri.AbsoluteUri), safeAlt, safeWidth, safeHeight);
@@ -149,7 +156,7 @@ public static class HtmlPreviewPolicy
                 output.Append('<');
                 if (tag.IsEndTag) output.Append('/');
                 output.Append(name);
-                if (!tag.IsEndTag && name == "a")
+                if (!tag.IsEndTag && name == "a" && !textAndFormattingOnly)
                 {
                     var href = tag.Attributes.FirstOrDefault(attribute => attribute.Name.Equals("href", StringComparison.OrdinalIgnoreCase))?.Value;
                     if (TryExternalLink(href, out var uri))

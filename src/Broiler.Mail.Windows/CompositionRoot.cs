@@ -19,6 +19,7 @@ using Broiler.Mail.Application;
 using Broiler.Mail.Infrastructure.Mail;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.Mail.Windows.Services;
+using System.Diagnostics;
 
 namespace Broiler.Mail.Windows;
 
@@ -39,13 +40,31 @@ internal static class CompositionRoot
     public static MailApplication CreateApplication(string? dataDirectory = null)
     {
         dataDirectory ??= DefaultDataDirectory;
+        var profile = MailProfile.Open(dataDirectory);
         var credentials = new WindowsCredentialStore();
-        return new MailApplication(
-            new JsonAccountStore(Path.Combine(dataDirectory, "accounts.json")),
-            new JsonSettingsStore(Path.Combine(dataDirectory, "settings.json")),
-            new ImapMailReceiver(credentials),
-            new SmtpMailSender(credentials), credentials,
-            new JsonDraftStore(Path.Combine(dataDirectory, "drafts.json")), new ImapSentCopyWriter(credentials),
-            new SmtpConnectionTester(credentials));
+        try
+        {
+            var cache = new SqliteMailCache(profile.CachePath, profile.Manifest.CacheMaximumBytes);
+            cache.RepairAsync().GetAwaiter().GetResult();
+            var accounts = new JsonAccountCollectionStore(profile.DirectoryPath);
+            var storage = new ProfileStorageService(profile, cache);
+            return new MailApplication(
+                accounts,
+                new JsonSettingsStore(profile.SettingsPath),
+                new ImapMailReceiver(credentials, new MutationIntentJournal(profile.CachePath)),
+                new SmtpMailSender(credentials), credentials,
+                new JsonDraftStore(profile.DraftsPath), new ImapSentCopyWriter(credentials),
+                new SmtpConnectionTester(credentials), cache, profile,
+                storage, OpenProfile, new AccountRemovalService(accounts, storage, credentials), new JsonRecipientBook(Path.Combine(profile.DirectoryPath, "recipients.json")), new JsonOfflineFolderStore(Path.Combine(profile.DirectoryPath, "offline-folders.json")), new JsonAccountNavigationStore(Path.Combine(profile.DirectoryPath, "account-navigation.json")), new FileMessageSourceExports(profile.DirectoryPath, storage));
+        }
+        catch { profile.Dispose(); throw; }
+    }
+
+    private static void OpenProfile(string directory)
+    {
+        string executable = Path.Combine(AppContext.BaseDirectory, "Broiler.Mail.Windows.exe");
+        var start = new ProcessStartInfo(executable) { UseShellExecute = false };
+        start.ArgumentList.Add("--data-directory"); start.ArgumentList.Add(directory);
+        using var process = Process.Start(start) ?? throw new IOException("A new Mail window could not be started.");
     }
 }

@@ -16,6 +16,7 @@
 // GENERATED - DO NOT EDIT MANUALLY
 
 using System.Net.Security;
+using Broiler.Mail.Infrastructure.Persistence;
 using System.Net.Sockets;
 using System.Text;
 using Broiler.Mail.Core.Accounts;
@@ -30,7 +31,7 @@ namespace Broiler.Mail.Infrastructure.Mail;
 // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=C55898
 // Broiler-Falsified-If: the IMAP password is sent over a connection whose server certificate failed platform validation or that never upgraded to TLS
 // Broiler-Human:        PENDING
-public sealed class ImapMailReceiver : IMailReceiver
+public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadStateWriter, IMailStarStateWriter, IMailMover, IMailPermanentDeleter, IMailSourceReceiver, IStreamingMailSourceReceiver, IMailMailboxSnapshotReceiver
 {
     static ImapMailReceiver()
     {
@@ -43,25 +44,27 @@ public sealed class ImapMailReceiver : IMailReceiver
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=3C945E
     // Broiler-Falsified-If: a message body of more than 2 MiB is transferred in full and passed to the MIME decoder
     // Broiler-Human:        PENDING
-    public const int MaximumMessageBytes = 2 * 1024 * 1024;
+    public const int MaximumMessageBytes = IStreamingMessageSourceExports.MaximumBytes;
     private readonly ICredentialStore _credentials;
     private readonly Func<ImapProtocolClient> _clientFactory;
     private readonly TimeSpan _timeout;
+    private readonly MutationIntentJournal? _intents;
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=8F6932
     // Broiler-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
     // Broiler-Human:        PENDING
-    public ImapMailReceiver(ICredentialStore credentials) : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20)) { }
+    public ImapMailReceiver(ICredentialStore credentials, MutationIntentJournal? intents = null) : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20), intents) { }
 
     // Test-only seam for a fixture certificate and a short deadline; production uses platform certificate validation.
     // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=0F261A
     // Broiler-Falsified-If: code outside the test assembly reaches this constructor with a client factory that replaces certificate validation
     // Broiler-Human:        PENDING
-    internal ImapMailReceiver(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout)
-        : this(credentials, () => new ImapProtocolClient(certValidator), timeout) { }
+    internal ImapMailReceiver(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout, MutationIntentJournal? intents = null)
+        : this(credentials, () => new ImapProtocolClient(certValidator), timeout, intents) { }
 
-    internal ImapMailReceiver(ICredentialStore credentials, Func<ImapProtocolClient> clientFactory, TimeSpan timeout)
+    internal ImapMailReceiver(ICredentialStore credentials, Func<ImapProtocolClient> clientFactory, TimeSpan timeout, MutationIntentJournal? intents = null)
     {
+        _intents = intents;
         _credentials = credentials ?? throw new ArgumentNullException(nameof(credentials));
         _clientFactory = clientFactory ?? throw new ArgumentNullException(nameof(clientFactory));
         _timeout = timeout;
@@ -142,62 +145,285 @@ public sealed class ImapMailReceiver : IMailReceiver
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=53B5C5
     // Broiler-Falsified-If: a FETCH reply that omits the envelope or UID of a message in the requested range yields a page instead of the inbox-changed error
     // Broiler-Human:        PENDING
+    public async Task<ReadStateChangeResult> SetReadStateAsync(AccountProfile account, MailMessageKey key, bool isRead,
+        CancellationToken cancellationToken = default)
+    {
+        var result = await SetFlagStateAsync(account, key, ImapMutableFlag.Seen, isRead, cancellationToken).ConfigureAwait(false);
+        return new(result.Key, result.IsSet, result.Status, result.Explanation);
+    }
+
+    public Task<MailFlagChangeResult> SetStarStateAsync(AccountProfile account, MailMessageKey key, bool isStarred,
+        CancellationToken cancellationToken = default) => SetFlagStateAsync(account, key, ImapMutableFlag.Flagged, isStarred, cancellationToken);
+
+    private async Task<MailFlagChangeResult> SetFlagStateAsync(AccountProfile account, MailMessageKey key, ImapMutableFlag flag, bool isSet, CancellationToken cancellationToken)
+    {
+        if (_intents is null) return await SetFlagCoreAsync(account, key, flag, isSet, cancellationToken).ConfigureAwait(false);
+        string name = flag switch { ImapMutableFlag.Seen => "seen", ImapMutableFlag.Flagged => "flagged", _ => throw new ArgumentOutOfRangeException(nameof(flag)) };
+        using var active = _intents.Enter(key);
+        var id = await _intents.BeginAsync(key, null, cancellationToken, name, isSet).ConfigureAwait(false);
+        var result = await SetFlagCoreAsync(account, key, flag, isSet, cancellationToken).ConfigureAwait(false);
+        if (result.Status == MailFlagChangeStatus.Confirmed)
+            await _intents.Receipts.RecordFlagAsync(key, name, isSet, id, CancellationToken.None).ConfigureAwait(false);
+        if (result.Status != MailFlagChangeStatus.Unknown)
+            await _intents.CompleteAsync(id, CancellationToken.None, keepPending: result.Status == MailFlagChangeStatus.Confirmed).ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<MailFlagChangeResult> SetFlagCoreAsync(AccountProfile account, MailMessageKey key, ImapMutableFlag flag, bool isSet,
+        CancellationToken cancellationToken = default)
+    {
+        if (key.AccountId != account.Id || key.Uid == 0 || key.UidValidity == 0 || ImapMailboxName.Validate(key.MailboxId) != key.MailboxId)
+            throw new ArgumentException("The message identity must belong to this account and canonical mailbox.", nameof(key));
+        string stateName = flag == ImapMutableFlag.Seen ? "read state" : "starred state";
+        bool attempted = false;
+        MailFlagChangeResult Outcome(MailFlagChangeStatus status, string explanation) => new(key, isSet, status, explanation);
+        try
+        {
+            return await WithConnectionAsync(account, async (client, token) =>
+            {
+                var selected = await client.SelectForFlagChangeAsync(key.MailboxId, flag, token).ConfigureAwait(false);
+                if (selected.UidValidity != key.UidValidity)
+                    return Outcome(MailFlagChangeStatus.NotApplied, $"Mailbox identity changed. Receive mail before changing {stateName}.");
+                if (!selected.AllowsFlag)
+                    return Outcome(MailFlagChangeStatus.NotApplied, $"The server does not allow permanent {stateName} changes in this mailbox.");
+                bool? before = await client.GetFlagStateAsync(key.Uid, flag, token).ConfigureAwait(false);
+                if (before is null) return Outcome(MailFlagChangeStatus.NotApplied, "The message is no longer available. Receive mail to refresh.");
+                if (before == isSet) return Outcome(MailFlagChangeStatus.Confirmed, $"The server already confirms the requested {stateName}.");
+                token.ThrowIfCancellationRequested();
+                attempted = true;
+                try { await client.StoreFlagStateAsync(key.Uid, flag, isSet, token).ConfigureAwait(false); }
+                catch (ImapCommandException)
+                { return Outcome(MailFlagChangeStatus.NotApplied, $"The server rejected the {stateName} change. Receive mail to refresh."); }
+                bool? after = await client.GetFlagStateAsync(key.Uid, flag, token).ConfigureAwait(false);
+                return after == isSet ? Outcome(MailFlagChangeStatus.Confirmed, $"{stateName} confirmed by the server.") :
+                    Outcome(MailFlagChangeStatus.Unknown, $"The requested {stateName} could not be verified. Receive mail to check the server; no change is queued for retry.");
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is MailConnectionException or OperationCanceledException or IOException or ArgumentException)
+        {
+            return attempted ? Outcome(MailFlagChangeStatus.Unknown,
+                $"The {stateName} acknowledgement was lost or canceled. The server may have applied it. Receive mail to check; no change is queued for retry.") :
+                Outcome(MailFlagChangeStatus.NotApplied, $"{stateName} was not changed. Check the account and connection, then receive mail before trying again.");
+        }
+    }
+
+    public async Task<MailMoveResult> MoveAsync(AccountProfile account, MailMessageKey source, string destinationMailboxId, CancellationToken cancellationToken = default)
+    {
+        if (_intents is null) return await MoveCoreAsync(account, source, destinationMailboxId, cancellationToken).ConfigureAwait(false);
+        using var active = _intents.Enter(source);
+        var id = await _intents.BeginAsync(source, ImapMailboxName.Validate(destinationMailboxId), cancellationToken).ConfigureAwait(false);
+        var result = await MoveCoreAsync(account, source, destinationMailboxId, cancellationToken).ConfigureAwait(false);
+        if (result.Status == MailMoveStatus.Confirmed && (result.Destination is not { } target || target.AccountId != source.AccountId || target.MailboxId != ImapMailboxName.Validate(destinationMailboxId) || target.Uid == 0 || target.UidValidity == 0))
+            throw new InvalidDataException("The confirmed move mapping is invalid; the intent remains unresolved.");
+        if (result.Status == MailMoveStatus.Confirmed)
+            await _intents.Receipts.ConfirmIntentAsync(id, source, result.Destination, CancellationToken.None).ConfigureAwait(false);
+        if (result.Status != MailMoveStatus.Unknown) await _intents.CompleteAsync(id, CancellationToken.None, keepPending: result.Status == MailMoveStatus.Confirmed).ConfigureAwait(false);
+        return result;
+    }
+    public async Task<MailDeleteResult> PermanentlyDeleteAsync(AccountProfile account, MailMessageKey key, CancellationToken cancellationToken = default)
+    {
+        if (_intents is null) return await DeleteCoreAsync(account, key, cancellationToken).ConfigureAwait(false);
+        using var active = _intents.Enter(key);
+        var id = await _intents.BeginAsync(key, null, cancellationToken).ConfigureAwait(false);
+        var result = await DeleteCoreAsync(account, key, cancellationToken).ConfigureAwait(false);
+        if (result.Status == MailDeleteStatus.Confirmed)
+            await _intents.Receipts.ConfirmIntentAsync(id, key, null, CancellationToken.None).ConfigureAwait(false);
+        if (result.Status != MailDeleteStatus.Unknown) await _intents.CompleteAsync(id, CancellationToken.None, keepPending: result.Status == MailDeleteStatus.Confirmed).ConfigureAwait(false);
+        return result;
+    }
+
+    private async Task<MailMoveResult> MoveCoreAsync(AccountProfile account, MailMessageKey source, string destinationMailboxId,
+        CancellationToken cancellationToken = default)
+    {
+        if (source.AccountId != account.Id || source.Uid == 0 || source.UidValidity == 0 ||
+            ImapMailboxName.Validate(source.MailboxId) != source.MailboxId)
+            throw new ArgumentException("The source identity must belong to the account and canonical mailbox.", nameof(source));
+        destinationMailboxId = ImapMailboxName.Validate(destinationMailboxId);
+        bool attempted = false;
+        MailMoveResult Outcome(MailMoveStatus status, string explanation, MailMessageKey? destination = null) =>
+            new(source, destinationMailboxId, status, destination, explanation);
+        if (source.MailboxId == destinationMailboxId)
+            return Outcome(MailMoveStatus.NotApplied, "Choose a different destination folder.");
+        try
+        {
+            return await WithConnectionAsync(account, async (client, token) =>
+            {
+                // LIST refreshes post-authentication capabilities and verifies exact destination identity.
+                var folders = await client.ListFoldersAsync(token).ConfigureAwait(false);
+                if (!client.Capabilities.Contains("MOVE", StringComparer.OrdinalIgnoreCase))
+                    return Outcome(MailMoveStatus.NotApplied, "The server does not advertise MOVE. No copy/delete fallback was attempted.");
+                if (!folders.Any(folder => folder.MailboxId == destinationMailboxId && folder.IsSelectable))
+                    return Outcome(MailMoveStatus.NotApplied, "The destination was not found as a selectable server folder. Refresh folders and check its exact name.");
+                var selected = await client.SelectForMoveAsync(source.MailboxId, token).ConfigureAwait(false);
+                if (selected.UidValidity != source.UidValidity || !selected.AllowsFlag)
+                    return Outcome(MailMoveStatus.NotApplied, "The source mailbox identity changed or is not writable. Receive mail before moving it.");
+                if (await client.GetFlagStateAsync(source.Uid, ImapMutableFlag.Seen, token).ConfigureAwait(false) is null)
+                    return Outcome(MailMoveStatus.NotApplied, "The source message is no longer available. Receive mail to refresh.");
+                token.ThrowIfCancellationRequested();
+                attempted = true;
+                var receipt = await client.MoveUidAsync(source.Uid, destinationMailboxId, token).ConfigureAwait(false);
+                if (!receipt.IsOk || receipt.DestinationValidity is not { } epoch || receipt.DestinationUid is not { } uid)
+                    return Outcome(MailMoveStatus.Unknown, "The move was not fully confirmed with a destination UID. Check both folders; no move is queued for retry.");
+                if (await client.GetFlagStateAsync(source.Uid, ImapMutableFlag.Seen, token).ConfigureAwait(false) is not null)
+                    return Outcome(MailMoveStatus.Unknown, "The source message remains after the move acknowledgement. Check both folders; no move is queued for retry.");
+                var destination = await client.ExamineMailboxAsync(destinationMailboxId, token).ConfigureAwait(false);
+                if (destination.UidValidity != epoch ||
+                    await client.GetFlagStateAsync(uid, ImapMutableFlag.Seen, token).ConfigureAwait(false) is null)
+                    return Outcome(MailMoveStatus.Unknown, "The destination identity could not be verified. Check both folders; no move is queued for retry.");
+                return Outcome(MailMoveStatus.Confirmed, "Move confirmed in both source and destination mailboxes.",
+                    new(account.Id, destinationMailboxId, epoch, uid));
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is MailConnectionException or OperationCanceledException or IOException or ArgumentException)
+        {
+            return attempted ? Outcome(MailMoveStatus.Unknown,
+                "The move acknowledgement or verification was lost or canceled. The server may have moved the message. Check both folders; no move is queued for retry.") :
+                Outcome(MailMoveStatus.NotApplied, "No move was sent. Check the account, connection and folder identities before trying again.");
+        }
+    }
+
+    private async Task<MailDeleteResult> DeleteCoreAsync(AccountProfile account, MailMessageKey key, CancellationToken cancellationToken = default)
+    {
+        if (key.AccountId != account.Id || key.Uid == 0 || key.UidValidity == 0 || ImapMailboxName.Validate(key.MailboxId) != key.MailboxId)
+            throw new ArgumentException("The confirmed message must belong to this account and canonical mailbox.", nameof(key));
+        bool attempted = false;
+        MailDeleteResult Outcome(MailDeleteStatus status, string explanation) => new(key, status, explanation);
+        try
+        {
+            return await WithConnectionAsync(account, async (client, token) =>
+            {
+                await client.RefreshMutationCapabilitiesAsync(token).ConfigureAwait(false);
+                if (!client.Capabilities.Contains("UIDPLUS", StringComparer.OrdinalIgnoreCase))
+                    return Outcome(MailDeleteStatus.NotApplied, "The server does not advertise UIDPLUS. Permanent deletion was not sent; no mailbox-wide fallback is used.");
+                var selected = await client.SelectForFlagChangeAsync(key.MailboxId, ImapMutableFlag.Deleted, token).ConfigureAwait(false);
+                if (selected.UidValidity != key.UidValidity || !selected.AllowsFlag)
+                    return Outcome(MailDeleteStatus.NotApplied, "The mailbox identity changed or deletion is not permitted. Receive mail before trying again.");
+                bool? deleted = await client.GetFlagStateAsync(key.Uid, ImapMutableFlag.Deleted, token).ConfigureAwait(false);
+                if (deleted is null) return Outcome(MailDeleteStatus.NotApplied, "The message is no longer present. No deletion was sent; refresh the folder.");
+                token.ThrowIfCancellationRequested(); attempted = true;
+                if (!deleted.Value)
+                {
+                    await client.StoreFlagStateAsync(key.Uid, ImapMutableFlag.Deleted, true, token).ConfigureAwait(false);
+                    if (await client.GetFlagStateAsync(key.Uid, ImapMutableFlag.Deleted, token).ConfigureAwait(false) != true)
+                        return Outcome(MailDeleteStatus.Unknown, "Deletion marking could not be verified. Refresh the folder; no deletion is queued for retry.");
+                }
+                await client.ExpungeUidAsync(key.Uid, token).ConfigureAwait(false);
+                return await client.GetFlagStateAsync(key.Uid, ImapMutableFlag.Deleted, token).ConfigureAwait(false) is null
+                    ? Outcome(MailDeleteStatus.Confirmed, "Permanent deletion of the confirmed message was verified on the server.")
+                    : Outcome(MailDeleteStatus.Unknown, "The message remains after the deletion acknowledgement. Refresh the folder; no deletion is queued for retry.");
+            }, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception error) when (error is MailConnectionException or OperationCanceledException or IOException or ArgumentException)
+        {
+            return attempted ? Outcome(MailDeleteStatus.Unknown,
+                "Deletion was interrupted or not fully acknowledged. The message may be gone or marked for deletion. Refresh the folder; no deletion is queued for retry.") :
+                Outcome(MailDeleteStatus.NotApplied, "No deletion was sent. Check the account, connection and message identity before trying again.");
+        }
+    }
+
+    public Task<IReadOnlyList<MailFolder>> GetFoldersAsync(AccountProfile account, CancellationToken cancellationToken = default) =>
+        WithConnectionAsync(account, (client, token) => client.ListFoldersAsync(token), cancellationToken);
+
     public Task<MailInboxPage> GetInboxAsync(AccountProfile account, int maximumCount,
         MailInboxCursor? older = null, CancellationToken cancellationToken = default)
+        => GetMailboxAsync(account, "INBOX", maximumCount, older, cancellationToken);
+
+    public Task<MailInboxPage> GetMailboxAsync(AccountProfile account, string mailboxId, int maximumCount,
+        MailInboxCursor? older = null, CancellationToken cancellationToken = default)
     {
+        mailboxId = ImapMailboxName.Validate(mailboxId);
         if (maximumCount is < 1 or > MaximumPageSize) throw new ArgumentOutOfRangeException(nameof(maximumCount));
-        if (older is not null && (older.AccountId != account.Id || older.NextIndex < 0 || older.NextIndex >= older.MessageCount))
+        if (older is not null && (older.AccountId != account.Id || older.MailboxId != mailboxId || older.NextIndex < 0 || older.NextIndex >= older.MessageCount))
             throw new ArgumentException("The inbox continuation does not belong to this request.", nameof(older));
         return WithConnectionAsync(account, async (client, token) =>
         {
-            var inbox = await client.ExamineInboxAsync(token).ConfigureAwait(false);
+            var inbox = await client.ExamineMailboxAsync(mailboxId, token).ConfigureAwait(false);
             int count = inbox.Count;
             uint validity = inbox.UidValidity;
             uint? nextUid = inbox.UidNext;
             if (older is not null && (older.UidValidity != validity || older.MessageCount != count || older.UidNext != nextUid))
                 throw InboxChanged();
-            if (count == 0) return new MailInboxPage([], null);
+            if (count == 0) return new MailInboxPage([], null) { Mailbox = new(account.Id, mailboxId, validity) };
             int end = older?.NextIndex ?? count - 1;
             int start = Math.Max(0, end - maximumCount + 1);
-            var summaries = await client.FetchSummariesAsync(start + 1, end + 1, token).ConfigureAwait(false);
+            var summaries = await client.FetchSummariesAsync(start + 1, end + 1, token, boundedSnapshot: true).ConfigureAwait(false);
 
             var requested = summaries.Where(item => (item.SequenceNumber - 1) >= start && (item.SequenceNumber - 1) <= end).ToArray();
             if (requested.Length != end - start + 1 || requested.Any(item => item.Uid == 0 || item.Subject is null && item.From is null))
                 throw InboxChanged();
             var messages = requested.OrderByDescending(item => item.Uid).Select(item => new MailMessageSummary
             {
-                Key = new(account.Id, "INBOX", validity, item.Uid),
+                Key = new(account.Id, mailboxId, validity, item.Uid),
                 Sender = MessageTextDecoder.Header(item.Sender ?? item.From, "(Unknown sender)"),
                 Subject = MessageTextDecoder.Header(item.Subject, "(No subject)"),
                 ReceivedAt = item.InternalDate ?? item.EnvelopeDate,
-                IsRead = item.IsSeen,
+                IsRead = item.IsSeen, IsStarred = item.IsFlagged,
             }).ToArray();
-            return new MailInboxPage(messages, start == 0 ? null : new(account.Id, validity, nextUid, count, start - 1));
+            return new MailInboxPage(messages, start == 0 ? null : new(account.Id, validity, nextUid, count, start - 1) { MailboxId = mailboxId })
+            { Mailbox = new(account.Id, mailboxId, validity) };
         }, cancellationToken);
     }
 
     // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=AA9481
     // Broiler-Falsified-If: a message larger than 2 MiB reaches MessageTextDecoder.DecodeAsync instead of being refused with the reading-limit error
     // Broiler-Human:        PENDING
-    public Task<MailMessageBody> GetBodyAsync(
-        AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default)
+    public async Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default)
     {
-        if (message.AccountId != account.Id || message.MailboxId != "INBOX" || message.Uid == 0 || message.UidValidity == 0)
-            throw new ArgumentException("The message does not belong to this account's inbox.", nameof(message));
-        return WithConnectionAsync(account, async (client, token) =>
+        var source = await ReadSourceAsync(account, message, false, cancellationToken).ConfigureAwait(false);
+        return MessageTextDecoder.DecodeReceived(message, source.Bytes, cancellationToken);
+    }
+
+    public Task<MailMessageSource> GetSourceAsync(AccountProfile account, MailMessageKey message, CancellationToken token = default) => ReadSourceAsync(account, message, true, token);
+
+    public Task<int> CopySourceAsync(AccountProfile account, MailMessageKey message, Stream destination, int maximumBytes,
+        Action<int, int>? progress = null, CancellationToken token = default)
+    {
+        string mailboxId = SourceMailbox(account, message);
+        if (maximumBytes is < 1 or > IStreamingMessageSourceExports.MaximumBytes) throw new ArgumentOutOfRangeException(nameof(maximumBytes));
+        return WithConnectionAsync(account, async (client, cancellation) =>
         {
-            var inbox = await client.ExamineInboxAsync(token).ConfigureAwait(false);
-            if (inbox.UidValidity != message.UidValidity) throw InboxChanged();
-
-            // Partial BODY.PEEK bounds the transfer and leaves server flags unchanged. One extra byte detects overflow.
-            using var stream = await client.GetBodyStreamAsync(message.Uid, 0, MaximumMessageBytes + 1, token, (transferred, total) =>
+            var mailbox = await client.ExamineMailboxAsync(mailboxId, cancellation).ConfigureAwait(false);
+            if (mailbox.UidValidity != message.UidValidity) throw InboxChanged();
+            long expected = await client.GetMessageSizeAsync(message.Uid, cancellation).ConfigureAwait(false);
+            if (expected < 1 || expected > maximumBytes)
+                throw new MailConnectionException("The original is empty or exceeds the available export limit.");
+            int lastReport = 0;
+            return await client.CopyBodyAsync(message.Uid, 0, (int)expected, destination, cancellation, (transferred, total) =>
             {
-                if (transferred > MaximumMessageBytes || total > MaximumMessageBytes + 1) throw MessageTooLarge();
-            }).ConfigureAwait(false);
+                if (transferred != total && transferred - lastReport < 256 * 1024) return;
+                lastReport = (int)transferred;
+                progress?.Invoke(lastReport, (int)total);
+            }, expectedLength: (int)expected).ConfigureAwait(false);
+        }, token);
+    }
 
-            if (stream.Length > MaximumMessageBytes) throw MessageTooLarge();
-            return await MessageTextDecoder.DecodeAsync(message, stream, token).ConfigureAwait(false);
-        }, cancellationToken);
+    private static string SourceMailbox(AccountProfile account, MailMessageKey message)
+    {
+        if (message.AccountId != account.Id || message.Uid == 0 || message.UidValidity == 0)
+            throw new ArgumentException("The message does not belong to this account's mailbox.", nameof(message));
+        var mailboxId = ImapMailboxName.Validate(message.MailboxId);
+        if (mailboxId != message.MailboxId) throw new ArgumentException("Use the canonical INBOX identity.", nameof(message));
+        return mailboxId;
+    }
+
+    private Task<MailMessageSource> ReadSourceAsync(AccountProfile account, MailMessageKey message, bool verifyComplete, CancellationToken token)
+    {
+        string mailboxId = SourceMailbox(account, message);
+        int maximum = verifyComplete ? MailMessageSource.MaximumBytes : MaximumMessageBytes;
+        return WithConnectionAsync(account, async (client, cancellation) =>
+        {
+            var mailbox = await client.ExamineMailboxAsync(mailboxId, cancellation).ConfigureAwait(false);
+            if (mailbox.UidValidity != message.UidValidity) throw InboxChanged();
+            long? expected = verifyComplete ? await client.GetMessageSizeAsync(message.Uid, cancellation).ConfigureAwait(false) : null;
+            if (expected > maximum) throw MessageTooLarge(maximum);
+            using var stream = new MemoryStream(expected is { } length ? (int)length : 0);
+            await client.CopyBodyAsync(message.Uid, 0, maximum + 1, stream, cancellation, (transferred, total) =>
+            {
+                if (transferred > maximum || total > maximum) throw MessageTooLarge(maximum);
+            }).ConfigureAwait(false);
+            if (expected is not null && stream.Length != expected) throw new MailConnectionException("Original message source was incomplete or changed size; no complete source was accepted. Retry explicitly.");
+            cancellation.ThrowIfCancellationRequested(); return new MailMessageSource(message, stream.ToArray());
+        }, token);
     }
 
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=90B19F
@@ -206,5 +432,5 @@ public sealed class ImapMailReceiver : IMailReceiver
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=7B28BA
     // Broiler-Falsified-If: the reading limit stated in the message differs from MaximumMessageBytes
     // Broiler-Human:        PENDING
-    private static MailConnectionException MessageTooLarge() => new("This message exceeds the version 1 reading limit of 2 MiB (including attachments).");
+    private static MailConnectionException MessageTooLarge(int maximum) => new($"This message exceeds the {maximum / (1024 * 1024)} MiB limit (including attachments).");
 }

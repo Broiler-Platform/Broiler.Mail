@@ -2,6 +2,12 @@
 
 Status: content policy implemented; process isolation pending. Date: 2026-09-30. Extends decisions 0001–0004.
 
+The forward presentation design is superseded by [decision 0008](0008-inline-reader-and-containment.md):
+HTML belongs in the default reading pane. The separate window described here is the
+historical implementation, retained for measurement tools. Windows' normal reader
+now embeds the same restricted surface. Content restrictions and the containment
+release gate remain.
+
 Implement the version 2 HTML preview milestone using the native Broiler ecosystem
 component `Broiler.HTML` (`Broiler.HTML.Image` / `Broiler.HTML.Core`) hosted in a
 native `Direct2DWindow` behind the `IHtmlPreviewHost` boundary. This runs in the mail

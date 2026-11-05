@@ -1,0 +1,2 @@
+PASS Tls: IMAP bounded read/body + SMTP accepted/private-Bcc over pinned loopback TLS.
+PASS StartTls: IMAP bounded read/body + SMTP accepted/private-Bcc over pinned loopback TLS.

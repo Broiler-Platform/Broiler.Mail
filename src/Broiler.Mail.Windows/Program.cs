@@ -69,6 +69,16 @@ internal static class Program
         try { BImageCodecs.Use(new MediaCodecCatalog(ManagedImageCodecs.CreateCodecs())); }
         catch (InvalidOperationException) { }
         GlobalExceptionHandler.Install();
+        if (args is ["--profile-smoke-reopen", var fixtureId] && Guid.TryParseExact(fixtureId, "N", out var fixtureGuid))
+        {
+            try
+            {
+                using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(15));
+                ProfileSmokeCheck.ReopenAsync(new(fixtureGuid), timeout.Token).GetAwaiter().GetResult();
+                return 0;
+            }
+            catch { return 1; }
+        }
         bool smoke = args.SequenceEqual(["--smoke-test"]);
         bool demo = DemoOptions.TryParse(args, out var demoOptions);
         bool customDirectory = args.Length == 2 && args[0] == "--data-directory" && !string.IsNullOrWhiteSpace(args[1]);
@@ -89,8 +99,11 @@ internal static class Program
             if (smoke)
             {
                 // The smoke check never reads or creates the user's application data.
+                ProfileSmokeCheck.RunAsync(separateProcess: true).GetAwaiter().GetResult();
+                HtmlRasterSmokeCheck.Run();
+                RemoteImageBrokerSmokeCheck.RunAsync().GetAwaiter().GetResult();
                 string isolatedPath = Path.Combine(Path.GetTempPath(), "Broiler.Mail.Smoke", Guid.NewGuid().ToString("N"));
-                var smokeApplication = CompositionRoot.CreateApplication(isolatedPath);
+                using var smokeApplication = CompositionRoot.CreateApplication(isolatedPath);
                 smokeApplication.InitializeAsync().GetAwaiter().GetResult();
                 using var shell = smokeApplication.CreateShell();
                 ShellSmokeCheck.Run(shell);
@@ -98,7 +111,7 @@ internal static class Program
             }
 
             string dataDirectory = customDirectory ? Path.GetFullPath(args[1]) : CompositionRoot.DefaultDataDirectory;
-            var application = demo ? DemoApplication.Create(demoOptions) : CompositionRoot.CreateApplication(dataDirectory);
+            using var application = demo ? DemoApplication.Create(demoOptions) : CompositionRoot.CreateApplication(dataDirectory);
             // Before the window exists, complete initialization without changing the STA thread.
             application.InitializeAsync().GetAwaiter().GetResult();
             // The same policy the running window applies live: system high contrast first, then the saved choice.

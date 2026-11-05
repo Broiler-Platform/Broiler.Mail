@@ -104,6 +104,17 @@ jobs:
       - name: Publish and smoke-test
         shell: pwsh
         run: ./scripts/Publish-Windows.ps1 -Runtime '${{ matrix.runtime }}' -Variant '${{ matrix.variant }}' -Version $env:VERSION
+      - name: NativeAOT storage, protocol and HTTP-session acceptance
+        if: matrix.variant == 'self-contained'
+        shell: pwsh
+        run: ./scripts/Confirm-M0Probes.ps1 -Runtime '${{ matrix.runtime }}'
+      - name: Upload M0 acceptance evidence
+        if: always() && matrix.variant == 'self-contained'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: m0-${{ matrix.runtime }}-${{ env.VERSION }}
+          path: artifacts/m0/**
+          if-no-files-found: warn
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: broiler-mail-${{ matrix.runtime }}-${{ matrix.variant }}-${{ env.VERSION }}

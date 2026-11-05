@@ -1,9 +1,16 @@
 # Broiler.Mail roadmap
 
-Current implementation and acceptance status for every roadmap is consolidated in
+The active forward plan is the [product completion roadmap](product-completion-roadmap.md),
+updated 2 November 2026. It prioritizes durable profiles/downloaded mail, inline HTML,
+multiple accounts, and NativeAOT release coverage, with implementation slices and
+acceptance gates. Its delivery order supersedes the later milestones below.
+
+## Historical milestone plan
+
+Historical implementation and acceptance status through 5 October is consolidated in
 the [5 October status](roadmap-status-2026-10-05.md), which updates the
-[4 October audit](roadmap-status-2026-10-04.md). The version scopes below remain
-the product plan; historical component observations are not current package claims.
+[4 October audit](roadmap-status-2026-10-04.md). The version scopes below preserve
+the original plan; historical component observations are not current package claims.
 
 Status: version 1 implementation is complete and packaged for Windows x64.
 Automated acceptance and native demo checks passed. The user deferred live-provider

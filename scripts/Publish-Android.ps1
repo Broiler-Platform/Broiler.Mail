@@ -20,6 +20,16 @@ $arguments = @('publish', (Join-Path $root 'src/Broiler.Mail.Android/Broiler.Mai
 if ($Runtime -ne 'all') { $arguments += "-p:BroilerAndroidAbis=$Runtime" }
 & dotnet @arguments
 if ($LASTEXITCODE -ne 0) { throw 'Android publish failed.' }
+$assetsPath = Join-Path $root 'src/Broiler.Mail.Android/obj/project.assets.json'
+if ($Runtime -eq 'all') {
+    $assets = Get-Content -LiteralPath $assetsPath -Raw | ConvertFrom-Json
+    $selectedRuntimes = @($assets.targets.psobject.Properties.Name | Where-Object { $_ -match '/android-[^/]+$' } | ForEach-Object { ($_ -split '/')[-1] } | Sort-Object -Unique)
+    if ($selectedRuntimes.Count -eq 0) { throw 'No restored Android runtime graphs to verify.' }
+}
+else { $selectedRuntimes = @($Runtime) }
+foreach ($selectedRuntime in $selectedRuntimes) {
+    & "$PSScriptRoot/Confirm-NativeDependencies.ps1" -AssetsPath $assetsPath -Runtime $selectedRuntime
+}
 $package = Get-ChildItem -LiteralPath $destination -Filter "*-Signed.$Format" | Select-Object -First 1
 if (-not $package) { throw "No signed $Format was produced." }
 $target = Join-Path $root "artifacts/Broiler.Mail-$Version-$Runtime.$Format"

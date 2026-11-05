@@ -43,10 +43,59 @@ internal sealed class LocalImapServer : IAsyncDisposable
     public ConcurrentQueue<string> MailCommands { get; } = new();
     public List<FixtureMessage> Messages { get; } = [];
     public uint UidValidity { get; set; } = 7;
+    public int SnapshotCensusCount { get; private set; }
+    public Func<int, string?>? SnapshotCensusResponse { get; set; }
+    public Action<int>? BeforeSnapshotCensus { get; set; }
+    public Action<int, int>? BeforeSnapshotHeaderFetch { get; set; }
+    public bool OmitSnapshotFlags { get; set; }
+    public string? HeaderResponseOverride { get; set; }
+    public long? SourceReportedSize { get; set; }
+    public byte[]? SourceOctets { get; set; }
+    public uint? BodyResponseUid { get; set; }
+    public int BodyResponseOffset { get; set; }
+    public int? DeclaredBodyLiteralLength { get; set; }
+    public bool BodyUidAfterLiteral { get; set; }
+    public bool OmitBodyUid { get; set; }
+    public bool DuplicateBodyLiteral { get; set; }
+    public bool InvalidBodyEnding { get; set; }
     public bool DisconnectOnFetch { get; set; }
     public bool MalformedFetch { get; set; }
     public bool StallOnFetch { get; set; }
+    public string? FolderListResponse { get; set; }
+    public bool AdvertiseSpecialUse { get; set; }
+    public bool RejectFolderList { get; set; }
     public bool MissingSentFolder { get; set; }
+    private string? _movedMailboxWireName;
+    public bool AdvertiseMove { get; set; }
+    public string MoveDestinationWireName { get; set; } = "Archive";
+    public uint MoveDestinationValidity { get; set; } = 9;
+    public uint MoveDestinationUid { get; set; } = 900;
+    public List<FixtureMessage> MovedMessages { get; } = [];
+    public int MoveCount { get; private set; }
+    public bool RejectMove { get; set; }
+    public bool DropAfterMove { get; set; }
+    public bool IgnoreMove { get; set; }
+    public bool KeepSourceAfterMove { get; set; }
+    public bool TaggedMoveReceipt { get; set; }
+    public bool MissingMoveReceipt { get; set; }
+    public bool MissingMoveDestination { get; set; }
+    public string? MoveReceiptOverride { get; set; }
+    public bool ReadOnlySelection { get; set; }
+    public bool AdvertiseUidPlus { get; set; }
+    public bool AllowDeletedChanges { get; set; } = true;
+    public bool RejectUidExpunge { get; set; }
+    public bool DropAfterUidExpunge { get; set; }
+    public bool IgnoreUidExpunge { get; set; }
+    public bool DropAfterDeleteMark { get; set; }
+    public int UidExpungeCount { get; private set; }
+    public int DeleteMarkCount { get; private set; }
+    public bool AllowSeenChanges { get; set; } = true;
+    public bool AllowStarChanges { get; set; } = true;
+    public bool RejectReadStateStore { get; set; }
+    public bool DropAfterReadStateStore { get; set; }
+    public bool IgnoreReadStateStore { get; set; }
+    public bool RemoveAfterReadStateStore { get; set; }
+    public int ReadStateStoreCount { get; private set; }
     public bool RejectAppend { get; set; }
     public bool DropAfterAppend { get; set; }
     public bool StallAfterAppend { get; set; }
@@ -54,7 +103,7 @@ internal sealed class LocalImapServer : IAsyncDisposable
     public string? AppendedMessage { get; private set; }
     public TaskCompletionSource AppendReceived { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
 
-    private string Capabilities(bool encrypted) => "IMAP4rev1 AUTH=PLAIN SASL-IR" + (!encrypted && _advertiseStartTls ? " STARTTLS" : "");
+    private string Capabilities(bool encrypted) => "IMAP4rev1 AUTH=PLAIN SASL-IR" + (AdvertiseUidPlus && Authenticated ? " UIDPLUS" : "") + (AdvertiseMove && Authenticated ? " MOVE" : "") + (AdvertiseSpecialUse && Authenticated ? " SPECIAL-USE LIST-EXTENDED" : "") + (!encrypted && _advertiseStartTls ? " STARTTLS" : "");
 
     private async Task RunAsync()
     {
@@ -81,6 +130,7 @@ internal sealed class LocalImapServer : IAsyncDisposable
                 await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token);
                 return;
             }
+            bool selectedDestination = false;
             using var initialWriter = Writer(transport);
             await initialWriter.WriteLineAsync($"* OK [CAPABILITY {Capabilities(encrypted)}] Fixture ready");
             while (true)
@@ -129,6 +179,13 @@ internal sealed class LocalImapServer : IAsyncDisposable
                             }
                             break;
                         case "LIST":
+                            MailCommands.Enqueue(line[(tag.Length + 1)..]);
+                            if (line.Contains("LIST \"\" \"*\"", StringComparison.Ordinal))
+                            {
+                                await writer.WriteLineAsync(RejectFolderList ? $"{tag} NO Rejected" :
+                                    (FolderListResponse == "" ? "" : (FolderListResponse ?? "* LIST () \"/\" \"INBOX\"") + "\r\n") + $"{tag} OK List");
+                                break;
+                            }
                             if (line.Contains("Sent", StringComparison.Ordinal))
                                 await writer.WriteLineAsync(MissingSentFolder ? $"{tag} OK No matching folder" : $"* LIST (\\HasNoChildren) \"/\" \"Sent\"\r\n{tag} OK List");
                             else if (line.EndsWith("\"\" \"\"", StringComparison.Ordinal))
@@ -164,14 +221,89 @@ internal sealed class LocalImapServer : IAsyncDisposable
                         case "LOGIN" when _rejectAuthentication:
                             await writer.WriteLineAsync($"{tag} NO [AUTHENTICATIONFAILED] Rejected {Password}");
                             break;
-                        case "EXAMINE":
+                        case "SELECT":
+                            selectedDestination = AdvertiseMove && line.EndsWith("\"" + (_movedMailboxWireName ?? MoveDestinationWireName) + "\"", StringComparison.Ordinal);
                             MailCommands.Enqueue(line[(tag.Length + 1)..]);
-                            uint next = Messages.Count == 0 ? 1 : Messages.Max(message => message.Uid) + 1;
-                            await writer.WriteLineAsync($"* FLAGS (\\Seen)\r\n* {Messages.Count} EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY {UidValidity}] Validity\r\n* OK [UIDNEXT {next}] Next\r\n{tag} OK [READ-ONLY] Open");
+                            await writer.WriteLineAsync($"* FLAGS (\\Seen \\Flagged)\r\n* {(selectedDestination ? MovedMessages.Count : Messages.Count)} EXISTS\r\n* OK [UIDVALIDITY {(selectedDestination ? MoveDestinationValidity : UidValidity)}] Validity\r\n* OK [PERMANENTFLAGS ({(AllowSeenChanges ? "\\Seen " : "")}{(AllowStarChanges ? "\\Flagged " : "")}{(AllowDeletedChanges ? "\\Deleted" : "")})] Flags\r\n{tag} OK [{(ReadOnlySelection ? "READ-ONLY" : "READ-WRITE")}] Open");
+                            break;
+                        case "EXAMINE":
+                            selectedDestination = AdvertiseMove && line.EndsWith("\"" + (_movedMailboxWireName ?? MoveDestinationWireName) + "\"", StringComparison.Ordinal);
+                            MailCommands.Enqueue(line[(tag.Length + 1)..]);
+                            var examined = selectedDestination ? MovedMessages : Messages;
+                            uint next = examined.Count == 0 ? 1 : examined.Max(message => message.Uid) + 1;
+                            await writer.WriteLineAsync($"* FLAGS (\\Seen)\r\n* {examined.Count} EXISTS\r\n* 0 RECENT\r\n* OK [UIDVALIDITY {(selectedDestination ? MoveDestinationValidity : UidValidity)}] Validity\r\n* OK [UIDNEXT {next}] Next\r\n{tag} OK [READ-ONLY] Open");
                             break;
                         case "FETCH":
                         case "UID":
                             MailCommands.Enqueue(line[(tag.Length + 1)..]);
+                            if (command == "UID" && line.EndsWith("UID SEARCH ALL", StringComparison.Ordinal))
+                            {
+                                int census = ++SnapshotCensusCount; BeforeSnapshotCensus?.Invoke(census);
+                                string response = SnapshotCensusResponse?.Invoke(census) ?? "* SEARCH" + string.Concat((selectedDestination ? MovedMessages : Messages).Select(row => " " + row.Uid));
+                                await writer.WriteLineAsync(response + $"\r\n{tag} OK Search"); break;
+                            }
+                            if (command == "UID" && line.Contains("UID EXPUNGE ", StringComparison.Ordinal))
+                            {
+                                if (!AdvertiseUidPlus || !AuthenticatedOverTls) throw new InvalidOperationException("Unexpected UID EXPUNGE context.");
+                                var expunge = Regex.Match(line, @"UID EXPUNGE ([0-9]+)$");
+                                if (!expunge.Success) throw new InvalidOperationException("A single UID is required.");
+                                UidExpungeCount++;
+                                if (RejectUidExpunge) { await writer.WriteLineAsync($"{tag} NO Denied"); break; }
+                                uint uid = uint.Parse(expunge.Groups[1].Value);
+                                if (!IgnoreUidExpunge) (selectedDestination ? MovedMessages : Messages).RemoveAll(message => message.Uid == uid && message.IsDeleted);
+                                if (DropAfterUidExpunge) return;
+                                await writer.WriteLineAsync($"{tag} OK Expunged"); break;
+                            }
+                            if (command == "UID" && line.Contains("UID MOVE ", StringComparison.Ordinal))
+                            {
+                                if (!AdvertiseMove || !AuthenticatedOverTls) throw new InvalidOperationException("Unexpected move context.");
+                                MoveCount++;
+                                var move = Regex.Match(line, @"UID MOVE ([0-9]+) ""([^""]+)""$");
+                                if (!move.Success || move.Groups[2].Value != MoveDestinationWireName) throw new InvalidOperationException("Unexpected move command.");
+                                uint original = uint.Parse(move.Groups[1].Value);
+                                if (RejectMove) { await writer.WriteLineAsync($"{tag} NO Rejected"); break; }
+                                if (!selectedDestination) _movedMailboxWireName ??= MoveDestinationWireName;
+                                var moveFrom = selectedDestination ? MovedMessages : Messages;
+                                var moveTo = selectedDestination ? Messages : MovedMessages;
+                                int target = moveFrom.FindIndex(message => message.Uid == original);
+                                if (target >= 0 && !IgnoreMove)
+                                {
+                                    if (!MissingMoveDestination) moveTo.Add(moveFrom[target] with { Uid = MoveDestinationUid });
+                                    if (!KeepSourceAfterMove) moveFrom.RemoveAt(target);
+                                }
+                                if (DropAfterMove) return;
+                                string mapping = "[COPYUID " + (MoveReceiptOverride ?? $"{(selectedDestination ? UidValidity : MoveDestinationValidity)} {original} {MoveDestinationUid}") + "]";
+                                string receipt = MissingMoveReceipt || TaggedMoveReceipt ? "" : "* OK " + mapping + " Moved\r\n";
+                                await writer.WriteLineAsync(receipt + $"{tag} OK " + (TaggedMoveReceipt && !MissingMoveReceipt ? mapping + " " : "") + "Moved"); break;
+                            }
+                            if (command == "UID" && line.Contains("UID STORE ", StringComparison.Ordinal))
+                            {
+                                ReadStateStoreCount++;
+                                var store = Regex.Match(line, @"UID STORE ([0-9]+) ([+-])FLAGS\.SILENT \(\\(Seen|Flagged|Deleted)\)$");
+                                if (!store.Success) throw new InvalidOperationException("Unexpected state mutation.");
+                                if (RejectReadStateStore) { await writer.WriteLineAsync($"{tag} NO Denied"); break; }
+                                int target = Messages.FindIndex(message => message.Uid == uint.Parse(store.Groups[1].Value));
+                                if (store.Groups[3].Value == "Deleted") DeleteMarkCount++;
+                                if (target >= 0 && !IgnoreReadStateStore) Messages[target] = store.Groups[3].Value switch
+                                {
+                                    "Seen" => Messages[target] with { IsRead = store.Groups[2].Value == "+" },
+                                    "Flagged" => Messages[target] with { IsStarred = store.Groups[2].Value == "+" },
+                                    "Deleted" => Messages[target] with { IsDeleted = store.Groups[2].Value == "+" },
+                                    _ => throw new InvalidOperationException("Unsupported flag")
+                                };
+                                if (store.Groups[3].Value == "Deleted" && DropAfterDeleteMark) return;
+                                if (target >= 0 && RemoveAfterReadStateStore) Messages.RemoveAt(target);
+                                if (DropAfterReadStateStore) return;
+                                await writer.WriteLineAsync($"{tag} OK Stored"); break;
+                            }
+                            if (command == "UID" && line.EndsWith("(UID FLAGS)", StringComparison.Ordinal))
+                            {
+                                var uid = uint.Parse(Regex.Match(line, @"UID FETCH ([0-9]+)").Groups[1].Value);
+                                var selectedMessages = selectedDestination ? MovedMessages : Messages;
+                                int target = selectedMessages.FindIndex(message => message.Uid == uid);
+                                if (target >= 0) await writer.WriteLineAsync($"* {target + 1} FETCH (UID {uid} FLAGS ({(selectedMessages[target].IsRead ? "\\Seen " : "")}{(selectedMessages[target].IsStarred ? "\\Flagged " : "")}{(selectedMessages[target].IsDeleted ? "\\Deleted " : "")}custom))");
+                                await writer.WriteLineAsync($"{tag} OK Flags"); break;
+                            }
                             if (DisconnectOnFetch) return;
                             if (StallOnFetch) { await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token); return; }
                             if (MalformedFetch) { await writer.WriteLineAsync("* NOT-AN-IMAP-RESPONSE"); return; }
@@ -196,37 +328,54 @@ internal sealed class LocalImapServer : IAsyncDisposable
     {
         if (byUid)
         {
+            var sizeRequest = Regex.Match(line, @"UID FETCH ([0-9]+) \(RFC822\.SIZE\)");
+            if (sizeRequest.Success)
+            {
+                uint sizeUid = uint.Parse(sizeRequest.Groups[1].Value); int indexForSize = Messages.FindIndex(row => row.Uid == sizeUid);
+                if (indexForSize >= 0) await writer.WriteLineAsync($"* {indexForSize + 1} FETCH (UID {sizeUid} RFC822.SIZE {SourceReportedSize ?? SourceOctets?.Length ?? Encoding.ASCII.GetByteCount(Messages[indexForSize].Raw)})");
+                await writer.WriteLineAsync($"{tag} OK Size"); return;
+            }
             var match = Regex.Match(line, @"UID FETCH (\d+) .*BODY\.PEEK\[\]<0\.(\d+)>");
             if (!match.Success) throw new InvalidOperationException("Body requests must be bounded and use PEEK.");
             uint uid = uint.Parse(match.Groups[1].Value);
             int index = Messages.FindIndex(message => message.Uid == uid);
             if (index >= 0)
             {
-                string body = Messages[index].Raw;
+                byte[] body = SourceOctets ?? Encoding.ASCII.GetBytes(Messages[index].Raw);
                 body = body[..Math.Min(body.Length, int.Parse(match.Groups[2].Value))];
-                await writer.WriteLineAsync($"* {index + 1} FETCH (UID {uid} BODY[]<0> {{{Encoding.ASCII.GetByteCount(body)}}}");
-                await writer.WriteAsync(body);
-                await writer.WriteLineAsync(")");
+                uint responseUid = BodyResponseUid ?? uid;
+                string uidPrefix = BodyUidAfterLiteral || OmitBodyUid ? "" : $"UID {responseUid} ";
+                string ending = InvalidBodyEnding ? "BROKEN)" : BodyUidAfterLiteral && !OmitBodyUid ? $" UID {responseUid})" : ")";
+                async Task WriteBody()
+                {
+                    await writer.WriteLineAsync($"* {index + 1} FETCH ({uidPrefix}BODY[]<{BodyResponseOffset}> {{{DeclaredBodyLiteralLength ?? body.Length}}}");
+                    await writer.FlushAsync(); await writer.BaseStream.WriteAsync(body);
+                    await writer.WriteLineAsync(ending);
+                }
+                await WriteBody(); if (DuplicateBodyLiteral) await WriteBody();
             }
         }
         else
         {
+            if (HeaderResponseOverride is {} response) { await writer.WriteLineAsync(response + $"\r\n{tag} OK Fetch"); return; }
             var match = Regex.Match(line, @"FETCH (\d+)(?::(\d+))? ");
             if (!match.Success) throw new InvalidOperationException("Expected a bounded sequence range.");
             int start = int.Parse(match.Groups[1].Value);
             int end = match.Groups[2].Success ? int.Parse(match.Groups[2].Value) : start;
+            BeforeSnapshotHeaderFetch?.Invoke(start, end);
             for (int sequence = start; sequence <= end; sequence++)
             {
                 var message = Messages[sequence - 1];
-                string flags = message.IsRead ? "\\Seen" : "";
+                string flags = (message.IsRead ? "\\Seen " : "") + (message.IsStarred ? "\\Flagged" : "");
                 string address = "((\"Sender\" NIL \"sender\" \"example.test\"))";
-                await writer.WriteLineAsync($"* {sequence} FETCH (UID {message.Uid} FLAGS ({flags}) INTERNALDATE \"28-Sep-2026 08:00:00 +0000\" ENVELOPE (\"Mon, 28 Sep 2026 08:00:00 +0000\" \"=?utf-8?b?R3LDvMOfZQ==?=\" {address} {address} {address} NIL NIL NIL NIL \"<fixture@example.test>\"))");
+                string flagField = OmitSnapshotFlags ? "" : $"FLAGS ({flags}) ";
+                await writer.WriteLineAsync($"* {sequence} FETCH (UID {message.Uid} {flagField}INTERNALDATE \"28-Sep-2026 08:00:00 +0000\" ENVELOPE (\"Mon, 28 Sep 2026 08:00:00 +0000\" \"=?utf-8?b?R3LDvMOfZQ==?=\" {address} {address} {address} NIL NIL NIL NIL \"<fixture@example.test>\"))");
             }
         }
         await writer.WriteLineAsync($"{tag} OK Fetch");
     }
 
-    internal sealed record FixtureMessage(uint Uid, string Raw, bool IsRead = false);
+    internal sealed record FixtureMessage(uint Uid, string Raw, bool IsRead = false, bool IsStarred = false, bool IsDeleted = false);
 
     private async Task<SslStream> UpgradeAsync(Stream stream)
     {

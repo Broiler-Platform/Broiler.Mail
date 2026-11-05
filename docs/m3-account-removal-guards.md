@@ -1,0 +1,13 @@
+# M3 account removal readiness guards
+
+Implemented 2026-11-04. Removing configuration, clearing downloaded mail and changing server mail remain separate actions. Account removal now checks the selected unchanged configuration, all retained drafts/submission records and mail-mutation ownership three times: before creating the recovery backup, after the backup callback and before final configuration deletion.
+
+The target account cannot be removed while it owns an active mutation, a durable uncertain intent or a confirmed receipt awaiting local reconciliation. Another account's attributable intent does not block it. An in-memory pending marker with no readable durable identity blocks destructive removal conservatively. Invalid/future/corrupt journal state fails closed. Windows paths are compared case-insensitively for active/pending ownership; Unix paths retain ordinal comparison.
+
+No guard repairs, dismisses or replays a server operation. The notice directs the user to Local mail storage's existing repair/review controls. No password or configuration changes occur on the initial or post-backup refusal. A completed recovery backup is retained if later checks refuse. If new work/configuration appears after explicitly forgetting passwords, the account stays listed and the failure explicitly states that passwords were forgotten. Vault/configuration writes are still not one atomic transaction; cancellation/crashes may require re-entering a forgotten password.
+
+Conditional removal now compares sender-identity override collections by content across JSON reloads. It still compares every other account field and rejects changed overrides. An account with unchanged persisted sender overrides is removable; altered overrides cannot silently pass its confirmation. The atomic store and preflight use the same comparison.
+
+Regression covers active/uncertain/confirmed/unattributed changes, case-varied Windows paths, other-account isolation, late work after backup and password cleanup, corrupt state, both keep/forget choices on changed confirmation, and unchanged/changed persisted overrides. Published smoke injects a synthetic unresolved intent, verifies refusal before backup, clears only that synthetic marker, then completes the ordinary backed-up removal with persisted sender overrides and both synthetic OS credential slots.
+
+[Windows x64 evidence](evidence/m3-account-removal-guards-win-x64/README.md). Existing account removal retains local mail/imports and its backup. Broader orphan configuration/credential/import management, platform/provider fault acceptance and account orchestration remain open; this does not complete M3 or M0–M4.

@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <PublishAot>true</PublishAot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
+    <Compile Include="../../tests/Broiler.Mail.Tests/LocalImapServer.cs" Link="Fixtures/LocalImapServer.cs" />
+    <Compile Include="../../tests/Broiler.Mail.Tests/LocalSmtpServer.cs" Link="Fixtures/LocalSmtpServer.cs" />
+  </ItemGroup>
+</Project>

@@ -1,0 +1,11 @@
+# M3 unified saved inbox — Windows x64 evidence
+
+Local validation on 2026-11-04 against base revision `fc1f74ffc5e8d3dae03b8fd81c39aa851bdf5c23` plus the dirty working tree. Packages are unsigned validation artifacts, not releases.
+
+The focused unified/local-original/provider-guard subset passed **41 cases**. The complete shared suite passed **1,518 cases**, and the complete Windows suite passed **346 cases**, before the later account-removal guard increment. Both published variants passed their smoke checks, dependency gate (72 runtime libraries) and renderer audit with no IL2xxx/IL3xxx warnings. Retained [NativeAOT manifest](self-contained-build-manifest.json) and [framework-dependent manifest](framework-dependent-build-manifest.json). Unified coverage includes 24 new cases over real SQLite and controlled cache fakes: INBOX/current-epoch/account isolation, 50-header candidate limits, disabled accounts, duplicate UIDs across accounts, received-date ordering, independent account failures/malformed pages, exact cached-body identity, epoch races, missing bodies, cancellation during ignored work, context/selection/queued/disposal guards and 100%/200% layout. Local-original coverage additionally verifies corrupt-data UI handling; five provider self-send guard cases remain synthetic and do not send mail.
+
+Published profile smoke opens the actual Ctrl+7 view over two temporary configured accounts with the same INBOX epoch/UID. It reads the disabled second account's saved text and full attribution, verifies the current account and pinned draft remain the first account, renders and closes the view, checking rows/text are cleared. Receiver/sender/credential operations throw if invoked. Ordinary shell smoke also renders the new view. No live account or provider is used in this fixture.
+
+Ignored logs: `artifacts/m3-unified-build.log`, `m3-unified-targeted.log`, `m3-unified-native-smoke.log`, `m3-unified-shared.log`, `m3-unified-windows.log`, `m3-unified-aot.log`, `m3-unified-framework.log`.
+
+[Implemented scope](../../m3-unified-saved-inbox.md). Bounded saved-only navigation does not certify live orchestration, unified write actions, cross-account search, other targets/accessibility, or renderer containment. M0–M4 remain incomplete.

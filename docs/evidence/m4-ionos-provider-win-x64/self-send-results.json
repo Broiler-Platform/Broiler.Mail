@@ -1,0 +1,23 @@
+{
+  "schemaVersion": 1,
+  "checkedAtUtc": "2026-11-04T13:45:20.6793718+00:00",
+  "runtime": "win-x64",
+  "imapHost": "imap.ionos.de",
+  "smtpHost": "smtp.ionos.de",
+  "accountFingerprint": "47a332c08ff8a348c949b490fb58c991b2779e9fc7a073a93a1fc078476619a8",
+  "stages": [
+    {
+      "name": "single-self-smtp-submission",
+      "status": "passed",
+      "failure": null,
+      "count": null
+    },
+    {
+      "name": "self-message-inbox-observation",
+      "status": "passed",
+      "failure": null,
+      "count": null
+    }
+  ],
+  "scope": "Explicitly approved single plain-text self-message attempt 3806579d-e9de-4da9-9cd0-4a2744070472; no other recipient, no SMTP retry, no Sent APPEND, flags, moves or deletion. Outcome is retained in the one-shot attempt journal. Inbox observation uses read-only EXAMINE/BODY.PEEK; no private message content is recorded."
+}

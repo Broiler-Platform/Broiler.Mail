@@ -15,6 +15,8 @@
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
+using Broiler.UI.RichEdit.Standard;
+using Broiler.Graphics.Geometry;
 using Broiler.UI.Forms.Standard;
 using Broiler.UI.Edit.Standard;
 using Broiler.Mail.Application.ViewModels;
@@ -43,6 +45,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
     {
+        bool applyingProfile = false;
         var panel = new StandardPanel { Spacing = 20 };
         // Setup checklist: each step states its result, and one button performs or reveals the next step.
         // Not collapsible: the next-step button must stay the first stop for keyboard users. Once the
@@ -70,6 +73,32 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         var name = ConfigurationForm.AddField(identity, "Display name", model.DisplayName);
         var email = ConfigurationForm.AddField(identity, "Email address", model.EmailAddress);
 
+        var signature = new StandardRichEdit { AcceptsReturn = true, AccessibleName = "Account signature", PreferredSize = new BSize(520, 90) };
+        signature.SetPlainText(model.Signature);
+        identity.AddChild(new StandardLabel { Text = "Plain-text signature (up to 4,000 characters; applied to new drafts)", Target = signature });
+        identity.AddChild(signature);
+
+        var aliasSection = new FormSection("Sender aliases", "Configure only addresses your provider permits this account to send as. This does not create or verify provider aliases.", collapsible: true, expanded: false);
+        aliasSection.ShowText = "Show sender aliases"; aliasSection.HideText = "Hide sender aliases";
+        aliasSection.Content.AccessibleName = "Configured sender addresses";
+        panel.AddChild(aliasSection);
+        var aliases = new StandardRichEdit { AcceptsReturn = true, AccessibleName = "Sender aliases (one address per line)", PreferredSize = new BSize(520, 90) };
+        aliases.SetPlainText(model.SenderAliases); aliasSection.Content.AddChild(aliases);
+        aliasSection.Content.AddChild(SenderIdentitiesView.Create(model));
+        var defaults = new FormSection("Composition defaults", "Defaults affect newly started drafts. Explicit sender selection takes priority over automatic reply selection.", collapsible: true, expanded: false)
+            { ShowText = "Show composition defaults", HideText = "Hide composition defaults" };
+        defaults.Content.AccessibleName = "Sender and reply signature defaults"; panel.AddChild(defaults);
+        var defaultSender = ConfigurationForm.AddField(defaults.Content, "Default sender address (blank uses primary)", model.DefaultSenderAddress);
+        var replySender = new StandardComboBox();
+        replySender.SetItems([new("Chosen", "Use chosen/default sender for replies"), new("Receiving", "Use the unique configured To/Cc address for replies")]);
+        replySender.SelectedIndex = model.ReplyFromReceivingAlias ? 1 : 0;
+        ConfigurationForm.AddLabeledControl(defaults.Content, "Reply sender policy", replySender);
+        var replySignatureMode = new StandardComboBox();
+        replySignatureMode.SetItems([new("Same", "Use account signature for replies"), new("Separate", "Use separate reply signature")]);
+        replySignatureMode.SelectedIndex = model.UseSeparateReplySignature ? 1 : 0;
+        ConfigurationForm.AddLabeledControl(defaults.Content, "Reply signature policy", replySignatureMode);
+        var replySignature = new StandardRichEdit { AcceptsReturn = true, AccessibleName = "Separate reply signature", PreferredSize = new BSize(520, 90) };
+        replySignature.SetPlainText(model.ReplySignature); defaults.Content.AddChild(replySignature);
         var tabs = new StandardTabView();
         panel.AddChild(tabs);
 
@@ -89,8 +118,11 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         security.SelectedIndex = model.Security == TransportSecurity.StartTls ? 1 : 0;
 
         var authentication = new StandardComboBox();
-        authentication.SetItems([new UiComboBoxItem("Password", "Password or app password")]);
-        authentication.SelectedIndex = 0;
+        var loadedIncomingAuthentication = model.Authentication;
+        authentication.SetItems(model.Authentication == AuthenticationMethod.Password
+            ? [new UiComboBoxItem("Password", "Password or app password")]
+            : [new UiComboBoxItem("Password", "Password or app password"), new UiComboBoxItem("Unsupported", $"{model.Authentication} (not available yet)")]);
+        authentication.SelectedIndex = model.Authentication == AuthenticationMethod.Password ? 0 : 1;
 
         incomingPanel.AddChild(new FormRow(
             new FormField("Connection security", security),
@@ -105,6 +137,21 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         var forgetPassword = new StandardButton { Text = "Forget saved password" };
         credentials.AddChild(FormSurface.ActionBar(savePassword, forgetPassword));
 
+        var folderMapping = new FormSection("Special-folder mapping", collapsible: true, expanded: false)
+        { ShowText = "Show special-folder mapping", HideText = "Hide special-folder mapping" };
+        folderMapping.Content.AccessibleName = "Special-folder role overrides";
+        incomingPanel.AddChild(folderMapping);
+        ConfigurationForm.AddText(folderMapping.Content, "Optional exact mailbox names. Leave blank to use server special-use attributes after Refresh folders. These navigation roles do not change Sent-copy handling, save drafts to the server, or move/delete mail.");
+        var folderSent = ConfigurationForm.AddField(folderMapping.Content, "Sent role override (exact mailbox name)", model.FolderSent);
+        folderSent.MaxLength = 1024;
+        var folderDrafts = ConfigurationForm.AddField(folderMapping.Content, "Drafts role override (exact mailbox name)", model.FolderDrafts);
+        folderDrafts.MaxLength = 1024;
+        var folderArchive = ConfigurationForm.AddField(folderMapping.Content, "Archive role override (exact mailbox name)", model.FolderArchive);
+        folderArchive.MaxLength = 1024;
+        var folderTrash = ConfigurationForm.AddField(folderMapping.Content, "Trash role override (exact mailbox name)", model.FolderTrash);
+        folderTrash.MaxLength = 1024;
+        var folderJunk = ConfigurationForm.AddField(folderMapping.Content, "Junk role override (exact mailbox name)", model.FolderJunk);
+        folderJunk.MaxLength = 1024;
         var incomingCard = new Inset(incomingPanel, 12, 12);
         tabs.AddTab("incoming", "Incoming (IMAP)", incomingCard);
 
@@ -190,7 +237,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
 
         void RefreshState()
         {
-            if (panel.IsDisposed)
+            if (panel.IsDisposed || applyingProfile)
                 return;
             foreach (var field in new[] { name, email, host, port, user })
                 field.IsEnabled = model.CanSave;
@@ -204,6 +251,16 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             smtpPassword.IsEnabled = saveSmtpPassword.IsEnabled = forgetSmtpPassword.IsEnabled = model.CanManageSmtpPassword && smtpSetup.SelectedIndex == 1;
             sentCopy.IsEnabled = model.CanSave && smtpSetup.SelectedIndex == 1;
             sentFolder.IsEnabled = sentCopy.IsEnabled && sentCopy.SelectedIndex == 2;
+            folderSent.IsEnabled = model.CanSave;
+            folderDrafts.IsEnabled = model.CanSave;
+            signature.IsReadOnly = aliases.IsReadOnly = replySignature.IsReadOnly = !model.CanSave;
+            defaultSender.IsEnabled = replySender.IsEnabled = replySignatureMode.IsEnabled = model.CanSave;
+            replySignature.Visibility = model.UseSeparateReplySignature ? UiVisibility.Visible : UiVisibility.Collapsed;
+            if (model.ValidationField is "DefaultSenderAddress" or "ReplySignature") defaults.IsExpanded = true;
+            if (model.ValidationField is "SenderAliases" or "SenderIdentities") aliasSection.IsExpanded = true;
+            folderArchive.IsEnabled = model.CanSave;
+            folderTrash.IsEnabled = model.CanSave;
+            folderJunk.IsEnabled = model.CanSave;
             save.IsEnabled = model.CanSave;
             password.IsEnabled = savePassword.IsEnabled = forgetPassword.IsEnabled = test.IsEnabled = model.CanManagePassword;
             test.IsEnabled = model.CanManagePassword && password.Text.Length == 0;
@@ -218,6 +275,8 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             {
                 if (valField.StartsWith("OutgoingServer", StringComparison.Ordinal) || valField.StartsWith("SentFolder", StringComparison.Ordinal))
                     SelectOutgoingTab();
+                else if (valField.StartsWith("FolderOverrides", StringComparison.Ordinal))
+                { SelectIncomingTab(); folderMapping.IsExpanded = true; }
                 else if (valField.StartsWith("IncomingServer", StringComparison.Ordinal))
                     SelectIncomingTab();
             }
@@ -312,21 +371,67 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
                     line.Visibility = ready ? UiVisibility.Collapsed : UiVisibility.Visible;
             }
         }
+        model.ProfileSelected += (_, _) =>
+        {
+            if (panel.IsDisposed) return;
+            applyingProfile = true;
+            name.Text = model.DisplayName; email.Text = model.EmailAddress;
+            host.Text = model.Host; port.Text = model.Port; user.Text = model.UserName;
+            security.SelectedIndex = model.Security == TransportSecurity.StartTls ? 1 : 0;
+            loadedIncomingAuthentication = model.Authentication;
+            authentication.SetItems(model.Authentication == AuthenticationMethod.Password
+                ? [new UiComboBoxItem("Password", "Password or app password")]
+                : [new UiComboBoxItem("Password", "Password or app password"), new UiComboBoxItem("Unsupported", $"{model.Authentication} (not available yet)")]);
+            authentication.SelectedIndex = model.Authentication == AuthenticationMethod.Password ? 0 : 1;
+            smtpSetup.SelectedIndex = model.ConfigureSmtp ? 1 : 0;
+            smtpHost.Text = model.SmtpHost; smtpPort.Text = model.SmtpPort; smtpUser.Text = model.SmtpUserName;
+            smtpSecurity.SelectedIndex = model.SmtpSecurity == TransportSecurity.StartTls ? 1 : 0;
+            loadedSmtpAuthentication = model.SmtpAuthentication;
+            smtpAuthentication.SetItems(model.SmtpAuthentication == AuthenticationMethod.Password
+                ? [new UiComboBoxItem("Password", "Password or app password")]
+                : [new UiComboBoxItem("Password", "Password or app password"), new UiComboBoxItem("Unsupported", $"{model.SmtpAuthentication} (not available yet)")]);
+            smtpAuthentication.SelectedIndex = model.SmtpAuthentication == AuthenticationMethod.Password ? 0 : 1;
+            sentCopy.SelectedIndex = (int)model.SentCopyMode; sentFolder.Text = model.SentFolder;
+            folderSent.Text = model.FolderSent;
+            folderDrafts.Text = model.FolderDrafts;
+            folderArchive.Text = model.FolderArchive;
+            folderTrash.Text = model.FolderTrash;
+            folderJunk.Text = model.FolderJunk;
+            signature.SetPlainText(model.Signature); aliases.SetPlainText(model.SenderAliases);
+            defaultSender.Text = model.DefaultSenderAddress; replySender.SelectedIndex = model.ReplyFromReceivingAlias ? 1 : 0;
+            replySignatureMode.SelectedIndex = model.UseSeparateReplySignature ? 1 : 0; replySignature.SetPlainText(model.ReplySignature);
+
+            password.Text = smtpPassword.Text = "";
+            applyingProfile = false; SelectIncomingTab(); RefreshState();
+        };
         model.Changed += (_, _) => RefreshState();
         ConfigurationForm.BindFeedback(model, surface, status, new Dictionary<string, StandardEdit>
         {
             ["DisplayName"] = name, ["EmailAddress"] = email,
             ["IncomingServer.Host"] = host, ["IncomingServer.Port"] = port, ["IncomingServer.UserName"] = user,
             ["OutgoingServer.Host"] = smtpHost, ["OutgoingServer.Port"] = smtpPort, ["OutgoingServer.UserName"] = smtpUser,
+            ["DefaultSenderAddress"] = defaultSender,
             ["SentFolder"] = sentFolder,
+            ["FolderOverrides.Sent"] = folderSent,
+            ["FolderOverrides.Drafts"] = folderDrafts,
+            ["FolderOverrides.Archive"] = folderArchive,
+            ["FolderOverrides.Trash"] = folderTrash,
+            ["FolderOverrides.Junk"] = folderJunk,
+
         });
+        defaultSender.TextChanged += (_, _) => { if (!applyingProfile) { CaptureFields(); model.NotifyEdited(); } };
+        replySender.SelectionChanged += (_, _) => { if (!applyingProfile) { CaptureFields(); model.NotifyEdited(); } };
+        replySignatureMode.SelectionChanged += (_, _) => { if (!applyingProfile) { CaptureFields(); model.NotifyEdited(); } };
+        replySignature.DocumentChanged += (_, _) => { if (!applyingProfile) { CaptureFields(); model.NotifyEdited(); } };
+        aliases.DocumentChanged += (_, _) => { if (!applyingProfile) { CaptureFields(); model.NotifyEdited(); } };
+        signature.DocumentChanged += (_, _) => { if (!applyingProfile) { CaptureFields(); model.NotifyEdited(); } };
         password.TextChanged += (_, _) => RefreshState();
         smtpPassword.TextChanged += (_, _) => RefreshState();
         // Copying edits as they happen keeps the unsaved-changes step accurate.
-        foreach (var field in new[] { name, email, host, port, user, smtpHost, smtpPort, smtpUser, sentFolder })
-            field.TextChanged += (_, _) => { CaptureFields(); model.NotifyEdited(); };
-        foreach (var combo in new[] { security, smtpSecurity, sentCopy })
-            combo.SelectionChanged += (_, _) => { CaptureFields(); model.NotifyEdited(); };
+        foreach (var field in new[] { name, email, host, port, user, smtpHost, smtpPort, smtpUser, sentFolder, folderSent, folderDrafts, folderArchive, folderTrash, folderJunk })
+            field.TextChanged += (_, _) => { if (applyingProfile) return; CaptureFields(); model.NotifyEdited(); };
+        foreach (var combo in new[] { security, authentication, smtpSecurity, smtpAuthentication, sentCopy })
+            combo.SelectionChanged += (_, _) => { if (applyingProfile) return; CaptureFields(); model.NotifyEdited(); };
         next.Clicked += async (_, _) =>
         {
             switch (model.NextStep)
@@ -350,6 +455,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
         };
         smtpSetup.SelectionChanged += (_, _) =>
         {
+            if (applyingProfile) return;
             if (smtpSetup.SelectedIndex == 1)
                 SelectOutgoingTab();
             smtpPassword.Text = string.Empty;
@@ -366,7 +472,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             model.Port = port.Text;
             model.UserName = user.Text;
             model.Security = security.SelectedIndex == 1 ? TransportSecurity.StartTls : TransportSecurity.Tls;
-            model.Authentication = AuthenticationMethod.Password;
+            model.Authentication = authentication.SelectedIndex == 0 ? AuthenticationMethod.Password : loadedIncomingAuthentication;
             model.ConfigureSmtp = smtpSetup.SelectedIndex == 1;
             model.SmtpHost = smtpHost.Text;
             model.SmtpPort = smtpPort.Text;
@@ -375,6 +481,15 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             model.SmtpAuthentication = smtpAuthentication.SelectedIndex == 0 ? AuthenticationMethod.Password : loadedSmtpAuthentication;
             model.SentCopyMode = (SentCopyMode)sentCopy.SelectedIndex;
             model.SentFolder = sentFolder.Text;
+            model.FolderSent = folderSent.Text;
+            model.FolderDrafts = folderDrafts.Text;
+            model.FolderArchive = folderArchive.Text;
+            model.FolderTrash = folderTrash.Text;
+            model.FolderJunk = folderJunk.Text;
+            model.Signature = signature.GetPlainText(); model.SenderAliases = aliases.GetPlainText();
+            model.DefaultSenderAddress = defaultSender.Text; model.ReplyFromReceivingAlias = replySender.SelectedIndex == 1;
+            model.UseSeparateReplySignature = replySignatureMode.SelectedIndex == 1; model.ReplySignature = replySignature.GetPlainText();
+
         }
         save.Clicked += async (_, _) =>
         {

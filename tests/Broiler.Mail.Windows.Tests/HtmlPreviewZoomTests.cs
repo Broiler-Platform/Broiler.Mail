@@ -692,15 +692,13 @@ public sealed class HtmlPreviewZoomTests
     public async Task APreviewGetsAThemeChangedWhileItsWindowWasBeingBuilt()
     {
         var changed = StandardThemeTokens.Dark.WithTextScale(1.25);
-        WindowsHtmlPreviewHost? host = null;
+        Broiler.Mail.Windows.Measurement.HtmlMeasurementHost? host = null;
         // The main window's theme changes just after the preview has read it.
-        host = new WindowsHtmlPreviewHost(() => { host!.ApplyTheme(changed); return StandardThemeTokens.Light; });
+        host = new Broiler.Mail.Windows.Measurement.HtmlMeasurementHost(() => { host!.ApplyTheme(changed); return StandardThemeTokens.Light; });
         using (host)
         {
             var body = new MailMessageBody(new MailMessageKey(new(Guid.NewGuid()), "INBOX", 1, 7), "Agenda as text", "<p>Agenda</p>");
-            string status = await host.ShowAsync(body).WaitAsync(TimeSpan.FromSeconds(30));
-            Assert.StartsWith("HTML preview open", status);
-            var window = host.Window!;
+            var window = Assert.IsType<HtmlPreviewWindow>(await host.OpenAsync(body).WaitAsync(TimeSpan.FromSeconds(30)));
             var seen = new TaskCompletionSource<(StandardThemeTokens Theme, double Zoom)>(TaskCreationOptions.RunContinuationsAsynchronously);
             window.Post(() => seen.TrySetResult((StandardControlPaint.GetTheme(window.Session), window.Zoom)));
             var (theme, zoom) = await seen.Task.WaitAsync(TimeSpan.FromSeconds(30));

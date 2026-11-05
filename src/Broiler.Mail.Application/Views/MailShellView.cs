@@ -16,6 +16,7 @@
 // GENERATED - DO NOT EDIT MANUALLY
 
 using Broiler.Mail.Application.ViewModels;
+using Broiler.Mail.Core.Services;
 using Broiler.UI.Forms;
 using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
@@ -48,7 +49,7 @@ public sealed class MailShellView : IDisposable
     // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=ADE6BB
     // Broiler-Falsified-If: with an unconfigured account the Account setup dialog is not opened
     // Broiler-Human:        PENDING
-    public MailShellView(MailShellViewModel model, IHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, Action<Uri>? openUrl = null)
+    public MailShellView(MailShellViewModel model, IInlineHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, Action<Uri>? openUrl = null)
     {
         _model = model;
         _openUrl = openUrl;
@@ -60,6 +61,13 @@ public sealed class MailShellView : IDisposable
         Menu = CreateMenu();
         layout.AddChild(Menu);
         layout.SetDock(Menu, UiDock.Top);
+        if (model.Accounts is { } accounts)
+        {
+            accounts.CanChangeView = () => ActiveDialog is null && ActiveAboutDialog is null;
+            var selection = new AccountSelectionView(accounts, () => ShowView("account"), model.AccountReceives).CreateContent();
+            AccountSelectionContent = selection;
+            layout.AddChild(selection); layout.SetDock(selection, UiDock.Top);
+        }
         // Keep the status clear of the window edges.
         var footer = _footer = new Inset(status, 12, FooterPadding);
         layout.AddChild(footer);
@@ -75,6 +83,16 @@ public sealed class MailShellView : IDisposable
         _contents.Add("settings", new SettingsView(model.Settings).CreateContent());
         var composer = new ComposerView(model.Composer, model.Inbox, model.Compose);
         _contents.Add("compose", composer.CreateContent());
+        Outbox = new OutboxView(model.Composer, () => { if (!_disposing && ActiveViewId == "outbox") ShowView("compose"); });
+        _contents.Add("outbox", Outbox.CreateContent());
+        SavedOriginals = new SavedOriginalsView(model.Inbox.SourceExports, htmlPreview as ILocalOriginalHtmlHost); SavedOriginals.SetAccount(model.CurrentAccount);
+        _contents.Add("originals", SavedOriginals);
+        UnifiedInbox = new UnifiedSavedInboxView(model.Inbox.LocalCache);
+        void UpdateUnifiedAccounts() => UnifiedInbox.SetAccounts(model.Accounts?.Profiles ?? (model.CurrentAccount is {} current ? [current] : []));
+        UpdateUnifiedAccounts(); _contents.Add("unified", UnifiedInbox);
+        model.Account.Changed += (_,_) => UpdateUnifiedAccounts();
+        if (model.Accounts is {} collection) collection.Changed += (_,_) => UpdateUnifiedAccounts();
+        model.Account.Changed += (_,_) => SavedOriginals.SetAccount(model.CurrentAccount);
         if (model.Account.Profile is null) ActiveViewId = "account";
         _refreshStatus = RefreshStatus;
         void RefreshStatus()
@@ -87,6 +105,9 @@ public sealed class MailShellView : IDisposable
                     : !string.IsNullOrEmpty(model.Account.Status) ? model.Account.Status
                     : model.Account.NextStep == AccountSetupStep.Ready ? "This account is ready to receive mail."
                     : "Save your account details, then save a password and test the connection.",
+                "outbox" => model.Composer.OutboxNotice,
+                "unified" => "Unified saved INBOX mail across configured accounts. Refresh explicitly; all reading stays offline.",
+                "originals" => "Saved originals for the selected account. List and verify explicitly; no receiving or automatic opening.",
                 "settings" => IsProblem(model.Settings.StatusKind) ? $"{model.Settings.StatusSummary} {DetailsBelow}"
                     : string.IsNullOrEmpty(model.Settings.Status) ? "Saved appearance and inbox spacing apply immediately. The window reopens at its last size and position." : model.Settings.Status,
                 // Informational composer messages appear only here; the composer shows the others inline,
@@ -124,7 +145,7 @@ public sealed class MailShellView : IDisposable
         model.Composer.Changed += (_, _) => RefreshStatus();
         RefreshStatus();
         layout.AddChild(_parked);
-        foreach (var id in new[] { "account", "settings", "compose" }) _parked.AddChild(_contents[id]);
+        foreach (var id in new[] { "account", "settings", "compose", "outbox", "originals" }) _parked.AddChild(_contents[id]);
         layout.AddChild(inboxContent);
         Window.AddChild(new MeasuredContent(layout, size =>
         {
@@ -177,7 +198,7 @@ public sealed class MailShellView : IDisposable
     public bool ShowView(string id)
     {
         if (!_contents.ContainsKey(id)) return false;
-        if (Window.Session is not { } session) { ActiveViewId = id; return true; }
+        if (Window.Session is not { } session) { ActiveViewId = id; SavedOriginals.SetActive(id == "originals"); UnifiedInbox.SetActive(id == "unified"); return true; }
         if (ActiveDialog is not null && ActiveViewId == id) return true;
         CloseDialog();
         if (id == "inbox") { ActiveViewId = id; _refreshStatus(); return true; }
@@ -188,7 +209,7 @@ public sealed class MailShellView : IDisposable
         _parked.RemoveChild(content);
         var dialog = new StandardDialog
         {
-            Title = id switch { "account" => "Account", "settings" => "Settings", _ => "Compose message" },
+            Title = id switch { "account" => "Account", "settings" => "Settings", "outbox" => "Outbox", "originals" => "Saved originals", "unified" => "Unified saved inbox", _ => "Compose message" },
             PreferredSize = new BSize(940, 680), Padding = 0,
             BreakOutMode = UiWindowBreakOutMode.Automatic,
         };
@@ -208,11 +229,14 @@ public sealed class MailShellView : IDisposable
             dialog.IsBrokenOut || dialog.Placement.IsEmpty
                 ? null
                 : new BSize(dialog.Placement.Width, Math.Max(0, dialog.Placement.Height - dialog.TitleBarHeight))));
-        ActiveViewId = id;
+        ActiveViewId = id; SavedOriginals.SetActive(id == "originals"); UnifiedInbox.SetActive(id == "unified");
         ActiveDialog = dialog;
+        _model.Accounts?.RefreshAvailability();
         // Detach persistent controls before UiWindow.Close disposes the dialog's children.
         dialog.Closing += (_, _) =>
         {
+            if (id == "originals") SavedOriginals.SetActive(false);
+            if (id == "unified") UnifiedInbox.SetActive(false);
             _scrollOffsets[id] = Descendants(content).OfType<UiScrollView>().Select(scroll => (scroll, scroll.Offset)).ToArray();
             body.RemoveChild(content);
             _parked.AddChild(content);
@@ -225,6 +249,7 @@ public sealed class MailShellView : IDisposable
             ActiveDialog = null;
             _dialogClose = null;
             ActiveViewId = "inbox";
+            _model.Accounts?.RefreshAvailability();
             if (_disposing || session.IsDisposed) return;
             session.SetFocus(_readerFocus is { CanFocus: true } ? _readerFocus : Menu);
             _readerFocus = null;
@@ -266,11 +291,13 @@ public sealed class MailShellView : IDisposable
         var dialog = MailAbout.Show(Window, viewport, typeof(MailShellView).Assembly, _openUrl);
         if (dialog is null) return false;
         ActiveAboutDialog = dialog;
+        _model.Accounts?.RefreshAvailability();
         var activeSession = dialog.Session ?? session;
         StandardThemeController.ApplyToSubtree(dialog, StandardControlPaint.GetTheme(Window));
         dialog.Closed += (_, _) =>
         {
             ActiveAboutDialog = null;
+            _model.Accounts?.RefreshAvailability();
             if (_disposing || session.IsDisposed) return;
             session.SetFocus(_readerFocus is { CanFocus: true } ? _readerFocus : Menu);
             _readerFocus = null;
@@ -312,6 +339,9 @@ public sealed class MailShellView : IDisposable
         mail.Children.Add(Item("new", "New message", MailCommand.NewMessage));
         mail.Children.Add(Item("compose", "Open draft", MailCommand.Compose));
         mail.Children.Add(Item("receive", "Receive mail", MailCommand.Receive));
+        mail.Children.Add(Item("outbox", "Outbox", MailCommand.Outbox));
+        mail.Children.Add(Item("unified", "Unified saved inbox", MailCommand.UnifiedSavedInbox));
+        mail.Children.Add(Item("originals", "Saved originals", MailCommand.SavedOriginals));
         var message = new UiMenuItem("message", "Message");
         message.Children.Add(Item("reply", "Reply", MailCommand.Reply));
         message.Children.Add(Item("reply-all", "Reply all", MailCommand.ReplyAll));
@@ -337,7 +367,7 @@ public sealed class MailShellView : IDisposable
                 var command = e.Item.Id switch
                 {
                     "inbox" => MailCommand.Inbox, "new" => MailCommand.NewMessage,
-                    "compose" => MailCommand.Compose, "receive" => MailCommand.Receive,
+                    "compose" => MailCommand.Compose, "receive" => MailCommand.Receive, "outbox" => MailCommand.Outbox, "originals" => MailCommand.SavedOriginals, "unified" => MailCommand.UnifiedSavedInbox,
                     "reply" => MailCommand.Reply, "reply-all" => MailCommand.ReplyAll,
                     "forward" => MailCommand.Forward, "account" => MailCommand.Account,
                     _ => MailCommand.Settings,
@@ -350,6 +380,8 @@ public sealed class MailShellView : IDisposable
             if (menu.IsDisposed) return;
             mail.Children[1].IsEnabled = _model.Compose.CanCompose;
             mail.Children[3].IsEnabled = !_model.Inbox.IsBusy;
+            mail.Children.Single(item => item.Id == "unified").IsEnabled = _model.Inbox.LocalCache is not null;
+            mail.Children[^1].IsEnabled = _model.Inbox.SourceExports is IAccountSourceExportCatalog;
             foreach (var item in message.Children) item.IsEnabled = _model.Compose.CanRespond;
             menu.Invalidate(UiInvalidationKind.Render | UiInvalidationKind.Semantic);
         }
@@ -402,6 +434,10 @@ public sealed class MailShellView : IDisposable
     public UiElement NavigationFocus => (UiElement?)_dialogClose ?? Menu;
     public UiElement GetContent(string id) => _contents[id];
     public InboxView Inbox { get; }
+    public OutboxView Outbox { get; }
+    public SavedOriginalsView SavedOriginals { get; }
+    public UnifiedSavedInboxView UnifiedInbox { get; }
+    public UiElement? AccountSelectionContent { get; }
     /// <summary>The status line for the active workspace or dialog.</summary>
     public StandardLabel Footer { get; }
     // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=A9E9EB
@@ -421,7 +457,9 @@ public sealed class MailShellView : IDisposable
         _disposing = true;
         CloseDialog();
         _model.Account.CancelConnectionTest();
+        _model.AccountReceives?.Dispose();
         _model.Inbox.Dispose();
+        _model.Settings.Storage?.Dispose();
         _model.Composer.Dispose();
         Window.Dispose();
     }

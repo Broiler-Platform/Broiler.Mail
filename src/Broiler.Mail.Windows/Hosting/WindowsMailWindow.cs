@@ -58,6 +58,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private bool _maximized;
     private bool _closePending;
     private readonly WindowsHtmlPreviewHost _htmlPreview;
+    private readonly HtmlMeasurementHost? _htmlMeasurement;
     private readonly FrameRecorder? _recorder;
     private int _exitCode;
     // A simulated display scale (demo --scale, DPI tests); null reports Windows' own.
@@ -125,7 +126,11 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _normal = restore.Normal;
         _maximized = restore.Maximized;
         // A preview opens with the shell's current theme, so its caption matches and its zoom starts at the text size.
-        _htmlPreview = new WindowsHtmlPreviewHost(() => _appearance?.Current);
+        _htmlPreview = new WindowsHtmlPreviewHost(() => _appearance?.Current)
+        {
+            RendererProvider = () => Renderer,
+            ScaleProvider = () => DpiScale,
+        };
         _shell = new MailShellView(model, _htmlPreview, demo is null ? null : DemoApplication.CreateDateFormatter());
         _shell.Attach(_session);
         _keyboard = _shell.CreateKeyboardNavigation(_session);
@@ -138,6 +143,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
             // An open HTML preview follows too; it runs its own session on its own thread.
             _htmlPreview.ApplyTheme(_appearance.Current);
+            _htmlMeasurement?.ApplyTheme(_appearance.Current);
             foreach (var hostWindow in _host.HostWindows)
                 hostWindow.ApplyTheme(_appearance.Current);
             Invalidate();
@@ -147,6 +153,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             var driver = DemoScenarioDriver.Start(demo, model, _shell, _dispatcher);
             if (demo.Measure is not null)
             {
+                if (DemoOptions.MeasuresPreview(demo.Measure.Value)) _htmlMeasurement = new(() => _appearance.Current);
                 _recorder = new FrameRecorder(demo.Detail);
                 MeasurementRun.Start(this, _recorder, demo, driver.Completion);
             }
@@ -164,6 +171,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         // Broiler's secondary-window mode delegates close requests. Own its outer loop here so
         // a close can wait for autosave without blocking dispatch or silently dropping edits.
         Show();
+        DrainDispatcher();
         if (_restore.MoveAfterShow is { } position) WindowsScreen.MoveTo(NativeHandle, position.Left, position.Top);
         if (_restore.Maximized) SetWindowState(BWindowState.Maximized);
         while (true)
@@ -267,7 +275,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // UI-12 measurement hooks; only a --measure demo run uses them.
     internal bool RunOnUiThread(Action action) => PostToUiThread(action);
 
-    internal WindowsHtmlPreviewHost HtmlPreview => _htmlPreview;
+    internal HtmlMeasurementHost HtmlMeasurement => _htmlMeasurement ?? throw new InvalidOperationException("HTML measurement was not requested.");
 
     /// <summary>The recorder of a --measure run; null otherwise.</summary>
     internal FrameRecorder? Recorder => _recorder;
@@ -458,6 +466,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             _inputBridge?.Dispose();
             _host.DisposeHostWindows();
             _htmlPreview.Dispose();
+            _htmlMeasurement?.Dispose();
             _shell.Dispose();
             _appearance.Dispose();
             _session.Dispose();

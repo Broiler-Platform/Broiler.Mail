@@ -32,7 +32,7 @@ namespace Broiler.Mail.Application.Preview;
 // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=7CBBCE
 // Broiler-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
 // Broiler-Human:        PENDING
-public sealed class ScrollableMessageText : UiElement
+public sealed class ScrollableMessageText : UiElement, IReaderViewport
 {
     private readonly StandardRichEdit _editor = new()
     {
@@ -73,6 +73,30 @@ public sealed class ScrollableMessageText : UiElement
     }
 
     public StandardRichEdit Editor => _editor;
+    private (int Start, int End)? _findReveal;
+    /// <summary>Select and reveal a valid UTF-16 range in the displayed text without rewriting the message.</summary>
+    public bool SelectFindMatch(int start, int length)
+    {
+        if (start < 0 || length <= 0 || start > Text.Length - length) return false;
+        _editor.SetEditorSelection(start, start + length); _findReveal = (start, start + length); _zoomFraction = null;
+        Invalidate(UiInvalidationKind.Measure | UiInvalidationKind.Render); return true;
+    }
+    private void RevealFindMatch()
+    {
+        if (_findReveal is not { } match || _editor.Bounds.Width <= 0) return;
+        _findReveal = null;
+        // Reuse the same plain-text layout engine/font/zoom to locate the matching line in the outer scroll view.
+        using var measure = new StandardRichEdit { Font = _editor.Font, Zoom = _editor.Zoom, Wrapping = _editor.Wrapping,
+            VerticalScrollPolicy = RichEditScrollPolicy.Never, HorizontalScrollPolicy = RichEditScrollPolicy.Never,
+            PaddingX = _editor.PaddingX, PaddingY = _editor.PaddingY, IndentWidth = _editor.IndentWidth, TabStopWidth = _editor.TabStopWidth };
+        string value = Text;
+        double Height(int end)
+        { measure.SetPlainText(value[..end] + "\u200b"); return measure.Measure(new BSize(_editor.Bounds.Width, double.PositiveInfinity)).Height; }
+        double line = BTextMeasurer.GetLineHeight(_editor.Font) * _editor.Zoom;
+        double top = Math.Max(0, Height(match.Start) - line), bottom = Height(match.End);
+        _scroll.MakeVisible(new BRect(_editor.Bounds.Left, _editor.Bounds.Top + top, _editor.Bounds.Width, Math.Max(line, bottom - top)));
+    }
+
 
     /// <summary>
     /// The height that shows <paramref name="lines"/> lines of text at the text's font size, which
@@ -102,6 +126,14 @@ public sealed class ScrollableMessageText : UiElement
         }
     }
 
+    public double ReadingPosition => _zoomFraction ?? _readFraction;
+    public void RestoreReadingPosition(double fraction)
+    {
+        if (!double.IsFinite(fraction)) throw new ArgumentOutOfRangeException(nameof(fraction));
+        _zoomFraction = _readFraction = Math.Clamp(fraction, 0, 1);
+        Invalidate(UiInvalidationKind.Measure | UiInvalidationKind.Render);
+    }
+
     private double ReadFraction()
     {
         double range = _scroll.ExtentSize.Height - _scroll.ViewportSize.Height;
@@ -122,6 +154,7 @@ public sealed class ScrollableMessageText : UiElement
     public void ScrollToStart()
     {
         // The start wins over a place a zoom still has to restore.
+        _findReveal = null;
         _zoomFraction = null;
         _readFraction = 0;
         _scroll.ScrollToStart();
@@ -162,6 +195,7 @@ public sealed class ScrollableMessageText : UiElement
                 if (range > 0 && _scroll.SetOffset(new BPoint(_scroll.HorizontalOffset, Math.Round(fraction * range))))
                     _scroll.Arrange(finalRect);
             }
+            if (_findReveal is not null) { RevealFindMatch(); _scroll.Arrange(finalRect); }
             _readFraction = ReadFraction();
         }
         finally { _inLayout = false; }

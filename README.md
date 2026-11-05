@@ -1,8 +1,8 @@
 # Broiler.Mail
 
-A mail application built on .NET 10, Broiler.UI, and Broiler.Graphics. Version 1
-is implemented as a small, single-account reader and is ready for your provider
-acceptance test. Version 2 development is underway.
+A mail application built on .NET 10, Broiler.UI, and Broiler.Graphics. Windows
+development builds include durable offline mail, inline HTML and account selection.
+Mail rendering remains JavaScript-free by design.
 
 Version 2 development includes secure SMTP sending, separate SMTP credentials, and a plain-text
 composer with Reply, Reply all, and Forward. The active draft is saved locally and
@@ -10,8 +10,22 @@ recovered after restart. Sent copies can be provider-managed or appended via IMA
 HTML preview is implemented with Broiler.HTML. Renderer process isolation remains
 a release gate; current generated packages are unsigned validation builds.
 
-See the [roadmap](docs/roadmap.md) for release scope, Broiler component reuse,
-acceptance criteria, and the first implementation steps.
+See the [product completion roadmap](docs/product-completion-roadmap.md) for the active
+plan: persistent downloaded mail, inline HTML, multiple accounts, everyday workflows,
+and NativeAOT/platform releases. The [original roadmap](docs/roadmap.md) retains
+historical milestones and acceptance context.
+
+Windows now keeps received headers and opened message bodies in a versioned local
+profile for offline reading. Existing configuration/drafts are backed up and adopted
+without changing account IDs. **Settings → Local mail storage** provides usage,
+verified backups, restore into a separate profile, and recovery-backed cache cleanup.
+It also controls cache quota and headers-only/save-on-open policy. The inbox's
+**Download loaded messages** action explicitly keeps up to 500 loaded bodies offline,
+with cancellation and retry that skips already saved bodies.
+See [M1 persistence and recovery](docs/m1-persistence.md) for current limits and
+remaining offline-download policies.
+
+In the Windows reader, expand **Offline folders** to select up to eight folders per account, then choose **Download selected offline folders**. Each explicit batch covers up to 500 saved headers per unfinished folder. **Download next offline batch** continues into older saved headers; **Restart offline batches from newest** rechecks from the top without deleting mail. Session cursors advance only after success, and retry skips saved bodies. It does not receive headers or mirror whole folders. [Coverage and controls](docs/m1-selected-offline-folders.md).
 
 The [component reuse review](docs/component-reuse-review.md) identifies code that
 can move upstream and the recommended order for removing application workarounds.
@@ -22,7 +36,7 @@ reading/composing flows, accessibility, and smoothness, with
 [shared Broiler component roadmap](docs/broiler-experience-components-roadmap.md).
 
 See the [roadmap status of 5 October](docs/roadmap-status-2026-10-05.md)
-for the current status of every roadmap, remaining work, and validation evidence.
+for historical implementation status, remaining work, and validation evidence at that date.
 The [detailed UI implementation roadmap](docs/ui-implementation-roadmap.md) splits
 the remaining interface work into tracked packages, delivery slices, and native acceptance checks.
 Checks that need a person, particular hardware, or Windows settings are listed in the
@@ -119,8 +133,8 @@ The inbox is the main workspace. **Mail** opens a new message or the current dra
 **Message** offers Reply, Reply all, and Forward, and **Tools** opens the **Account**
 and **Settings** dialogs. Compose also opens in a dialog. Close or Escape returns
 to the inbox; unsaved fields and the current draft remain available when reopened.
-Use the existing Save buttons to apply account or settings changes. Save one account
-profile and its password, test the IMAP connection, receive mail, and read messages.
+Use the Save buttons to apply account or settings changes. Save account profiles
+and their own passwords, test the IMAP connections, receive mail, and read messages.
 Settings include a theme, Comfortable/Compact inbox row spacing, and initial window
 size. Saving row spacing updates the inbox immediately without changing text size.
 The executable retains console
@@ -128,19 +142,34 @@ output for startup diagnostics.
 
 Tab / Shift+Tab traverses enabled controls and reveals fields below the fold.
 F10 opens the menu; arrows and Enter select a command. Ctrl+1 returns to Inbox,
-and Ctrl+2/3/4 opens Account/Settings/Compose. F5 receives mail from the inbox,
+and Ctrl+2/3/4/5/6/7 opens Account/Settings/Compose/Outbox/Saved originals/Unified saved inbox. F5 receives mail from the inbox,
 Ctrl+N starts a message, Ctrl+R / Ctrl+Shift+R / Ctrl+F reply, reply to all, and forward, Escape
 closes the active dialog, cancels an active connection test, or goes back from a narrow-window reader, Alt+Left goes back, and Enter on a selected inbox
 message opens it. Shortcuts need their exact modifiers, so AltGr characters type normally.
-Settings lists every shortcut. In the HTML preview window, Ctrl+= (or Ctrl+Plus), Ctrl+- and
-Ctrl+0 zoom in, zoom out, and reset, on the main keys or the number pad; Ctrl+wheel also zooms,
-and Escape closes the preview. Text fields
+Settings lists the shortcuts. In the inline HTML reader, Ctrl+= (or Ctrl+Plus), Ctrl+- and
+Ctrl+0 zoom in, zoom out, and reset, on the main keys or the number pad. Ctrl+wheel
+zooms over the HTML body. Tab reveals links and Enter opens the focused link;
+Space / Shift+Space pages the focused document. These reader shortcuts leave
+dialogs, other editors, plain-text views and hidden reader panes alone. Text fields
 support the Windows clipboard; password fields cannot copy or cut their contents.
 The Windows host declares per-monitor DPI awareness and positions the default IME
 composition window at the caret; the IME is off while a password field has the caret.
 Minimum client size is 640×480 logical pixels.
 
 ## Set up and test an account
+
+Windows' **Mail account** selector remembers the chosen account across restart.
+**Add account** opens setup; saving adds and selects that identity. Close setup and
+choose **Cancel new account** to abandon unsaved new details. Save existing account
+edits before switching. Each account keeps its own credential bindings and cached
+INBOX. A retained draft keeps its original sender; select that account again to send.
+**Manage accounts** enables/disables the selected account and changes its order.
+Disabling keeps cached mail, credentials and drafts; enabling starts no automatic
+receive. **Remove account…** requires a second confirmation and a verified recovery
+backup, with an explicit keep/forget-password choice. It retains downloaded mail
+and refuses an account that owns a retained draft/submission record. Passwords are
+not backed up; partial cleanup can leave an account listed with a password already
+forgotten. See [account progress](docs/m3-account-collection.md).
 
 1. Enter the email address, IMAP hostname, port, username, and TLS mode in **Account**.
    Choose the settings supplied by your mail provider, then select **Save account**.
@@ -210,7 +239,11 @@ identifiers are included in outgoing MIME headers. Forward starts with empty rec
 fields and no reply-thread identifiers. Quotes identify truncated or HTML-derived
 text; attachments are not forwarded.
 
-Only one draft can be open. Closing and reopening the Compose dialog or changing inbox selection keeps it intact.
+**Unified saved inbox** (Mail menu / Ctrl+7) provides explicit offline browsing across configured accounts, including disabled accounts, with account-attributed rows and exact saved-text reading. It keeps the active account and pinned draft unchanged, never receives automatically, and shows up to 50 newest saved INBOX UIDs per account. [Coverage and limits](docs/m3-unified-saved-inbox.md).
+
+**Saved originals** (Mail menu / Ctrl+6) also opens local `.eml` files as read-only byte-source previews. Choose **Import opened original** separately to retain exact bytes for the selected account, then **List local imports** to reopen them. Imports use local identities, survive cache cleanup and are included in verified profile backups. Current limits are 2 MiB per file and 16 files/4 MiB per profile. [Local opening/import details](docs/m4-local-originals.md).
+
+One draft is active at a time. In the Windows profile-backed composer, expand **Saved drafts** to save and close it, start another message, or resume a saved draft. Resuming atomically saves any open draft first. Up to 20 other drafts/submission records fit in the library, within the shared 4 MiB file limit. Account selection filters the library; each draft retains its original sender. Closing/reopening Compose or changing inbox selection keeps the active draft intact. [Multiple-draft details and compatibility](docs/m4-multiple-drafts.md).
 Use **Discard draft** before starting another composition. The displayed sender is
 fixed when the draft starts; changing the saved email address does not silently
 change that draft's sender. Edits are automatically saved, including incomplete
@@ -263,27 +296,32 @@ uses read-only access and leaves the server's read/unread flags unchanged. **Rea
 message** retries a failed or canceled body request. **Receive mail** replaces the
 loaded list; a failed refresh keeps the previous list visible.
 
-Plain-text MIME content is preferred. HTML-only messages get a labeled text
-extraction with simplified formatting. Images, scripts, styles, external resources,
-and clickable links are not rendered. Attachment-only mail has an explicit empty
-text state. Reading and network work run away from the UI thread.
-
-For a message with HTML, **Open HTML preview** shows it rendered by Broiler.HTML in a
-separate window ([renderer security gate](docs/html-renderer-security.md)). The preview
-opens at the system text size and zooms from 50 to 300 % with **Zoom out**, the level
-button (which resets to the default), **Zoom in**, Ctrl+= / Ctrl+- / Ctrl+0, or
-Ctrl+wheel. Until you zoom, it follows changes of the text size; after a reset it follows
-them again. The same zoom applies to the plain-text view (**Show plain text**). It is not
-saved: every preview opens at the default. Content that cannot wrap, such as a long
-unbroken address, scrolls sideways.
+Windows prefers available HTML inside the normal reading pane using Broiler.HTML.
+**Plain text / HTML** switches views and remembers the preference across restarts.
+The HTML page follows light, dark and high-contrast application palettes, retaining
+reading position and custom zoom when appearance changes.
+The text alternative includes labeled extraction for HTML-only mail and supports
+selection/copy. Attachment-only mail has an explicit empty text state.
+Restricted markup and bounded CID images render; automatic remote resources and
+scripts stay blocked. Deliberately activated HTTP(S) links open in the system browser.
+The renderer shares the application process; the
+[renderer security gate](docs/html-renderer-security.md) remains open.
+Inline **Zoom out**, percentage/reset, and **Zoom in** controls cover 50–300 percent
+and start at the system text scale. Managed rendering failures fall back to text.
+**Load remote images** asks the controlled broker to fetch images for the open
+message, with a privacy explanation, cancellation and partial retry. Permission
+resets when the reader is replaced; these images are not saved in the mail cache.
+Broader networking/TLS and full native UI acceptance remain M2 work;
+the older pop-out preview is retained for measurement tools. See [M2 progress](docs/m2-inline-reader.md).
 
 Current limits: 50 headers per page, 500 loaded headers per session, 2 MiB per raw
 message including attachments, and a 32,000-character text preview. Larger messages
 show an error; long text shows a truncation notice. At the session limit, an information
 notice above the list says so. Bodies are fetched only on
-selection, and only the selected decoded body is retained. Attachments can be part
-of the bounded MIME download but cannot be opened or saved. Mail is held in memory
-and must be received again after restart.
+selection or explicit **Download loaded messages**. Windows saves headers and,
+according to the configured download policy, decoded bodies/CID images to the local
+profile. Saved bodies remain readable after restart without a connection.
+Attachments can be part of the bounded MIME download but cannot be opened or saved.
 
 Each network operation has a 20-second deadline. If messages arrive or disappear
 between pages, **Load older** asks you to receive again. A changed mailbox identity

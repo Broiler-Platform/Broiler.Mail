@@ -95,8 +95,8 @@ public sealed class NewMailFixtureTests
         // At the top of the list nothing anchors, so the new rows are visible above the open one.
         var list = run.Descendant<StandardListView>();
         Assert.Equal(0, list.VerticalOffset);
-        Assert.Equal("1:58", list.Items[0].Id);
-        Assert.Equal("1:55", list.SelectedItemId);
+        Assert.Equal(inbox.Messages[0].Key, Assert.IsType<MailMessageSummary>(list.Items[0].Tag).Key);
+        Assert.Equal(inbox.SelectedMessage.Key, Assert.IsType<MailMessageSummary>(list.Items.Single(item => item.Id == list.SelectedItemId).Tag).Key);
         Assert.StartsWith("Read · Welcome to Broiler.Mail", list.Items[3].Text);
     }
 
@@ -120,7 +120,7 @@ public sealed class NewMailFixtureTests
             return Task.CompletedTask;
         });
         var body = run.Model.Inbox.Body;
-        Assert.Equal(chosen, $"1:{body?.Key.Uid}");
+        Assert.Equal(body?.Key, Assert.IsType<MailMessageSummary>(list.Items.Single(item => item.Id == chosen).Tag).Key);
         var reader = run.Descendant<ScrollableMessageText>();
         var scroll = Descendants(reader).OfType<StandardScrollView>().Single();
         Assert.True(scroll.ScrollBy(0, 300));
@@ -131,7 +131,8 @@ public sealed class NewMailFixtureTests
 
         run.Do(run.Model.Inbox.ReceiveAsync);
 
-        Assert.Equal("1:61", list.Items[0].Id);
+        Assert.Equal(61u, Assert.IsType<MailMessageSummary>(list.Items[0].Tag).Key.Uid);
+        Assert.Equal(run.Model.Inbox.Messages[0].Key, Assert.IsType<MailMessageSummary>(list.Items[0].Tag).Key);
         Assert.Equal(anchor, list.Items[list.FirstVisibleIndex].Id);
         Assert.Equal(withinRow, list.VerticalOffset - list.FirstVisibleIndex * list.EffectiveItemHeight, 3);
         Assert.Equal(chosen, list.SelectedItemId);
@@ -287,7 +288,7 @@ public sealed class NewMailFixtureTests
             return run;
         }
 
-        public T Descendant<T>() where T : UiElement => Descendants(Shell.Window).OfType<T>().Single();
+        public T Descendant<T>() where T : UiElement => Descendants(Shell.GetContent("inbox")).OfType<T>().Single();
 
         public void Render() => Assert.NotNull(_session.RenderFrame());
 

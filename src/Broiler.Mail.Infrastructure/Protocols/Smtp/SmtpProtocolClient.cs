@@ -180,8 +180,9 @@ public sealed class SmtpProtocolClient : IAsyncDisposable, IDisposable
     public async Task SendMailAsync(
         string sender,
         IReadOnlyList<string> recipients,
-        byte[] messageBytes,
-        CancellationToken cancellationToken)
+        IEnumerable<ReadOnlyMemory<byte>> messageChunks,
+        CancellationToken cancellationToken,
+        Action<long>? bytesSent = null)
     {
         // Format sender address
         string cleanSender = sender.Trim().Trim('<', '>');
@@ -213,7 +214,7 @@ public sealed class SmtpProtocolClient : IAsyncDisposable, IDisposable
         }
 
         // Stream dot-stuffed body
-        await StreamDotStuffedBodyAsync(messageBytes, cancellationToken).ConfigureAwait(false);
+        await StreamDotStuffedBodyAsync(messageChunks, cancellationToken, bytesSent).ConfigureAwait(false);
 
         // Read final submission acceptance response
         var submitResp = await ReadResponseAsync(cancellationToken).ConfigureAwait(false);
@@ -223,23 +224,57 @@ public sealed class SmtpProtocolClient : IAsyncDisposable, IDisposable
         }
     }
 
-    private async Task StreamDotStuffedBodyAsync(byte[] messageBytes, CancellationToken cancellationToken)
+    private async Task StreamDotStuffedBodyAsync(IEnumerable<ReadOnlyMemory<byte>> messageChunks, CancellationToken cancellationToken, Action<long>? bytesSent)
     {
-        string text = Encoding.UTF8.GetString(messageBytes);
-        var lines = text.Split(["\r\n", "\n", "\r"], StringSplitOptions.None);
-        var sb = new StringBuilder();
-
-        foreach (string line in lines)
+        // SMTP DATA is framed at the octet level. Keep the transport buffer bounded
+        // even when the serialized message contains a large base64 part.
+        var buffer = new byte[8192];
+        int used = 0;
+        long transferred = 0, lastReport = 0;
+        bool lineStart = true;
+        bool previousWasCr = false;
+        foreach (var chunk in messageChunks)
         {
-            if (line.StartsWith('.'))
+            cancellationToken.ThrowIfCancellationRequested();
+            for (int index = 0; index < chunk.Length; index++)
             {
-                sb.Append('.'); // Dot-stuffing
+                if (used >= buffer.Length - 5)
+                {
+                    await _connection.WriteBytesAsync(buffer.AsMemory(0, used), cancellationToken).ConfigureAwait(false);
+                    transferred += used;
+                    if (transferred - lastReport >= 256 * 1024)
+                    {
+                        lastReport = transferred;
+                        bytesSent?.Invoke(transferred);
+                    }
+                    used = 0;
+                }
+
+                byte value = chunk.Span[index];
+                bool skipLf = previousWasCr && value == (byte)'\n';
+                previousWasCr = value == (byte)'\r';
+                if (skipLf) continue;
+                if (value is (byte)'\r' or (byte)'\n')
+                {
+                    buffer[used++] = (byte)'\r';
+                    buffer[used++] = (byte)'\n';
+                    lineStart = true;
+                    continue;
+                }
+
+                if (lineStart && value == (byte)'.') buffer[used++] = (byte)'.';
+                buffer[used++] = value;
+                lineStart = false;
             }
-            sb.Append(line).Append("\r\n");
         }
 
-        sb.Append(".\r\n"); // End of DATA
-        await _connection.WriteBytesAsync(Encoding.UTF8.GetBytes(sb.ToString()), cancellationToken).ConfigureAwait(false);
+        if (used > buffer.Length - 5)
+        {
+            await _connection.WriteBytesAsync(buffer.AsMemory(0, used), cancellationToken).ConfigureAwait(false);
+            used = 0;
+        }
+        "\r\n.\r\n"u8.CopyTo(buffer.AsSpan(used));
+        await _connection.WriteBytesAsync(buffer.AsMemory(0, used + 5), cancellationToken).ConfigureAwait(false);
     }
 
     public async Task DisconnectAsync(bool sendQuit, CancellationToken cancellationToken)

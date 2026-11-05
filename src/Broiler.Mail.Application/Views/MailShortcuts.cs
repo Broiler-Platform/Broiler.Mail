@@ -24,7 +24,7 @@ namespace Broiler.Mail.Application.Views;
 public enum MailCommand
 {
     NextField, PreviousField, OpenMenu, Inbox, Account, Settings, Compose,
-    Receive, NewMessage, Reply, ReplyAll, Forward, OpenMessage, Back, BackOrCancel,
+    Receive, NewMessage, Reply, ReplyAll, Forward, OpenMessage, Back, BackOrCancel, Outbox, SavedOriginals, UnifiedSavedInbox,
 }
 
 /// <summary>One key with an exact set of Ctrl, Shift, and Alt modifiers.</summary>
@@ -47,6 +47,9 @@ public static class MailShortcuts
         new(MailCommand.Account, '2', true, false, false, "Ctrl+2", "Account"),
         new(MailCommand.Settings, '3', true, false, false, "Ctrl+3", "Settings"),
         new(MailCommand.Compose, '4', true, false, false, "Ctrl+4", "Compose"),
+        new(MailCommand.UnifiedSavedInbox, '7', true, false, false, "Ctrl+7", "Unified saved inbox"),
+        new(MailCommand.SavedOriginals, '6', true, false, false, "Ctrl+6", "Saved originals"),
+        new(MailCommand.Outbox, '5', true, false, false, "Ctrl+5", "Outbox"),
         new(MailCommand.Receive, F5, false, false, false, "F5", "Receive mail"),
         new(MailCommand.NewMessage, 'N', true, false, false, "Ctrl+N", "New message"),
         new(MailCommand.Reply, 'R', true, false, false, "Ctrl+R", "Reply"),

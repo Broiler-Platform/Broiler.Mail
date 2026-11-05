@@ -35,9 +35,11 @@ namespace Broiler.Mail.Application;
 // Broiler-Human:        PENDING
 public sealed class MailApplication(
     IAccountStore accounts, ISettingsStore settings, IMailReceiver receiver, IMailSender sender, ICredentialStore credentials, IDraftStore? drafts = null, ISentCopyWriter? sentCopies = null,
-    IOutgoingConnectionTester? outgoingTester = null)
+    IOutgoingConnectionTester? outgoingTester = null, IMailCache? cache = null, IDisposable? profileLifetime = null,
+    IProfileStorage? storage = null, Action<string>? openProfile = null, IAccountRemovalService? accountRemoval = null, IRecipientBook? recipientBook = null, IOfflineFolderStore? offlineFolders = null, IAccountNavigationStore? navigation = null, IMessageSourceExports? sourceExports = null) : IDisposable
 {
-    public IAccountStore Accounts { get; } = accounts ?? throw new ArgumentNullException(nameof(accounts));
+    private readonly List<AccountReceiveQueueViewModel> _receiveQueues = [];
+    public IAccountStore Accounts { get; } = accounts is CoordinatedAccountCollectionStore coordinated ? coordinated : accounts is IAccountCollectionStore collection ? new CoordinatedAccountCollectionStore(collection) : accounts ?? throw new ArgumentNullException(nameof(accounts));
     public ISettingsStore Settings { get; } = settings ?? throw new ArgumentNullException(nameof(settings));
     public IMailReceiver Receiver { get; } = receiver ?? throw new ArgumentNullException(nameof(receiver));
     public IMailSender Sender { get; } = sender ?? throw new ArgumentNullException(nameof(sender));
@@ -46,10 +48,12 @@ public sealed class MailApplication(
     public ISentCopyWriter? SentCopies { get; } = sentCopies;
     /// <summary>The non-sending SMTP sign-in test; without it the Account tab offers no SMTP test.</summary>
     public IOutgoingConnectionTester? OutgoingTester { get; } = outgoingTester;
+    public IMailCache? Cache { get; } = cache;
     public DraftStoreState LoadedDraft { get; private set; } = new(0, null);
     public string? DraftLoadError { get; private set; }
 
     public AccountProfile? LoadedAccount { get; private set; }
+    public AccountCollectionState LoadedAccountCollection { get; private set; } = new([], null);
     public ApplicationSettings LoadedSettings { get; private set; } = new();
     public string? AccountLoadError { get; private set; }
     public string? SettingsLoadError { get; private set; }
@@ -71,10 +75,17 @@ public sealed class MailApplication(
         }
         try
         {
-            var profiles = await Accounts.LoadAsync(cancellationToken).ConfigureAwait(false);
-            if (profiles.Count > 1)
-                throw new InvalidDataException("Version 1 supports only one account.");
-            LoadedAccount = profiles.SingleOrDefault();
+            if (Accounts is IAccountCollectionStore collection)
+            {
+                LoadedAccountCollection = await collection.LoadStateAsync(cancellationToken).ConfigureAwait(false);
+                LoadedAccount = LoadedAccountCollection.Accounts.SingleOrDefault(profile => profile.Id == LoadedAccountCollection.SelectedAccountId);
+            }
+            else
+            {
+                var profiles = await Accounts.LoadAsync(cancellationToken).ConfigureAwait(false);
+                if (profiles.Count > 1) throw new InvalidDataException("This account store supports only one active profile.");
+                LoadedAccount = profiles.SingleOrDefault();
+            }
             AccountLoadError = null;
         }
         catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
@@ -96,17 +107,33 @@ public sealed class MailApplication(
     // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=35E6AC
     // Broiler-Falsified-If: a draft or account load error recorded by InitializeAsync is not passed to its view model, so saving is enabled over the unreadable file
     // Broiler-Human:        PENDING
-    public MailShellView CreateShell(IUiDispatcher? dispatcher = null, IHtmlPreviewHost? htmlPreview = null)
+    public MailShellView CreateShell(IUiDispatcher? dispatcher = null, IInlineHtmlPreviewHost? htmlPreview = null)
         => new(CreateViewModel(dispatcher), htmlPreview);
 
     /// <summary>Create state independently of views, allowing deterministic in-memory fixtures to be prepared before layout.</summary>
     public MailShellViewModel CreateViewModel(IUiDispatcher? dispatcher = null)
     {
         dispatcher ??= new ImmediateUiDispatcher();
-        return new MailShellViewModel(
-            new AccountProfileViewModel(Accounts, Credentials, Receiver, dispatcher, LoadedAccount, AccountLoadError, OutgoingTester),
-            new SettingsViewModel(Settings, dispatcher, LoadedSettings, SettingsLoadError),
-            new InboxViewModel(Receiver, dispatcher),
-            new ComposerViewModel(Drafts, LoadedDraft, dispatcher, Sender, DraftLoadError, SentCopies));
+        var model = new MailShellViewModel(
+            new AccountProfileViewModel(Accounts is CoordinatedAccountCollectionStore collection ? new SelectedAccountEditorStore(collection) : Accounts, Credentials, Receiver, dispatcher, LoadedAccount, AccountLoadError, OutgoingTester),
+            new SettingsViewModel(Settings, dispatcher, LoadedSettings, SettingsLoadError,
+                storage is null ? null : new ProfileStorageViewModel(storage, dispatcher, openProfile)),
+            new InboxViewModel(Receiver, dispatcher, Cache, storage?.Policy.Downloads ?? OfflineDownloadPolicy.OnDemand, offlineFolders, navigation, sourceExports),
+            new ComposerViewModel(Drafts, LoadedDraft, dispatcher, Sender, DraftLoadError, SentCopies, recipientBook));
+        if (Accounts is CoordinatedAccountCollectionStore accountsCollection)
+        {
+            model.ConfigureAccounts(accountsCollection, LoadedAccountCollection, dispatcher, AccountLoadError, accountRemoval, storage as IAccountDownloadedMailStorage);
+            if (model.AccountReceives is {} queue) _receiveQueues.Add(queue);
+        }
+        return model;
     }
+
+    private sealed class SelectedAccountEditorStore(IAccountCollectionStore collection) : IAccountStore
+    {
+        public Task<IReadOnlyList<AccountProfile>> LoadAsync(CancellationToken token = default) => collection.LoadAsync(token);
+        public Task SaveAsync(AccountProfile profile, CancellationToken token = default) => collection.SaveAndSelectAsync(profile, token);
+        public Task RemoveAsync(AccountId id, CancellationToken token = default) => collection.RemoveAsync(id, token);
+    }
+
+    public void Dispose() { foreach (var queue in _receiveQueues) queue.Dispose(); profileLifetime?.Dispose(); }
 }

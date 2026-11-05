@@ -316,7 +316,7 @@ public sealed class NativeInputFidelityTests
     }
 
     private static T Find<T>(HiddenMailWindow fixture) where T : UiElement =>
-        fixture.Ui(() => HiddenMailWindow.Descendants(fixture.Window.Shell.Window).OfType<T>().Single());
+        fixture.Ui(() => HiddenMailWindow.Descendants(fixture.Window.Shell.GetContent("inbox")).OfType<T>().Single());
 
     /// <summary>Collects every wheel event Hosting's bridge dispatches; read the list on the window thread.</summary>
     private static List<UiInputEvent> RecordWheels(HiddenMailWindow fixture)

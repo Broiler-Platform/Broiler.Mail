@@ -21,10 +21,17 @@ namespace Broiler.Mail.Core.Messages;
 
 // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=17AB36
 // Broiler-Human:        PENDING
-public sealed record MailInboxPage(IReadOnlyList<MailMessageSummary> Messages, MailInboxCursor? Older);
+public sealed record MailInboxPage(IReadOnlyList<MailMessageSummary> Messages, MailInboxCursor? Older)
+{
+    /// <summary>The examined mailbox epoch, including when an inbox is empty.</summary>
+    public MailboxKey? Mailbox { get; init; }
+}
 
 /// <summary>A session-only continuation. Mailbox membership changes require a fresh first page.</summary>
 // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=Medium; Resources=0; Fingerprint=076EE8
 // Broiler-Falsified-If: on a server that reports no UIDNEXT, an expunge plus an arrival between two pages keeps the cursor matching and the next page repeats or skips a message instead of requiring a fresh first page
 // Broiler-Human:        PENDING
-public sealed record MailInboxCursor(AccountId AccountId, uint UidValidity, uint? UidNext, int MessageCount, int NextIndex);
+public sealed record MailInboxCursor(AccountId AccountId, uint UidValidity, uint? UidNext, int MessageCount, int NextIndex)
+{
+    public string MailboxId { get; init; } = "INBOX";
+}

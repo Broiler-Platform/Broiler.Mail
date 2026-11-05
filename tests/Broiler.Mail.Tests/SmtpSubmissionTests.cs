@@ -13,6 +13,19 @@ public sealed class SmtpSubmissionTests
     [Theory]
     [InlineData(TransportSecurity.Tls)]
     [InlineData(TransportSecurity.StartTls)]
+    public async Task ExplicitAliasUsesExistingAccountCredentialsAndAliasEnvelope(TransportSecurity security)
+    {
+        await using var server = new LocalSmtpServer(security); var account = Profile(server, security) with { SenderAliases = "alias@example.test" };
+        var credentials = await Credentials(account); var draft = MailComposition.Create(account, "alias@example.test") with { To = ["to@example.test"], PlainText = "Alias fixture" };
+        var result = await Sender(credentials, server).SendAsync(account, draft);
+        Assert.Equal(SubmissionStatus.Accepted, result.Status); Assert.Contains("alias@example.test", server.Sender!); Assert.Contains("alias@example.test", server.RawMessage!); Assert.True(server.AuthenticatedOverTls);
+        var refused = await Sender(credentials, server).SendAsync(account with { SenderAliases = "" }, draft);
+        Assert.Equal(SubmissionStatus.Rejected, refused.Status); Assert.Equal(1, server.DataCount);
+    }
+
+    [Theory]
+    [InlineData(TransportSecurity.Tls)]
+    [InlineData(TransportSecurity.StartTls)]
     public async Task SendsUnicodeReplyWithPrivateBccEnvelopeAndDurableAcceptance(TransportSecurity security)
     {
         await using var server = new LocalSmtpServer(security);
@@ -46,6 +59,45 @@ public sealed class SmtpSubmissionTests
         Assert.Equal($"{composer.DraftId:N}@broiler.mail", message.MessageId);
         await composer.SendAsync();
         Assert.Equal(1, server.DataCount);
+    }
+
+    [Fact]
+    public async Task AttachmentBytesSurviveDraftRestartAndLoopbackSubmission()
+    {
+        await using var server = new LocalSmtpServer(TransportSecurity.Tls);
+        var account = Profile(server);
+        using var directory = new TestDirectory();
+        var store = new JsonDraftStore(directory.File("drafts.json"));
+        string path = directory.File("Grüße.bin");
+        byte[] expected = Enumerable.Range(0, 20_480).Select(value => (byte)value).ToArray();
+        directory.Create();
+        await File.WriteAllBytesAsync(path, expected);
+        using (var composer = new ComposerViewModel(store))
+        {
+            composer.SetAccount(account);
+            Assert.True(composer.StartNew());
+            composer.Edit("to@example.test", "", "hidden@example.test", "Files", "See attached 😀");
+            await composer.AddAttachmentAsync(path);
+            Assert.Null(composer.AttachmentReminderText);
+            Assert.Equal(expected, Assert.Single(composer.Attachments).Content.ToArray());
+            Assert.True(await composer.SaveAsync());
+        }
+        File.Delete(path);
+        var stored = await store.LoadAsync();
+        using var reopened = new ComposerViewModel(store, stored, sender: Sender(await Credentials(account), server));
+        reopened.SetAccount(account);
+        Assert.Equal("Grüße.bin", Assert.Single(reopened.Attachments).FileName);
+        Assert.DoesNotContain(path, await File.ReadAllTextAsync(directory.File("drafts.json")));
+        await reopened.SendAsync();
+        Assert.Equal(DraftSubmissionState.Accepted, reopened.SubmissionState);
+        Assert.Equal(1, server.DataCount);
+        var delivered = MimeParser.Parse(System.Text.Encoding.UTF8.GetBytes(server.RawMessage!));
+        Assert.Empty(delivered.Bcc);
+        Assert.Equal("See attached 😀", delivered.TextBody!.TrimEnd('\r', '\n'));
+        var attachment = Assert.Single(delivered.Parts, part => part.IsAttachment);
+        Assert.Equal("Grüße.bin", attachment.FileName);
+        Assert.Equal(expected, attachment.Data);
+        Assert.Equal(expected, Assert.Single((await store.LoadAsync()).Draft!.Draft.Attachments!).Content.ToArray());
     }
 
     [Fact]

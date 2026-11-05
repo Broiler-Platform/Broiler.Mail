@@ -36,7 +36,7 @@ internal static class ShellSmokeCheck
     {
         using var session = new StandardUiSessionBuilder().Build(new HeadlessHost());
         shell.Attach(session);
-        foreach (string tabId in new[] { "inbox", "account", "settings", "compose" })
+        foreach (string tabId in new[] { "inbox", "account", "settings", "compose", "outbox", "originals", "unified" })
         {
             if (!shell.ShowView(tabId))
                 throw new InvalidOperationException($"Missing shell view: {tabId}");

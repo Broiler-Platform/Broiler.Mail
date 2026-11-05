@@ -1,0 +1,10 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup><OutputType>Exe</OutputType><PublishAot>true</PublishAot></PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../src/Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
+    <PackageReference Include="Broiler.Media.Image.Managed" />
+    <PackageReference Include="Broiler.Net" />
+    <Compile Include="../../src/Broiler.Mail.Windows/Preview/RemoteImageBroker.cs" Link="Production/RemoteImageBroker.cs" />
+    <Compile Include="../../src/Broiler.Mail.Windows/Preview/HtmlResourceOutcome.cs" Link="Production/HtmlResourceOutcome.cs" />
+  </ItemGroup>
+</Project>

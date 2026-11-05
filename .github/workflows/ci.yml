@@ -89,6 +89,8 @@ jobs:
           if ($LASTEXITCODE -ne 0) { throw 'Dependency inventory failed.' }
       - name: Shared tests
         run: dotnet test tests/Broiler.Mail.Tests/Broiler.Mail.Tests.csproj -c Release --logger 'trx;LogFileName=shared.trx' --results-directory artifacts/validation --blame-hang-timeout 2m
+      - name: Native dependency policy regression fixtures
+        run: ./scripts/Test-NativeDependencies.ps1
       - name: Managed Linux adapter tests (no native display)
         run: dotnet test tests/Broiler.Mail.Linux.Tests/Broiler.Mail.Linux.Tests.csproj -c Release --logger 'trx;LogFileName=linux-host.trx' --results-directory artifacts/validation --blame-hang-timeout 2m
       - name: Windows host tests
@@ -130,6 +132,17 @@ jobs:
           global-json-file: global.json
       - name: Publish and smoke-test matching architecture
         run: ./scripts/Publish-Windows.ps1 -Runtime '${{ matrix.runtime }}'
+      - name: NativeAOT storage, protocol and HTTP-session probes
+        run: ./scripts/Confirm-M0Probes.ps1 -Runtime '${{ matrix.runtime }}'
+      - name: Framework-dependent publish and smoke
+        run: ./scripts/Publish-Windows.ps1 -Runtime '${{ matrix.runtime }}' -Variant framework-dependent
+      - name: Upload M0 evidence
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: m0-${{ matrix.runtime }}
+          path: artifacts/m0/**
+          if-no-files-found: warn
       - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: unsigned-${{ matrix.runtime }}
@@ -137,5 +150,27 @@ jobs:
             artifacts/*.zip
             artifacts/*.sha256
           if-no-files-found: error
+
+  m0-linux-probes:
+    name: M0 Linux x64 probes (no GUI support claim)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Install NativeAOT prerequisites
+        run: sudo apt-get update && sudo apt-get install -y clang zlib1g-dev
+      - name: Publish and execute NativeAOT probes
+        run: ./scripts/Confirm-M0Probes.ps1 -Runtime linux-x64
+      - uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        if: always()
+        with:
+          name: m0-linux-x64
+          path: artifacts/m0/**
+          if-no-files-found: warn
   # Phase 0 validates unsigned artifacts only. Release publishing/signing remains
   # gated on the renderer security acceptance in docs/html-renderer-security.md.
