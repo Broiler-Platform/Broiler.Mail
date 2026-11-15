@@ -61,7 +61,6 @@ internal static class ProfileSmokeCheck
         string directory = FixtureDirectory(profile.Id);
         var key = CredentialKey.For(profile, MailProtocol.Imap);
         var credentials = new WindowsCredentialStore();
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
         try
         {
             await SavedOriginalLibrarySmokeCheck.RunAsync(Path.Combine(directory, "saved-original-library-smoke"), profile);
@@ -86,6 +85,10 @@ internal static class ProfileSmokeCheck
             await PermanentDeleteSmokeCheck.RunAsync(Path.Combine(directory, "delete-smoke.db"), profile);
             await MoveWorkflowSmokeCheck.RunAsync(Path.Combine(directory, "move-ui-smoke.db"), profile);
             await AccountSelectionSmokeCheck.RunAsync(Path.Combine(directory, "account-selection-smoke"));
+            // The deadline bounds the profile, credential, reopen and MIME steps below, which take its token. Started
+            // before the feature checks above, which take none, it was spent by them on a slower runner (Windows on
+            // ARM), and the first step below was cancelled before it began.
+            using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             string accounts = Path.Combine(directory, "accounts.json");
             string settings = Path.Combine(directory, "settings.json");
             await new JsonAccountStore(accounts).SaveAsync(profile, timeout.Token);
