@@ -921,6 +921,47 @@ public sealed class ResponsiveInboxTests
     /// <see cref="TheReaderHeaderShowsTheMarginBelowItsLastRowWithoutAScrollBar"/> shows the margin in a window
     /// made for it.
     /// </summary>
+    /// <summary>
+    /// The compact reader's parsed-headers toggle shares Back's row while both fit on one line, and otherwise
+    /// has its own row below the date, so the first row never wraps taller than the header's share and is cut.
+    /// </summary>
+    [Theory]
+    [InlineData(1.0, true)]
+    [InlineData(2.0, false)]
+    public async Task TheParsedHeadersToggleSharesBacksRowOnlyWhereBothFitOnOneLine(double textScale, bool besideBack)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(640, 480);
+            Assert.True(reader.Layout.ShowsReaderOnly);
+            var back = reader.Button(InboxView.BackText);
+            var toggle = reader.Button("Show parsed headers");
+            Assert.Equal(besideBack, toggle.Parent == back.Parent);
+            if (besideBack)
+                Assert.Equal(back.Bounds.Top, toggle.Bounds.Top, 0.5);
+            else
+            {
+                // Its own row, below the date and not in Back's row, which keeps one line.
+                Assert.True(toggle.Bounds.Top >= back.Parent!.Bounds.Bottom, $"The toggle at {toggle.Bounds} is in Back's row at {back.Parent!.Bounds}.");
+                Assert.Equal(1, back.Parent!.Children.Count(child => child.Visibility != UiVisibility.Collapsed));
+                var date = Descendants(reader.Header).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received", StringComparison.Ordinal));
+                Assert.True(toggle.Bounds.Top >= date.Bounds.Bottom, $"The toggle at {toggle.Bounds} is above the date at {date.Bounds}.");
+            }
+
+            // Wherever it is, it still shows the parsed headers.
+            toggle.Click();
+            reader.Session.RenderFrame();
+            Assert.Contains(Descendants(reader.Header).OfType<StandardRichEdit>(), edit => edit.AccessibleName == "Parsed message headers");
+            Assert.Equal("Hide parsed headers", toggle.Text);
+        }
+        finally
+        {
+            StandardControlPaint.ApplyTheme(previous);
+        }
+    }
+
     [Theory]
     [InlineData(640, 480, 1.0, "plain", false, true)]
     [InlineData(640, 480, 1.0, "html", false, true)]
