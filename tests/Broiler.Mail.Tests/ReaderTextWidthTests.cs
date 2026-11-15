@@ -27,6 +27,9 @@ public sealed class ReaderTextWidthTests
         var (longText, longScroll) = Layout(Long, width);
         Assert.Equal(shortScroll.ViewportSize.Width, width);
         Assert.True(longScroll.ViewportSize.Width < width, "The long message scrolls, beside its bar.");
+        // The bar takes its thickness and gap, which the reader header's layout counts on.
+        Assert.Equal(width - longScroll.ScrollbarThickness - longScroll.ScrollbarGap, longScroll.ViewportSize.Width, 0.5);
+        Assert.Equal(longText.Editor.Bounds.Width, ReadingColumn.ContentWidthIn(width, longScroll.ViewportSize.Width));
 
         Assert.Equal(shortText.Editor.Bounds.Width, longText.Editor.Bounds.Width);
         Assert.Equal(shortText.Editor.Bounds.X, longText.Editor.Bounds.X);

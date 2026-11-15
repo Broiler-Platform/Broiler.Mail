@@ -962,6 +962,62 @@ public sealed class ResponsiveInboxTests
         }
     }
 
+    [Fact]
+    public async Task AFocusedParsedHeadersToggleKeepsFocusWhenItMovesToItsOwnRow()
+    {
+        using var reader = await ReaderFixture.OpenAsync(640, 480);
+        var back = reader.Button(InboxView.BackText);
+        var toggle = reader.Button("Show parsed headers");
+        Assert.Same(back.Parent, toggle.Parent);
+        reader.Session.SetFocus(toggle);
+
+        // Beside the list Back is hidden, and the toggle has its own row below the date.
+        reader.Resize(1100, 720);
+        Assert.False(reader.Layout.IsCompact);
+        Assert.NotSame(back.Parent, toggle.Parent);
+        Assert.True(toggle.Bounds.Width > 0);
+        Assert.Same(toggle, reader.Session.FocusedElement);
+    }
+
+    /// <summary>
+    /// In a narrow compact reader whose header scrolls, the column gives way to the scroll bar; the toggle shares
+    /// Back's row only where both still fit on one line there, so that first row never wraps.
+    /// </summary>
+    [Theory]
+    [InlineData(1.0, 260)]
+    [InlineData(1.0, 320)]
+    [InlineData(1.25, 300)]
+    public async Task InANarrowScrollingHeaderBacksRowNeverWraps(double textScale, int height)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(479, height, "long");
+            var back = reader.Button(InboxView.BackText);
+            var toggle = reader.Button("Show parsed headers");
+            int beside = 0, apart = 0, scrolled = 0;
+            for (int width = 479; width >= 300; width--)
+            {
+                reader.Resize(width, height);
+                Assert.True(reader.Layout.ShowsReaderOnly);
+                if (reader.Header.Scroll.HasVerticalScrollbar) scrolled++;
+                if (toggle.Parent == back.Parent)
+                {
+                    beside++;
+                    Assert.True(Math.Abs(toggle.Bounds.Top - back.Bounds.Top) < 0.5, $"At {width}x{height}, text {textScale:P0}, Back at {back.Bounds} and the toggle at {toggle.Bounds} wrap.");
+                }
+                else apart++;
+            }
+            // The sweep crosses the point where the two stop fitting, with the header scrolling.
+            Assert.True(beside > 0 && apart > 0 && scrolled > 0, $"beside {beside}, apart {apart}, scrolled {scrolled}");
+        }
+        finally
+        {
+            StandardControlPaint.ApplyTheme(previous);
+        }
+    }
+
     [Theory]
     [InlineData(640, 480, 1.0, "plain", false, true)]
     [InlineData(640, 480, 1.0, "html", false, true)]

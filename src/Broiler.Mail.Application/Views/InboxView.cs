@@ -915,22 +915,22 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         {
             bool beside = layout.ShowsReaderOnly && inspectHeaders.Visibility != UiVisibility.Collapsed && ToggleFitsBesideBack(space);
             UiElement place = beside ? backRow : headersRow;
-            bool moved = false;
-            if (inspectHeaders.Parent != place)
-            {
-                var focused = panel.Session?.FocusedElement;
-                inspectHeaders.Parent?.RemoveChild(inspectHeaders);
-                place.AddChild(inspectHeaders);
-                if (focused == inspectHeaders && focused.CanFocus) panel.Session!.SetFocus(focused);
-                moved = true;
-            }
-            return ShowHeadersRow() | moved;
+            if (inspectHeaders.Parent == place) return ShowHeadersRow();
+            // Removing a child takes focus from it, so a focused toggle gets it back once its new row shows.
+            bool refocus = panel.Session?.FocusedElement == inspectHeaders;
+            inspectHeaders.Parent?.RemoveChild(inspectHeaders);
+            place.AddChild(inspectHeaders);
+            ShowHeadersRow();
+            if (refocus && inspectHeaders.CanFocus) panel.Session!.SetFocus(inspectHeaders);
+            return true;
         }
-        // On one line at the header column's width, as the toolbar lays them out; buttons not yet measured do not fit.
+        // On one line at the header column's width, as the toolbar lays them out, also beside the scroll bar of a
+        // header that scrolls, where a narrow column gives way to it; buttons not yet measured do not fit.
         bool ToggleFitsBesideBack(BSize space)
         {
             if (!double.IsFinite(space.Width) || back.DesiredSize.Width <= 0 || inspectHeaders.DesiredSize.Width <= 0) return false;
-            double width = Math.Min(space.Width - (2 * ReadingColumn.MarginFor(space.Width)), ReadingColumn.DefaultMaximumWidth);
+            double bar = headerColumn.Scroll.ScrollbarThickness + headerColumn.Scroll.ScrollbarGap;
+            double width = Math.Min(ReadingColumn.ContentWidthIn(space.Width, space.Width), ReadingColumn.ContentWidthIn(space.Width, space.Width - bar));
             return back.DesiredSize.Width + backRow.Spacing + inspectHeaders.DesiredSize.Width + (2 * backRow.Padding) <= width;
         }
         // The toggle's own row shows only while it holds the toggle and the toggle shows. True when that changed.
