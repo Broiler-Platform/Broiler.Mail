@@ -924,33 +924,48 @@ public sealed class ResponsiveInboxTests
     /// <summary>
     /// The compact reader's parsed-headers toggle shares Back's row while both fit on one line, and otherwise
     /// has its own row below the date, so the first row never wraps taller than the header's share and is cut.
+    /// Where the two fit depends on the platform's fonts, so the rule is checked at every compact width.
     /// </summary>
     [Theory]
-    [InlineData(1.0, true)]
-    [InlineData(2.0, false)]
-    public async Task TheParsedHeadersToggleSharesBacksRowOnlyWhereBothFitOnOneLine(double textScale, bool besideBack)
+    [InlineData(1.0)]
+    [InlineData(2.0)]
+    public async Task TheParsedHeadersToggleSharesBacksRowOnlyWhereBothFitOnOneLine(double textScale)
     {
         StandardThemeTokens previous = StandardControlPaint.Theme;
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
         try
         {
             using var reader = await ReaderFixture.OpenAsync(640, 480);
-            Assert.True(reader.Layout.ShowsReaderOnly);
             var back = reader.Button(InboxView.BackText);
             var toggle = reader.Button("Show parsed headers");
-            Assert.Equal(besideBack, toggle.Parent == back.Parent);
-            if (besideBack)
-                Assert.Equal(back.Bounds.Top, toggle.Bounds.Top, 0.5);
-            else
+            var backRow = Assert.IsType<StandardToolbar>(back.Parent);
+            var date = Descendants(reader.Header).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received", StringComparison.Ordinal));
+            int beside = 0, apart = 0;
+            for (int width = 679; width >= 300; width -= 3)
             {
-                // Its own row, below the date and not in Back's row, which keeps one line.
-                Assert.True(toggle.Bounds.Top >= back.Parent!.Bounds.Bottom, $"The toggle at {toggle.Bounds} is in Back's row at {back.Parent!.Bounds}.");
-                Assert.Equal(1, back.Parent!.Children.Count(child => child.Visibility != UiVisibility.Collapsed));
-                var date = Descendants(reader.Header).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received", StringComparison.Ordinal));
-                Assert.True(toggle.Bounds.Top >= date.Bounds.Bottom, $"The toggle at {toggle.Bounds} is above the date at {date.Bounds}.");
+                reader.Resize(width, 480);
+                Assert.True(reader.Layout.ShowsReaderOnly);
+                string where = $"At {width}x480, text {textScale:P0}, Back at {back.Bounds}, the toggle at {toggle.Bounds}";
+                if (toggle.Parent == backRow)
+                {
+                    beside++;
+                    Assert.True(Math.Abs(toggle.Bounds.Top - back.Bounds.Top) < 0.5, $"{where}: they wrap.");
+                    continue;
+                }
+                apart++;
+                // Its own row below the date, only where the two would not fit on one line, also beside a scroll bar.
+                Assert.True(toggle.Bounds.Top >= date.Bounds.Bottom, $"{where}: the toggle is above the date at {date.Bounds}.");
+                Assert.Equal(1, backRow.Children.Count(child => child.Visibility != UiVisibility.Collapsed));
+                double pane = reader.Header.Bounds.Width, bar = reader.Header.Scroll.ScrollbarThickness + reader.Header.Scroll.ScrollbarGap;
+                double column = Math.Min(ReadingColumn.ContentWidthIn(pane, pane), ReadingColumn.ContentWidthIn(pane, pane - bar));
+                double row = back.DesiredSize.Width + backRow.Spacing + toggle.DesiredSize.Width + (2 * backRow.Padding);
+                Assert.True(row > column, $"{where}: they need {row} of {column} and would fit on one line.");
             }
+            // Both placements occur where the text is small enough to share a row in a wider compact reader.
+            Assert.True(apart > 0, $"beside {beside}, apart {apart}");
+            if (textScale == 1.0) Assert.True(beside > 0, $"beside {beside}, apart {apart}");
 
-            // Wherever it is, it still shows the parsed headers.
+            // In its own row it still shows the parsed headers.
             toggle.Click();
             reader.Session.RenderFrame();
             Assert.Contains(Descendants(reader.Header).OfType<StandardRichEdit>(), edit => edit.AccessibleName == "Parsed message headers");
