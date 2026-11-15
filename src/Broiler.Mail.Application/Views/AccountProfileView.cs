@@ -22,6 +22,7 @@ using Broiler.UI.Edit.Standard;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Accounts;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
@@ -40,7 +41,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
     /// <summary>Raised by the setup checklist's final action, once the account is ready to receive mail.</summary>
     public event EventHandler? InboxRequested;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=ADA04C
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=C21E57
     // Broiler-Falsified-If: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
@@ -432,7 +433,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             field.TextChanged += (_, _) => { if (applyingProfile) return; CaptureFields(); model.NotifyEdited(); };
         foreach (var combo in new[] { security, authentication, smtpSecurity, smtpAuthentication, sentCopy })
             combo.SelectionChanged += (_, _) => { if (applyingProfile) return; CaptureFields(); model.NotifyEdited(); };
-        next.Clicked += async (_, _) =>
+        next.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             switch (model.NextStep)
             {
@@ -452,7 +453,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
                     break;
             }
             await Task.CompletedTask;
-        };
+        });
         smtpSetup.SelectionChanged += (_, _) =>
         {
             if (applyingProfile) return;
@@ -491,57 +492,57 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
             model.UseSeparateReplySignature = replySignatureMode.SelectedIndex == 1; model.ReplySignature = replySignature.GetPlainText();
 
         }
-        save.Clicked += async (_, _) =>
+        save.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             CaptureFields();
             password.Text = string.Empty;
             smtpPassword.Text = string.Empty;
             await model.SaveAsync();
-        };
-        saveSmtpPassword.Clicked += async (_, _) =>
+        });
+        saveSmtpPassword.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             SelectOutgoingTab();
             CaptureFields();
             string secret = smtpPassword.Text;
             smtpPassword.Text = string.Empty;
             await model.SavePasswordAsync(secret, MailProtocol.Smtp);
-        };
-        forgetSmtpPassword.Clicked += async (_, _) =>
+        });
+        forgetSmtpPassword.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             SelectOutgoingTab();
             CaptureFields();
             smtpPassword.Text = string.Empty;
             await model.ForgetPasswordAsync(MailProtocol.Smtp);
-        };
-        savePassword.Clicked += async (_, _) =>
+        });
+        savePassword.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             SelectIncomingTab();
             CaptureFields();
             string secret = password.Text;
             password.Text = string.Empty;
             await model.SavePasswordAsync(secret);
-        };
-        forgetPassword.Clicked += async (_, _) =>
+        });
+        forgetPassword.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             SelectIncomingTab();
             CaptureFields();
             password.Text = string.Empty;
             await model.ForgetPasswordAsync();
-        };
-        test.Clicked += async (_, _) =>
+        });
+        test.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             SelectIncomingTab();
             CaptureFields();
             password.Text = string.Empty;
             await model.TestConnectionAsync();
-        };
-        testSmtp.Clicked += async (_, _) =>
+        });
+        testSmtp.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             SelectOutgoingTab();
             CaptureFields();
             smtpPassword.Text = string.Empty;
             await model.TestOutgoingConnectionAsync();
-        };
+        });
         cancel.Clicked += (_, _) => model.CancelConnectionTest();
         RefreshState();
         return surface;

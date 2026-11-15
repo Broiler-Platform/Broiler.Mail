@@ -23,6 +23,7 @@ using Broiler.UI.Forms;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel.Standard;
 using Broiler.Mail.Core.Services;
+using Broiler.UI.Button;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
 
@@ -46,7 +47,7 @@ public sealed class ProfileStorageView(ProfileStorageViewModel model)
         var apply = new StandardButton { Text = "Apply storage policy" }; policy.AddChild(apply);
         var repair = new StandardButton { Text = "Repair confirmed local mail changes" };
         if (model.SupportsRepair) policy.AddChild(repair);
-        repair.Clicked += async (_, _) => await model.RepairAsync();
+        repair.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RepairAsync());
         var uncertain = new FormSection("Uncertain server actions", "These actions are never automatically repeated. Check the message and any destination with your provider before dismissing its saved record. Dismissal creates a verified backup and keeps cached mail.", collapsible: true, expanded: false)
             { ShowText = "Show uncertain server actions", HideText = "Hide uncertain server actions" };
         uncertain.Content.AccessibleName = "Review uncertain server mutation records";
@@ -127,22 +128,22 @@ public sealed class ProfileStorageView(ProfileStorageViewModel model)
             }
         }
         model.Changed += (_, _) => Refresh();
-        inspectIndex.Clicked += async (_, _) => await model.InspectSearchIndexAsync();
-        rebuildIndex.Clicked += async (_, _) => await model.RebuildSearchIndexAsync();
-        disableIndex.Clicked += async (_, _) => await model.DisableSearchIndexAsync();
-        review.Clicked += async (_, _) => await model.ReviewUncertainActionsAsync();
+        inspectIndex.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.InspectSearchIndexAsync());
+        rebuildIndex.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RebuildSearchIndexAsync());
+        disableIndex.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.DisableSearchIndexAsync());
+        review.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ReviewUncertainActionsAsync());
         actionChoice.SelectionChanged += (_, _) => { if (!updatingActions) model.SelectUncertainAction(actionChoice.SelectedIndex >= 0 && actionChoice.SelectedIndex < model.UncertainActions.Count ? model.UncertainActions[actionChoice.SelectedIndex].Id : null); };
         dismiss.Clicked += (_, _) => { model.RequestUncertainDismissal(); if (model.PendingUncertainDismissal is not null) FocusVisible(keepAction); };
         keepAction.Clicked += (_, _) => { model.CancelUncertainDismissal(); FocusVisible(dismiss); };
-        confirmDismissal.Clicked += async (_, _) => { await model.DismissUncertainActionAsync(); if (!panel.IsDisposed) FocusVisible(review); };
-        refresh.Clicked += async (_, _) => await model.RefreshAsync();
-        apply.Clicked += async (_, _) => { model.SelectedDownloadPolicy = (OfflineDownloadPolicy)downloads.SelectedIndex; model.QuotaMiB = quota.Text; await model.SavePolicyAsync(); };
-        save.Clicked += async (_, _) => { model.BackupDestination = destination.Text; await model.BackupAsync(); };
+        confirmDismissal.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { await model.DismissUncertainActionAsync(); if (!panel.IsDisposed) FocusVisible(review); });
+        refresh.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RefreshAsync());
+        apply.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { model.SelectedDownloadPolicy = (OfflineDownloadPolicy)downloads.SelectedIndex; model.QuotaMiB = quota.Text; await model.SavePolicyAsync(); });
+        save.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { model.BackupDestination = destination.Text; await model.BackupAsync(); });
         newFolder.Clicked += (_, _) => destination.Text = model.BackupDestination = Path.Combine(model.ProfileDirectory, "backups", "profile-" + Guid.NewGuid().ToString("N"));
         clear.Clicked += (_, _) => model.RequestClear();
         keep.Clicked += (_, _) => model.CancelClear();
-        confirm.Clicked += async (_, _) => { model.BackupDestination = destination.Text; await model.ClearAsync(); };
-        restoreButton.Clicked += async (_, _) => { model.RestoreSource = source.Text; model.RestoreDestination = restored.Text; await model.RestoreAsync(); };
+        confirm.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { model.BackupDestination = destination.Text; await model.ClearAsync(); });
+        restoreButton.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { model.RestoreSource = source.Text; model.RestoreDestination = restored.Text; await model.RestoreAsync(); });
         open.Clicked += (_, _) => model.OpenRestored(); cancel.Clicked += (_, _) => model.Cancel();
         Refresh(); return panel;
     }

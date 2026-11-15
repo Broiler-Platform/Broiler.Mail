@@ -21,6 +21,7 @@ using Broiler.Graphics.Geometry;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Edit.Standard;
 using Broiler.UI.ComboBox;
@@ -49,7 +50,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
     /// <summary>The body editor, available after <see cref="CreateContent"/>; focused for replies.</summary>
     public UiElement? Body { get; private set; }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=DDB036
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=8426BC
     // Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
@@ -249,12 +250,12 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         }
         attachmentPath.TextChanged += (_, _) => UpdateAttachmentActions();
         attachmentPicker.SelectionChanged += (_, _) => UpdateAttachmentActions();
-        addAttachment.Clicked += async (_, _) =>
+        addAttachment.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             int before = model.Attachments.Count;
             await model.AddAttachmentAsync(attachmentPath.Text.Trim());
             if (!surface.IsDisposed && model.Attachments.Count > before) attachmentPath.Text = "";
-        };
+        });
         removeAttachment.Clicked += (_, _) => model.RemoveAttachment(attachmentPicker.SelectedIndex);
         cancelAttachment.Clicked += (_, _) => model.CancelAttachment();
         void ShowProblemsFirst()
@@ -296,16 +297,16 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
         replyAll.Clicked += (_, _) => _commands.Respond(CompositionKind.ReplyAll);
         forward.Clicked += (_, _) => _commands.Respond(CompositionKind.Forward);
         check.Clicked += (_, _) => model.CheckDraft();
-        discard.Clicked += async (_, _) => await model.DiscardAsync();
-        save.Clicked += async (_, _) => await model.SaveAsync();
-        send.Clicked += async (_, _) =>
+        discard.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.DiscardAsync());
+        save.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.SaveAsync());
+        send.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             if (submissionCancellation is not null || !model.CanSend) return;
             using var cancellation = new CancellationTokenSource();
             submissionCancellation = cancellation;
             try { await model.SendAsync(cancellation.Token); }
             finally { submissionCancellation = null; if (!surface.IsDisposed) Refresh(); }
-        };
+        });
         cancelSend.Clicked += (_, _) => { submissionCancellation?.Cancel(); cancelSend.IsEnabled = false; };
         model.Changed += (_, _) => Refresh();
         inbox.Changed += (_, _) => Refresh();

@@ -23,6 +23,7 @@ using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Settings;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
@@ -77,7 +78,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
     public bool ShowsPaneOf(InboxProblemScope scope) => _layout is not { IsCompact: true } layout
         || (scope == InboxProblemScope.Message ? layout.ShowsReaderOnly : !layout.ShowsReaderOnly);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=4987C5
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=B38E29
     // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
@@ -119,8 +120,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         var inspectSnapshot = new StandardButton { Text = "Inspect saved header snapshot" };
         var snapshotFeedback = new InlineFeedback();
         if (model.SupportsMailboxSnapshots) { offlineActions.AddChild(captureSnapshot); offlineActions.AddChild(inspectSnapshot); }
-        captureSnapshot.Clicked += async (_, _) => await model.CaptureMailboxSnapshotAsync();
-        inspectSnapshot.Clicked += async (_, _) => await model.InspectMailboxSnapshotAsync();
+        captureSnapshot.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.CaptureMailboxSnapshotAsync());
+        inspectSnapshot.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.InspectMailboxSnapshotAsync());
         offlineActions.AddChild(offlineToggle); offlineActions.AddChild(offlineDownload); offlineActions.AddChild(offlineRestart); offlineActions.AddChild(offlineReload); offlineActions.AddChild(offlineHeaders); offlineActions.AddChild(offlineHeadersRestart); offlineActions.AddChild(offlineShowHeaders);
         offlineSection.Content.AddChild(offlineActions); offlineSection.Content.AddChild(offlineHeaderFeedback);
         if (model.SupportsMailboxSnapshots) offlineSection.Content.AddChild(snapshotFeedback);
@@ -142,7 +143,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         var navigationFrame = new BoundedScrollArea(navigationSection, 0.35, "Account folders");
         var undoMove = new StandardButton { Text = "Undo last move", Visibility = UiVisibility.Collapsed };
         if (model.SupportsMoves) toolbar.AddChild(undoMove);
-        undoMove.Clicked += async (_, _) => await model.UndoLastMoveAsync();
+        undoMove.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.UndoLastMoveAsync());
         bool searchExpanded = false;
         var showSearch = new StandardButton { Text = "Search saved mail" };
         if (model.SupportsLocalSearch) toolbar.AddChild(showSearch);
@@ -195,9 +196,9 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             else if (searchDate.SelectedIndex == 4) model.SetSearchCustomDateRange(customDates.Text);
         };
         customDates.TextChanged += (_, _) => { if (!updating && model.SearchUsesCustomDates) model.SetSearchCustomDateRange(customDates.Text); };
-        previousSearch.Clicked += async (_, _) => await model.LoadPreviousSearchPageAsync();
-        nextSearch.Clicked += async (_, _) => await model.LoadNextSearchPageAsync();
-        search.Clicked += async (_, _) => await model.SearchSavedHeadersAsync();
+        previousSearch.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.LoadPreviousSearchPageAsync());
+        nextSearch.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.LoadNextSearchPageAsync());
+        search.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.SearchSavedHeadersAsync());
         var list = new StandardListView
         {
             PreferredSize = new BSize(320, 420),
@@ -231,10 +232,10 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         // The notice keeps the toolbar's inset, so its accent stays clear of the frame around the pane.
         var retryMoveCache = new StandardButton { Text = "Retry local move update", Visibility = UiVisibility.Collapsed };
         if (model.SupportsMoves) listRetryRow.AddChild(retryMoveCache);
-        retryMoveCache.Clicked += async (_, _) => await model.RetryMoveCacheAsync();
+        retryMoveCache.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RetryMoveCacheAsync());
         var retryDeleteCache = new StandardButton { Text = "Retry local deletion cleanup", Visibility = UiVisibility.Collapsed };
         if (model.SupportsPermanentDelete) listRetryRow.AddChild(retryDeleteCache);
-        retryDeleteCache.Clicked += async (_, _) => await model.RetryDeleteCacheAsync();
+        retryDeleteCache.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RetryDeleteCacheAsync());
         var listExplanation = new Inset(listFeedback, toolbar.Padding, toolbar.Padding);
         // A long explanation at a large text size scrolls instead of leaving the list no room. Like the
         // reader's header, it ends between its lines, never inside one, even its first in a short pane, and
@@ -329,8 +330,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         var readStateActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, Visibility = UiVisibility.Collapsed };
         readStateActions.AddChild(changeRead); readStateActions.AddChild(changeStar);
         var readStateFeedback = new InlineFeedback();
-        changeStar.Clicked += async (_, _) => await model.SetSelectedStarStateAsync(model.SelectedMessage?.IsStarred != true);
-        changeRead.Clicked += async (_, _) => await model.SetSelectedReadStateAsync(model.SelectedMessage?.IsRead != true);
+        changeStar.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.SetSelectedStarStateAsync(model.SelectedMessage?.IsStarred != true));
+        changeRead.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.SetSelectedReadStateAsync(model.SelectedMessage?.IsRead != true));
         var moveDestination = new StandardComboBox { AccessibleName = "Move destination", PreferredSize = new BSize(240, 32) };
         var moveMessage = new StandardButton { Text = "Move message" };
         var archiveMessage = new StandardButton { Text = "Archive" };
@@ -345,9 +346,9 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             int index = moveDestination.SelectedIndex;
             if (index >= 0 && index < model.MoveDestinations.Count) model.ChooseMoveDestination(model.MoveDestinations[index].MailboxId);
         };
-        moveMessage.Clicked += async (_, _) => await model.MoveSelectedAsync(model.MoveDestinationMailboxId);
-        archiveMessage.Clicked += async (_, _) => await model.ArchiveSelectedAsync();
-        trashMessage.Clicked += async (_, _) => await model.TrashSelectedAsync();
+        moveMessage.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.MoveSelectedAsync(model.MoveDestinationMailboxId));
+        archiveMessage.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ArchiveSelectedAsync());
+        trashMessage.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.TrashSelectedAsync());
         var requestDelete = new StandardButton { Text = "Delete permanently…" };
         var deleteActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, Visibility = UiVisibility.Collapsed };
         deleteActions.AddChild(requestDelete);
@@ -362,7 +363,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         requestDelete.Clicked += (_, _) =>
         { if (model.RequestPermanentDelete() && panel.Session is { } session) FocusNavigation.FocusAndReveal(session, cancelDelete); };
         cancelDelete.Clicked += (_, _) => model.CancelPermanentDeleteConfirmation();
-        confirmDelete.Clicked += async (_, _) => await model.ConfirmPermanentDeleteAsync();
+        confirmDelete.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmPermanentDeleteAsync());
         var sourceArea = new StandardPanel { Visibility = UiVisibility.Collapsed };
         MessageSourceExportActions? sourceExportActions = null;
         var headerStack = new StandardPanel { Spacing = 4 };
@@ -745,7 +746,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
                                 findChangedMode = true; preferHtml = false; ApplyMode(); text.RestoreReadingPosition(position);
                             }
                         };
-                        toggle.Clicked += async (_, _) =>
+                        toggle.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
                         {
                             if (panel.IsDisposed || !ReferenceEquals(surface, inlineContent) || !ReferenceEquals(model.Body, body)) return;
                             double position = preferHtml && surface is IReaderViewport viewport ? viewport.ReadingPosition : text.ReadingPosition;
@@ -753,7 +754,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
                             if (preferHtml && surface is IReaderViewport next) next.RestoreReadingPosition(position);
                             else if (!preferHtml) text.RestoreReadingPosition(position);
                             if (settings is not null) await settings.RememberReaderModeAsync(!preferHtml);
-                        };
+                        });
                         previewActions.AddChild(modeRow);
                         if (imageActions is not null) previewActions.AddChild(imageActions);
                         previewActions.AddChild(renderingNotice);
@@ -807,19 +808,19 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             if (index >= 0 && index < model.Folders.Count) model.SelectFolder(model.Folders[index].MailboxId);
             Update();
         };
-        refreshFolders.Clicked += async (_, _) => await model.RefreshFoldersAsync();
-        receive.Clicked += async (_, _) => await model.ReceiveAsync();
-        download.Clicked += async (_, _) => await model.DownloadLoadedBodiesAsync();
-        offlineShowHeaders.Clicked += async (_, _) => await model.ShowSavedHeadersAsync();
-        offlineHeaders.Clicked += async (_, _) => await model.ReceiveOfflineHeadersAsync();
+        refreshFolders.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RefreshFoldersAsync());
+        receive.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ReceiveAsync());
+        download.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.DownloadLoadedBodiesAsync());
+        offlineShowHeaders.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ShowSavedHeadersAsync());
+        offlineHeaders.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ReceiveOfflineHeadersAsync());
         offlineHeadersRestart.Clicked += (_, _) => model.RestartOfflineHeaders();
-        offlineToggle.Clicked += async (_, _) => await model.ToggleOfflineFolderAsync();
-        offlineDownload.Clicked += async (_, _) => await model.DownloadOfflineFoldersAsync();
-        offlineRestart.Clicked += async (_, _) => await model.RestartOfflineFolderBatchesAsync();
-        startFolder.Clicked += async (_, _) => await model.SetStartFolderAsync();
-        pinFolder.Clicked += async (_, _) => await model.TogglePinnedFolderAsync();
-        reloadNavigation.Clicked += async (_, _) => await model.ReloadAccountNavigationAsync();
-        resetNavigation.Clicked += async (_, _) => await model.ResetAccountNavigationAsync();
+        offlineToggle.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ToggleOfflineFolderAsync());
+        offlineDownload.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.DownloadOfflineFoldersAsync());
+        offlineRestart.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RestartOfflineFolderBatchesAsync());
+        startFolder.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.SetStartFolderAsync());
+        pinFolder.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.TogglePinnedFolderAsync());
+        reloadNavigation.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ReloadAccountNavigationAsync());
+        resetNavigation.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ResetAccountNavigationAsync());
         pinnedFolders.SelectionChanged += (_, _) =>
         {
             if (updating) return;
@@ -831,8 +832,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             int index = pinnedFolders.SelectedIndex;
             if (index >= 0 && index < model.PinnedFolders.Count) model.OpenPinnedFolder(model.PinnedFolders[index]);
         };
-        offlineReload.Clicked += async (_, _) => await model.ReloadOfflineFolderSelectionAsync();
-        older.Clicked += async (_, _) => await model.LoadOlderAsync();
+        offlineReload.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ReloadOfflineFolderSelectionAsync());
+        older.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.LoadOlderAsync());
         void ShowStates()
         {
             // List notice: a problem with Retry, progress while receiving, why the list is empty, or why
@@ -893,13 +894,13 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         }
         inspectHeaders.Clicked += (_, _) => { extendedHeaders = !extendedHeaders; Update(); };
         showSearch.Clicked += (_, _) => { searchExpanded = true; searchRow.Visibility = UiVisibility.Visible; Update(); if (panel.Session is { } session) FocusNavigation.FocusAndReveal(session, searchText); };
-        clearSearch.Clicked += async (_, _) =>
+        clearSearch.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             await model.ClearSearchAsync(); searchExpanded = false; searchRow.Visibility = UiVisibility.Collapsed; Update();
             if (panel.Session is { } session) FocusNavigation.FocusAndReveal(session, showSearch);
-        };
-        listRetry.Clicked += async (_, _) => await model.RetryAsync(InboxProblemScope.List);
-        messageRetry.Clicked += async (_, _) => await model.RetryAsync(InboxProblemScope.Message);
+        });
+        listRetry.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RetryAsync(InboxProblemScope.List));
+        messageRetry.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RetryAsync(InboxProblemScope.Message));
         void FocusVisiblePane()
         {
             if (panel.Session is not { } session || !layout.IsCompact) return;
@@ -1004,16 +1005,16 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         };
         back.Clicked += (_, _) => _back();
         layout.ListClicked += (_, _) => OpenReader();
-        read.Clicked += async (_, _) =>
+        read.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             if (model.SelectedMessage is not { } item) return;
             var loading = model.SelectAsync(item.Key);
             OpenReader();
             try { await loading; }
             catch (OperationCanceledException) { }
-        };
+        });
         cancel.Clicked += (_, _) => model.Cancel();
-        list.SelectionChanged += async (_, _) =>
+        list.SelectionChanged += UiAsync.Handler<UiListSelectionChangedEventArgs>(async (_, _) =>
         {
             if (!updating && !model.CanSelect) { Update(); return; }
             if (!updating && model.Messages.FirstOrDefault(item => Id(item) == list.SelectedItemId) is { } item)
@@ -1021,8 +1022,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
                 try { await model.SelectAsync(item.Key); }
                 catch (OperationCanceledException) { }
             }
-        };
-        list.ItemActivated += async (_, e) =>
+        });
+        list.ItemActivated += UiAsync.Handler<UiListItemEventArgs>(async (_, e) =>
         {
             if (!updating && model.Messages.FirstOrDefault(item => Id(item) == e.Item.Id) is { } item)
             {
@@ -1031,7 +1032,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
                 try { await loading; }
                 catch (OperationCanceledException) { }
             }
-        };
+        });
         if (commands is not null)
         {
             reply.Clicked += (_, _) => commands.Respond(CompositionKind.Reply);

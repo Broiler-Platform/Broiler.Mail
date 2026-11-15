@@ -5,7 +5,7 @@ GENERATED - DO NOT EDIT MANUALLY. Regenerate with
 `CODE-ASSURANCE.md`, `assurance.manifest.json` and every generated source header from the
 product tree.
 
-> **Status: PENDING.** Human-reviewed: 0 of 2525 relevant units. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail --release`
+> **Status: PENDING.** Human-reviewed: 0 of 2533 relevant units. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail --release`
 > fails while any relevant unit is without a decision bound to its current fingerprint.
 
 ## 1. How To Use This File
@@ -49,13 +49,13 @@ did, which is the narrower and the more useful of the two.
 
 | Metric | Value |
 |---|---:|
-| Files scanned | 244 |
-| Code units | 3923 |
-| Relevant | 2525 |
+| Files scanned | 245 |
+| Code units | 3931 |
+| Relevant | 2533 |
 | Exempt | 1398 |
-| Assessed | 363 of 2525 (14%) |
-| Human reviewed | 0 of 2525 (0%) |
-| Unverified | 2525 |
+| Assessed | 371 of 2533 (15%) |
+| Human reviewed | 0 of 2533 (0%) |
+| Unverified | 2533 |
 | Aliases naming a decision | 0 |
 
 ## 4. Review States
@@ -67,7 +67,7 @@ annotations and the current fingerprints; nothing stores them.
 |---|---:|
 | NEW | 2162 |
 | AI_ASSESSED | 0 |
-| HUMAN_PENDING | 363 |
+| HUMAN_PENDING | 371 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
@@ -159,6 +159,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Views/SavedRecipientsView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SenderIdentitiesView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SettingsView.cs` | 2 | 2 | 0 | 2 | Low | Medium | 2/0 |
+| `src/Broiler.Mail.Application/Views/UiAsync.cs` | 8 | 8 | 0 | 8 | None | Medium | 1/0 |
 | `src/Broiler.Mail.Application/Views/UnifiedSavedInboxView.cs` | 32 | 19 | 13 | 19 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Accounts/AccountFolderOverrides.cs` | 6 | 1 | 5 | 1 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Accounts/AccountId.cs` | 3 | 2 | 1 | 2 | None | Medium | 2/0 |
@@ -403,11 +404,11 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: the sender is invoked before the draft store has written the Sending snapshot
 - `Broiler.Mail.Application.Views.AccountProfileView` in `src/Broiler.Mail.Application/Views/AccountProfileView.cs` - Security=High, Spec=none cited, `C09C5B`, PENDING
   - Falsified if: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
-- `Broiler.Mail.Application.Views.AccountProfileView.CreateContent()` in `src/Broiler.Mail.Application/Views/AccountProfileView.cs` - Security=High, Spec=none cited, `ADA04C`, PENDING
+- `Broiler.Mail.Application.Views.AccountProfileView.CreateContent()` in `src/Broiler.Mail.Application/Views/AccountProfileView.cs` - Security=High, Spec=none cited, `C21E57`, PENDING
   - Falsified if: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
 - `Broiler.Mail.Application.Views.ComposerView` in `src/Broiler.Mail.Application/Views/ComposerView.cs` - Security=High, Spec=none cited, `62EDC3`, PENDING
   - Falsified if: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
-- `Broiler.Mail.Application.Views.ComposerView.CreateContent()` in `src/Broiler.Mail.Application/Views/ComposerView.cs` - Security=High, Spec=none cited, `DDB036`, PENDING
+- `Broiler.Mail.Application.Views.ComposerView.CreateContent()` in `src/Broiler.Mail.Application/Views/ComposerView.cs` - Security=High, Spec=none cited, `8426BC`, PENDING
   - Falsified if: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
 - `Broiler.Mail.Core.Accounts.CredentialKey` in `src/Broiler.Mail.Core/Accounts/CredentialKey.cs` - Security=High, Spec=ADR-0002, `F383DF`, PENDING
   - Falsified if: keys for two accounts, two protocols, or two server settings that differ in anything but host letter case compare equal
@@ -705,5 +706,5 @@ An assessment is a comment, so changing one moves no fingerprint anywhere, and n
 mechanical checks that it is right; the check holds its values to their vocabularies and no
 further.
 
-363 of the 363 assessed units declare `Origin=AI`. Reading a declaration is the only thing
+371 of the 371 assessed units declare `Origin=AI`. Reading a declaration is the only thing
 that makes it read.

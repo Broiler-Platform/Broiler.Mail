@@ -19,6 +19,7 @@ using Broiler.UI.Forms.Standard;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Settings;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
@@ -34,7 +35,7 @@ namespace Broiler.Mail.Application.Views;
 // Broiler-Human:        PENDING
 public sealed class SettingsView(SettingsViewModel model)
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=9DC077
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=60F366
     // Broiler-Falsified-If: choosing a theme in the list saves a different AppTheme, because the list order no longer matches the enum
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
@@ -94,14 +95,14 @@ public sealed class SettingsView(SettingsViewModel model)
         if (model.Storage is { } storageState) storageState.Changed += (_, _) => RefreshState();
         ConfigurationForm.BindFeedback(model, surface, status, new Dictionary<string, Broiler.UI.Edit.Standard.StandardEdit>
         { ["WindowWidth"] = width, ["WindowHeight"] = height });
-        save.Clicked += async (_, _) =>
+        save.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
             model.Theme = (AppTheme)theme.SelectedIndex;
             model.InboxDensity = (InboxDensity)density.SelectedIndex;
             model.WindowWidth = width.Text;
             model.WindowHeight = height.Text;
             await model.SaveAsync();
-        };
+        });
         RefreshState();
         return surface;
     }

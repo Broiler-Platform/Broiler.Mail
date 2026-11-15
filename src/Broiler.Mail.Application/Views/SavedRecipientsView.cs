@@ -21,6 +21,7 @@ using Broiler.UI.ComboBox.Standard;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Services;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.ComboBox;
 using Broiler.UI.Forms;
 using Broiler.UI.Forms.Standard;
@@ -82,9 +83,9 @@ internal static class SavedRecipientsView
             if (Selected() is { } row) { address.Text = row.Address; name.Text = row.Name; }
             Refresh();
         };
-        save.Clicked += async (_, _) => await model.SaveAsync(address.Text, name.Text);
-        remove.Clicked += async (_, _) => { if (Selected() is { } row) await model.RemoveAsync(row.Address); };
-        reload.Clicked += async (_, _) => await model.ReloadAsync();
+        save.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.SaveAsync(address.Text, name.Text));
+        remove.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { if (Selected() is { } row) await model.RemoveAsync(row.Address); });
+        reload.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ReloadAsync());
         use.Clicked += (_, _) =>
         {
             if (Selected() is { } row && target.SelectedIndex is >= 0 and <= 2)

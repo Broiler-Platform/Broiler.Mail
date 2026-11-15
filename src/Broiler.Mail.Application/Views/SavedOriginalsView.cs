@@ -20,6 +20,7 @@ using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Services;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
@@ -58,7 +59,7 @@ public sealed class SavedOriginalsView : UiElement
         ConfigurationForm.AddText(_layout,"Saved originals for the selected account, including disabled accounts. This library works without an inbox body or cached headers. List explicitly, choose a receipt, then Verify. Preview source and save attachments separately. No receiving, sending or automatic file opening. Local file opening/import has separate controls below. Up to 64 receipted originals across the profile; export files/catalog require separate backups. Uncataloged files are kept but not guessed.");
         var toolbar = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 4, Spacing = 6 }; toolbar.AddChild(_list); toolbar.AddChild(_use); toolbar.AddChild(_cancel);
         _layout.AddChild(toolbar); _layout.AddChild(_picker); _layout.AddChild(_feedback); _layout.AddChild(_identity); _layout.AddChild(_details); _layout.AddChild(LocalImports);
-        _list.Clicked += async (_,_) => await ListAsync(); _use.Clicked += async (_,_) => { if (Selected() is {} row) await VerifyAsync(row); };
+        _list.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_,_) => await ListAsync()); _use.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_,_) => { if (Selected() is {} row) await VerifyAsync(row); });
         _cancel.Clicked += (_,_) => Cancel(); _picker.SelectionChanged += (_,_) => { if (!IsBusy) { ClearDetails(); _feedback.Set("Selection changed. Verify the selected original explicitly; no original is active.",FeedbackKind.Information); UpdateControls(); } }; UpdateControls();
         _feedback.Set(Guidance("Select an account and open Saved originals, then List explicitly. No inventory is loaded automatically."),FeedbackKind.Information);
     }

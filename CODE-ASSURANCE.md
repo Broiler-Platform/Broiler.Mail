@@ -13,15 +13,15 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Metric | Value |
 |---|---:|
-| Files scanned | 244 |
+| Files scanned | 245 |
 | Files not covered | 0 |
-| Files carrying an annotation | 63 |
-| Code units | 3923 |
-| Relevant | 2525 |
+| Files carrying an annotation | 64 |
+| Code units | 3931 |
+| Relevant | 2533 |
 | Exempt by predicate | 1398 |
-| Annotated | 363 of 2525 (14%) |
-| Human reviewed | 0 of 2525 (0%) |
-| Unverified | 2525 |
+| Annotated | 371 of 2533 (15%) |
+| Human reviewed | 0 of 2533 (0%) |
+| Unverified | 2533 |
 
 ## Review states
 
@@ -29,7 +29,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 |---|---:|
 | NEW | 2162 |
 | AI_ASSESSED | 0 |
-| HUMAN_PENDING | 363 |
+| HUMAN_PENDING | 371 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
@@ -39,7 +39,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Value | Units |
 |---|---:|
-| None | 137 |
+| None | 145 |
 | Low | 228 |
 | Medium | 0 |
 | High | 0 |
@@ -50,9 +50,9 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Value | Units |
 |---|---:|
-| None | 7 |
-| Low | 98 |
-| Medium | 88 |
+| None | 8 |
+| Low | 100 |
+| Medium | 93 |
 | High | 162 |
 | Critical | 10 |
 | *not annotated* | 2162 |
@@ -62,8 +62,8 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Metric | Value |
 |---|---:|
 | Maximum | 8 / 10 |
-| Average over annotated units | 2.7 / 10 |
-| Units scored | 363 |
+| Average over annotated units | 2.6 / 10 |
+| Units scored | 371 |
 
 ## High-security review areas
 
@@ -244,7 +244,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Metric | Value |
 |---|---:|
-| Units carrying a criterion | 307 |
+| Units carrying a criterion | 308 |
 | Units required to carry one | 172 |
 | Required and missing | 0 |
 
@@ -296,14 +296,14 @@ through a `<Compile Include>` it states, is left out of the record.
 ## Change detection
 
 `assurance.manifest.json` lists **every** code unit in the 4 covered assemblies -
-3923 of them, exempt and relevant alike - with the fingerprint of its declaration.
+3931 of them, exempt and relevant alike - with the fingerprint of its declaration.
 This manifest is a change-detection record, not a review. A unit listed there is watched, not reviewed:
 the entry records what the declaration's tokens hashed to when the generator last ran, and
 nothing else. What the manifest adds is that a unit the exemption predicate treats as
 trivial is no longer invisible: a semantic change to one moves a value in a generated file
 the check compares byte for byte. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail` holds the manifest to the tree.
 
-Beside the units it lists **every covered file** - 244 of them - with a
+Beside the units it lists **every covered file** - 245 of them - with a
 fingerprint over the complete token stream of its compilation unit. A unit entry exists only
 for a declaration kind the scanner enumerates, and an enumeration is a whitelist: an
 `[assembly: ...]` attribute is a member of nothing and can be in no unit at all.

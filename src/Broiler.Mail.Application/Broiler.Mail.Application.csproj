@@ -1,5 +1,8 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <ItemGroup>
+    <InternalsVisibleTo Include="Broiler.Mail.Tests" />
+  </ItemGroup>
+  <ItemGroup>
     <EmbeddedResource Include="..\..\icon-256.png" LogicalName="Broiler.Mail.About.png" />
     <ProjectReference Include="../Broiler.Mail.Core/Broiler.Mail.Core.csproj" />
     <PackageReference Include="Broiler.Media.Image.Managed" />
