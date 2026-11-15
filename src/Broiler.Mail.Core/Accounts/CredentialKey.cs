@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   3
 // Annotated:        2/3
 // Exempt:           4
@@ -23,9 +23,9 @@ using Broiler.Mail.Core.Validation;
 namespace Broiler.Mail.Core.Accounts;
 
 /// <summary>Identifies a credential slot and binds its contents to one server configuration.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=F383DF
-// Broiler-Falsified-If: keys for two accounts, two protocols, or two server settings that differ in anything but host letter case compare equal
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=F383DF
+// Hairs-Falsified-If: keys for two accounts, two protocols, or two server settings that differ in anything but host letter case compare equal
+// Hairs-Human:        PENDING
 public sealed record CredentialKey
 {
     private CredentialKey(AccountId accountId, MailProtocol protocol, string binding)
@@ -46,9 +46,9 @@ public sealed record CredentialKey
         return new(accountId, protocol, "deletion-only");
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=9EA806
-    // Broiler-Falsified-If: a profile whose server host, port, username, security or authentication changed yields the same Binding as before, so the old secret is released to the new server
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=9EA806
+    // Hairs-Falsified-If: a profile whose server host, port, username, security or authentication changed yields the same Binding as before, so the old secret is released to the new server
+    // Hairs-Human:        PENDING
     public static CredentialKey For(AccountProfile account, MailProtocol protocol)
     {
         ConfigurationValidator.Validate(account);

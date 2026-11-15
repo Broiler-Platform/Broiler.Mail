@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   35
 // Annotated:        14/35
 // Exempt:           57
@@ -22,9 +22,9 @@ using Broiler.UI;
 
 namespace Broiler.Mail.Application.ViewModels;
 
-// Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=CAB93C
-// Broiler-Falsified-If: a password is written under a credential key for connection details that differ from the saved profile
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=CAB93C
+// Hairs-Falsified-If: a password is written under a credential key for connection details that differ from the saved profile
+// Hairs-Human:        PENDING
 /// <summary>The next action that brings an account closer to receiving mail.</summary>
 public enum AccountSetupStep { SaveDetails, SavePassword, TestConnection, Ready }
 
@@ -77,9 +77,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
     private CancellationTokenSource? _connectionCancellation;
     private int _credentialCheck;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=2F9477
-    // Broiler-Falsified-If: a profile without an outgoing server opens with SMTP configuration switched on
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=2F9477
+    // Hairs-Falsified-If: a profile without an outgoing server opens with SMTP configuration switched on
+    // Hairs-Human:        PENDING
     public AccountProfileViewModel(IAccountStore store, ICredentialStore credentials, IMailReceiver receiver,
         IUiDispatcher dispatcher, AccountProfile? profile, string? loadError, IOutgoingConnectionTester? outgoingTester = null)
         : base(dispatcher, loadError)
@@ -233,23 +233,23 @@ public sealed class AccountProfileViewModel : SaveViewModel
         FolderArchive = profile?.FolderOverrides.Archive ?? ""; FolderTrash = profile?.FolderOverrides.Trash ?? "";
         FolderJunk = profile?.FolderOverrides.Junk ?? "";
     }
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=C124B9
-    // Broiler-Falsified-If: the password controls are enabled while no profile has been saved
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=C124B9
+    // Hairs-Falsified-If: the password controls are enabled while no profile has been saved
+    // Hairs-Human:        PENDING
     public bool CanManagePassword => CanSave && Profile is not null;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=37C46F
-    // Broiler-Falsified-If: the SMTP password controls are enabled for a saved profile without an outgoing server
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=37C46F
+    // Hairs-Falsified-If: the SMTP password controls are enabled for a saved profile without an outgoing server
+    // Hairs-Human:        PENDING
     public bool CanManageSmtpPassword => CanManagePassword && Profile?.OutgoingServer is not null;
     public bool CanTestOutgoing => CanManageSmtpPassword && SupportsOutgoingTest;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=6D5116
-    // Broiler-Falsified-If: Cancel is offered while no connection test is running
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=6D5116
+    // Hairs-Falsified-If: Cancel is offered while no connection test is running
+    // Hairs-Human:        PENDING
     public bool CanCancelTest => IsBusy && _connectionCancellation is not null;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=174C7C
-    // Broiler-Falsified-If: Profile is replaced by field values edited after the store write began rather than by the candidate the store wrote
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=174C7C
+    // Hairs-Falsified-If: Profile is replaced by field values edited after the store write began rather than by the candidate the store wrote
+    // Hairs-Human:        PENDING
     public Task SaveAsync(CancellationToken cancellationToken = default)
     {
         // Snapshot fields before awaiting; a draft edit cannot change an in-flight save.
@@ -275,15 +275,15 @@ public sealed class AccountProfileViewModel : SaveViewModel
         }, "Account profile saved.");
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=2; Fingerprint=5E5C0D
-    // Broiler-Falsified-If: the one-argument SavePasswordAsync stores the secret in the SMTP slot instead of the IMAP slot
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=2; Fingerprint=5E5C0D
+    // Hairs-Falsified-If: the one-argument SavePasswordAsync stores the secret in the SMTP slot instead of the IMAP slot
+    // Hairs-Human:        PENDING
     public Task SavePasswordAsync(string password, CancellationToken cancellationToken = default) =>
         SavePasswordAsync(password, MailProtocol.Imap, cancellationToken);
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=143BC2
-    // Broiler-Falsified-If: a password is written while the form host, port, user name or security differs from the saved profile instead of being refused
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=143BC2
+    // Hairs-Falsified-If: a password is written while the form host, port, user name or security differs from the saved profile instead of being refused
+    // Hairs-Human:        PENDING
     public Task SavePasswordAsync(string password, MailProtocol protocol, CancellationToken cancellationToken = default) =>
         RunAsync(() =>
         {
@@ -291,15 +291,15 @@ public sealed class AccountProfileViewModel : SaveViewModel
             return _credentials.WriteAsync(CredentialKey.For(account, protocol), password, cancellationToken);
         }, () => RecordPassword(protocol, stored: true), "Saving password…", "Password saved.", "Password not saved", "Password save canceled.");
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=2; Fingerprint=D33B47
-    // Broiler-Falsified-If: the one-argument ForgetPasswordAsync deletes the SMTP credential slot instead of the IMAP one
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=2; Fingerprint=D33B47
+    // Hairs-Falsified-If: the one-argument ForgetPasswordAsync deletes the SMTP credential slot instead of the IMAP one
+    // Hairs-Human:        PENDING
     public Task ForgetPasswordAsync(CancellationToken cancellationToken = default) =>
         ForgetPasswordAsync(MailProtocol.Imap, cancellationToken);
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=35354D
-    // Broiler-Falsified-If: after the saved profile switches that protocol to OAuth2, Forget password is refused and the previously saved secret stays in the credential store
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=35354D
+    // Hairs-Falsified-If: after the saved profile switches that protocol to OAuth2, Forget password is refused and the previously saved secret stays in the credential store
+    // Hairs-Human:        PENDING
     public Task ForgetPasswordAsync(MailProtocol protocol, CancellationToken cancellationToken = default) =>
         RunAsync(() => _credentials.DeleteAsync(CredentialKey.For(RequireSavedProfile(protocol), protocol), cancellationToken),
             () => RecordPassword(protocol, stored: false), "Removing password…", "Saved password removed.", "Password not removed", "Password removal canceled.");
@@ -325,9 +325,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
         OutgoingFailureKind = null;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=AF7681
-    // Broiler-Falsified-If: a connection test runs while the form holds unsaved connection edits instead of being refused with the save-your-changes message
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=AF7681
+    // Hairs-Falsified-If: a connection test runs while the form holds unsaved connection edits instead of being refused with the save-your-changes message
+    // Hairs-Human:        PENDING
     public Task TestConnectionAsync(CancellationToken cancellationToken = default)
     {
         if (!CanSave || ProfileToTest(MailProtocol.Imap) is not { } account) return Task.CompletedTask;
@@ -392,9 +392,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
             });
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=27FE6E
-    // Broiler-Falsified-If: Cancel pressed after a test finished throws ObjectDisposedException from the disposed token source
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=27FE6E
+    // Hairs-Falsified-If: Cancel pressed after a test finished throws ObjectDisposedException from the disposed token source
+    // Hairs-Human:        PENDING
     public void CancelConnectionTest()
     {
         try { _connectionCancellation?.Cancel(); }
@@ -416,9 +416,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
         }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=4CBB0D
-    // Broiler-Falsified-If: a form whose host differs from the saved Profile returns Profile, so a password is bound to or tested against details the user has not saved
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=2; Fingerprint=4CBB0D
+    // Hairs-Falsified-If: a form whose host differs from the saved Profile returns Profile, so a password is bound to or tested against details the user has not saved
+    // Hairs-Human:        PENDING
     private AccountProfile RequireSavedProfile(MailProtocol protocol = MailProtocol.Imap)
     {
         if (Profile is null) throw new InvalidOperationException("Save the account profile first.");
@@ -429,9 +429,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
         return Profile;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=6BB833
-    // Broiler-Falsified-If: a host typed with a port, such as imap.example.com:993, yields a candidate profile without an ArgumentException
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=6BB833
+    // Hairs-Falsified-If: a host typed with a port, such as imap.example.com:993, yields a candidate profile without an ArgumentException
+    // Hairs-Human:        PENDING
     private AccountProfile BuildProfile()
     {
         if (!int.TryParse(Port, out int port))

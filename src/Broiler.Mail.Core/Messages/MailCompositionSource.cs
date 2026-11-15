@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   1
 // Annotated:        1/1
 // Exempt:           8
@@ -18,9 +18,9 @@
 namespace Broiler.Mail.Core.Messages;
 
 /// <summary>Parsed source headers for composition, independent of the abbreviated inbox display.</summary>
-// Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=F1E5E2
-// Broiler-Falsified-If: a source built without a Reply-To or References header leaves that list null, so reply composition throws instead of falling back to From
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=F1E5E2
+// Hairs-Falsified-If: a source built without a Reply-To or References header leaves that list null, so reply composition throws instead of falling back to From
+// Hairs-Human:        PENDING
 public sealed record MailCompositionSource
 {
     public string Subject { get; init; } = string.Empty;

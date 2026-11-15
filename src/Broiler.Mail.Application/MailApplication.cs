@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   9
 // Annotated:        3/9
 // Exempt:           17
@@ -30,9 +30,9 @@ using System.Text;
 namespace Broiler.Mail.Application;
 
 /// <summary>Application composition without native platform or protocol-library dependencies.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=EB5768
-// Broiler-Falsified-If: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=EB5768
+// Hairs-Falsified-If: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
+// Hairs-Human:        PENDING
 public sealed class MailApplication(
     IAccountStore accounts, ISettingsStore settings, IMailReceiver receiver, IMailSender sender, ICredentialStore credentials, IDraftStore? drafts = null, ISentCopyWriter? sentCopies = null,
     IOutgoingConnectionTester? outgoingTester = null, IMailCache? cache = null, IDisposable? profileLifetime = null,
@@ -58,9 +58,9 @@ public sealed class MailApplication(
     public string? AccountLoadError { get; private set; }
     public string? SettingsLoadError { get; private set; }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=E3D0F2
-    // Broiler-Falsified-If: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=E3D0F2
+    // Hairs-Falsified-If: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
+    // Hairs-Human:        PENDING
     public async Task InitializeAsync(CancellationToken cancellationToken = default)
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
@@ -104,9 +104,9 @@ public sealed class MailApplication(
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=6F9E7B
-    // Broiler-Falsified-If: a draft or account load error recorded by InitializeAsync is not passed to its view model, so saving is enabled over the unreadable file
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=6F9E7B
+    // Hairs-Falsified-If: a draft or account load error recorded by InitializeAsync is not passed to its view model, so saving is enabled over the unreadable file
+    // Hairs-Human:        PENDING
     public MailShellView CreateShell(IUiDispatcher? dispatcher = null, IInlineHtmlPreviewHost? htmlPreview = null)
         => new(CreateViewModel(dispatcher), htmlPreview);
 

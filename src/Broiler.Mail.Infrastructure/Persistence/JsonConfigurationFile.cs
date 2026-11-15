@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   5
 // Annotated:        4/5
 // Exempt:           1
@@ -22,17 +22,17 @@ using System.Text.Json.Serialization.Metadata;
 namespace Broiler.Mail.Infrastructure.Persistence;
 
 /// <summary>Versioned configuration with same-directory replacement and a cross-process write lock.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=474A5B
-// Broiler-Falsified-If: two overlapping UpdateAsync calls, in one process or two, both apply their change to the same prior state so that one change is lost
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=474A5B
+// Hairs-Falsified-If: two overlapping UpdateAsync calls, in one process or two, both apply their change to the same prior state so that one change is lost
+// Hairs-Human:        PENDING
 internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefault, Action<T> validate,
     JsonTypeInfo<ConfigurationEnvelope<T>> typeInfo, long maximumBytes = 1024 * 1024) where T : class
 {
     private readonly string _path = Path.GetFullPath(path);
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=5E5E32
-    // Broiler-Falsified-If: an existing file that is corrupt, larger than maximumBytes or of another schema version yields the default value instead of an exception
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=5E5E32
+    // Hairs-Falsified-If: an existing file that is corrupt, larger than maximumBytes or of another schema version yields the default value instead of an exception
+    // Hairs-Human:        PENDING
     public async Task<T> ReadAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -56,9 +56,9 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
         }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=407654
-    // Broiler-Falsified-If: a failure or cancellation while writing leaves the target file truncated or partly written instead of holding its previous content
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=407654
+    // Hairs-Falsified-If: a failure or cancellation while writing leaves the target file truncated or partly written instead of holding its previous content
+    // Hairs-Human:        PENDING
     public async Task UpdateAsync(Func<T, T> update, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
@@ -97,9 +97,9 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=E7E027
-    // Broiler-Falsified-If: a lock file held by another writer for more than 3 seconds lets the update proceed without the lock instead of throwing
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=E7E027
+    // Hairs-Falsified-If: a lock file held by another writer for more than 3 seconds lets the update proceed without the lock instead of throwing
+    // Hairs-Human:        PENDING
     private async Task<FileStream> AcquireWriteLockAsync(CancellationToken cancellationToken)
     {
         var elapsed = Stopwatch.StartNew();

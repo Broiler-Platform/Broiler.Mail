@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   8
 // Annotated:        4/8
 // Exempt:           0
@@ -26,14 +26,14 @@ using Broiler.Mail.Application.ViewModels;
 
 namespace Broiler.Mail.Application.Views;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=CF90B6
-// Broiler-Falsified-If: a saved value longer than 320 characters, such as a Sent folder path the validator accepts up to 512, is shortened when its field is created
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=CF90B6
+// Hairs-Falsified-If: a saved value longer than 320 characters, such as a Sent folder path the validator accepts up to 512, is shortened when its field is created
+// Hairs-Human:        PENDING
 internal static class ConfigurationForm
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=7CD629
-    // Broiler-Falsified-If: a saved value longer than 320 characters, such as a Sent folder path the validator accepts up to 512, is shortened when its field is created
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=7CD629
+    // Hairs-Falsified-If: a saved value longer than 320 characters, such as a Sent folder path the validator accepts up to 512, is shortened when its field is created
+    // Hairs-Human:        PENDING
     public static StandardEdit AddField(StandardPanel panel, string label, string value)
     {
         var field = new StandardEdit { Text = value, MaxLength = 320 };
@@ -41,15 +41,15 @@ internal static class ConfigurationForm
         return field;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=B8F9CF
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=B8F9CF
+    // Hairs-Human:        PENDING
     public static void AddLabeledControl(StandardPanel panel, string label, UiElement control)
     {
         panel.AddChild(new FormField(label, control));
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=0380A5
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=0380A5
+    // Hairs-Human:        PENDING
     public static StandardLabel AddText(StandardPanel panel, string text)
     {
         var label = new StandardLabel { Text = text, Wrapping = UiTextWrapping.Wrap };

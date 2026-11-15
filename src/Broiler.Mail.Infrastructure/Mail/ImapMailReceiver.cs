@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   28
 // Annotated:        11/28
 // Exempt:           4
@@ -28,37 +28,37 @@ using Broiler.Mail.Infrastructure.Protocols.Smtp;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=51055A
-// Broiler-Falsified-If: the IMAP password is sent over a connection whose server certificate failed platform validation or that never upgraded to TLS
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=51055A
+// Hairs-Falsified-If: the IMAP password is sent over a connection whose server certificate failed platform validation or that never upgraded to TLS
+// Hairs-Human:        PENDING
 public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadStateWriter, IMailStarStateWriter, IMailMover, IMailPermanentDeleter, IMailSourceReceiver, IStreamingMailSourceReceiver, IMailMailboxSnapshotReceiver
 {
     static ImapMailReceiver()
     {
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=431894
-    // Broiler-Falsified-If: GetInboxAsync accepts a maximumCount of 51 and fetches more than 50 envelopes in one request
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=431894
+    // Hairs-Falsified-If: GetInboxAsync accepts a maximumCount of 51 and fetches more than 50 envelopes in one request
+    // Hairs-Human:        PENDING
     public const int MaximumPageSize = 50;
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=9AFFEC
-    // Broiler-Falsified-If: a message body of more than 2 MiB is transferred in full and passed to the MIME decoder
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=9AFFEC
+    // Hairs-Falsified-If: a message body of more than 2 MiB is transferred in full and passed to the MIME decoder
+    // Hairs-Human:        PENDING
     public const int MaximumMessageBytes = IStreamingMessageSourceExports.MaximumBytes;
     private readonly ICredentialStore _credentials;
     private readonly Func<ImapProtocolClient> _clientFactory;
     private readonly TimeSpan _timeout;
     private readonly MutationIntentJournal? _intents;
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=CB43B1
-    // Broiler-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=CB43B1
+    // Hairs-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
+    // Hairs-Human:        PENDING
     public ImapMailReceiver(ICredentialStore credentials, MutationIntentJournal? intents = null) : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20), intents) { }
 
     // Test-only seam for a fixture certificate and a short deadline; production uses platform certificate validation.
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=52D613
-    // Broiler-Falsified-If: code outside the test assembly reaches this constructor with a client factory that replaces certificate validation
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=None; Security=High; Resources=1; Fingerprint=52D613
+    // Hairs-Falsified-If: code outside the test assembly reaches this constructor with a client factory that replaces certificate validation
+    // Hairs-Human:        PENDING
     internal ImapMailReceiver(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout, MutationIntentJournal? intents = null)
         : this(credentials, () => new ImapProtocolClient(certValidator), timeout, intents) { }
 
@@ -70,15 +70,15 @@ public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadSta
         _timeout = timeout;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=705856
-    // Broiler-Falsified-If: a connection test selects or examines a mailbox, or fetches a message, after authenticating
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=705856
+    // Hairs-Falsified-If: a connection test selects or examines a mailbox, or fetches a message, after authenticating
+    // Hairs-Human:        PENDING
     public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default) =>
         WithConnectionAsync(account, (_, _) => Task.FromResult(true), cancellationToken);
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=F1B1D5
-    // Broiler-Falsified-If: an account configured for STARTTLS authenticates in plaintext when the server does not advertise STARTTLS
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=7; Fingerprint=F1B1D5
+    // Hairs-Falsified-If: an account configured for STARTTLS authenticates in plaintext when the server does not advertise STARTTLS
+    // Hairs-Human:        PENDING
     private async Task<T> WithConnectionAsync<T>(AccountProfile account,
         Func<ImapProtocolClient, CancellationToken, Task<T>> operation, CancellationToken cancellationToken)
     {
@@ -142,9 +142,9 @@ public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadSta
         return false;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=E2BA2C
-    // Broiler-Falsified-If: a FETCH reply that omits the envelope or UID of a message in the requested range yields a page instead of the inbox-changed error
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=E2BA2C
+    // Hairs-Falsified-If: a FETCH reply that omits the envelope or UID of a message in the requested range yields a page instead of the inbox-changed error
+    // Hairs-Human:        PENDING
     public async Task<ReadStateChangeResult> SetReadStateAsync(AccountProfile account, MailMessageKey key, bool isRead,
         CancellationToken cancellationToken = default)
     {
@@ -364,9 +364,9 @@ public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadSta
         }, cancellationToken);
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=DF6BAB
-    // Broiler-Falsified-If: a message larger than 2 MiB reaches MessageTextDecoder.DecodeAsync instead of being refused with the reading-limit error
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=DF6BAB
+    // Hairs-Falsified-If: a message larger than 2 MiB reaches MessageTextDecoder.DecodeAsync instead of being refused with the reading-limit error
+    // Hairs-Human:        PENDING
     public async Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default)
     {
         var source = await ReadSourceAsync(account, message, false, cancellationToken).ConfigureAwait(false);
@@ -426,11 +426,11 @@ public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadSta
         }, token);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=90B19F
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=90B19F
+    // Hairs-Human:        PENDING
     private static MailConnectionException InboxChanged() => new("The inbox changed. Receive mail again before loading more messages.");
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A65BDF
-    // Broiler-Falsified-If: the reading limit stated in the message differs from MaximumMessageBytes
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A65BDF
+    // Hairs-Falsified-If: the reading limit stated in the message differs from MaximumMessageBytes
+    // Hairs-Human:        PENDING
     private static MailConnectionException MessageTooLarge(int maximum) => new($"This message exceeds the {maximum / (1024 * 1024)} MiB limit (including attachments).");
 }

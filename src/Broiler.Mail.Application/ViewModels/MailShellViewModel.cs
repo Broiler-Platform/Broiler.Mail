@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   4
 // Annotated:        3/4
 // Exempt:           9
@@ -22,14 +22,14 @@ using Broiler.Mail.Application.Persistence;
 
 namespace Broiler.Mail.Application.ViewModels;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=2CB11B
-// Broiler-Falsified-If: after the account profile is saved with new settings, Inbox or Composer still holds the previous AccountProfile
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=2CB11B
+// Hairs-Falsified-If: after the account profile is saved with new settings, Inbox or Composer still holds the previous AccountProfile
+// Hairs-Human:        PENDING
 public sealed class MailShellViewModel
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=D9AD00
-    // Broiler-Falsified-If: a later Account.Changed leaves Inbox or Composer on the profile that was current at construction
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=D9AD00
+    // Hairs-Falsified-If: a later Account.Changed leaves Inbox or Composer on the profile that was current at construction
+    // Hairs-Human:        PENDING
     public MailShellViewModel(AccountProfileViewModel account, SettingsViewModel settings, InboxViewModel inbox, ComposerViewModel? composer = null)
     {
         Account = account;
@@ -55,8 +55,8 @@ public sealed class MailShellViewModel
         Account.Changed += (_, _) => { Inbox.SetAccount(Account.Profile); Composer.SetAccount(Account.Profile); };
     }
     public string Title => "Broiler Mail";
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=6B5558
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=6B5558
+    // Hairs-Human:        PENDING
     public AccountProfile? CurrentAccount => Account.Profile;
     public string Status => Inbox.Status;
     public SettingsViewModel Settings { get; }

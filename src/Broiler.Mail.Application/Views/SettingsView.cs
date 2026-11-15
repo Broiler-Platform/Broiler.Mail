@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   2
 // Annotated:        2/2
 // Exempt:           0
@@ -30,14 +30,14 @@ using Broiler.UI.Panel.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=C168E3
-// Broiler-Falsified-If: choosing a theme in the list saves a different AppTheme, because the list order no longer matches the enum
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=C168E3
+// Hairs-Falsified-If: choosing a theme in the list saves a different AppTheme, because the list order no longer matches the enum
+// Hairs-Human:        PENDING
 public sealed class SettingsView(SettingsViewModel model)
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=60F366
-    // Broiler-Falsified-If: choosing a theme in the list saves a different AppTheme, because the list order no longer matches the enum
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=60F366
+    // Hairs-Falsified-If: choosing a theme in the list saves a different AppTheme, because the list order no longer matches the enum
+    // Hairs-Human:        PENDING
     public UiElement CreateContent()
     {
         var panel = new StandardPanel { Spacing = 20 };

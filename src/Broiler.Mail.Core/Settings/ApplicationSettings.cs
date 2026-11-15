@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   4
 // Annotated:        2/4
 // Exempt:           19
@@ -17,9 +17,9 @@
 
 namespace Broiler.Mail.Core.Settings;
 
-// Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=373834
-// Broiler-Falsified-If: the default window size falls outside the range Validate(ApplicationSettings) accepts, so a first save of unchanged settings is refused
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=373834
+// Hairs-Falsified-If: the default window size falls outside the range Validate(ApplicationSettings) accepts, so a first save of unchanged settings is refused
+// Hairs-Human:        PENDING
 public sealed record ApplicationSettings
 {
     public AppTheme Theme { get; init; } = AppTheme.System;
@@ -49,8 +49,8 @@ public sealed record WindowPlacement
     public bool Maximized { get; init; }
 }
 
-// Broiler-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=6E41ED
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=6E41ED
+// Hairs-Human:        PENDING
 public enum AppTheme { System, Light, Dark }
 
 /// <summary>Spacing of the two-line inbox rows, independent of text size.</summary>

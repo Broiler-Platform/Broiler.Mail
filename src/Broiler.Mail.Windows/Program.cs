@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   4
 // Annotated:        2/4
 // Exempt:           0
@@ -28,9 +28,9 @@ using System.Text;
 
 namespace Broiler.Mail.Windows;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=D26BF0
-// Broiler-Falsified-If: a --smoke-test run creates or reads files under the default data directory instead of only a fresh directory under the temp path
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=D26BF0
+// Hairs-Falsified-If: a --smoke-test run creates or reads files under the default data directory instead of only a fresh directory under the temp path
+// Hairs-Human:        PENDING
 internal static class Program
 {
     private const string Usage = "Broiler.Mail.Windows [" + DemoOptions.Usage + " | --smoke-test | --data-directory <path>]";
@@ -59,9 +59,9 @@ internal static class Program
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=17B95C
-    // Broiler-Falsified-If: an argument list other than none, --help, a valid --demo option list, --smoke-test or --data-directory with a non-blank path starts the application instead of returning exit code 2
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=17B95C
+    // Hairs-Falsified-If: an argument list other than none, --help, a valid --demo option list, --smoke-test or --data-directory with a non-blank path starts the application instead of returning exit code 2
+    // Hairs-Human:        PENDING
     [STAThread]
     private static int Main(string[] args)
     {

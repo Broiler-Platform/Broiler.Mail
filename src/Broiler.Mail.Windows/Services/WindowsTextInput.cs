@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   13
 // Annotated:        7/13
 // Exempt:           4
@@ -28,9 +28,9 @@ namespace Broiler.Mail.Windows.Services;
 /// Hosting's input bridge delivers the composition and the committed text, and keeps the IME from drawing a copy of
 /// the composition (DrawsCompositionInline), so outside an editor that draws it a composition would be invisible.
 /// </summary>
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=4FCA45
-// Broiler-Falsified-If: ImmSetCompositionWindow is handed a form whose layout differs from Win32 COMPOSITIONFORM, so IMM32 reads the caret position from the wrong offsets
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=4FCA45
+// Hairs-Falsified-If: ImmSetCompositionWindow is handed a form whose layout differs from Win32 COMPOSITIONFORM, so IMM32 reads the caret position from the wrong offsets
+// Hairs-Human:        PENDING
 internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : IUiTextInputHost
 {
     // IACE_DEFAULT: the window gets its own input context back.
@@ -39,9 +39,9 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
     private UiElement? _imeOffFor;
     private nint _imeOffIn;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=3418AF
-    // Broiler-Falsified-If: an input context from ImmGetContext is left unreleased when the scale callback or ImmSetCompositionWindow throws
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=3418AF
+    // Hairs-Falsified-If: an input context from ImmGetContext is left unreleased when the scale callback or ImmSetCompositionWindow throws
+    // Hairs-Human:        PENDING
     public void PublishCaret(UiTextCaretInfo caret)
     {
         nint hwnd = window();
@@ -69,8 +69,8 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
         finally { ImmReleaseContext(hwnd, context); }
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=8B53CF
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=8B53CF
+    // Hairs-Human:        PENDING
     public void ClearCaret(UiElement owner)
     {
         // Focus leaving the field, or the field going away, clears its caret; FollowFocus then decides for the next.
@@ -121,22 +121,22 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
         _imeOffFor = null;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=7817E6
-    // Broiler-Falsified-If: the struct is smaller than Win32 COMPOSITIONFORM (28 bytes), so ImmSetCompositionWindow reads past the end of the caller's copy
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=7817E6
+    // Hairs-Falsified-If: the struct is smaller than Win32 COMPOSITIONFORM (28 bytes), so ImmSetCompositionWindow reads past the end of the caller's copy
+    // Hairs-Human:        PENDING
     [StructLayout(LayoutKind.Sequential)]
     private struct CompositionForm { public uint Style; public int X, Y, Left, Top, Right, Bottom; }
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=964CC6
-    // Broiler-Falsified-If: the window or context handle is declared narrower than a pointer, so a 64-bit HIMC is truncated before ImmSetCompositionWindow uses it
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=964CC6
+    // Hairs-Falsified-If: the window or context handle is declared narrower than a pointer, so a 64-bit HIMC is truncated before ImmSetCompositionWindow uses it
+    // Hairs-Human:        PENDING
     [DllImport("imm32.dll")] private static extern nint ImmGetContext(nint window);
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=1742AC
-    // Broiler-Falsified-If: a parameter is declared narrower than a pointer, so the context released is not the one ImmGetContext returned
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=1742AC
+    // Hairs-Falsified-If: a parameter is declared narrower than a pointer, so the context released is not the one ImmGetContext returned
+    // Hairs-Human:        PENDING
     [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmReleaseContext(nint window, nint context);
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=3139A5
-    // Broiler-Falsified-If: the form is passed by value rather than by reference, so IMM32 dereferences the struct's first field as a pointer
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=3139A5
+    // Hairs-Falsified-If: the form is passed by value rather than by reference, so IMM32 dereferences the struct's first field as a pointer
+    // Hairs-Human:        PENDING
     [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmSetCompositionWindow(nint context, ref CompositionForm form);
     [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmAssociateContextEx(nint window, nint context, uint flags);
 }

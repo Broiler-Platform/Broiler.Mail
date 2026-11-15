@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   12
 // Annotated:        7/12
 // Exempt:           0
@@ -25,9 +25,9 @@ using Broiler.Mail.Infrastructure.Preview;
 namespace Broiler.Mail.Infrastructure.Mail;
 
 /// <summary>Decodes bounded text and untrusted HTML; no renderer or resource loader is involved.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=B447E4
-// Broiler-Falsified-If: a decoded body exceeds one of its caps: more than 32,000 text characters, more than 16 images, an image over 1 MiB or more than 2 MiB of images in total
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=B447E4
+// Hairs-Falsified-If: a decoded body exceeds one of its caps: more than 32,000 text characters, more than 16 images, an image over 1 MiB or more than 2 MiB of images in total
+// Hairs-Human:        PENDING
 internal static class MessageTextDecoder
 {
     static MessageTextDecoder()
@@ -35,14 +35,14 @@ internal static class MessageTextDecoder
         Encoding.RegisterProvider(CodePagesEncodingProvider.Instance);
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=0ECAA8
-    // Broiler-Falsified-If: a text body longer than 32,000 characters reaches the reading pane in full instead of being cut at this limit and marked truncated
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=High; Resources=0; Fingerprint=0ECAA8
+    // Hairs-Falsified-If: a text body longer than 32,000 characters reaches the reading pane in full instead of being cut at this limit and marked truncated
+    // Hairs-Human:        PENDING
     internal const int MaximumTextCharacters = 32_000;
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=F04532
-    // Broiler-Falsified-If: a message whose multiparts nest more than 32 levels deep is parsed into entities below that depth instead of stopping at the parser's depth limit
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=F04532
+    // Hairs-Falsified-If: a message whose multiparts nest more than 32 levels deep is parsed into entities below that depth instead of stopping at the parser's depth limit
+    // Hairs-Human:        PENDING
     public static async Task<MailMessageBody> DecodeAsync(MailMessageKey key, Stream stream, CancellationToken token)
     {
         var message = await MimeParser.ParseAsync(stream, token).ConfigureAwait(false);
@@ -114,9 +114,9 @@ internal static class MessageTextDecoder
         return (placeholder && string.IsNullOrWhiteSpace(text) ? "(No readable text in this message.)" : text, fallback, truncated);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=9D8023
-    // Broiler-Falsified-If: a received Message-ID, References or In-Reply-To value containing CR or LF is copied into the reply composition source
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=9D8023
+    // Hairs-Falsified-If: a received Message-ID, References or In-Reply-To value containing CR or LF is copied into the reply composition source
+    // Hairs-Human:        PENDING
     private static MailCompositionSource CompositionHeaders(ParsedMimeMessage message)
     {
         static string Safe(string value, int maximum)
@@ -151,18 +151,18 @@ internal static class MessageTextDecoder
         };
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=666D03
-    // Broiler-Falsified-If: an envelope subject or sender whose 512-character cut falls inside a surrogate pair is returned ending in a lone high surrogate
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=666D03
+    // Hairs-Falsified-If: an envelope subject or sender whose 512-character cut falls inside a surrogate pair is returned ending in a lone high surrogate
+    // Hairs-Human:        PENDING
     internal static string Header(string? value, string missing)
     {
         string result = Clean(value ?? "", 512, multiline: false).Trim();
         return result.Length == 0 ? missing : result;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=50B579
-    // Broiler-Falsified-If: in single-line mode a CR, LF, TAB or NUL from the input survives into the returned string
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=50B579
+    // Hairs-Falsified-If: in single-line mode a CR, LF, TAB or NUL from the input survives into the returned string
+    // Hairs-Human:        PENDING
     private static string Clean(string text, int limit, bool multiline)
     {
         var result = new StringBuilder(Math.Min(text.Length, limit));
@@ -181,9 +181,9 @@ internal static class MessageTextDecoder
         return result.ToString();
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=4; Fingerprint=0F4C04
-    // Broiler-Falsified-If: an HTML-only message that omits the optional </head> end tag yields no readable text because everything after <head> stays suppressed
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=4; Fingerprint=0F4C04
+    // Hairs-Falsified-If: an HTML-only message that omits the optional </head> end tag yields no readable text because everything after <head> stays suppressed
+    // Hairs-Human:        PENDING
     private static string ExtractHtmlText(string html, CancellationToken token, int maximum)
     {
         using var reader = new StringReader(html);

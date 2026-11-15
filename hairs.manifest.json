@@ -1,7 +1,7 @@
 {
   "$comment": [
     "GENERATED - DO NOT EDIT MANUALLY. Regenerate with",
-    "`dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance generate --root Broiler.Mail`.",
+    "`dotnet tool run hairs -- assurance generate --root .`.",
     "",
     "This manifest is a change-detection record, not a review. Every code unit in the 4 covered assemblies is listed",
     "here, exempt and relevant alike, with the fingerprint of its declaration. An entry",
@@ -18,7 +18,7 @@
     "What the manifest adds is that a unit the exemption predicate treats as trivial is no",
     "longer invisible: a semantic change to one moves a fingerprint in a generated file the",
     "check compares byte for byte, so the change appears in a diff and fails an unregenerated",
-    "tree. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail` holds this file to the tree - every unit and every covered file",
+    "tree. `dotnet tool run hairs -- assurance check --root .` holds this file to the tree - every unit and every covered file",
     "present, no extras, every fingerprint current."
   ],
   "files": [

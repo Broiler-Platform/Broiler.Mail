@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   9
 // Annotated:        3/9
 // Exempt:           4
@@ -46,9 +46,9 @@ using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=576E70
-// Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=576E70
+// Hairs-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
+// Hairs-Human:        PENDING
 public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, CompositionCommands? commands = null, SettingsViewModel? settings = null)
 {
     private Func<bool>? _back;
@@ -78,9 +78,9 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
     public bool ShowsPaneOf(InboxProblemScope scope) => _layout is not { IsCompact: true } layout
         || (scope == InboxProblemScope.Message ? layout.ShowsReaderOnly : !layout.ShowsReaderOnly);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=B38E29
-    // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=B38E29
+    // Hairs-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
+    // Hairs-Human:        PENDING
     public UiElement CreateContent()
     {
         var dateFormat = dates ?? MessageDateFormatter.Default;
@@ -1046,8 +1046,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         return panel;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=BF0110
-    // Broiler-Falsified-If: two loaded messages with different keys get the same Id, so choosing one row opens the other
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=BF0110
+    // Hairs-Falsified-If: two loaded messages with different keys get the same Id, so choosing one row opens the other
+    // Hairs-Human:        PENDING
     private static string Id(MailMessageSummary message) => $"{message.Key.AccountId}:{Convert.ToBase64String(System.Text.Encoding.UTF8.GetBytes(message.Key.MailboxId))}:{message.Key.UidValidity}:{message.Key.Uid}";
 }

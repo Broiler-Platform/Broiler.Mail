@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   15
 // Annotated:        5/15
 // Exempt:           9
@@ -29,9 +29,9 @@ using Broiler.Mail.Application.Views;
 namespace Broiler.Mail.Application.Preview;
 
 /// <summary>Readable and selectable message reader.</summary>
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=E9A74D
-// Broiler-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=E9A74D
+// Hairs-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
+// Hairs-Human:        PENDING
 public sealed class ScrollableMessageText : UiElement, IReaderViewport
 {
     private readonly StandardRichEdit _editor = new()
@@ -57,8 +57,8 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
     // Above and below the text, inside the scroll view.
     private const double VerticalMargin = 8;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A1E604
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A1E604
+    // Hairs-Human:        PENDING
     public ScrollableMessageText()
     {
         // Margins and a bounded line length come from the column; the scroll view still spans the pane.
@@ -143,17 +143,17 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
         return range > 0 ? _scroll.VerticalOffset / range : 0;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=C0B869
-    // Broiler-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=C0B869
+    // Hairs-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
+    // Hairs-Human:        PENDING
     public string Text
     {
         get => _editor.GetPlainText();
         set => _editor.SetPlainText(value ?? string.Empty);
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=5CB21E
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=5CB21E
+    // Hairs-Human:        PENDING
     public void ScrollToStart()
     {
         // The start wins over a place a zoom still has to restore.
@@ -163,9 +163,9 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
         _scroll.ScrollToStart();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=D4BDBB
-    // Broiler-Falsified-If: an infinite available width reaches the label as its wrap width, so long message lines never wrap
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=D4BDBB
+    // Hairs-Falsified-If: an infinite available width reaches the label as its wrap width, so long message lines never wrap
+    // Hairs-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
     {
         _inLayout = true;

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   12
 // Annotated:        1/12
 // Exempt:           16
@@ -18,9 +18,9 @@
 namespace Broiler.Mail.Core.Accounts;
 
 /// <summary>Non-secret configuration. Credentials belong in ICredentialStore.</summary>
-// Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=AB2C4D
-// Broiler-Falsified-If: two profiles that differ only in OutgoingServer or SentFolder compare equal, so a password can be saved against unsaved SMTP edits
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=AB2C4D
+// Hairs-Falsified-If: two profiles that differ only in OutgoingServer or SentFolder compare equal, so a password can be saved against unsaved SMTP edits
+// Hairs-Human:        PENDING
 public sealed record AccountProfile
 {
     public required AccountId Id { get; init; }

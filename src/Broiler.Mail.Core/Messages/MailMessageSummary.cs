@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   1
 // Annotated:        1/1
 // Exempt:           7
@@ -17,8 +17,8 @@
 
 namespace Broiler.Mail.Core.Messages;
 
-// Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=9D9C42
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=9D9C42
+// Hairs-Human:        PENDING
 public sealed record MailMessageSummary
 {
     public required MailMessageKey Key { get; init; }

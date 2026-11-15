@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   21
 // Annotated:        5/21
 // Exempt:           23
@@ -39,16 +39,16 @@ using Broiler.Mail.Application.Preview;
 namespace Broiler.Mail.Application.Views;
 
 /// <summary>Single-account inbox, reading pane, and configuration workflow.</summary>
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=126B98
-// Broiler-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=126B98
+// Hairs-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
+// Hairs-Human:        PENDING
 public sealed class MailShellView : IDisposable
 {
     private readonly MailShellViewModel _model;
     private readonly Action<Uri>? _openUrl;
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=D66B9E
-    // Broiler-Falsified-If: with an unconfigured account the Account setup dialog is not opened
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=D66B9E
+    // Hairs-Falsified-If: with an unconfigured account the Account setup dialog is not opened
+    // Hairs-Human:        PENDING
     public MailShellView(MailShellViewModel model, IInlineHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, Action<Uri>? openUrl = null)
     {
         _model = model;
@@ -440,18 +440,18 @@ public sealed class MailShellView : IDisposable
     public UiElement? AccountSelectionContent { get; }
     /// <summary>The status line for the active workspace or dialog.</summary>
     public StandardLabel Footer { get; }
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=A9E9EB
-    // Broiler-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=A9E9EB
+    // Hairs-Falsified-If: PrepareCloseAsync completes true without waiting for Composer.PrepareCloseAsync, so the window may close before the draft reaches storage
+    // Hairs-Human:        PENDING
     public Task<bool> PrepareCloseAsync() => _model.Composer.PrepareCloseAsync();
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=886976
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=886976
+    // Hairs-Human:        PENDING
     public MailKeyboardNavigation CreateKeyboardNavigation(UiSession session) => new(session, this, _model);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=64AD9A
-    // Broiler-Falsified-If: a connection test still running when the view is disposed is not canceled
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=64AD9A
+    // Hairs-Falsified-If: a connection test still running when the view is disposed is not canceled
+    // Hairs-Human:        PENDING
     public void Dispose()
     {
         _disposing = true;

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   2
 // Annotated:        2/2
 // Exempt:           3
@@ -24,17 +24,17 @@ using Broiler.Mail.Core.Settings;
 
 namespace Broiler.Mail.Infrastructure.Persistence;
 
-// Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=66937C
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=66937C
+// Hairs-Human:        PENDING
 internal sealed class ConfigurationEnvelope<T> where T : class
 {
     public required int SchemaVersion { get; init; }
     public required T Data { get; init; }
 }
 
-// Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=C943A6
-// Broiler-Falsified-If: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=C943A6
+// Hairs-Falsified-If: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
+// Hairs-Human:        PENDING
 [JsonSerializable(typeof(ConfigurationEnvelope<LocalOriginalState>), TypeInfoPropertyName = "LocalOriginals")]
 [JsonSerializable(typeof(ConfigurationEnvelope<SourceExportCatalogState>), TypeInfoPropertyName = "SourceExportCatalog")]
 [JsonSerializable(typeof(ConfigurationEnvelope<AccountNavigationState>), TypeInfoPropertyName = "NavigationPreferences")]

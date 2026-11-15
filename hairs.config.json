@@ -15,5 +15,10 @@
   },
   "spdxOverrides": [],
   "adrDirectory": "docs/decisions",
-  "regenerateCommand": "dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance generate --root Broiler.Mail"
+  "artefacts": {
+    "report": "CODE-ASSURANCE.md",
+    "humanReview": "HUMAN_REVIEW.md",
+    "manifest": "hairs.manifest.json"
+  },
+  "regenerateCommand": "dotnet tool run hairs -- assurance generate --root ."
 }
