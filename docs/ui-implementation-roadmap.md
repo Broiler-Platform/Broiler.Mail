@@ -1613,8 +1613,9 @@ Do not substitute screenshot inspection or unit-test counts for latency/memory e
   allocations as the steadier measure; `Measure-UI.ps1 -Detail` on the reference machine is still
   needed for native numbers.
 - Tests: `ReaderTextWidthTests` (fails on the earlier layout) and two `MessageRowTests` cases for
-  cached rows. `TheReaderHeaderEndsBetweenItsRows` at 640×480 and 200% text still fails as it did
-  before this change, now with a toolbar 592 instead of 580 DIP wide.
+  cached rows. `TheReaderHeaderEndsBetweenItsRows` at 640×480 and 200% text failed before and after
+  this change; it came from 90dd631 putting the parsed-headers toggle beside Back, and is fixed in
+  Broiler-Platform/Broiler.Mail#19, which gives the toggle its own row where the two do not fit on one line.
 
 ### UI-13 — published-app acceptance and evidence
 
