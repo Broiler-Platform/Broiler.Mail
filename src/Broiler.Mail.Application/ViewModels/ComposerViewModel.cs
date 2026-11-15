@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   43
 // Annotated:        29/43
 // Exempt:           30
@@ -26,9 +26,9 @@ using Broiler.UI.Standard;
 namespace Broiler.Mail.Application.ViewModels;
 
 /// <summary>One recoverable composition with serialized autosave and explicit submission outcomes.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=57C6F9
-// Broiler-Falsified-If: a draft whose submission ended Accepted or Unknown is handed to the sender a second time
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=57C6F9
+// Hairs-Falsified-If: a draft whose submission ended Accepted or Unknown is handed to the sender a second time
+// Hairs-Human:        PENDING
 public sealed partial class ComposerViewModel : IDisposable
 {
     private AccountProfile? _account;
@@ -51,9 +51,9 @@ public sealed partial class ComposerViewModel : IDisposable
     private bool _closing;
     private bool _profileStorageBusy;
     public void SetProfileStorageBusy(bool busy) { if (_profileStorageBusy == busy) return; _profileStorageBusy = busy; Notify(); }
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=Medium; Resources=4; Fingerprint=A9C4DE
-    // Broiler-Falsified-If: a draft saved in the Sending state reopens as Editing and can be sent again
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=Medium; Resources=4; Fingerprint=A9C4DE
+    // Hairs-Falsified-If: a draft saved in the Sending state reopens as Editing and can be sent again
+    // Hairs-Human:        PENDING
     public ComposerViewModel(IDraftStore? store = null, DraftStoreState? initial = null,
         IUiDispatcher? dispatcher = null, IMailSender? sender = null, string? loadError = null, ISentCopyWriter? sentCopies = null, IRecipientBook? recipientBook = null)
     {
@@ -83,44 +83,44 @@ public sealed partial class ComposerViewModel : IDisposable
         _journal.Changed += OnStorageChanged;
         if (_loadError is null && (initial.Draft?.State == DraftSubmissionState.Sending || initial.Draft?.SentCopy == SentCopyState.Pending)) Persist();
     }
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8C487F
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8C487F
+    // Hairs-Human:        PENDING
     public event EventHandler? Changed;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=4DADC2
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=4DADC2
+    // Hairs-Human:        PENDING
     public Guid? DraftId => _seed?.Id;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=D61F57
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=D61F57
+    // Hairs-Human:        PENDING
     public bool HasDraft => _seed is not null;
     public AccountId? DraftAccountId => _seed?.AccountId;
     public bool HasUnreadableDraft => _loadError is not null;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=9F6E71
-    // Broiler-Falsified-If: Start is offered while a saved draft exists, so a new message would replace it
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=9F6E71
+    // Hairs-Falsified-If: Start is offered while a saved draft exists, so a new message would replace it
+    // Hairs-Human:        PENDING
     public bool CanStart => !_disposed && !_closing && !_profileStorageBusy && _loadError is null && !IsBusy && !HasDraft && _account is { IsEnabled: true };
     public bool IsBusy { get; private set; }
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=7702C6
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=7702C6
+    // Hairs-Human:        PENDING
     public bool HasLoadError => _loadError is not null;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=59741F
-    // Broiler-Falsified-If: CanEdit is true for a draft in the Accepted or Unknown state
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=59741F
+    // Hairs-Falsified-If: CanEdit is true for a draft in the Accepted or Unknown state
+    // Hairs-Human:        PENDING
     public bool CanEdit => !_disposed && !_profileStorageBusy && _loadError is null && !_closing && HasDraft && !IsBusy && SubmissionState is DraftSubmissionState.Editing or DraftSubmissionState.Failed;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=79F4F3
-    // Broiler-Falsified-If: Discard is offered while a send or discard is still in progress
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=79F4F3
+    // Hairs-Falsified-If: Discard is offered while a send or discard is still in progress
+    // Hairs-Human:        PENDING
     public bool CanDiscard => !_disposed && !_profileStorageBusy && _loadError is null && !_closing && HasDraft && !IsBusy;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=5EF78D
-    // Broiler-Falsified-If: CanSend is true for an account that has no outgoing server
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=5EF78D
+    // Hairs-Falsified-If: CanSend is true for an account that has no outgoing server
+    // Hairs-Human:        PENDING
     public bool CanSend => CanEdit && _sender?.IsAvailable == true && _account is { IsEnabled: true, OutgoingServer: not null } &&
         _seed is not null && _account.Id == _seed.AccountId && _account.HasSenderAddress(_seed.FromAddress);
     public DraftSubmissionState SubmissionState { get; private set; }
     public SentCopyState SentCopy { get; private set; }
     public string? SentCopyFolder { get; private set; }
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=791967
-    // Broiler-Falsified-If: the Failed or Unknown Sent-copy text tells the user to resend the message
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=791967
+    // Hairs-Falsified-If: the Failed or Unknown Sent-copy text tells the user to resend the message
+    // Hairs-Human:        PENDING
     public string SentCopyText => SentCopy switch
     {
         SentCopyState.ProviderManaged => "Sent copy: managed by your provider. Broiler.Mail has not verified the copy.",
@@ -130,9 +130,9 @@ public sealed partial class ComposerViewModel : IDisposable
         SentCopyState.Unknown => $"Sent copy: outcome unknown for {SentCopyFolder}. Check the folder before copying manually. No automatic retry or resend.",
         _ => SubmissionState == DraftSubmissionState.Accepted ? "Sent copy: not configured; no app copy was attempted." : "Sent copy: not attempted.",
     };
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=E6549D
-    // Broiler-Falsified-If: the Unknown submission state is described as a failure that may be retried
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=E6549D
+    // Hairs-Falsified-If: the Unknown submission state is described as a failure that may be retried
+    // Hairs-Human:        PENDING
     private long _submissionBytes;
     public string SubmissionText => SubmissionState switch
     {
@@ -142,15 +142,15 @@ public sealed partial class ComposerViewModel : IDisposable
         DraftSubmissionState.Unknown => "Sending outcome unknown. Check the recipient/provider before starting another message; automatic resend is disabled.",
         _ => "Not sent.",
     };
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=EAA81F
-    // Broiler-Falsified-If: StorageStatus reports that the draft is saved locally while the journal holds an unsaved edit
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=EAA81F
+    // Hairs-Falsified-If: StorageStatus reports that the draft is saved locally while the journal holds an unsaved edit
+    // Hairs-Human:        PENDING
     public string StorageStatus => _loadError ?? _journal.Error ?? (!_journal.IsSaved ? "Saving draft…" :
         _journal.IsPersistent ? "Draft saved locally." : "Demo/headless draft is in memory only.");
     public FeedbackKind StorageKind => _loadError is not null || _journal.Error is not null ? FeedbackKind.Error :
         !_journal.IsSaved ? FeedbackKind.Progress : FeedbackKind.Information;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=1EDCB9
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=1EDCB9
+    // Hairs-Human:        PENDING
     /// <summary>Why an editable draft cannot be sent, or null. Shown instead of a permanent instruction.</summary>
     public string? SendUnavailableReason => !CanEdit ? null
         : _sender?.IsAvailable != true ? "Sending is not available in this mode."
@@ -192,9 +192,9 @@ public sealed partial class ComposerViewModel : IDisposable
     private ITimer? _successTimer;
     private int _statusVersion;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=BE7BFE
-    // Broiler-Falsified-If: after the saved account changes its SMTP server, a send still uses the previous AccountProfile
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=BE7BFE
+    // Hairs-Falsified-If: after the saved account changes its SMTP server, a send still uses the previous AccountProfile
+    // Hairs-Human:        PENDING
     public void SetAccount(AccountProfile? account)
     {
         if (_account == account) return;
@@ -207,15 +207,15 @@ public sealed partial class ComposerViewModel : IDisposable
         Notify();
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=0874DB
-    // Broiler-Falsified-If: StartNew replaces an existing draft instead of refusing with the retained-draft status
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=0874DB
+    // Hairs-Falsified-If: StartNew replaces an existing draft instead of refusing with the retained-draft status
+    // Hairs-Human:        PENDING
     public bool StartNew() => Start(null, null);
     public bool StartFromMessage(MailMessageBody body, CompositionKind kind) => Start(body, kind);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=B2A601
-    // Broiler-Falsified-If: a reply whose original sender address has a quoted local part containing a comma becomes two recipients when the joined To text is parsed again
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=B2A601
+    // Hairs-Falsified-If: a reply whose original sender address has a quoted local part containing a comma becomes two recipients when the joined To text is parsed again
+    // Hairs-Human:        PENDING
     private bool Start(MailMessageBody? body, CompositionKind? kind)
     {
         if (!CanStart)
@@ -257,9 +257,9 @@ public sealed partial class ComposerViewModel : IDisposable
         return true;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=3B9524
-    // Broiler-Falsified-If: an Edit on an Accepted or Unknown draft resets the submission state to Editing so the message can be sent again
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=3B9524
+    // Hairs-Falsified-If: an Edit on an Accepted or Unknown draft resets the submission state to Editing so the message can be sent again
+    // Hairs-Human:        PENDING
     public void Edit(string to, string cc, string bcc, string subject, string body)
     {
         if (!CanEdit) return;
@@ -271,9 +271,9 @@ public sealed partial class ComposerViewModel : IDisposable
         Notify();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=2C8BAB
-    // Broiler-Falsified-If: a draft started under one account builds after the saved account changed its EmailAddress, keeping the old From address instead of throwing
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=2C8BAB
+    // Hairs-Falsified-If: a draft started under one account builds after the saved account changed its EmailAddress, keeping the old From address instead of throwing
+    // Hairs-Human:        PENDING
     public MailDraft BuildDraft()
     {
         if (_seed is null) throw new InvalidOperationException("Start a draft first.");
@@ -287,9 +287,9 @@ public sealed partial class ComposerViewModel : IDisposable
         return draft;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=CF0FFB
-    // Broiler-Falsified-If: an invalid recipient makes CheckDraft throw instead of setting the validation message as the status
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=CF0FFB
+    // Hairs-Falsified-If: an invalid recipient makes CheckDraft throw instead of setting the validation message as the status
+    // Hairs-Human:        PENDING
     public void CheckDraft()
     {
         try { _ = BuildDraft(); Status = "Draft fields are valid. No mail was sent."; StatusKind = FeedbackKind.Success; ClearAfterDisplayTime(); }
@@ -344,14 +344,14 @@ public sealed partial class ComposerViewModel : IDisposable
         }, null, SaveViewModel.SuccessDisplayTime, Timeout.InfiniteTimeSpan);
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=70FAA8
-    // Broiler-Falsified-If: SaveAsync writes to the draft store after the saved draft failed to load
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=70FAA8
+    // Hairs-Falsified-If: SaveAsync writes to the draft store after the saved draft failed to load
+    // Hairs-Human:        PENDING
     public Task<bool> SaveAsync() => _loadError is null ? _journal.FlushAsync() : Task.FromResult(false);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=353A42
-    // Broiler-Falsified-If: PrepareCloseAsync returns true while an edit has not been written by the draft store
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=353A42
+    // Hairs-Falsified-If: PrepareCloseAsync returns true while an edit has not been written by the draft store
+    // Hairs-Human:        PENDING
     public async Task<bool> PrepareCloseAsync()
     {
         if (IsBusy) return false;
@@ -362,9 +362,9 @@ public sealed partial class ComposerViewModel : IDisposable
         return saved;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=60DA3B
-    // Broiler-Falsified-If: a discard whose tombstone write fails still clears the composer fields and loses the draft text
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=60DA3B
+    // Hairs-Falsified-If: a discard whose tombstone write fails still clears the composer fields and loses the draft text
+    // Hairs-Human:        PENDING
     public async Task<bool> DiscardAsync()
     {
         if (!CanDiscard) return false;
@@ -396,9 +396,9 @@ public sealed partial class ComposerViewModel : IDisposable
         return saved;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=E0FCEF
-    // Broiler-Falsified-If: the sender is invoked before the draft store has written the Sending snapshot
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=E0FCEF
+    // Hairs-Falsified-If: the sender is invoked before the draft store has written the Sending snapshot
+    // Hairs-Human:        PENDING
     public async Task SendAsync(CancellationToken cancellationToken = default)
     {
         if (!CanSend) return;
@@ -508,30 +508,30 @@ public sealed partial class ComposerViewModel : IDisposable
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=654915
-    // Broiler-Falsified-If: a snapshot taken during submission omits the Sending state, so a crash during SMTP reopens the draft as Editing
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=654915
+    // Hairs-Falsified-If: a snapshot taken during submission omits the Sending state, so a crash during SMTP reopens the draft as Editing
+    // Hairs-Human:        PENDING
     private DraftSnapshot? Snapshot() => _seed is null ? null : new()
     {
         Draft = _seed with { Subject = Subject, PlainText = PlainText },
         ToText = To, CcText = Cc, BccText = Bcc, State = SubmissionState,
         SentCopy = SentCopy, SentCopyFolder = SentCopyFolder,
     };
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=D6ED46
-    // Broiler-Falsified-If: Persist hands the journal a snapshot with saving disabled, so an edit is never written
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=D6ED46
+    // Hairs-Falsified-If: Persist hands the journal a snapshot with saving disabled, so an edit is never written
+    // Hairs-Human:        PENDING
     private void Persist() => _journal.Update(Snapshot());
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=276C32
-    // Broiler-Falsified-If: Changed is raised on the draft journal worker thread instead of through the UI dispatcher
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=276C32
+    // Hairs-Falsified-If: Changed is raised on the draft journal worker thread instead of through the UI dispatcher
+    // Hairs-Human:        PENDING
     private void OnStorageChanged(object? sender, EventArgs args)
     {
         try { _dispatcher.Post(() => { if (!_disposed) Notify(); }); }
         catch (ObjectDisposedException) { }
     }
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=542ACA
-    // Broiler-Falsified-If: an exception thrown by the posted action is swallowed and the awaiting SendAsync continues as if the update ran
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=542ACA
+    // Hairs-Falsified-If: an exception thrown by the posted action is swallowed and the awaiting SendAsync continues as if the update ran
+    // Hairs-Human:        PENDING
     private Task OnUiAsync(Action action)
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -539,12 +539,12 @@ public sealed partial class ComposerViewModel : IDisposable
         catch (ObjectDisposedException error) { completion.SetException(error); }
         return completion.Task;
     }
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=68BC6B
-    // Broiler-Falsified-If: Changed is raised after Dispose
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=68BC6B
+    // Hairs-Falsified-If: Changed is raised after Dispose
+    // Hairs-Human:        PENDING
     private void Notify() { if (!_disposed) { RecipientBook?.SetAccount(DraftAccountId ?? _account?.Id); Changed?.Invoke(this, EventArgs.Empty); } }
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=74DEF9
-    // Broiler-Falsified-If: a draft write completing after Dispose still raises Changed on the disposed view model
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=74DEF9
+    // Hairs-Falsified-If: a draft write completing after Dispose still raises Changed on the disposed view model
+    // Hairs-Human:        PENDING
     public void Dispose() { RecipientBook?.Dispose(); _disposed = true; CancelAttachment(); _journal.Changed -= OnStorageChanged; _successTimer?.Dispose(); }
 }

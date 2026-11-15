@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   38
 // Annotated:        18/38
 // Exempt:           26
@@ -41,9 +41,9 @@ using static Broiler.Native.Windows.WindowNative;
 namespace Broiler.Mail.Windows.Hosting;
 
 /// <summary>Minimal native host. OS chrome handles moving, resizing, and closing.</summary>
-// Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=7; Fingerprint=0A6203
-// Broiler-Falsified-If: a WM_GETMINMAXINFO or WM_DPICHANGED for the render child window reaches WindowsWindowSizing.OnMessage, whose Marshal reads and writes through lParam then act on the wrong window
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Critical; Resources=7; Fingerprint=0A6203
+// Hairs-Falsified-If: a WM_GETMINMAXINFO or WM_DPICHANGED for the render child window reaches WindowsWindowSizing.OnMessage, whose Marshal reads and writes through lParam then act on the wrong window
+// Hairs-Human:        PENDING
 internal sealed class WindowsMailWindow : Direct2DWindow
 {
     private readonly WindowsUiHost _host;
@@ -65,9 +65,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private double? _simulatedScale;
     // WindowsWindowSizing's default minimum client size in DIPs.
     private const int MinimumClientWidth = 640, MinimumClientHeight = 480;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=ED2638
-    // Broiler-Falsified-If: IME positioning calls receive the top-level frame handle instead of the render child window that holds keyboard focus, so the composition window is placed against the wrong client origin
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=ED2638
+    // Hairs-Falsified-If: IME positioning calls receive the top-level frame handle instead of the render child window that holds keyboard focus, so the composition window is placed against the wrong client origin
+    // Hairs-Human:        PENDING
     // Both bridges subclass native windows, which exist only from WM_CREATE on; see OnCreated.
     private WindowsAutomationBridge? _automationBridge;
     private WindowsInputBridge? _inputBridge;
@@ -87,9 +87,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private readonly StandardLegacyGraphicsInputAdapter _input = new("broiler-mail-windows");
 #pragma warning restore CS0618
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=Medium; Resources=3; Fingerprint=4C47CD
-    // Broiler-Falsified-If: a result posted by a background mail operation runs its callback on the posting thread instead of waiting for DrainDispatcher on the window thread
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=Medium; Resources=3; Fingerprint=4C47CD
+    // Hairs-Falsified-If: a result posted by a background mail operation runs its callback on the posting thread instead of waiting for DrainDispatcher on the window thread
+    // Hairs-Human:        PENDING
     public WindowsMailWindow(MailApplication application, DemoOptions? demo = null)
         : this(application, demo, WindowRestorePlan.For(application.LoadedSettings, WindowsScreen.WorkAreas(), WindowsScreen.SystemScale()))
     {
@@ -163,9 +163,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         Closed += (_, _) => PostQuitMessage(_exitCode);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=5A3305
-    // Broiler-Falsified-If: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=5A3305
+    // Hairs-Falsified-If: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
+    // Hairs-Human:        PENDING
     protected override int RunCore()
     {
         // Broiler's secondary-window mode delegates close requests. Own its outer loop here so
@@ -208,9 +208,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         return _model.Settings.RememberLayoutAsync(placement, _model.Inbox.SplitterFraction);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=7E4CEC
-    // Broiler-Falsified-If: the window closes although PrepareCloseAsync returned false or threw, discarding an unsaved draft
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=7E4CEC
+    // Hairs-Falsified-If: the window closes although PrepareCloseAsync returned false or threw, discarding an unsaved draft
+    // Hairs-Human:        PENDING
     private async void RequestClose()
     {
         if (_closePending) return;
@@ -230,9 +230,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         });
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=1FF9DE
-    // Broiler-Falsified-If: a mail result queued before a paint is not applied until a later frame, so the painted frame shows the state from before that result
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=1FF9DE
+    // Hairs-Falsified-If: a mail result queued before a paint is not applied until a later frame, so the painted frame shows the state from before that result
+    // Hairs-Human:        PENDING
     protected override BRenderList? BuildRenderList(BSize clientSize)
     {
         var frame = _recorder?.BeginFrame();
@@ -316,9 +316,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         Close();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=2CD656
-    // Broiler-Falsified-If: an exception thrown by one queued UI callback escapes Drain and ends the message loop or aborts the frame being built
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=2CD656
+    // Hairs-Falsified-If: an exception thrown by one queued UI callback escapes Drain and ends the message loop or aborts the frame being built
+    // Hairs-Human:        PENDING
     private void DrainDispatcher()
     {
         // Log a failing callback as Direct2DWindow logs its own posted callbacks. The callbacks
@@ -331,9 +331,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=53A44C
-    // Broiler-Falsified-If: after a resize or DPI change the UI session lays out against the old viewport size or scale until another resize arrives
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=53A44C
+    // Hairs-Falsified-If: after a resize or DPI change the UI session lays out against the old viewport size or scale until another resize arrives
+    // Hairs-Human:        PENDING
     /// <summary>
     /// Runs during WM_CREATE, once both the frame and the render child exist and before the window is
     /// shown. Constructing the bridges earlier passed zero handles, so neither subclassed anything: UI
@@ -365,9 +365,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         Invalidate();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=1; Fingerprint=377490
-    // Broiler-Falsified-If: a WM_GETMINMAXINFO or WM_DPICHANGED addressed to a window other than NativeHandle is handed to WindowsWindowSizing.OnMessage, which then writes through that message's lParam
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Critical; Resources=1; Fingerprint=377490
+    // Hairs-Falsified-If: a WM_GETMINMAXINFO or WM_DPICHANGED addressed to a window other than NativeHandle is handed to WindowsWindowSizing.OnMessage, which then writes through that message's lParam
+    // Hairs-Human:        PENDING
     protected override void OnNativeWindowMessage(nint hwnd, uint message, nint wParam, nint lParam)
     {
         if (hwnd == NativeHandle)
@@ -396,38 +396,38 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _appearance.Apply();
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=626D97
-    // Broiler-Falsified-If: pressing a mouse button over a control delivers no pointer-down input to the UI session, or delivers it as a pointer move
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=626D97
+    // Hairs-Falsified-If: pressing a mouse button over a control delivers no pointer-down input to the UI session, or delivers it as a pointer move
+    // Hairs-Human:        PENDING
     protected override void OnPointerDown(BPointerEventArgs e) => Dispatch(_input.FromPointerButton(e));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=EF3419
-    // Broiler-Falsified-If: releasing a mouse button delivers no pointer-up input to the UI session, so a pressed button never completes its click
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=EF3419
+    // Hairs-Falsified-If: releasing a mouse button delivers no pointer-up input to the UI session, so a pressed button never completes its click
+    // Hairs-Human:        PENDING
     protected override void OnPointerUp(BPointerEventArgs e) => Dispatch(_input.FromPointerButton(e));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=780407
-    // Broiler-Falsified-If: moving the pointer delivers a button event to the UI session instead of a move, starting a click or drag the user did not make
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=780407
+    // Hairs-Falsified-If: moving the pointer delivers a button event to the UI session instead of a move, starting a click or drag the user did not make
+    // Hairs-Human:        PENDING
     protected override void OnPointerMove(BPointerEventArgs e) => Dispatch(_input.FromPointerMove(e));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=13EC08
-    // Broiler-Falsified-If: a wheel notch over the message list delivers no wheel input to the UI session, so the list does not scroll
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=13EC08
+    // Hairs-Falsified-If: a wheel notch over the message list delivers no wheel input to the UI session, so the list does not scroll
+    // Hairs-Human:        PENDING
     protected override void OnMouseWheel(BMouseWheelEventArgs e) => Dispatch(_input.FromMouseWheel(e));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=C5177F
-    // Broiler-Falsified-If: a key press reaches MailKeyboardNavigation or the UI session as a key-up transition
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=C5177F
+    // Hairs-Falsified-If: a key press reaches MailKeyboardNavigation or the UI session as a key-up transition
+    // Hairs-Human:        PENDING
     protected override void OnKeyDown(BKeyEventArgs e) => Dispatch(_input.FromKey(e, KeyboardKeyTransition.Down));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=C41524
-    // Broiler-Falsified-If: a key release reaches MailKeyboardNavigation or the UI session as a key-down transition, repeating the action of that key
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=C41524
+    // Hairs-Falsified-If: a key release reaches MailKeyboardNavigation or the UI session as a key-down transition, repeating the action of that key
+    // Hairs-Human:        PENDING
     protected override void OnKeyUp(BKeyEventArgs e) => Dispatch(_input.FromKey(e, KeyboardKeyTransition.Up));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=8F04BC
-    // Broiler-Falsified-If: a character committed through WM_CHAR or the IME is inserted into the focused editor a number of times other than once
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=8F04BC
+    // Hairs-Falsified-If: a character committed through WM_CHAR or the IME is inserted into the focused editor a number of times other than once
+    // Hairs-Human:        PENDING
     protected override void OnTextInput(BTextInputEventArgs e) => _inputBridge?.ProcessTextInput(e.Character);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=7ABD26
-    // Broiler-Falsified-If: an input that MailKeyboardNavigation handles, such as Tab, is also dispatched to the UI session and inserts text into the focused editor
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=7ABD26
+    // Hairs-Falsified-If: an input that MailKeyboardNavigation handles, such as Tab, is also dispatched to the UI session and inserts text into the focused editor
+    // Hairs-Human:        PENDING
     private void Dispatch(UiInputEvent input)
     {
         // Application navigation owns Tab; dispatching it to RichEdit first would also insert text.
@@ -435,8 +435,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             Invalidate();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=D20E5E
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=D20E5E
+    // Hairs-Human:        PENDING
     protected override void CloseCore()
     {
         try { (_shell.ActiveDialog?.Session ?? _session).SetFocus(null); }
@@ -453,9 +453,9 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=20CB95
-    // Broiler-Falsified-If: an HTML preview opened from this mail window stays open after the mail window is disposed
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=20CB95
+    // Hairs-Falsified-If: an HTML preview opened from this mail window stays open after the mail window is disposed
+    // Hairs-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)

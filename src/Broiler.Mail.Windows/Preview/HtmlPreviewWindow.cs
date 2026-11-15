@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   131
 // Annotated:        48/131
 // Exempt:           98
@@ -60,19 +60,19 @@ using HtmlBitmap = Broiler.HTML.Image.BBitmap;
 namespace Broiler.Mail.Windows.Preview;
 
 /// <summary>Broiler.HTML preview window. Fully isolated with no scripts, active content, or external process dependencies.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=222A47
-// Broiler-Falsified-If: a link click in the preview hands the external browser a URL that is not in the current document's ExternalLinks set
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=222A47
+// Hairs-Falsified-If: a link click in the preview hands the external browser a URL that is not in the current document's ExternalLinks set
+// Hairs-Human:        PENDING
 internal sealed class HtmlPreviewWindow : Direct2DWindow
 {
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=75D67B
-    // Broiler-Falsified-If: a remote image body still arriving 10 seconds after its request started keeps being read, because the client Timeout stops applying once response headers are in
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=75D67B
+    // Hairs-Falsified-If: a remote image body still arriving 10 seconds after its request started keeps being read, because the client Timeout stops applying once response headers are in
+    // Hairs-Human:        PENDING
     private static readonly HttpClient ImageHttpClient = new() { Timeout = TimeSpan.FromSeconds(10) };
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=AD9575
-    // Broiler-Falsified-If: an embedded message image in the preview is decoded by a codec other than those ManagedImageCodecs.CreateCodecs returns, because an earlier registration made Use throw and the exception was swallowed
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=AD9575
+    // Hairs-Falsified-If: an embedded message image in the preview is decoded by a codec other than those ManagedImageCodecs.CreateCodecs returns, because an earlier registration made Use throw and the exception was swallowed
+    // Hairs-Human:        PENDING
     static HtmlPreviewWindow()
     {
         HtmlRuntime.Initialize();
@@ -124,30 +124,30 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     private readonly PreviewMeasurement? _measurement;
     private const int DefaultClientWidth = 900, DefaultClientHeight = 700;
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=8A70C4
+    // Hairs-Human:        PENDING
     internal nint InputHandle => RenderNativeHandle;
 
     public bool ShowInTaskbar { get; set; }
     public double Opacity { get; set; } = 1.0;
     public TaskCompletionSource<bool> Loaded { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
     public string? FailureDiagnostic { get; private set; }
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=4495BA
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=4495BA
+    // Hairs-Human:        PENDING
     public event EventHandler? Shown;
 
     public bool IsShowingPlainText => _isShowingPlainText;
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=401F88
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=401F88
+    // Hairs-Human:        PENDING
     public bool AreRemoteImagesAllowed => _allowRemoteImages;
     public HtmlPreviewDocument Document => _document;
 
     internal void Post(Action action) => PostToUiThread(action);
     /// <summary>UI-12: queues <paramref name="action"/> to the preview's thread; false once the window is closing.</summary>
     internal bool RunOnUiThread(Action action) => PostToUiThread(action);
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=0; Fingerprint=36E190
-    // Broiler-Falsified-If: a CloseWindow call from the preview host's thread runs Close on that thread instead of queuing it to the preview window's own thread
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=0; Fingerprint=36E190
+    // Hairs-Falsified-If: a CloseWindow call from the preview host's thread runs Close on that thread instead of queuing it to the preview window's own thread
+    // Hairs-Human:        PENDING
     internal void CloseWindow()
     {
         _imageLoadCts?.Cancel();
@@ -194,9 +194,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         FollowTextSize(theme.TextScale);
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=6E7FBD
-    // Broiler-Falsified-If: an ArgumentException from HtmlPreviewPolicy.Create inside LoadRemoteImagesAsync escapes the async Clicked handler of the Load remote images button and terminates the process
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=6E7FBD
+    // Hairs-Falsified-If: an ArgumentException from HtmlPreviewPolicy.Create inside LoadRemoteImagesAsync escapes the async Clicked handler of the Load remote images button and terminates the process
+    // Hairs-Human:        PENDING
     public HtmlPreviewWindow(
         HtmlPreviewDocument document,
         string plainText,
@@ -328,8 +328,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         };
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=A44345
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=A44345
+    // Hairs-Human:        PENDING
     public Task InitializeAsync(string? profileDirectory = null)
     {
         try
@@ -344,8 +344,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         return Task.CompletedTask;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Low; Resources=0; Fingerprint=4A1377
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Low; Resources=0; Fingerprint=4A1377
+    // Hairs-Human:        PENDING
     public void ToggleView()
     {
         if (_isShowingPlainText)
@@ -371,9 +371,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         Invalidate();
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=8; Fingerprint=E8D147
-    // Broiler-Falsified-If: an exception thrown by LoadRemoteImagesAsync is discarded while the status line already says that remote images were loaded
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=8; Fingerprint=E8D147
+    // Hairs-Falsified-If: an exception thrown by LoadRemoteImagesAsync is discarded while the status line already says that remote images were loaded
+    // Hairs-Human:        PENDING
     public void LoadRemoteImages() => _ = LoadRemoteImagesAsync();
 
     /// <summary>
@@ -382,9 +382,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     /// </summary>
     public HtmlResourceBatchResult? LastResourceBatchResult { get; private set; }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=AC5A62
-    // Broiler-Falsified-If: a remote image response larger than 5,000,000 bytes is read fully into memory before the size check discards it
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=AC5A62
+    // Hairs-Falsified-If: a remote image response larger than 5,000,000 bytes is read fully into memory before the size check discards it
+    // Hairs-Human:        PENDING
     public async Task LoadRemoteImagesAsync()
     {
         if (_allowRemoteImages || string.IsNullOrEmpty(_rawHtml)) return;
@@ -491,9 +491,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=DA6972
-    // Broiler-Falsified-If: a URL that is absent from the current document's ExternalLinks set, or arrives with userInitiated false, reaches the open-external callback
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=DA6972
+    // Hairs-Falsified-If: a URL that is absent from the current document's ExternalLinks set, or arrives with userInitiated false, reaches the open-external callback
+    // Hairs-Human:        PENDING
     public void OpenLink(string target, bool userInitiated)
     {
         if (!userInitiated || !HtmlPreviewPolicy.TryExternalLink(target, out var uri) || !_document.ExternalLinks.Contains(uri!.AbsoluteUri)) return;
@@ -501,9 +501,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         catch (Exception) { _status.Text = "The external browser could not be opened. The preview remains isolated."; }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Low; Resources=0; Fingerprint=534967
-    // Broiler-Falsified-If: after ShowFailure the HTML view is still visible or the Load remote images button is still enabled
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=Low; Resources=0; Fingerprint=534967
+    // Hairs-Falsified-If: after ShowFailure the HTML view is still visible or the Load remote images button is still enabled
+    // Hairs-Human:        PENDING
     public void ShowFailure()
     {
         if (IsDisposed) return;
@@ -675,9 +675,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     internal StandardLabel Status => _status;
     internal StandardLabel TruncationNotice => _truncationNotice;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=9A3595
-    // Broiler-Falsified-If: an exception thrown by a queued UI callback escapes DrainDispatcher and aborts the frame being built or the posted-callback handler
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=9A3595
+    // Hairs-Falsified-If: an exception thrown by a queued UI callback escapes DrainDispatcher and aborts the frame being built or the posted-callback handler
+    // Hairs-Human:        PENDING
     private void DrainDispatcher()
     {
         try { _dispatcher.Drain(); }
@@ -687,9 +687,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=695F24
-    // Broiler-Falsified-If: a frame is rendered before the host has taken the new client size, so the HTML snapshot is laid out at the previous width
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=695F24
+    // Hairs-Falsified-If: a frame is rendered before the host has taken the new client size, so the HTML snapshot is laid out at the previous width
+    // Hairs-Human:        PENDING
     protected override void OnCreated()
     {
         base.OnCreated();
@@ -751,41 +751,41 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         Invalidate();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=3E34D4
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=3E34D4
+    // Hairs-Human:        PENDING
     protected override void OnResized(BSize clientSize, double dpiScale)
     {
         _host.Update(clientSize, dpiScale);
         Invalidate();
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=626D97
-    // Broiler-Falsified-If: pressing a mouse button over the preview delivers no pointer-down input to the UI session, or delivers it as a pointer move
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=626D97
+    // Hairs-Falsified-If: pressing a mouse button over the preview delivers no pointer-down input to the UI session, or delivers it as a pointer move
+    // Hairs-Human:        PENDING
     protected override void OnPointerDown(BPointerEventArgs e) => Dispatch(_input.FromPointerButton(e));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=EF3419
-    // Broiler-Falsified-If: a pointer-up reaches the UI session with a position or button other than the operating system reported, so a link other than the one under the cursor is followed
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=EF3419
+    // Hairs-Falsified-If: a pointer-up reaches the UI session with a position or button other than the operating system reported, so a link other than the one under the cursor is followed
+    // Hairs-Human:        PENDING
     protected override void OnPointerUp(BPointerEventArgs e) => Dispatch(_input.FromPointerButton(e));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=780407
-    // Broiler-Falsified-If: moving the pointer delivers a button event to the UI session instead of a move, following a link the user did not click
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=780407
+    // Hairs-Falsified-If: moving the pointer delivers a button event to the UI session instead of a move, following a link the user did not click
+    // Hairs-Human:        PENDING
     protected override void OnPointerMove(BPointerEventArgs e) => Dispatch(_input.FromPointerMove(e));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=13EC08
-    // Broiler-Falsified-If: a wheel notch over the preview delivers no wheel input to the UI session, so the HTML view does not scroll
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=13EC08
+    // Hairs-Falsified-If: a wheel notch over the preview delivers no wheel input to the UI session, so the HTML view does not scroll
+    // Hairs-Human:        PENDING
     protected override void OnMouseWheel(BMouseWheelEventArgs e) => Dispatch(_input.FromMouseWheel(e));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=C5177F
-    // Broiler-Falsified-If: a key press reaches the UI session as a key-up transition
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=C5177F
+    // Hairs-Falsified-If: a key press reaches the UI session as a key-up transition
+    // Hairs-Human:        PENDING
     protected override void OnKeyDown(BKeyEventArgs e) => Dispatch(_input.FromKey(e, KeyboardKeyTransition.Down));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=C41524
-    // Broiler-Falsified-If: a key release reaches the UI session as a key-down transition, repeating the action of that key
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=C41524
+    // Hairs-Falsified-If: a key release reaches the UI session as a key-down transition, repeating the action of that key
+    // Hairs-Human:        PENDING
     protected override void OnKeyUp(BKeyEventArgs e) => Dispatch(_input.FromKey(e, KeyboardKeyTransition.Up));
-    // Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=7E8B06
-    // Broiler-Falsified-If: a character committed through WM_CHAR or the IME reaches the UI session a number of times other than once
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=4; Fingerprint=7E8B06
+    // Hairs-Falsified-If: a character committed through WM_CHAR or the IME reaches the UI session a number of times other than once
+    // Hairs-Human:        PENDING
     protected override void OnTextInput(BTextInputEventArgs e) => Dispatch(_input.FromText(e));
 
     /// <summary>UI-12: dispatches an input a --measure run synthesized, marked for the frame that shows it.</summary>
@@ -798,9 +798,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         recorder?.EndDispatch(started);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=4053CA
-    // Broiler-Falsified-If: an input event the UI session reports as handled leaves the window without an invalidation, so the frame on screen stays stale
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=4053CA
+    // Hairs-Falsified-If: an input event the UI session reports as handled leaves the window without an invalidation, so the frame on screen stays stale
+    // Hairs-Human:        PENDING
     internal void Dispatch(UiInputEvent input)
     {
         if (input.Kind == UiInputEventKind.KeyboardKey && input.KeyTransition == KeyboardKeyTransition.Down
@@ -823,9 +823,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             Close();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=BCB653
-    // Broiler-Falsified-If: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=BCB653
+    // Hairs-Falsified-If: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
+    // Hairs-Human:        PENDING
     protected override int RunCore()
     {
         Show();
@@ -847,8 +847,8 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6D7D24
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6D7D24
+    // Hairs-Human:        PENDING
     protected override void CloseCore()
     {
         try { _imageLoadCts?.Cancel(); } catch (Exception) { }
@@ -867,9 +867,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=B68F46
-    // Broiler-Falsified-If: the HTML container behind the preview is left undisposed after the window is disposed
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=B68F46
+    // Hairs-Falsified-If: the HTML container behind the preview is left undisposed after the window is disposed
+    // Hairs-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -917,9 +917,9 @@ internal sealed record HtmlLayoutSnapshot(
 /// </summary>
 internal readonly record struct HtmlReadingAnchor(int Index, string TagName, double Fraction, double Gap);
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=7F007E
-// Broiler-Falsified-If: a document shown through this view has an http(s) image or stylesheet it names fetched over the network instead of denied
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=7F007E
+// Hairs-Falsified-If: a document shown through this view has an http(s) image or stylesheet it names fetched over the network instead of denied
+// Hairs-Human:        PENDING
 internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReaderViewport, IInlineRemoteImages, IInlineRemoteImageReset, IInlineReaderInput
 {
     private string _sourceHtml;
@@ -988,9 +988,9 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
     private readonly StandardScrollView _scroll = new();
     private readonly HtmlViewElement _content;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=D6B4BA
-    // Broiler-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the view renders
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=D6B4BA
+    // Hairs-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the view renders
+    // Hairs-Human:        PENDING
     public ScrollableHtmlView(
         string html,
         Func<IBroilerRenderer?> rendererProvider,
@@ -1020,9 +1020,9 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
         };
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=F2F519
-    // Broiler-Falsified-If: an http(s) image named in the html passed to UpdateHtml is fetched over the network when the view next renders
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=F2F519
+    // Hairs-Falsified-If: an http(s) image named in the html passed to UpdateHtml is fetched over the network when the view next renders
+    // Hairs-Human:        PENDING
     public void UpdateHtml(string html, bool preserveReadingPosition = false)
     {
         if (preserveReadingPosition) _readFraction = ReadingPosition;
@@ -1060,8 +1060,8 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=2BA274
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=2BA274
+    // Hairs-Human:        PENDING
     public void ScrollToStart()
     {
         _restoreFraction = null; _zoomAnchor = null; _readFraction = 0;
@@ -1141,9 +1141,9 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
     }
     public HtmlLayoutSnapshot? Snapshot => _content.Snapshot;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=82D3BC
-    // Broiler-Falsified-If: an infinite or NaN available width sets a content width other than 800, or a width under 13 sets one below 1
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=82D3BC
+    // Hairs-Falsified-If: an infinite or NaN available width sets a content width other than 800, or a width under 13 sets one below 1
+    // Hairs-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
     {
         _content.ContentWidth = double.IsFinite(availableSize.Width) ? Math.Max(1, availableSize.Width - 12) : 800;
@@ -1160,8 +1160,8 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
         base.RenderCore(context);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=24120C
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=24120C
+    // Hairs-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -1174,9 +1174,9 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
     }
 }
 
-// Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=9D4E0E
-// Broiler-Falsified-If: rendering a document whose img src is an http(s) or file: URL sends a request for it instead of the load being denied
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=9D4E0E
+// Hairs-Falsified-If: rendering a document whose img src is an http(s) or file: URL sends a request for it instead of the load being denied
+// Hairs-Human:        PENDING
 internal sealed class HtmlViewElement : UiElement
 {
     internal event EventHandler? RenderingFailed;
@@ -1278,9 +1278,9 @@ internal sealed class HtmlViewElement : UiElement
     public bool IsTileCached(int row, int column = 0) => _tiles.ContainsKey((row, column));
     internal IReadOnlyCollection<(int Row, int Column)> CachedTileIndices => _tiles.Keys.ToArray();
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=490A6B
-    // Broiler-Falsified-If: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=490A6B
+    // Hairs-Falsified-If: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
+    // Hairs-Human:        PENDING
     private static HtmlContainer CreateContainer(string html)
     {
         HtmlRuntime.Initialize();
@@ -1305,9 +1305,9 @@ internal sealed class HtmlViewElement : UiElement
         return container;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=E28C87
-    // Broiler-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the element renders
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=E28C87
+    // Hairs-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the element renders
+    // Hairs-Human:        PENDING
     public HtmlViewElement(
         string html,
         Func<IBroilerRenderer?> rendererProvider,
@@ -1325,9 +1325,9 @@ internal sealed class HtmlViewElement : UiElement
         Focusable = true;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=C4589F
-    // Broiler-Falsified-If: after UpdateHtml a paint or link hit-test runs against the container that UpdateHtml disposed
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=C4589F
+    // Hairs-Falsified-If: after UpdateHtml a paint or link hit-test runs against the container that UpdateHtml disposed
+    // Hairs-Human:        PENDING
     public void UpdateHtml(string html)
     {
         bool focusInside = _linkTargets.Any(target => target.IsFocused);
@@ -1454,9 +1454,9 @@ internal sealed class HtmlViewElement : UiElement
     protected override UiSemanticNode GetSemanticNodeCore() =>
         base.GetSemanticNodeCore() with { Role = UiSemanticRole.Group, Name = "HTML message" };
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=246DD5
-    // Broiler-Falsified-If: an allocated tile texture handle is leaked or passed to ReleaseImage after invalidation
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=246DD5
+    // Hairs-Falsified-If: an allocated tile texture handle is leaked or passed to ReleaseImage after invalidation
+    // Hairs-Human:        PENDING
     private void InvalidateTiles()
     {
         Statistics?.Discarded(_tiles.Count);
@@ -1489,9 +1489,9 @@ internal sealed class HtmlViewElement : UiElement
         return (scale, (int)Math.Max(1, round(widthDip * scale)), (int)Math.Max(1, round(heightDip * scale)));
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=99266D
-    // Broiler-Falsified-If: layout geometry calculation ignores trailing content, leaving bare text or tail elements outside measured height
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=99266D
+    // Hairs-Falsified-If: layout geometry calculation ignores trailing content, leaving bare text or tail elements outside measured height
+    // Hairs-Human:        PENDING
     internal HtmlLayoutSnapshot CalculateLayout(float width)
     {
         long start = Stopwatch.GetTimestamp();
@@ -1539,9 +1539,9 @@ internal sealed class HtmlViewElement : UiElement
         return new HtmlLayoutSnapshot(width, extentWidth, contentHeight, rawHeight, isTruncated, links, diagnostics, elapsedTicks);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=2FA422
-    // Broiler-Falsified-If: repeated measures with unchanged width rerun the full layout instead of reusing the cached snapshot
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=2FA422
+    // Hairs-Falsified-If: repeated measures with unchanged width rerun the full layout instead of reusing the cached snapshot
+    // Hairs-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
     {
         if (_renderingFailed) return new BSize(1, 1);
@@ -1636,9 +1636,9 @@ internal sealed class HtmlViewElement : UiElement
         statistics?.Drawn(key, painted - started, Stopwatch.GetTimestamp() - painted, _cachedTileBytes);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=187F30
-    // Broiler-Falsified-If: rendering tiles outside the visible viewport window allocates bitmaps for non-visible regions
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=187F30
+    // Hairs-Falsified-If: rendering tiles outside the visible viewport window allocates bitmaps for non-visible regions
+    // Hairs-Human:        PENDING
     protected override void RenderCore(UiRenderContext context)
     {
         if (_renderingFailed) return;
@@ -1753,9 +1753,9 @@ internal sealed class HtmlViewElement : UiElement
                 new BRect(Bounds.X + visibleLeft + 2, Bounds.Y + visibleTop + 2, Math.Max(0, viewportWidth - 4), Math.Max(0, parentViewportHeight - 4)), 4);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=32B254
-    // Broiler-Falsified-If: the link callback fires for an input other than a left-button release, such as a pointer-down, a right click or a key press over a link
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=32B254
+    // Hairs-Falsified-If: the link callback fires for an input other than a left-button release, such as a pointer-down, a right click or a key press over a link
+    // Hairs-Human:        PENDING
     protected override bool OnInput(UiInputEvent e)
     {
         // Space and Shift+Space page through the document, as in a browser; other keys reach the scroll view.
@@ -1798,9 +1798,9 @@ internal sealed class HtmlViewElement : UiElement
 
     internal bool SendInput(UiInputEvent e) => OnInput(e);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=AB1C79
-    // Broiler-Falsified-If: disposing the element leaves cached tile image handles or the container undisposed
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=AB1C79
+    // Hairs-Falsified-If: disposing the element leaves cached tile image handles or the container undisposed
+    // Hairs-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)
@@ -1812,14 +1812,14 @@ internal sealed class HtmlViewElement : UiElement
     }
 }
 
-// Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=B984F4
-// Broiler-Falsified-If: a request the renderer sends through this transport, including one for a file: or loopback URL, is dispatched to the network or the file system
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=B984F4
+// Hairs-Falsified-If: a request the renderer sends through this transport, including one for a file: or loopback URL, is dispatched to the network or the file system
+// Hairs-Human:        PENDING
 internal sealed class DenyingRequestTransport : IBrowserRequestTransport
 {
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=5A1C67
-    // Broiler-Falsified-If: Deny returns a response whose status is anything other than 403 Forbidden or whose body is not empty
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=1; Fingerprint=5A1C67
+    // Hairs-Falsified-If: Deny returns a response whose status is anything other than 403 Forbidden or whose body is not empty
+    // Hairs-Human:        PENDING
     private static TransportResponse Deny(HttpRequestMessage request)
     {
         var resp = new HttpResponseMessage(System.Net.HttpStatusCode.Forbidden) { Content = new StringContent(string.Empty) };
@@ -1827,17 +1827,17 @@ internal sealed class DenyingRequestTransport : IBrowserRequestTransport
         return new TransportResponse(resp, urls, default);
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=D8BAB5
-    // Broiler-Falsified-If: SendAsync completes with a response other than the empty 403 that Deny builds
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=D8BAB5
+    // Hairs-Falsified-If: SendAsync completes with a response other than the empty 403 that Deny builds
+    // Hairs-Human:        PENDING
     public Task<TransportResponse> SendAsync(HttpRequestMessage request, RequestContext context, CancellationToken cancellationToken)
     {
         return Task.FromResult(Deny(request));
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=EF07AC
-    // Broiler-Falsified-If: Send returns a response other than the empty 403 that Deny builds
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=None; Security=High; Resources=1; Fingerprint=EF07AC
+    // Hairs-Falsified-If: Send returns a response other than the empty 403 that Deny builds
+    // Hairs-Human:        PENDING
     public TransportResponse Send(HttpRequestMessage request, RequestContext context, CancellationToken cancellationToken)
     {
         return Deny(request);

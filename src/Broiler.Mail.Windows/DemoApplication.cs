@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   36
 // Annotated:        13/36
 // Exempt:           11
@@ -27,17 +27,17 @@ using Broiler.Mail.Core.Settings;
 namespace Broiler.Mail.Windows;
 
 /// <summary>Explicit, in-memory UI preview. Never reads configuration, credentials, or the network.</summary>
-// Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=2673CB
-// Broiler-Falsified-If: demo mode opens a network connection, reads the Windows credential store, or reads or writes a configuration file
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=2673CB
+// Hairs-Falsified-If: demo mode opens a network connection, reads the Windows credential store, or reads or writes a configuration file
+// Hairs-Human:        PENDING
 internal static class DemoApplication
 {
     private static readonly DateTimeOffset Newest = new(2026, 9, 28, 10, 0, 0, TimeSpan.FromHours(2));
     private static readonly AccountId DemoAccount = new(new Guid("6d1f3a52-4b8e-4c27-9a3e-1f2b8c7d5e01"));
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=E50FAC
-    // Broiler-Falsified-If: the returned application uses a receiver, sender or store other than the in-memory demo implementations
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=E50FAC
+    // Hairs-Falsified-If: the returned application uses a receiver, sender or store other than the in-memory demo implementations
+    // Hairs-Human:        PENDING
     public static MailApplication Create(DemoOptions? options = null)
     {
         options ??= new(DemoScenario.Inbox, Interactive: true);
@@ -127,23 +127,23 @@ internal static class DemoApplication
         public override TimeZoneInfo LocalTimeZone => Zone;
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=37BD7B
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=37BD7B
+    // Hairs-Human:        PENDING
     private sealed class DemoSender(DemoScenario scenario) : IMailSender
     {
         // Only the rejected-send fixture offers Send; its synthetic server refuses the recipient.
         public bool IsAvailable => scenario == DemoScenario.SendRejected;
-        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=EDABFE
-        // Broiler-Falsified-If: a demo send returns Accepted or Unknown, so a draft is marked sent although nothing was submitted
-        // Broiler-Human:        PENDING
+        // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=EDABFE
+        // Hairs-Falsified-If: a demo send returns Accepted or Unknown, so a draft is marked sent although nothing was submitted
+        // Hairs-Human:        PENDING
         public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default) =>
             Task.FromResult(new SendResult(SubmissionStatus.Rejected, scenario == DemoScenario.SendRejected
                 ? "The demo server refused the recipient: 550 5.1.1 former.colleague@example.test mailbox unavailable."
                 : "Demo mode never sends mail."));
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=108CBA
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=108CBA
+    // Hairs-Human:        PENDING
     private sealed class DemoStore(DemoOptions options) : IAccountStore, ISettingsStore, ICredentialStore
     {
         private AccountProfile _profile = FixtureProfile(options.Scenario);
@@ -165,27 +165,27 @@ internal static class DemoApplication
         };
         private ApplicationSettings _settings = new() { Theme = options.Theme, WindowWidth = options.Width, WindowHeight = options.Height };
         public AccountProfile Profile => _profile;
-        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=BC503C
-        // Broiler-Human:        PENDING
+        // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=BC503C
+        // Hairs-Human:        PENDING
         public Task<IReadOnlyList<AccountProfile>> LoadAsync(CancellationToken cancellationToken = default) => Task.FromResult<IReadOnlyList<AccountProfile>>([_profile]);
-        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=3A9CDB
-        // Broiler-Human:        PENDING
+        // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=3A9CDB
+        // Hairs-Human:        PENDING
         public Task SaveAsync(AccountProfile profile, CancellationToken cancellationToken = default) { _profile = profile; return Task.CompletedTask; }
         public Task RemoveAsync(AccountId accountId, CancellationToken cancellationToken = default) => throw new InvalidOperationException("Account removal is not available in version 1.");
-        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=45FDAE
-        // Broiler-Human:        PENDING
+        // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=45FDAE
+        // Hairs-Human:        PENDING
         Task<ApplicationSettings> ISettingsStore.LoadAsync(CancellationToken cancellationToken) => Task.FromResult(_settings);
-        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=E20A30
-        // Broiler-Human:        PENDING
+        // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=E20A30
+        // Hairs-Human:        PENDING
         public Task SaveAsync(ApplicationSettings settings, CancellationToken cancellationToken = default)
         {
             if (options.Scenario == DemoScenario.SaveError) throw new IOException("The demo settings file is read-only.");
             _settings = settings;
             return Task.CompletedTask;
         }
-        // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=15E384
-        // Broiler-Falsified-If: a credential lookup in demo mode returns a non-null secret
-        // Broiler-Human:        PENDING
+        // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=15E384
+        // Hairs-Falsified-If: a credential lookup in demo mode returns a non-null secret
+        // Hairs-Human:        PENDING
         public Task<string?> ReadAsync(CredentialKey key, CancellationToken cancellationToken = default) => Task.FromResult<string?>(null);
         // Presence only: no secret exists, so no lookup returns one, and the demo tester and sender never read one.
         public Task<bool> ContainsAsync(CredentialKey key, CancellationToken cancellationToken = default) => Task.FromResult(key == _savedSmtpPassword);
@@ -210,8 +210,8 @@ internal static class DemoApplication
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=7B92C8
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=7B92C8
+    // Hairs-Human:        PENDING
     private sealed class DemoReceiver(DemoScenario scenario, bool interactive, DemoServerChange change) : IMailReceiver
     {
         private const string LongSender = "Maximilian Alexander von Langenstein-Habsburg <maximilian.alexander.von.langenstein-habsburg.office@subdomain.example.test>";
@@ -253,9 +253,9 @@ internal static class DemoApplication
             throw new MailConnectionException("Demo mode does not connect to a server. Restart without --demo to test an account.");
         }
 
-        // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=6AF2AE
-        // Broiler-Falsified-If: following the returned cursor repeats or skips a synthetic message
-        // Broiler-Human:        PENDING
+        // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=6AF2AE
+        // Hairs-Falsified-If: following the returned cursor repeats or skips a synthetic message
+        // Hairs-Human:        PENDING
         public async Task<MailInboxPage> GetInboxAsync(AccountProfile account, int maximumCount, MailInboxCursor? older = null, CancellationToken cancellationToken = default)
         {
             await Task.Delay(Latency(500), cancellationToken);
@@ -292,8 +292,8 @@ internal static class DemoApplication
             return new(messages, start == 0 ? null : new(account.Id, 1, (uint)total + 1, total, start - 1));
         }
 
-        // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=F6CA84
-        // Broiler-Human:        PENDING
+        // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=F6CA84
+        // Hairs-Human:        PENDING
         public async Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default)
         {
             await Task.Delay(Latency(300), cancellationToken);

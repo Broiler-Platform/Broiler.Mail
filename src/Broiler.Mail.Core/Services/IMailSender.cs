@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   4
 // Annotated:        2/4
 // Exempt:           1
@@ -21,15 +21,15 @@ using Broiler.Mail.Core.Messages;
 namespace Broiler.Mail.Core.Services;
 
 /// <summary>Version 2 seam. Implementations must check draft/account identity before submission.</summary>
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=140067
-// Broiler-Falsified-If: an implementation submits a draft whose AccountId or FromAddress differs from the account it is sent with
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=140067
+// Hairs-Falsified-If: an implementation submits a draft whose AccountId or FromAddress differs from the account it is sent with
+// Hairs-Human:        PENDING
 public interface IMailSender
 {
     bool IsAvailable => true;
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=F46089
-    // Broiler-Falsified-If: a Bcc recipient appears in the header block of the message delivered to the To and Cc recipients
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=F46089
+    // Hairs-Falsified-If: a Bcc recipient appears in the header block of the message delivered to the To and Cc recipients
+    // Hairs-Human:        PENDING
     Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default);
 }
 

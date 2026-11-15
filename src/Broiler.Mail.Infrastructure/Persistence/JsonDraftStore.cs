@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   6
 // Annotated:        4/6
 // Exempt:           2
@@ -20,21 +20,21 @@ using Broiler.Mail.Core.Services;
 
 namespace Broiler.Mail.Infrastructure.Persistence;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=60FB52
-// Broiler-Falsified-If: a save based on a stale revision overwrites a newer stored draft
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=60FB52
+// Hairs-Falsified-If: a save based on a stale revision overwrites a newer stored draft
+// Hairs-Human:        PENDING
 public sealed partial class JsonDraftStore(string path) : IDraftLibraryStore
 {
     internal const int MaximumFileBytes = 32 * 1024 * 1024;
     private readonly JsonConfigurationFile<DraftStoreState> _file = new(path, () => new(0, null), Validate, ConfigurationJsonContext.Storage.Drafts, MaximumFileBytes);
     public bool IsPersistent => true;
-    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=4; Fingerprint=BC3C29
-    // Broiler-Falsified-If: a corrupt or oversized drafts file loads as an empty store (revision 0, no draft) instead of throwing
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=High; Resources=4; Fingerprint=BC3C29
+    // Hairs-Falsified-If: a corrupt or oversized drafts file loads as an empty store (revision 0, no draft) instead of throwing
+    // Hairs-Human:        PENDING
     public Task<DraftStoreState> LoadAsync(CancellationToken cancellationToken = default) => _file.ReadAsync(cancellationToken);
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=760835
-    // Broiler-Falsified-If: a save whose expectedRevision differs from the stored revision writes the draft instead of throwing DraftConflictException
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=760835
+    // Hairs-Falsified-If: a save whose expectedRevision differs from the stored revision writes the draft instead of throwing DraftConflictException
+    // Hairs-Human:        PENDING
     public async Task<DraftStoreState> SaveAsync(long expectedRevision, DraftSnapshot? draft, CancellationToken cancellationToken = default)
     {
         DraftStoreState? saved = null;
@@ -46,9 +46,9 @@ public sealed partial class JsonDraftStore(string path) : IDraftLibraryStore
         return saved!;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=702580
-    // Broiler-Falsified-If: a saved draft whose Sent-copy state is Pending while its submission state is not Accepted loads without an exception
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=702580
+    // Hairs-Falsified-If: a saved draft whose Sent-copy state is Pending while its submission state is not Accepted loads without an exception
+    // Hairs-Human:        PENDING
     private static void Validate(DraftStoreState state)
     {
         if (state.Revision < 0 || state.Revision == long.MaxValue) throw new ArgumentException("Invalid draft revision.");

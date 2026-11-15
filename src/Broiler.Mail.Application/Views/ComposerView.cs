@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   2
 // Annotated:        2/2
 // Exempt:           3
@@ -38,9 +38,9 @@ using Broiler.UI.Toolbar.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=62EDC3
-// Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=62EDC3
+// Hairs-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
+// Hairs-Human:        PENDING
 public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, CompositionCommands? commands = null)
 {
     private readonly CompositionCommands _commands = commands ?? new CompositionCommands(model, inbox);
@@ -50,9 +50,9 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
     /// <summary>The body editor, available after <see cref="CreateContent"/>; focused for replies.</summary>
     public UiElement? Body { get; private set; }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=8426BC
-    // Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=8426BC
+    // Hairs-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
+    // Hairs-Human:        PENDING
     public UiElement CreateContent()
     {
         // Writing comes first: a compact header, then a body that takes the rest of the window.

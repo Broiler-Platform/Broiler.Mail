@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   1
 // Annotated:        1/1
 // Exempt:           1
@@ -18,9 +18,9 @@
 namespace Broiler.Mail.Core.Services;
 
 /// <summary>A safe user-facing connection failure. Must not include remote response text or secrets.</summary>
-// Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=5FAB92
-// Broiler-Falsified-If: a MailConnectionException is constructed with text taken from a server response or a saved secret
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=5FAB92
+// Hairs-Falsified-If: a MailConnectionException is constructed with text taken from a server response or a saved secret
+// Hairs-Human:        PENDING
 public sealed class MailConnectionException(string message, MailConnectionFailure failure = MailConnectionFailure.Unspecified) : Exception(message)
 {
     /// <summary>What kind of problem this is; <see cref="MailConnectionFailure.Unspecified"/> where the caller does not classify it.</summary>

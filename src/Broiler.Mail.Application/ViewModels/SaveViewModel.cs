@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   12
 // Annotated:        5/12
 // Exempt:           10
@@ -23,18 +23,18 @@ using Broiler.Mail.Core.Validation;
 namespace Broiler.Mail.Application.ViewModels;
 
 /// <summary>Publishes save results on the UI thread and keeps failures visible to the user.</summary>
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=A6ED99
-// Broiler-Falsified-If: a save runs while loadError is set, overwriting a configuration file that failed to load
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=A6ED99
+// Hairs-Falsified-If: a save runs while loadError is set, overwriting a configuration file that failed to load
+// Hairs-Human:        PENDING
 public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
 {
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=8C487F
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=8C487F
+    // Hairs-Human:        PENDING
     public event EventHandler? Changed;
     public bool IsBusy { get; private set; }
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=CF1BAD
-    // Broiler-Falsified-If: CanSave is true while loadError is set
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=CF1BAD
+    // Hairs-Falsified-If: CanSave is true while loadError is set
+    // Hairs-Human:        PENDING
     public bool CanSave => !IsBusy && !AdditionalBusy && loadError is null;
     protected virtual bool AdditionalBusy => false;
     protected void ResetFeedback(string text)
@@ -109,15 +109,15 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=80FC04
-    // Broiler-Falsified-If: a save whose operation throws still runs its commit action, so the view model shows values that never reached the store
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=80FC04
+    // Hairs-Falsified-If: a save whose operation throws still runs its commit action, so the view model shows values that never reached the store
+    // Hairs-Human:        PENDING
     protected Task SaveAsync(Func<Task> save, Action commit, string successMessage) =>
         RunAsync(save, commit, "Saving…", successMessage, "Not saved", "Save canceled.");
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=21F7C0
-    // Broiler-Falsified-If: a second call made while the first operation is still running starts its operation instead of returning
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=21F7C0
+    // Hairs-Falsified-If: a second call made while the first operation is still running starts its operation instead of returning
+    // Hairs-Human:        PENDING
     protected async Task RunAsync(Func<Task> operation, Action commit, string busyMessage,
         string successMessage, string failurePrefix, string canceledMessage, Action<string?>? completed = null)
     {

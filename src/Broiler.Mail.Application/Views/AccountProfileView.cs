@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   3
 // Annotated:        2/3
 // Exempt:           0
@@ -33,17 +33,17 @@ using Broiler.UI.TabView.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=C09C5B
-// Broiler-Falsified-If: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=C09C5B
+// Hairs-Falsified-If: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
+// Hairs-Human:        PENDING
 public sealed class AccountProfileView(AccountProfileViewModel model)
 {
     /// <summary>Raised by the setup checklist's final action, once the account is ready to receive mail.</summary>
     public event EventHandler? InboxRequested;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=C21E57
-    // Broiler-Falsified-If: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=C21E57
+    // Hairs-Falsified-If: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
+    // Hairs-Human:        PENDING
     public UiElement CreateContent()
     {
         bool applyingProfile = false;

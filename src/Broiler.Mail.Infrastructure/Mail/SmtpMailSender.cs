@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   9
 // Annotated:        6/9
 // Exempt:           5
@@ -26,9 +26,9 @@ using Broiler.Mail.Infrastructure.Protocols.Smtp;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
-// Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=03D79A
-// Broiler-Falsified-If: an SMTP server configured for STARTTLS that does not offer it receives the AUTH password over the unencrypted connection
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=03D79A
+// Hairs-Falsified-If: an SMTP server configured for STARTTLS that does not offer it receives the AUTH password over the unencrypted connection
+// Hairs-Human:        PENDING
 public sealed class SmtpMailSender : IProgressMailSender
 {
     static SmtpMailSender()
@@ -40,16 +40,16 @@ public sealed class SmtpMailSender : IProgressMailSender
     private readonly TimeSpan _timeout;
     public bool IsAvailable => true;
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=None; Security=High; Resources=1; Fingerprint=F8A1A7
-    // Broiler-Falsified-If: the client produced by the public constructor accepts a server certificate that system certificate validation rejects
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=None; Security=High; Resources=1; Fingerprint=F8A1A7
+    // Hairs-Falsified-If: the client produced by the public constructor accepts a server certificate that system certificate validation rejects
+    // Hairs-Human:        PENDING
     public SmtpMailSender(ICredentialStore credentials)
         : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20)) { }
 
     // Only tests replace certificate validation and shorten the deadline.
-    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=785B29
-    // Broiler-Falsified-If: an assembly other than the component's test project can construct the sender with its own client factory or deadline
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=785B29
+    // Hairs-Falsified-If: an assembly other than the component's test project can construct the sender with its own client factory or deadline
+    // Hairs-Human:        PENDING
     internal SmtpMailSender(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout)
         : this(credentials, () => new SmtpProtocolClient(certValidator), timeout) { }
 
@@ -60,9 +60,9 @@ public sealed class SmtpMailSender : IProgressMailSender
         _timeout = timeout;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=86DC32
-    // Broiler-Falsified-If: a disconnect, timeout or cancellation after client.SendAsync has begun is reported as Rejected instead of Unknown
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=86DC32
+    // Hairs-Falsified-If: a disconnect, timeout or cancellation after client.SendAsync has begun is reported as Rejected instead of Unknown
+    // Hairs-Human:        PENDING
     public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)
         => SendCoreAsync(account, draft, null, cancellationToken);
 
@@ -115,11 +115,11 @@ public sealed class SmtpMailSender : IProgressMailSender
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=4B9B2F
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=4B9B2F
+    // Hairs-Human:        PENDING
     private static SendResult Rejected(string message) => new(SubmissionStatus.Rejected, message);
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=D25E4C
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=D25E4C
+    // Hairs-Human:        PENDING
     private static SendResult Accepted() => new(SubmissionStatus.Accepted,
         "Accepted by the SMTP server. Delivery is not guaranteed. See the separate Sent-copy status.");
 }

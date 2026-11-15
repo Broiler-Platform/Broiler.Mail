@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   6
 // Annotated:        3/6
 // Exempt:           9
@@ -22,16 +22,16 @@ using Broiler.UI;
 
 namespace Broiler.Mail.Application.ViewModels;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=757DD1
-// Broiler-Falsified-If: a window width or height outside the validated range is written to the settings store
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=757DD1
+// Hairs-Falsified-If: a window width or height outside the validated range is written to the settings store
+// Hairs-Human:        PENDING
 public sealed class SettingsViewModel : SaveViewModel
 {
     private readonly ISettingsStore _store;
     private readonly SemaphoreSlim _layoutWrites = new(1, 1);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=E9913B
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=E9913B
+    // Hairs-Human:        PENDING
     public SettingsViewModel(ISettingsStore store, IUiDispatcher dispatcher, ApplicationSettings settings, string? loadError,
         ProfileStorageViewModel? storage = null)
         : base(dispatcher, loadError)
@@ -94,9 +94,9 @@ public sealed class SettingsViewModel : SaveViewModel
     public string WindowWidth { get; set; }
     public string WindowHeight { get; set; }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=0EABB5
-    // Broiler-Falsified-If: a non-numeric window width, or one outside 640 to 7680, reaches the settings store
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=0EABB5
+    // Hairs-Falsified-If: a non-numeric window width, or one outside 640 to 7680, reaches the settings store
+    // Hairs-Human:        PENDING
     public Task SaveAsync(CancellationToken cancellationToken = default)
     {
         ApplicationSettings? candidate = null;

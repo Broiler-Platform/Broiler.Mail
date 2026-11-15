@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   5
 // Annotated:        3/5
 // Exempt:           3
@@ -25,18 +25,18 @@ using Broiler.Mail.Infrastructure.Protocols.Imap;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
-// Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=6C5483
-// Broiler-Falsified-If: the IMAP password is sent to the Sent-copy server over a connection whose certificate failed platform validation or that never upgraded to TLS
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=6C5483
+// Hairs-Falsified-If: the IMAP password is sent to the Sent-copy server over a connection whose certificate failed platform validation or that never upgraded to TLS
+// Hairs-Human:        PENDING
 public sealed class ImapSentCopyWriter : ISentCopyWriter
 {
     private readonly ICredentialStore _credentials;
     private readonly Func<ImapProtocolClient> _clientFactory;
     private readonly TimeSpan _timeout;
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=E11809
-    // Broiler-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=E11809
+    // Hairs-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
+    // Hairs-Human:        PENDING
     public ImapSentCopyWriter(ICredentialStore credentials) : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20)) { }
 
     internal ImapSentCopyWriter(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout)
@@ -49,9 +49,9 @@ public sealed class ImapSentCopyWriter : ISentCopyWriter
         _timeout = timeout;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=8AE4A8
-    // Broiler-Falsified-If: an APPEND interrupted after it was sent is reported as Failed rather than Unknown
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=8AE4A8
+    // Hairs-Falsified-If: an APPEND interrupted after it was sent is reported as Failed rather than Unknown
+    // Hairs-Human:        PENDING
     public async Task<SentCopyState> AppendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)
     {
         bool appending = false, saved = false;

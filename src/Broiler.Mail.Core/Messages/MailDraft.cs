@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   6
 // Annotated:        1/6
 // Exempt:           13
@@ -21,9 +21,9 @@ using System.Text.Json.Serialization;
 namespace Broiler.Mail.Core.Messages;
 
 /// <summary>A plain-text composition snapshot with a pinned sender and optional reply thread.</summary>
-// Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=1104C4
-// Broiler-Falsified-If: a saved draft whose JSON omits the id deserializes with a fresh Guid, so its Message-ID differs from the one already submitted
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=None; Security=Medium; Resources=1; Fingerprint=1104C4
+// Hairs-Falsified-If: a saved draft whose JSON omits the id deserializes with a fresh Guid, so its Message-ID differs from the one already submitted
+// Hairs-Human:        PENDING
 public sealed record MailDraft
 {
     [JsonRequired] public Guid Id { get; init; } = Guid.NewGuid();

@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   138
 // Annotated:        17/138
 // Exempt:           66
@@ -24,9 +24,9 @@ using Broiler.UI;
 namespace Broiler.Mail.Application.ViewModels;
 
 /// <summary>Owns the in-memory inbox. All state changes are published on the UI dispatcher.</summary>
-// Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=8045C6
-// Broiler-Falsified-If: a body fetched for an earlier selection is committed after SelectAsync has picked another message, so Body no longer belongs to SelectedMessage
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=8045C6
+// Hairs-Falsified-If: a body fetched for an earlier selection is committed after SelectAsync has picked another message, so Body no longer belongs to SelectedMessage
+// Hairs-Human:        PENDING
 /// <summary>Which pane an inbox problem belongs to, so its explanation and Retry appear beside it.</summary>
 public enum InboxProblemScope { None, List, Message }
 
@@ -43,13 +43,13 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
     public AccountProfile? CurrentAccountProfile => _account;
     public bool SupportsSourceExport => SourceExports is not null && SourceReceiver is not null;
     public bool CanDownloadOriginalSource => SupportsSourceExport && CanReceive && SelectedMessage is not null;
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=Low; Resources=0; Fingerprint=75CF89
-    // Broiler-Falsified-If: PageSize is larger than ImapMailReceiver.MaximumPageSize, so every receive is refused with ArgumentOutOfRangeException
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=Low; Resources=0; Fingerprint=75CF89
+    // Hairs-Falsified-If: PageSize is larger than ImapMailReceiver.MaximumPageSize, so every receive is refused with ArgumentOutOfRangeException
+    // Hairs-Human:        PENDING
     public const int PageSize = 50;
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=Medium; Resources=0; Fingerprint=FC3D90
-    // Broiler-Falsified-If: repeated Load older leaves more than MaximumLoadedMessages plus one page of summaries in Messages
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=Medium; Resources=0; Fingerprint=FC3D90
+    // Hairs-Falsified-If: repeated Load older leaves more than MaximumLoadedMessages plus one page of summaries in Messages
+    // Hairs-Human:        PENDING
     public const int MaximumLoadedMessages = 500;
     private IReadOnlyList<MailFolder>? _serverFolders;
     private IReadOnlyList<string> _cachedMailboxIds = [];
@@ -587,8 +587,8 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         StopPending(); DownloadPolicy = policy; Notify();
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=8C487F
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=8C487F
+    // Hairs-Human:        PENDING
     public event EventHandler? Changed;
     public IReadOnlyList<MailMessageSummary> Messages { get; private set; } = [];
     public MailMessageSummary? SelectedMessage { get; private set; }
@@ -640,15 +640,15 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         InboxProblemScope.Message => MessageProblem is not null && SelectedMessage is not null && _account is not null,
         _ => false,
     };
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=4A2367
-    // Broiler-Falsified-If: CanReceive is true for a saved account whose IsEnabled is false
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=4A2367
+    // Hairs-Falsified-If: CanReceive is true for a saved account whose IsEnabled is false
+    // Hairs-Human:        PENDING
     public bool CanReceive => !IsSearchActive && !_disposed && !_storageMaintenance && !IsBusy && _account is { IsEnabled: true } &&
         (SelectedMailboxId == "INBOX" || receiver is IMailFolderReceiver) &&
         Folders.Any(folder => folder.MailboxId == SelectedMailboxId && folder.IsSelectable);
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=7DC2FC
-    // Broiler-Falsified-If: CanLoadOlder stays true after Messages.Count has reached MaximumLoadedMessages
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=7DC2FC
+    // Hairs-Falsified-If: CanLoadOlder stays true after Messages.Count has reached MaximumLoadedMessages
+    // Hairs-Human:        PENDING
     public bool CanLoadOlder => !IsSearchActive && !_disposed && !_storageMaintenance && !IsBusy && Messages.Count < MaximumLoadedMessages &&
         (IsShowingCachedMail ? _hasOlderCached : CanReceive && _older is not null);
     /// <summary>
@@ -658,9 +658,9 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
     /// </summary>
     public string? SessionLimitNotice => !IsLoadingList && (IsShowingCachedMail ? _hasOlderCached : _older is not null) && Messages.Count >= MaximumLoadedMessages
         ? "Session limit reached (500 messages). Older ones cannot be loaded in this session. Receive mail to start again." : null;
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=FF8DC8
-    // Broiler-Falsified-If: CanSelect is true while a page load is still running
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=0; Fingerprint=FF8DC8
+    // Hairs-Falsified-If: CanSelect is true while a page load is still running
+    // Hairs-Human:        PENDING
     public bool CanSelect => !_disposed && !_storageMaintenance && !_loadingPage;
 
     public void BeginStorageMaintenance()
@@ -695,9 +695,9 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=3; Fingerprint=DC3FBA
-    // Broiler-Falsified-If: a receive started before SetAccount switches to another profile still commits its messages afterwards
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=3; Fingerprint=DC3FBA
+    // Hairs-Falsified-If: a receive started before SetAccount switches to another profile still commits its messages afterwards
+    // Hairs-Human:        PENDING
     public void SetAccount(AccountProfile? account)
     {
         if (_disposed || _account == account) return;
@@ -767,19 +767,19 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         }, older ? "Opening older saved headers…" : $"Opening saved {MailboxNoun}…", InboxProblemScope.List);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=6EFC99
-    // Broiler-Falsified-If: ReceiveAsync starts a fetch while CanReceive is false, for example for a disabled account
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=6EFC99
+    // Hairs-Falsified-If: ReceiveAsync starts a fetch while CanReceive is false, for example for a disabled account
+    // Hairs-Human:        PENDING
     public Task ReceiveAsync() => CanReceive ? LoadPageAsync(null) : Task.CompletedTask;
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=2C3055
-    // Broiler-Falsified-If: LoadOlderAsync starts a fetch when no older cursor exists or after MaximumLoadedMessages summaries are loaded
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=2C3055
+    // Hairs-Falsified-If: LoadOlderAsync starts a fetch when no older cursor exists or after MaximumLoadedMessages summaries are loaded
+    // Hairs-Human:        PENDING
     public Task LoadOlderAsync() => !CanLoadOlder ? Task.CompletedTask
         : IsShowingCachedMail ? LoadCachedAsync(_account!, older: true) : LoadPageAsync(_older);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=6B62D5
-    // Broiler-Falsified-If: a page that repeats a message key already loaded leaves two entries with that key in Messages
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=6B62D5
+    // Hairs-Falsified-If: a page that repeats a message key already loaded leaves two entries with that key in Messages
+    // Hairs-Human:        PENDING
     private Task LoadPageAsync(MailInboxCursor? cursor)
     {
         _lastFailureWasDownload = false; DownloadCompleted = DownloadTotal = 0;
@@ -855,9 +855,9 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         return "The open message is older than the newest page and stays open. Use Load older to show it in the list.";
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=61A21D
-    // Broiler-Falsified-If: a body whose Key differs from the requested key is committed to Body
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=61A21D
+    // Hairs-Falsified-If: a body whose Key differs from the requested key is committed to Body
+    // Hairs-Human:        PENDING
     public Task SelectAsync(MailMessageKey key)
     {
         if (!CanSelect || _account is null) return Task.CompletedTask;
@@ -941,9 +941,9 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
             downloading: true, began: value => generation = value);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=10513A
-    // Broiler-Falsified-If: a result that completes after Cancel still replaces Messages or Body
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=3; Fingerprint=10513A
+    // Hairs-Falsified-If: a result that completes after Cancel still replaces Messages or Body
+    // Hairs-Human:        PENDING
     public void Cancel()
     {
         if (!IsBusy || _disposed) return;
@@ -1012,9 +1012,9 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         catch (Exception ex) when (ex is ObjectDisposedException or OperationCanceledException or AggregateException) { }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=F070FC
-    // Broiler-Falsified-If: a callback from an operation superseded by a later RunAsync or StopPending still commits its result on the dispatcher
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=F070FC
+    // Hairs-Falsified-If: a callback from an operation superseded by a later RunAsync or StopPending still commits its result on the dispatcher
+    // Hairs-Human:        PENDING
     private async Task RunAsync<T>(Func<CancellationToken, Task<T>> operation, Action<T> commit, string busy, InboxProblemScope scope,
         bool downloading = false, Action<int>? began = null, bool changingFlags = false, bool moving = false, bool deleting = false, bool selectedFoldersDownload = false, bool offlineHeaders = false, MailboxSnapshotAction snapshotAction = MailboxSnapshotAction.None)
     {
@@ -1093,9 +1093,9 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         catch (ObjectDisposedException) { /* The native window has closed. */ }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=1; Fingerprint=5AE902
-    // Broiler-Falsified-If: StopPending does not advance the generation, so a commit already queued on the dispatcher still runs
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=1; Fingerprint=5AE902
+    // Hairs-Falsified-If: StopPending does not advance the generation, so a commit already queued on the dispatcher still runs
+    // Hairs-Human:        PENDING
     private void StopPending()
     {
         if (_loadingNavigation) { _loadingNavigation = false; NavigationNotice = "Navigation restore canceled. Ordinary folder navigation is available; Reload saved navigation to retry."; }
@@ -1108,12 +1108,12 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         IsBusy = _loadingPage = _downloadingBodies = _changingFlags = _moving = _deleting = false;
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=3; Fingerprint=14B7E4
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=3; Fingerprint=14B7E4
+    // Hairs-Human:        PENDING
     private void Notify() => Changed?.Invoke(this, EventArgs.Empty);
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=D13C0D
-    // Broiler-Falsified-If: an operation that completes after Dispose still changes Messages, Body or Status
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=D13C0D
+    // Hairs-Falsified-If: an operation that completes after Dispose still changes Messages, Body or Status
+    // Hairs-Human:        PENDING
     public void Dispose()
     {
         if (_disposed) return;

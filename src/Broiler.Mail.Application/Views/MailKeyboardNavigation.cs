@@ -1,8 +1,8 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
 //
-// Broiler Code Assurance
-// ----------------------
+// HAIRS Code Assurance
+// --------------------
 // Relevant units:   10
 // Annotated:        5/10
 // Exempt:           0
@@ -22,14 +22,14 @@ using Broiler.UI.ListView.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=6389B4
-// Broiler-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
-// Broiler-Human:        PENDING
+// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=6389B4
+// Hairs-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
+// Hairs-Human:        PENDING
 public sealed class MailKeyboardNavigation(UiSession session, MailShellView shell, MailShellViewModel model)
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=E6832F
-    // Broiler-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=E6832F
+    // Hairs-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
+    // Hairs-Human:        PENDING
     public bool Handle(UiInputEvent input)
     {
         // Menus and combo-box popups own their arrows, Enter and Escape.
@@ -124,9 +124,9 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=B17051
-    // Broiler-Falsified-If: Tab moves focus onto a disabled control or into the collapsed SMTP fields
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=B17051
+    // Hairs-Falsified-If: Tab moves focus onto a disabled control or into the collapsed SMTP fields
+    // Hairs-Human:        PENDING
     public void MoveFocus(int direction)
     {
         var activeSession = shell.ActiveDialog?.Session ?? session;
@@ -185,9 +185,9 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     public static IReadOnlyList<UiElement> TabStops(UiElement content) =>
         Descendants(content).Where(IsTabStop).OrderBy(element => element.TabIndex).ToList();
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=5AB857
-    // Broiler-Falsified-If: a focused field below the visible area of its scroll view stays out of view after Tab
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=5AB857
+    // Hairs-Falsified-If: a focused field below the visible area of its scroll view stays out of view after Tab
+    // Hairs-Human:        PENDING
     private void Reveal(UiElement element) => FocusNavigation.Reveal(shell.ActiveDialog?.Session ?? session, element);
 
     // A scroll view of read-only content is a stop through StandardScrollView.FocusWhenScrollable, which
@@ -195,9 +195,9 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
     // feedback area never takes focus invisibly with nothing for a screen reader to announce.
     private static bool IsTabStop(UiElement element) => element.CanFocus && element.IsTabStop;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=563E24
-    // Broiler-Falsified-If: an element inside a collapsed panel is returned
-    // Broiler-Human:        PENDING
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=563E24
+    // Hairs-Falsified-If: an element inside a collapsed panel is returned
+    // Hairs-Human:        PENDING
     private static IEnumerable<UiElement> Descendants(UiElement element)
     {
         // Collapsed, or hidden by a container: inactive tab content and collapsed split panes.
