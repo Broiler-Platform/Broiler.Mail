@@ -29,7 +29,7 @@ internal sealed class InlineRemoteImageSession : IDisposable
     private readonly string _rawHtml;
     private readonly IReadOnlyDictionary<string, MailEmbeddedImage> _embedded;
     private readonly Func<RemoteImageBroker> _createBroker;
-    private Dictionary<string, MailEmbeddedImage> _approved = new(StringComparer.OrdinalIgnoreCase);
+    private Dictionary<string, MailEmbeddedImage> _permittedDownloads = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _active;
     private int _generation;
     private bool _disposed;
@@ -50,20 +50,20 @@ internal sealed class InlineRemoteImageSession : IDisposable
         int generation = ++_generation;
         var cancellation = _active = new CancellationTokenSource();
         var dispatcher = _surface.Session?.Dispatcher;
-        var approved = _approved;
+        var permitted = _permittedDownloads;
         State = State with { IsLoading = true, CanLoad = false, Status = "Loading remote images for this message…" };
         Changed?.Invoke(this, EventArgs.Empty);
         try
         {
             using var broker = _createBroker();
-            var batch = await Task.Run(() => broker.LoadBatchAsync(_rawHtml, _embedded, approved, cancellation.Token), cancellation.Token).ConfigureAwait(false);
+            var batch = await Task.Run(() => broker.LoadBatchAsync(_rawHtml, _embedded, permitted, cancellation.Token), cancellation.Token).ConfigureAwait(false);
             Post(() =>
             {
                 if (!Current()) return;
                 try
                 {
                     _surface.UpdateHtml(batch.Document.Html, preserveReadingPosition: true);
-                    _approved = batch.Images;
+                    _permittedDownloads = batch.Images;
                     int loaded = batch.Result.TotalSucceeded;
                     State = new(State.Total, loaded, false, loaded < State.Total,
                         loaded == State.Total ? $"Loaded {loaded} remote images for this message. Permission is not saved."
@@ -113,7 +113,7 @@ internal sealed class InlineRemoteImageSession : IDisposable
         if (_disposed || _surface.IsDisposed) return;
         ++_generation;
         try { _active?.Cancel(); } catch (ObjectDisposedException) { }
-        _active = null; _approved = new(StringComparer.OrdinalIgnoreCase);
+        _active = null; _permittedDownloads = new(StringComparer.OrdinalIgnoreCase);
         try
         {
             // Rebuild from original HTML and original embedded resources, with no remote approval map.
@@ -135,6 +135,6 @@ internal sealed class InlineRemoteImageSession : IDisposable
         _disposed = true; ++_generation;
         try { _active?.Cancel(); } catch (ObjectDisposedException) { }
         _active = null;
-        _approved = new(StringComparer.OrdinalIgnoreCase);
+        _permittedDownloads = new(StringComparer.OrdinalIgnoreCase);
     }
 }
