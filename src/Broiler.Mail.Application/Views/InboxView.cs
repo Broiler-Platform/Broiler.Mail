@@ -77,7 +77,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
     public bool ShowsPaneOf(InboxProblemScope scope) => _layout is not { IsCompact: true } layout
         || (scope == InboxProblemScope.Message ? layout.ShowsReaderOnly : !layout.ShowsReaderOnly);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=B9D36B
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=705FDB
     // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
     // Broiler-Human:        PENDING
     public UiElement CreateContent()

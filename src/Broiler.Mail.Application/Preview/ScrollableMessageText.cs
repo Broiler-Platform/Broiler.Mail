@@ -5,7 +5,7 @@
 // ----------------------
 // Relevant units:   15
 // Annotated:        5/15
-// Exempt:           8
+// Exempt:           9
 // Human-reviewed:   0/15
 // IP risk:          Low
 // Security risk:    Medium
@@ -57,7 +57,7 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
     // Above and below the text, inside the scroll view.
     private const double VerticalMargin = 8;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=BC2359
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A1E604
     // Broiler-Human:        PENDING
     public ScrollableMessageText()
     {
@@ -163,7 +163,7 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
         _scroll.ScrollToStart();
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=2E0436
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=D4BDBB
     // Broiler-Falsified-If: an infinite available width reaches the label as its wrap width, so long message lines never wrap
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)

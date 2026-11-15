@@ -5,7 +5,7 @@ GENERATED - DO NOT EDIT MANUALLY. Regenerate with
 `CODE-ASSURANCE.md`, `assurance.manifest.json` and every generated source header from the
 product tree.
 
-> **Status: PENDING.** Human-reviewed: 0 of 2516 relevant units. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail --release`
+> **Status: PENDING.** Human-reviewed: 0 of 2523 relevant units. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail --release`
 > fails while any relevant unit is without a decision bound to its current fingerprint.
 
 ## 1. How To Use This File
@@ -50,12 +50,12 @@ did, which is the narrower and the more useful of the two.
 | Metric | Value |
 |---|---:|
 | Files scanned | 244 |
-| Code units | 3908 |
-| Relevant | 2516 |
-| Exempt | 1392 |
-| Assessed | 363 of 2516 (14%) |
-| Human reviewed | 0 of 2516 (0%) |
-| Unverified | 2516 |
+| Code units | 3921 |
+| Relevant | 2523 |
+| Exempt | 1398 |
+| Assessed | 363 of 2523 (14%) |
+| Human reviewed | 0 of 2523 (0%) |
+| Unverified | 2523 |
 | Aliases naming a decision | 0 |
 
 ## 4. Review States
@@ -65,13 +65,13 @@ annotations and the current fingerprints; nothing stores them.
 
 | State | Units |
 |---|---:|
-| NEW | 2153 |
+| NEW | 2160 |
 | AI_ASSESSED | 0 |
 | HUMAN_PENDING | 363 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
-| EXEMPT | 1392 |
+| EXEMPT | 1398 |
 
 ## 5. Aliases In The Tree
 
@@ -101,7 +101,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Preview/PlainTextMessagePreview.cs` | 2 | 2 | 0 | 2 | Low | Medium | 2/0 |
 | `src/Broiler.Mail.Application/Preview/RemoteImageActions.cs` | 16 | 6 | 10 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/SavedSourceExportPicker.cs` | 28 | 15 | 13 | 15 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Preview/ScrollableMessageText.cs` | 23 | 15 | 8 | 15 | Low | Medium | 3/0 |
+| `src/Broiler.Mail.Application/Preview/ScrollableMessageText.cs` | 24 | 15 | 9 | 15 | Low | Medium | 3/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` | 92 | 35 | 57 | 35 | Low | High | 14/9 |
 | `src/Broiler.Mail.Application/ViewModels/AccountReceiveQueueViewModel.cs` | 56 | 32 | 24 | 32 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountSelectionViewModel.LocalMail.cs` | 17 | 12 | 5 | 12 | not assessed | not assessed | 0/0 |
@@ -131,7 +131,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Views/AdaptiveInboxLayout.cs` | 21 | 15 | 6 | 15 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AppearanceController.cs` | 13 | 5 | 8 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AppearancePolicy.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/BoundedScrollArea.cs` | 14 | 6 | 8 | 6 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/BoundedScrollArea.cs` | 15 | 6 | 9 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ComposerView.cs` | 5 | 2 | 3 | 2 | Low | High | 2/2 |
 | `src/Broiler.Mail.Application/Views/ConfigurationForm.cs` | 8 | 8 | 0 | 8 | Low | Low | 2/0 |
 | `src/Broiler.Mail.Application/Views/Divider.cs` | 4 | 3 | 1 | 3 | not assessed | not assessed | 0/0 |
@@ -145,15 +145,15 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Views/LocalOriginalsView.cs` | 61 | 37 | 24 | 37 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MailAbout.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MailKeyboardNavigation.cs` | 10 | 10 | 0 | 10 | Low | Medium | 5/0 |
-| `src/Broiler.Mail.Application/Views/MailMessageItemPresenter.cs` | 18 | 16 | 2 | 16 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/MailMessageItemPresenter.cs` | 25 | 20 | 5 | 20 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MailShellView.cs` | 44 | 21 | 23 | 21 | Low | Medium | 4/0 |
 | `src/Broiler.Mail.Application/Views/MailShortcuts.cs` | 26 | 7 | 19 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MeasuredContent.cs` | 7 | 4 | 3 | 4 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/MessageDateFormatter.cs` | 11 | 9 | 2 | 9 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/MessageDateFormatter.cs` | 12 | 10 | 2 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/OutboxView.cs` | 3 | 2 | 1 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ParsedMessageHeaders.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ProfileStorageView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/ReadingColumn.cs` | 13 | 10 | 3 | 10 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/ReadingColumn.cs` | 16 | 12 | 4 | 12 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SavedDraftsView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SavedOriginalsView.cs` | 33 | 18 | 15 | 18 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SavedRecipientsView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |

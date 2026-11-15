@@ -16,24 +16,24 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Files scanned | 244 |
 | Files not covered | 0 |
 | Files carrying an annotation | 63 |
-| Code units | 3908 |
-| Relevant | 2516 |
-| Exempt by predicate | 1392 |
-| Annotated | 363 of 2516 (14%) |
-| Human reviewed | 0 of 2516 (0%) |
-| Unverified | 2516 |
+| Code units | 3921 |
+| Relevant | 2523 |
+| Exempt by predicate | 1398 |
+| Annotated | 363 of 2523 (14%) |
+| Human reviewed | 0 of 2523 (0%) |
+| Unverified | 2523 |
 
 ## Review states
 
 | State | Count |
 |---|---:|
-| NEW | 2153 |
+| NEW | 2160 |
 | AI_ASSESSED | 0 |
 | HUMAN_PENDING | 363 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
-| EXEMPT | 1392 |
+| EXEMPT | 1398 |
 
 ## IP risk
 
@@ -44,7 +44,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Medium | 0 |
 | High | 0 |
 | Unknown | 0 |
-| *not annotated* | 2153 |
+| *not annotated* | 2160 |
 
 ## Security risk
 
@@ -55,7 +55,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Medium | 88 |
 | High | 162 |
 | Critical | 10 |
-| *not annotated* | 2153 |
+| *not annotated* | 2160 |
 
 ## Resource impact
 
@@ -265,13 +265,13 @@ that the rule is reviewable in one place rather than in several hundred.
 
 | Case | Units |
 |---|---:|
-| TrivialPropertyOrAccessor | 370 |
+| TrivialPropertyOrAccessor | 372 |
 | ParameterAssigningConstructor | 9 |
 | TrivialExpressionBodiedMember | 125 |
 | CompilerSuppliedRecordOrEnumMember | 131 |
-| DelegatingOverrideOrOperator | 1 |
+| DelegatingOverrideOrOperator | 2 |
 | InsideAssemblyMarker | 0 |
-| FieldDeclaringStorage | 568 |
+| FieldDeclaringStorage | 571 |
 | EnumMemberOfADeclaredVocabulary | 188 |
 | DeclaredInSource | 0 |
 
@@ -296,7 +296,7 @@ through a `<Compile Include>` it states, is left out of the record.
 ## Change detection
 
 `assurance.manifest.json` lists **every** code unit in the 4 covered assemblies -
-3908 of them, exempt and relevant alike - with the fingerprint of its declaration.
+3921 of them, exempt and relevant alike - with the fingerprint of its declaration.
 This manifest is a change-detection record, not a review. A unit listed there is watched, not reviewed:
 the entry records what the declaration's tokens hashed to when the generator last ran, and
 nothing else. What the manifest adds is that a unit the exemption predicate treats as
