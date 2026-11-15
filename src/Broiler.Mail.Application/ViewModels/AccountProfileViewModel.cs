@@ -4,12 +4,12 @@
 // Broiler Code Assurance
 // ----------------------
 // Relevant units:   35
-// Annotated:        13/35
+// Annotated:        14/35
 // Exempt:           57
 // Human-reviewed:   0/35
 // IP risk:          Low
 // Security risk:    High
-// Criteria:         13/9
+// Criteria:         14/9
 // Resource impact:  7/10 max
 // Unverified:       35
 //
@@ -392,8 +392,9 @@ public sealed class AccountProfileViewModel : SaveViewModel
             });
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=899D31
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=27FE6E
     // Broiler-Falsified-If: Cancel pressed after a test finished throws ObjectDisposedException from the disposed token source
+    // Broiler-Human:        PENDING
     public void CancelConnectionTest()
     {
         try { _connectionCancellation?.Cancel(); }

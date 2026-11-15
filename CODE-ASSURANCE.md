@@ -15,11 +15,11 @@ and the figures below are the measurement of how far from that claim the per-uni
 |---|---:|
 | Files scanned | 244 |
 | Files not covered | 0 |
-| Files carrying an annotation | 62 |
+| Files carrying an annotation | 63 |
 | Code units | 3908 |
 | Relevant | 2516 |
 | Exempt by predicate | 1392 |
-| Annotated | 360 of 2516 (14%) |
+| Annotated | 363 of 2516 (14%) |
 | Human reviewed | 0 of 2516 (0%) |
 | Unverified | 2516 |
 
@@ -27,9 +27,9 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | State | Count |
 |---|---:|
-| NEW | 2156 |
+| NEW | 2153 |
 | AI_ASSESSED | 0 |
-| HUMAN_PENDING | 360 |
+| HUMAN_PENDING | 363 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
@@ -39,23 +39,23 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Value | Units |
 |---|---:|
-| None | 135 |
-| Low | 227 |
+| None | 137 |
+| Low | 228 |
 | Medium | 0 |
 | High | 0 |
 | Unknown | 0 |
-| *not annotated* | 2156 |
+| *not annotated* | 2153 |
 
 ## Security risk
 
 | Value | Units |
 |---|---:|
 | None | 7 |
-| Low | 96 |
+| Low | 98 |
 | Medium | 88 |
-| High | 161 |
+| High | 162 |
 | Critical | 10 |
-| *not annotated* | 2156 |
+| *not annotated* | 2153 |
 
 ## Resource impact
 
@@ -63,7 +63,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 |---|---:|
 | Maximum | 8 / 10 |
 | Average over annotated units | 2.7 / 10 |
-| Units scored | 360 |
+| Units scored | 363 |
 
 ## High-security review areas
 
@@ -163,6 +163,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 - `Broiler.Mail.Infrastructure.Mail.SmtpMailSender.SmtpMailSender(ICredentialStore)` in `src/Broiler.Mail.Infrastructure/Mail/SmtpMailSender.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Mail.SmtpMailSender.SmtpMailSender(ICredentialStore, RemoteCertificateValidationCallback?, TimeSpan)` in `src/Broiler.Mail.Infrastructure/Mail/SmtpMailSender.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Mail.SmtpMailSender.SendAsync(AccountProfile, MailDraft, CancellationToken)` in `src/Broiler.Mail.Infrastructure/Mail/SmtpMailSender.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Infrastructure.Persistence.ConfigurationJsonContext` in `src/Broiler.Mail.Infrastructure/Persistence/ConfigurationJsonContext.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Persistence.JsonAccountStore` in `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountStore.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Persistence.JsonAccountStore.LoadAsync(CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountStore.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Infrastructure.Persistence.JsonAccountStore.SaveAsync(AccountProfile, CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountStore.cs` - Security=High, human line PENDING
@@ -243,8 +244,8 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Metric | Value |
 |---|---:|
-| Units carrying a criterion | 305 |
-| Units required to carry one | 171 |
+| Units carrying a criterion | 307 |
+| Units required to carry one | 172 |
 | Required and missing | 0 |
 
 A `Broiler-Falsified-If:` line states, at the declaration, the observation that would make

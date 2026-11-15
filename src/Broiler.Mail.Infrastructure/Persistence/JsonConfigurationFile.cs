@@ -29,11 +29,8 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
     JsonTypeInfo<ConfigurationEnvelope<T>> typeInfo, long maximumBytes = 1024 * 1024) where T : class
 {
     private readonly string _path = Path.GetFullPath(path);
-    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=5E5E32
-    // Broiler-Falsified-If: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
-    // Broiler-Human:        PENDING
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=7A3C57
+    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=5E5E32
     // Broiler-Falsified-If: an existing file that is corrupt, larger than maximumBytes or of another schema version yields the default value instead of an exception
     // Broiler-Human:        PENDING
     public async Task<T> ReadAsync(CancellationToken cancellationToken)
@@ -116,7 +113,4 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
             }
         }
     }
-
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=78B419
-    // Broiler-Human:        PENDING
 }

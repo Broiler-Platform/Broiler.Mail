@@ -53,7 +53,7 @@ did, which is the narrower and the more useful of the two.
 | Code units | 3908 |
 | Relevant | 2516 |
 | Exempt | 1392 |
-| Assessed | 360 of 2516 (14%) |
+| Assessed | 363 of 2516 (14%) |
 | Human reviewed | 0 of 2516 (0%) |
 | Unverified | 2516 |
 | Aliases naming a decision | 0 |
@@ -65,9 +65,9 @@ annotations and the current fingerprints; nothing stores them.
 
 | State | Units |
 |---|---:|
-| NEW | 2156 |
+| NEW | 2153 |
 | AI_ASSESSED | 0 |
-| HUMAN_PENDING | 360 |
+| HUMAN_PENDING | 363 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
@@ -102,7 +102,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Preview/RemoteImageActions.cs` | 16 | 6 | 10 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/SavedSourceExportPicker.cs` | 28 | 15 | 13 | 15 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/ScrollableMessageText.cs` | 23 | 15 | 8 | 15 | Low | Medium | 3/0 |
-| `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` | 92 | 35 | 57 | 35 | Low | High | 13/9 |
+| `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` | 92 | 35 | 57 | 35 | Low | High | 14/9 |
 | `src/Broiler.Mail.Application/ViewModels/AccountReceiveQueueViewModel.cs` | 56 | 32 | 24 | 32 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountSelectionViewModel.LocalMail.cs` | 17 | 12 | 5 | 12 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountSelectionViewModel.OrphanMail.cs` | 19 | 13 | 6 | 13 | not assessed | not assessed | 0/0 |
@@ -237,7 +237,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Infrastructure/Mime/ParsedMimeMessage.cs` | 29 | 2 | 27 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/AccountRemovalService.cs` | 3 | 3 | 0 | 3 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/CacheRecoveryJournal.cs` | 15 | 11 | 4 | 11 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Infrastructure/Persistence/ConfigurationJsonContext.cs` | 5 | 2 | 3 | 2 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Persistence/ConfigurationJsonContext.cs` | 5 | 2 | 3 | 2 | None | High | 1/1 |
 | `src/Broiler.Mail.Infrastructure/Persistence/EncryptedCredentialStore.cs` | 11 | 10 | 1 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/FileMessageSourceExports.Attachments.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/FileMessageSourceExports.Catalog.cs` | 13 | 13 | 0 | 13 | not assessed | not assessed | 0/0 |
@@ -537,6 +537,8 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: an assembly other than the component's test project can construct the sender with its own client factory or deadline
 - `Broiler.Mail.Infrastructure.Mail.SmtpMailSender.SendAsync(AccountProfile, MailDraft, CancellationToken)` in `src/Broiler.Mail.Infrastructure/Mail/SmtpMailSender.cs` - Security=High, Spec=ADR-0004, `86DC32`, PENDING
   - Falsified if: a disconnect, timeout or cancellation after client.SendAsync has begun is reported as Rejected instead of Unknown
+- `Broiler.Mail.Infrastructure.Persistence.ConfigurationJsonContext` in `src/Broiler.Mail.Infrastructure/Persistence/ConfigurationJsonContext.cs` - Security=High, Spec=none cited, `C943A6`, PENDING
+  - Falsified if: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
 - `Broiler.Mail.Infrastructure.Persistence.JsonAccountStore` in `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountStore.cs` - Security=High, Spec=ADR-0001, `DFAA50`, PENDING
   - Falsified if: a load or save leaves the accounts file holding more than one profile, or a profile that ConfigurationValidator rejects
 - `Broiler.Mail.Infrastructure.Persistence.JsonAccountStore.LoadAsync(CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountStore.cs` - Security=High, Spec=ADR-0001, `13CB12`, PENDING
@@ -549,8 +551,8 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: an accounts file with two profiles, or with a profile that ConfigurationValidator rejects, passes without an exception
 - `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile<T>` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, Spec=ADR-0001, `474A5B`, PENDING
   - Falsified if: two overlapping UpdateAsync calls, in one process or two, both apply their change to the same prior state so that one change is lost
-- `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile.ReadAsync(CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, Spec=none cited, `5E5E32`, PENDING
-  - Falsified if: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
+- `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile.ReadAsync(CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, Spec=ADR-0001, `5E5E32`, PENDING
+  - Falsified if: an existing file that is corrupt, larger than maximumBytes or of another schema version yields the default value instead of an exception
 - `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile.UpdateAsync(Func<T, T>, CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, Spec=ADR-0001, `407654`, PENDING
   - Falsified if: a failure or cancellation while writing leaves the target file truncated or partly written instead of holding its previous content
 - `Broiler.Mail.Infrastructure.Persistence.JsonConfigurationFile.AcquireWriteLockAsync(CancellationToken)` in `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` - Security=High, Spec=none cited, `E7E027`, PENDING
@@ -703,5 +705,5 @@ An assessment is a comment, so changing one moves no fingerprint anywhere, and n
 mechanical checks that it is right; the check holds its values to their vocabularies and no
 further.
 
-360 of the 360 assessed units declare `Origin=AI`. Reading a declaration is the only thing
+363 of the 363 assessed units declare `Origin=AI`. Reading a declaration is the only thing
 that makes it read.
