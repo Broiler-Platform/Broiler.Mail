@@ -93,9 +93,17 @@ public sealed class BoundedScrollArea : UiElement
     /// <summary>The height the area was last measured in, of which it takes its share.</summary>
     public double AvailableHeight { get; private set; }
 
+    /// <summary>
+    /// The area's whole width, scroll bar included, in the layout pass under way. A <see cref="ReadingColumn"/>
+    /// inside can follow it (<see cref="ReadingColumn.PaneWidth"/>), so its rows keep one layout with and
+    /// without the bar.
+    /// </summary>
+    public double PaneWidth { get; private set; } = double.PositiveInfinity;
+
     protected override BSize MeasureCore(BSize availableSize)
     {
         AvailableHeight = availableSize.Height;
+        PaneWidth = availableSize.Width;
         double natural = _content.Measure(new BSize(availableSize.Width, double.PositiveInfinity)).Height;
         double cap = double.IsFinite(availableSize.Height) ? availableSize.Height * MaximumFraction : double.PositiveInfinity;
         double height = Math.Min(natural, cap);
@@ -132,5 +140,9 @@ public sealed class BoundedScrollArea : UiElement
         return end > cap / 2 ? end : cap;
     }
 
-    protected override void ArrangeCore(BRect finalRect) => _scroll.Arrange(finalRect);
+    protected override void ArrangeCore(BRect finalRect)
+    {
+        PaneWidth = finalRect.Width;
+        _scroll.Arrange(finalRect);
+    }
 }

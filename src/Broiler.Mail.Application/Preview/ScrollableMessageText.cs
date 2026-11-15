@@ -62,7 +62,8 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
     public ScrollableMessageText()
     {
         // Margins and a bounded line length come from the column; the scroll view still spans the pane.
-        _scroll.AddChild(new ReadingColumn(_editor, VerticalMargin));
+        // Its scroll bar takes the right margin, so the text is wrapped once per width, not again beside the bar.
+        _scroll.AddChild(new ReadingColumn(_editor, VerticalMargin) { PaneWidth = () => _paneWidth });
         AddChild(_scroll);
         // Only the reader moves the place; the scroll view also clamps its offset while it lays out,
         // and a hidden view's extent and viewport come from a layout at no size at all.
@@ -109,6 +110,8 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
     private double? _zoomFraction;
     private bool _inLayout;
     private bool _shown;
+    // The width of the whole view in the layout pass under way, scroll bar included.
+    private double _paneWidth = double.PositiveInfinity;
 
     /// <summary>
     /// How large the text is drawn on top of its font's size; 1 is the font's size. The reader stays
@@ -166,6 +169,7 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
     protected override BSize MeasureCore(BSize availableSize)
     {
         _inLayout = true;
+        _paneWidth = availableSize.Width;
         try { return _scroll.Measure(availableSize); }
         finally { _inLayout = false; }
     }
@@ -182,6 +186,7 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
     protected override void ArrangeCore(BRect finalRect)
     {
         _inLayout = true;
+        _paneWidth = finalRect.Width;
         try
         {
             _scroll.Arrange(finalRect);
