@@ -616,7 +616,7 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: an ArgumentException from HtmlPreviewPolicy.Create inside LoadRemoteImagesAsync escapes the async Clicked handler of the Load remote images button and terminates the process
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.LoadRemoteImages()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `E8D147`, PENDING
   - Falsified if: an exception thrown by LoadRemoteImagesAsync is discarded while the status line already says that remote images were loaded
-- `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.LoadRemoteImagesAsync()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `AC5A62`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.LoadRemoteImagesAsync()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `C2B077`, PENDING
   - Falsified if: a remote image response larger than 5,000,000 bytes is read fully into memory before the size check discards it
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.OpenLink(string, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `DA6972`, PENDING
   - Falsified if: a URL that is absent from the current document's ExternalLinks set, or arrives with userInitiated false, reaches the open-external callback

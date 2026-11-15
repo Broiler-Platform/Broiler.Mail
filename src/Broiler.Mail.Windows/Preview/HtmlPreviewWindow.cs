@@ -382,7 +382,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     /// </summary>
     public HtmlResourceBatchResult? LastResourceBatchResult { get; private set; }
 
-    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=AC5A62
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=C2B077
     // Hairs-Falsified-If: a remote image response larger than 5,000,000 bytes is read fully into memory before the size check discards it
     // Hairs-Human:        PENDING
     public async Task LoadRemoteImagesAsync()
@@ -426,11 +426,14 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
                 }
             }
 
-            _document = HtmlPreviewPolicy.Create(updatedHtml, downloadedImages, allowRemoteImages: true);
+            var loaded = HtmlPreviewPolicy.Create(updatedHtml, downloadedImages, allowRemoteImages: true);
 
             PostToUiThread(() =>
             {
                 if (IsDisposed || token.IsCancellationRequested) return;
+                // The document is swapped here, on the UI thread and together with the HTML it describes:
+                // OpenLink reads it there, and a load that was cancelled or outlived the window must not replace it.
+                _document = loaded;
 
                 switch (batchResult.OverallOutcome)
                 {
