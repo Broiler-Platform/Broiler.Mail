@@ -340,6 +340,19 @@ blocks; they never enumerate or access existing user credentials. Some Windows t
 show a window briefly. The headless
 `--smoke-test` does not access credentials or make network connections.
 
+The per-declaration assurance record (generated source headers, `CODE-ASSURANCE.md`,
+`HUMAN_REVIEW.md` and `hairs.manifest.json`) must match the code; CI's **Code assurance (Hairs)**
+job fails when it does not. After changing code under `src/`, regenerate it and commit the result:
+
+```powershell
+dotnet tool restore
+dotnet tool run hairs -- assurance generate --root .
+dotnet tool run hairs -- assurance check --root .
+```
+
+The check also lists relevant code with no assessment yet (rule J1). CI counts those but does not
+fail on them; `hairs assurance list` and `insert` add assessments.
+
 ## UI acceptance and measurement scripts
 
 Each script publishes the app as NativeAOT unless `-Executable` names a build, runs demo

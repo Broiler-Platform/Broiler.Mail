@@ -25,6 +25,42 @@ defaults:
     shell: pwsh
 
 jobs:
+  # Holds the assurance record (generated source headers, CODE-ASSURANCE.md, HUMAN_REVIEW.md and
+  # hairs.manifest.json) to the code. A change to covered code fails here until
+  # `dotnet tool run hairs -- assurance generate --root .` has been run and its output committed.
+  # Relevant units with no annotation (J1) are the assessment backlog: counted in the summary, not failed.
+  assurance:
+    name: Code assurance (Hairs)
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - uses: actions/setup-dotnet@a98b56852c35b8e3190ac28c8c2271da59106c68 # v6.0.0
+        with:
+          global-json-file: global.json
+      - name: Restore the pinned Hairs tool
+        run: dotnet tool restore --configfile NuGet.config
+      - name: Check the assurance record against the code
+        run: |
+          New-Item -ItemType Directory -Force artifacts/assurance | Out-Null
+          $PSNativeCommandUseErrorActionPreference = $false
+          # Annotations come from Confirm-Assurance, for the rules that fail the run; J1's would bury them.
+          dotnet tool run hairs -- assurance check --root . --json artifacts/assurance/check.json --annotation-limit 0
+          # 1 means violations were found and the report decides; anything else means the check did not run.
+          if ($LASTEXITCODE -notin 0, 1) { throw "hairs assurance check exited with $LASTEXITCODE." }
+          $global:LASTEXITCODE = 0
+      - name: Fail on every rule except unannotated units (J1)
+        run: ./scripts/Confirm-Assurance.ps1 -Report artifacts/assurance/check.json
+      - name: Upload the assurance report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: assurance-check
+          path: artifacts/assurance/
+          if-no-files-found: warn
+
   android:
     name: Android packages
     runs-on: ubuntu-24.04
