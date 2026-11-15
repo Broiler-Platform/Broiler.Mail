@@ -102,8 +102,9 @@ internal static class ProfileSmokeCheck
             await PermanentDeleteSmokeCheck.RunAsync(Path.Combine(directory, "delete-smoke.db"), profile);
             await MoveWorkflowSmokeCheck.RunAsync(Path.Combine(directory, "move-ui-smoke.db"), profile);
             await AccountSelectionSmokeCheck.RunAsync(Path.Combine(directory, "account-selection-smoke"));
-            // The budget covers only the profile work below; the checks above take no token, and on a slow
-            // runner their time must not use it up before the first save.
+            // The deadline bounds the profile, credential, reopen and MIME steps below, which take its token. Started
+            // before the feature checks above, which take none, it was spent by them on a slower runner (Windows on
+            // ARM), and the first step below was cancelled before it began.
             using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(20));
             string accounts = Path.Combine(directory, "accounts.json");
             string settings = Path.Combine(directory, "settings.json");

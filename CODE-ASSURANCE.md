@@ -16,18 +16,18 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Files scanned | 244 |
 | Files not covered | 0 |
 | Files carrying an annotation | 63 |
-| Code units | 3921 |
-| Relevant | 2523 |
+| Code units | 3923 |
+| Relevant | 2525 |
 | Exempt by predicate | 1398 |
-| Annotated | 363 of 2523 (14%) |
-| Human reviewed | 0 of 2523 (0%) |
-| Unverified | 2523 |
+| Annotated | 363 of 2525 (14%) |
+| Human reviewed | 0 of 2525 (0%) |
+| Unverified | 2525 |
 
 ## Review states
 
 | State | Count |
 |---|---:|
-| NEW | 2160 |
+| NEW | 2162 |
 | AI_ASSESSED | 0 |
 | HUMAN_PENDING | 363 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
@@ -44,7 +44,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Medium | 0 |
 | High | 0 |
 | Unknown | 0 |
-| *not annotated* | 2160 |
+| *not annotated* | 2162 |
 
 ## Security risk
 
@@ -55,7 +55,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Medium | 88 |
 | High | 162 |
 | Critical | 10 |
-| *not annotated* | 2160 |
+| *not annotated* | 2162 |
 
 ## Resource impact
 
@@ -296,7 +296,7 @@ through a `<Compile Include>` it states, is left out of the record.
 ## Change detection
 
 `assurance.manifest.json` lists **every** code unit in the 4 covered assemblies -
-3921 of them, exempt and relevant alike - with the fingerprint of its declaration.
+3923 of them, exempt and relevant alike - with the fingerprint of its declaration.
 This manifest is a change-detection record, not a review. A unit listed there is watched, not reviewed:
 the entry records what the declaration's tokens hashed to when the generator last ran, and
 nothing else. What the manifest adds is that a unit the exemption predicate treats as

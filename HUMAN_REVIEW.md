@@ -5,7 +5,7 @@ GENERATED - DO NOT EDIT MANUALLY. Regenerate with
 `CODE-ASSURANCE.md`, `assurance.manifest.json` and every generated source header from the
 product tree.
 
-> **Status: PENDING.** Human-reviewed: 0 of 2523 relevant units. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail --release`
+> **Status: PENDING.** Human-reviewed: 0 of 2525 relevant units. `dotnet run --project Broiler.Code/src/Broiler.Code.Review.Cli -c Release -- assurance check --root Broiler.Mail --release`
 > fails while any relevant unit is without a decision bound to its current fingerprint.
 
 ## 1. How To Use This File
@@ -50,12 +50,12 @@ did, which is the narrower and the more useful of the two.
 | Metric | Value |
 |---|---:|
 | Files scanned | 244 |
-| Code units | 3921 |
-| Relevant | 2523 |
+| Code units | 3923 |
+| Relevant | 2525 |
 | Exempt | 1398 |
-| Assessed | 363 of 2523 (14%) |
-| Human reviewed | 0 of 2523 (0%) |
-| Unverified | 2523 |
+| Assessed | 363 of 2525 (14%) |
+| Human reviewed | 0 of 2525 (0%) |
+| Unverified | 2525 |
 | Aliases naming a decision | 0 |
 
 ## 4. Review States
@@ -65,7 +65,7 @@ annotations and the current fingerprints; nothing stores them.
 
 | State | Units |
 |---|---:|
-| NEW | 2160 |
+| NEW | 2162 |
 | AI_ASSESSED | 0 |
 | HUMAN_PENDING | 363 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
@@ -153,7 +153,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Views/OutboxView.cs` | 3 | 2 | 1 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ParsedMessageHeaders.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ProfileStorageView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/ReadingColumn.cs` | 16 | 12 | 4 | 12 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/ReadingColumn.cs` | 18 | 14 | 4 | 14 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SavedDraftsView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SavedOriginalsView.cs` | 33 | 18 | 15 | 18 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SavedRecipientsView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |

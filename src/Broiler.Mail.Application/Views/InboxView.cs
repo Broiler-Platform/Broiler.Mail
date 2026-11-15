@@ -77,7 +77,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
     public bool ShowsPaneOf(InboxProblemScope scope) => _layout is not { IsCompact: true } layout
         || (scope == InboxProblemScope.Message ? layout.ShowsReaderOnly : !layout.ShowsReaderOnly);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=705FDB
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=4987C5
     // Broiler-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
     // Broiler-Human:        PENDING
     public UiElement CreateContent()
@@ -318,7 +318,12 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         messageRetryRow.AddChild(messageRetry);
         var back = new StandardButton { Text = BackText };
         var backRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
-        backRow.AddChild(back); backRow.AddChild(inspectHeaders);
+        backRow.AddChild(back);
+        // The parsed-headers toggle shares the compact reader's first row with Back where both fit on one line,
+        // and otherwise has its own row below the date, as beside the list (see PlaceHeadersToggle). Wrapped
+        // beside Back at a large text size, that first row grew taller than the header's share, which cut it.
+        var headersRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
+        headersRow.AddChild(inspectHeaders);
         var changeRead = new StandardButton { Text = "Mark read" };
         var changeStar = new StandardButton { Text = "Star message" };
         var readStateActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, Visibility = UiVisibility.Collapsed };
@@ -361,7 +366,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         var sourceArea = new StandardPanel { Visibility = UiVisibility.Collapsed };
         MessageSourceExportActions? sourceExportActions = null;
         var headerStack = new StandardPanel { Spacing = 4 };
-        foreach (var element in new UiElement[] { backRow, subjectLine, detailsFrame, meta, messageFeedback, messageRetryRow, replyActions, readStateActions, readStateFeedback, previewActions, readerNavigation, findArea, sourceArea })
+        foreach (var element in new UiElement[] { backRow, subjectLine, detailsFrame, meta, headersRow, messageFeedback, messageRetryRow, replyActions, readStateActions, readStateFeedback, previewActions, readerNavigation, findArea, sourceArea })
             if (model.SupportsReadStateChanges || model.SupportsStarStateChanges || element != readStateActions && element != readStateFeedback) headerStack.AddChild(element);
         if (model.SupportsMoves) { headerStack.AddChild(moveActions); headerStack.AddChild(moveFeedback); }
         if (model.SupportsPermanentDelete) { headerStack.AddChild(deleteActions); headerStack.AddChild(deleteConfirmation); headerStack.AddChild(deleteFeedback); }
@@ -374,7 +379,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         const int textLinesKept = 6;
         var text = new ScrollableMessageText();
         var headerContent = new ReadingColumn(headerStack, verticalMargin: 8);
-        UiElement[] buttonRows = [deleteActions, deleteConfirmationActions, moveActions, backRow, messageRetryRow, replyActions, readStateActions, previewActions, readerNavigation, findArea, sourceArea];
+        UiElement[] buttonRows = [deleteActions, deleteConfirmationActions, moveActions, backRow, headersRow, messageRetryRow, replyActions, readStateActions, previewActions, readerNavigation, findArea, sourceArea];
         var headerColumn = new BoundedScrollArea(headerContent, headerShare, "Message header")
         {
             Rows = HeaderRows,
@@ -571,10 +576,9 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
                 : model.IsSearchActive ? "Select a saved search result." : empty ? (model.SelectedMailboxId == "INBOX" ? "The inbox is empty." : "The selected folder is empty.") : "Select a message to read.";
             if (headersKey != item?.Key) { headersKey = item?.Key; extendedHeaders = false; }
             var sourceHeaders = model.Body is { } loaded && loaded.Key == item?.Key ? loaded.Composition : null;
-            headerStack.MoveChild(backRow, layout.ShowsReaderOnly ? 0 : 3);
-            back.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
-            backRow.Visibility = layout.ShowsReaderOnly || sourceHeaders is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
+            backRow.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
             inspectHeaders.Visibility = sourceHeaders is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
+            ShowHeadersRow();
             details.AccessibleName = extendedHeaders ? "Parsed message headers" : "Sender and recipients";
             inspectHeaders.Text = extendedHeaders ? "Hide parsed headers" : "Show parsed headers";
             string detailText = item is null ? "" : string.Join("\n", ParsedMessageHeaders.Lines(item, sourceHeaders, extendedHeaders));
@@ -905,7 +909,38 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         }
         // Called as the reader's header area is measured in its space, once its rows are measured: true when
         // the commands moved, so the area measures them again where they are now.
-        bool PlaceCommands(BSize space) => MoveCommands(!layout.IsCompact && CommandsFitBelowHeader(space));
+        // Both run on every measure; neither may short-circuit the other.
+        bool PlaceCommands(BSize space) => MoveCommands(!layout.IsCompact && CommandsFitBelowHeader(space)) | PlaceHeadersToggle(space);
+        bool PlaceHeadersToggle(BSize space)
+        {
+            bool beside = layout.ShowsReaderOnly && inspectHeaders.Visibility != UiVisibility.Collapsed && ToggleFitsBesideBack(space);
+            UiElement place = beside ? backRow : headersRow;
+            if (inspectHeaders.Parent == place) return ShowHeadersRow();
+            // Removing a child takes focus from it, so a focused toggle gets it back once its new row shows.
+            bool refocus = panel.Session?.FocusedElement == inspectHeaders;
+            inspectHeaders.Parent?.RemoveChild(inspectHeaders);
+            place.AddChild(inspectHeaders);
+            ShowHeadersRow();
+            if (refocus && inspectHeaders.CanFocus) panel.Session!.SetFocus(inspectHeaders);
+            return true;
+        }
+        // On one line at the header column's width, as the toolbar lays them out, also beside the scroll bar of a
+        // header that scrolls, where a narrow column gives way to it; buttons not yet measured do not fit.
+        bool ToggleFitsBesideBack(BSize space)
+        {
+            if (!double.IsFinite(space.Width) || back.DesiredSize.Width <= 0 || inspectHeaders.DesiredSize.Width <= 0) return false;
+            double bar = headerColumn.Scroll.ScrollbarThickness + headerColumn.Scroll.ScrollbarGap;
+            double width = Math.Min(ReadingColumn.ContentWidthIn(space.Width, space.Width), ReadingColumn.ContentWidthIn(space.Width, space.Width - bar));
+            return back.DesiredSize.Width + backRow.Spacing + inspectHeaders.DesiredSize.Width + (2 * backRow.Padding) <= width;
+        }
+        // The toggle's own row shows only while it holds the toggle and the toggle shows. True when that changed.
+        bool ShowHeadersRow()
+        {
+            var visibility = inspectHeaders.Visibility != UiVisibility.Collapsed && inspectHeaders.Parent == headersRow ? UiVisibility.Visible : UiVisibility.Collapsed;
+            if (headersRow.Visibility == visibility) return false;
+            headersRow.Visibility = visibility;
+            return true;
+        }
         bool CommandsFitBelowHeader(BSize space)
         {
             // Hidden commands, without a message, stay where they are, as they do in a space without bounds.
@@ -938,11 +973,9 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         }
         layout.ModeChanged += (_, _) =>
         {
-            headerStack.MoveChild(backRow, layout.ShowsReaderOnly ? 0 : 3);
             // The compact reader keeps them in its header; beside the list, the header area places them as it is measured.
             if (layout.IsCompact) MoveCommands(pin: false);
-            back.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
-            backRow.Visibility = layout.ShowsReaderOnly || model.Body?.Composition is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
+            backRow.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
             FocusVisiblePane();
             PanesChanged?.Invoke(this, EventArgs.Empty);
         };

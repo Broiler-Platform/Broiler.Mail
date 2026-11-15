@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   12
-// Annotated:        0/12
+// Relevant units:   14
+// Annotated:        0/14
 // Exempt:           4
-// Human-reviewed:   0/12
+// Human-reviewed:   0/14
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       12
+// Unverified:       14
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -62,17 +62,28 @@ public sealed class ReadingColumn : UiElement
     /// <summary>The horizontal margin used for a given available width, so siblings can align with the column.</summary>
     public static double MarginFor(double width) => width < CompactBelow ? CompactMargin : WideMargin;
 
-    private double ContentWidth(double width) => Math.Max(0, Math.Min(width - 2 * MarginFor(width), MaximumWidth));
+    private static double ContentWidth(double width, double maximumWidth) => Math.Max(0, Math.Min(width - 2 * MarginFor(width), maximumWidth));
+
+    /// <summary>
+    /// The text's width in a column given <paramref name="viewportWidth"/> inside a pane of <paramref name="paneWidth"/>,
+    /// such as beside a scroll bar, so siblings can tell what fits on one line in it. Equal widths give the
+    /// width without a bar.
+    /// </summary>
+    public static double ContentWidthIn(double paneWidth, double viewportWidth, double maximumWidth = DefaultMaximumWidth) =>
+        Column(paneWidth, viewportWidth, maximumWidth).Width;
 
     /// <summary>The left margin and the text's width in an available width, following the pane where it can.</summary>
-    private (double Margin, double Width) Column(double width)
+    private (double Margin, double Width) Column(double width) =>
+        Column(PaneWidth?.Invoke() ?? double.PositiveInfinity, width, MaximumWidth);
+
+    private static (double Margin, double Width) Column(double pane, double width, double maximumWidth)
     {
-        if (PaneWidth?.Invoke() is { } pane && double.IsFinite(pane) && double.IsFinite(width) && pane > width)
+        if (double.IsFinite(pane) && double.IsFinite(width) && pane > width)
         {
-            double margin = MarginFor(pane), content = ContentWidth(pane);
+            double margin = MarginFor(pane), content = ContentWidth(pane, maximumWidth);
             if (margin + content <= width - ScrollBarGap) return (margin, content);
         }
-        return (MarginFor(width), ContentWidth(width));
+        return (MarginFor(width), ContentWidth(width, maximumWidth));
     }
 
     protected override BSize MeasureCore(BSize availableSize)
