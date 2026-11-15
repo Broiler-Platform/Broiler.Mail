@@ -380,6 +380,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             Rows = HeaderRows,
             MinimumRemaining = () => text.HeightOfLines(textLinesKept),
         };
+        // While the header scrolls, its bar sits in the right margin and its rows keep their layout.
+        headerContent.PaneWidth = () => headerColumn.PaneWidth;
         // Beside the list, Reply, Reply all and Forward stay in view below the header even while it
         // scrolls, where they fit, and the header has the height they leave (see PlaceCommands). A line
         // across the reader separates the header and its commands from the message text.

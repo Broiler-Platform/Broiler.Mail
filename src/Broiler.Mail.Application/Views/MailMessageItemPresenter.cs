@@ -51,15 +51,7 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
 
         if (context.Item.Tag is MailMessageSummary message)
         {
-            bool unread = !context.State.IsRead;
-            string date = RowDate(_dates.ListForms(message.ReceivedAt), message.Sender, unread, context.Bounds.Width, context.Font);
-            var displayItem = new UiListItem(
-                context.Item.Id,
-                RowSender(message.Sender, date, unread, context.Bounds.Width, context.Font),
-                (showMailbox ? "[" + message.Key.MailboxId + "] " : "") + (message.IsStarred ? "★ " : "") + message.Subject,
-                date,
-                message.IsRead,
-                message);
+            var displayItem = DisplayItem(context.Item.Id, message, !context.State.IsRead, context.Bounds.Width, context.Font);
 
             // Every color, font and state carries over, including the selected text colors a theme gives the
             // selection; a member-by-member copy dropped them, and a selected row then drew its text in Text.
@@ -68,6 +60,44 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
         }
 
         _twoLinePresenter.Render(context);
+    }
+
+    // Every visible row is drawn on every frame, and its texts only change with the message, its read
+    // state, the row's width or font, the day, or the culture. Formatting the date and measuring the
+    // sender and date for each row again took a fifth of a selection's frame.
+    private const int RowCacheLimit = 512;
+    private readonly Dictionary<RowKey, UiListItem> _rows = [];
+    private readonly Lock _rowsLock = new();
+
+    private readonly record struct RowKey(MailMessageSummary Message, string Id, bool Unread, double Width, BFontStyle Font, DateTime Today, CultureInfo Culture)
+    {
+        // A message is a record whose equality compares every member; the row only needs this instance.
+        public bool Equals(RowKey other) => ReferenceEquals(Message, other.Message) && Id == other.Id && Unread == other.Unread
+            && Width.Equals(other.Width) && Font.Equals(other.Font) && Today == other.Today && ReferenceEquals(Culture, other.Culture);
+        public override int GetHashCode() => HashCode.Combine(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Message), Id, Unread, Width, Font, Today);
+    }
+
+    private UiListItem DisplayItem(string id, MailMessageSummary message, bool unread, double width, BFontStyle font)
+    {
+        var (today, culture) = _dates.ListContext;
+        var key = new RowKey(message, id, unread, width, font, today, culture);
+        lock (_rowsLock)
+            if (_rows.TryGetValue(key, out var cached)) return cached;
+        string date = RowDate(_dates.ListForms(message.ReceivedAt), message.Sender, unread, width, font);
+        var item = new UiListItem(
+            id,
+            RowSender(message.Sender, date, unread, width, font),
+            (showMailbox ? "[" + message.Key.MailboxId + "] " : "") + (message.IsStarred ? "★ " : "") + message.Subject,
+            date,
+            message.IsRead,
+            message);
+        lock (_rowsLock)
+        {
+            // Bounded: a resize or a new page starts again rather than keeping every width ever drawn.
+            if (_rows.Count >= RowCacheLimit) _rows.Clear();
+            _rows[key] = item;
+        }
+        return item;
     }
 
     public UiSemanticNode CreateSemanticNode(UiListItemSemanticContext context)

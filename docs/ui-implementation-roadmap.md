@@ -1587,6 +1587,35 @@ Do not substitute screenshot inspection or unit-test counts for latency/memory e
   reference machine and whether `-Strict` becomes a gate (user decisions); input through the native
   message path; real DPI scales; select and resize allocation; the raster speed (UI-11).
 
+**Progress (15 November 2026, select and resize layout work, headless):**
+
+- Profiled headlessly (EventPipe sampling) with the full shell at 1100×720 and 500 rows. Selection
+  and resize spent most of their frame rewrapping the reader's text.
+- Cause: a scroll view measures its content first without and then with its scroll bar.
+  `ReadingColumn` derived its width from the space it got, so the message text was measured at two
+  widths (662 and 650 DIP in a 710 DIP reader). `StandardRichEdit` keeps the layout of one width
+  only, so every switch rewrapped every line: four times per selection and per resize frame. The
+  scrolling header did the same with its rows. This hit readers narrower than about 780 DIP; wider
+  ones are held at the 720 DIP line length.
+- Fix: `ReadingColumn.PaneWidth`. The reader text and the header take their margins and line length
+  from the whole pane, and the scroll bar sits in the right margin, keeping at least
+  `ScrollBarGap` (8 DIP) from the text. Where the margin cannot hold the bar (compact margins), the
+  column narrows as before. Visible effect: the text no longer reflows or loses 12 DIP when a message
+  is long enough to scroll; a scrolling header's rows keep their width.
+- Fix: `MailMessageItemPresenter` keeps each visible row's sender, date and subject, keyed by message
+  instance, read state, width, font, today's date and culture (bounded to 512 rows). Before, every
+  visible row converted its date's time zone, formatted it and measured the sender and date on
+  every frame.
+- Headless frame work, before → after (two runs each, 300 steps): resize p50 1.9–2.1 → 0.64–0.69 ms,
+  allocation 304 → 221 KiB per frame; selection frames p50 3.5–4.2 → 1.4–1.6 ms, allocation
+  433 → 336 KiB. The remaining selection p95 (about 9 ms) is the one necessary layout of the new
+  message. Headless timing on a shared container is noisy, so treat the times as relative and the
+  allocations as the steadier measure; `Measure-UI.ps1 -Detail` on the reference machine is still
+  needed for native numbers.
+- Tests: `ReaderTextWidthTests` (fails on the earlier layout) and two `MessageRowTests` cases for
+  cached rows. `TheReaderHeaderEndsBetweenItsRows` at 640×480 and 200% text still fails as it did
+  before this change, now with a toolbar 592 instead of 580 DIP wide.
+
 ### UI-13 — published-app acceptance and evidence
 
 **Owner:** Mail integration/CI. This closes the UI release milestone, not just a build.
