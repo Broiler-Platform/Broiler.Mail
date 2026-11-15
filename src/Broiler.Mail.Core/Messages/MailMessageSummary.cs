@@ -5,7 +5,7 @@
 // ----------------------
 // Relevant units:   1
 // Annotated:        1/1
-// Exempt:           5
+// Exempt:           7
 // Human-reviewed:   0/1
 // IP risk:          None
 // Security risk:    Medium

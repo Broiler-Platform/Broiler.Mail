@@ -48,7 +48,7 @@ public static class MailComposition
     public const int MaximumReferences = 100;
 
     /// <summary>Shared composer/transport validation; the transport must not trust UI validation.</summary>
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=B32F87
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=5AF43D
     // Broiler-Falsified-If: a draft whose AccountId or FromAddress no longer matches the enabled account passes and is submitted under that account's credential
     // Broiler-Human:        PENDING
     public static void ValidateDraft(AccountProfile account, MailDraft draft)
@@ -73,7 +73,7 @@ public static class MailComposition
             throw new ArgumentException("Invalid reply-thread identifiers.");
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=5934D2
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=1DCD85
     // Broiler-Falsified-If: the new draft's AccountId or FromAddress differs from the account it was created for
     // Broiler-Human:        PENDING
     public static MailDraft Create(AccountProfile account, string? fromAddress = null)
@@ -87,7 +87,7 @@ public static class MailComposition
         return new() { AccountId = account.Id, FromAddress = sender, FromDisplayName = displayName };
     }
 
-    // Broiler-AI:           Origin=AI; Spec=RFC-5322 s3.6.4; IP=Low; Security=High; Resources=3; Fingerprint=0BAEC6
+    // Broiler-AI:           Origin=AI; Spec=RFC-5322 s3.6.4; IP=Low; Security=High; Resources=3; Fingerprint=66A9E8
     // Broiler-Falsified-If: a reply-all to a received message that lists the account's own address in To or Cc, in any letter case, puts that address among the new recipients
     // Broiler-Human:        PENDING
     public static MailDraft Create(AccountProfile account, MailMessageBody body, CompositionKind kind, string? fromAddress = null)

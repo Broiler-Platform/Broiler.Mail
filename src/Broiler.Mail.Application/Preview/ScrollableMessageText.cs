@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   11
-// Annotated:        5/11
-// Exempt:           7
-// Human-reviewed:   0/11
+// Relevant units:   15
+// Annotated:        5/15
+// Exempt:           8
+// Human-reviewed:   0/15
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         3/0
 // Resource impact:  4/10 max
-// Unverified:       11
+// Unverified:       15
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -29,7 +29,7 @@ using Broiler.Mail.Application.Views;
 namespace Broiler.Mail.Application.Preview;
 
 /// <summary>Readable and selectable message reader.</summary>
-// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=7CBBCE
+// Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=E9A74D
 // Broiler-Falsified-If: message text containing an ampersand is displayed with it dropped or turned into an access-key underline
 // Broiler-Human:        PENDING
 public sealed class ScrollableMessageText : UiElement, IReaderViewport
@@ -149,7 +149,7 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
         set => _editor.SetPlainText(value ?? string.Empty);
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=1F754E
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=5CB21E
     // Broiler-Human:        PENDING
     public void ScrollToStart()
     {

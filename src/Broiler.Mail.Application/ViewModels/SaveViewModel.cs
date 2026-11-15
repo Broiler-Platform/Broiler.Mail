@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   11
-// Annotated:        5/11
-// Exempt:           9
-// Human-reviewed:   0/11
+// Relevant units:   12
+// Annotated:        5/12
+// Exempt:           10
+// Human-reviewed:   0/12
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         4/0
 // Resource impact:  7/10 max
-// Unverified:       11
+// Unverified:       12
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -32,7 +32,7 @@ public abstract class SaveViewModel(IUiDispatcher dispatcher, string? loadError)
     // Broiler-Human:        PENDING
     public event EventHandler? Changed;
     public bool IsBusy { get; private set; }
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=0E18E7
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=0; Fingerprint=CF1BAD
     // Broiler-Falsified-If: CanSave is true while loadError is set
     // Broiler-Human:        PENDING
     public bool CanSave => !IsBusy && !AdditionalBusy && loadError is null;

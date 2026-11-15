@@ -49,7 +49,7 @@ public sealed class ComposerView(ComposerViewModel model, InboxViewModel inbox, 
     /// <summary>The body editor, available after <see cref="CreateContent"/>; focused for replies.</summary>
     public UiElement? Body { get; private set; }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=B451E6
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=DDB036
     // Broiler-Falsified-If: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
     // Broiler-Human:        PENDING
     public UiElement CreateContent()

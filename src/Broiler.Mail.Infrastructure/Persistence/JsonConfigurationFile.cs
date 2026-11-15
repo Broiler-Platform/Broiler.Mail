@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   4
-// Annotated:        4/4
+// Relevant units:   5
+// Annotated:        4/5
 // Exempt:           1
-// Human-reviewed:   0/4
+// Human-reviewed:   0/5
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         4/4
 // Resource impact:  4/10 max
-// Unverified:       4
+// Unverified:       5
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -59,7 +59,7 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
         }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=628085
+    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=407654
     // Broiler-Falsified-If: a failure or cancellation while writing leaves the target file truncated or partly written instead of holding its previous content
     // Broiler-Human:        PENDING
     public async Task UpdateAsync(Func<T, T> update, CancellationToken cancellationToken)

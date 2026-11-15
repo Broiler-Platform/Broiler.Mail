@@ -5,7 +5,7 @@
 // ----------------------
 // Relevant units:   4
 // Annotated:        4/4
-// Exempt:           18
+// Exempt:           19
 // Human-reviewed:   0/4
 // IP risk:          None
 // Security risk:    Medium
@@ -42,7 +42,7 @@ public sealed record DraftSnapshot
 }
 
 /// <summary>A null draft is a revisioned tombstone, preventing stale writers from recreating a discarded draft.</summary>
-// Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=5EF0C8
+// Broiler-AI:           Origin=AI; IP=None; Security=Medium; Resources=3; Fingerprint=708C73
 // Broiler-Falsified-If: a stored state without Revision loads as revision 0 instead of being refused, letting a stale writer recreate a discarded draft
 // Broiler-Human:        PENDING
 public sealed record DraftStoreState([property: JsonRequired] long Revision, [property: JsonRequired] DraftSnapshot? Draft)

@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   3
-// Annotated:        3/3
+// Relevant units:   4
+// Annotated:        3/4
 // Exempt:           0
-// Human-reviewed:   0/3
+// Human-reviewed:   0/4
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         3/3
 // Resource impact:  1/10 max
-// Unverified:       3
+// Unverified:       4
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -34,7 +34,7 @@ internal static class CompositionRoot
     public static string DefaultDataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Broiler.Mail");
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=1091D3
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=F33836
     // Broiler-Falsified-If: the accounts, settings or drafts store is given a file outside the data directory passed in
     // Broiler-Human:        PENDING
     public static MailApplication CreateApplication(string? dataDirectory = null)

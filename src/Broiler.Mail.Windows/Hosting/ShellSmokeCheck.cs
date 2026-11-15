@@ -29,7 +29,7 @@ namespace Broiler.Mail.Windows.Hosting;
 // Broiler-Human:        PENDING
 internal static class ShellSmokeCheck
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=39BBCC
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=3; Fingerprint=30B56C
     // Broiler-Falsified-If: a shell missing one of the inbox, account, settings or compose views lets Run return without an exception
     // Broiler-Human:        PENDING
     public static void Run(MailShellView shell)

@@ -40,7 +40,7 @@ public sealed class AccountProfileView(AccountProfileViewModel model)
     /// <summary>Raised by the setup checklist's final action, once the account is ready to receive mail.</summary>
     public event EventHandler? InboxRequested;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=3FA8B6
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=ADA04C
     // Broiler-Falsified-If: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
     // Broiler-Human:        PENDING
     public UiElement CreateContent()

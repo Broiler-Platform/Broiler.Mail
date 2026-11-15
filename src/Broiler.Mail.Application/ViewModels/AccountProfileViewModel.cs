@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   28
-// Annotated:        13/28
-// Exempt:           44
-// Human-reviewed:   0/28
+// Relevant units:   35
+// Annotated:        13/35
+// Exempt:           57
+// Human-reviewed:   0/35
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         13/9
 // Resource impact:  7/10 max
-// Unverified:       28
+// Unverified:       35
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -77,7 +77,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     private CancellationTokenSource? _connectionCancellation;
     private int _credentialCheck;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=53AD41
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=2F9477
     // Broiler-Falsified-If: a profile without an outgoing server opens with SMTP configuration switched on
     // Broiler-Human:        PENDING
     public AccountProfileViewModel(IAccountStore store, ICredentialStore credentials, IMailReceiver receiver,
@@ -247,7 +247,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
     // Broiler-Human:        PENDING
     public bool CanCancelTest => IsBusy && _connectionCancellation is not null;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=B60920
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=174C7C
     // Broiler-Falsified-If: Profile is replaced by field values edited after the store write began rather than by the candidate the store wrote
     // Broiler-Human:        PENDING
     public Task SaveAsync(CancellationToken cancellationToken = default)
@@ -428,7 +428,7 @@ public sealed class AccountProfileViewModel : SaveViewModel
         return Profile;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=D3A8D0
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=6BB833
     // Broiler-Falsified-If: a host typed with a port, such as imap.example.com:993, yields a candidate profile without an ArgumentException
     // Broiler-Human:        PENDING
     private AccountProfile BuildProfile()

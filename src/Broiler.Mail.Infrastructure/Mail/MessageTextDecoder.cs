@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   10
-// Annotated:        9/10
+// Relevant units:   12
+// Annotated:        7/12
 // Exempt:           0
-// Human-reviewed:   0/10
+// Human-reviewed:   0/12
 // IP risk:          Low
 // Security risk:    High
-// Criteria:         9/9
+// Criteria:         7/7
 // Resource impact:  7/10 max
-// Unverified:       10
+// Unverified:       12
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -40,7 +40,7 @@ internal static class MessageTextDecoder
     // Broiler-Human:        PENDING
     internal const int MaximumTextCharacters = 32_000;
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=5A61BB
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=F04532
     // Broiler-Falsified-If: a message whose multiparts nest more than 32 levels deep is parsed into entities below that depth instead of stopping at the parser's depth limit
     // Broiler-Human:        PENDING
     public static async Task<MailMessageBody> DecodeAsync(MailMessageKey key, Stream stream, CancellationToken token)
@@ -114,7 +114,7 @@ internal static class MessageTextDecoder
         return (placeholder && string.IsNullOrWhiteSpace(text) ? "(No readable text in this message.)" : text, fallback, truncated);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=5BC1DA
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=3; Fingerprint=9D8023
     // Broiler-Falsified-If: a received Message-ID, References or In-Reply-To value containing CR or LF is copied into the reply composition source
     // Broiler-Human:        PENDING
     private static MailCompositionSource CompositionHeaders(ParsedMimeMessage message)
@@ -181,7 +181,7 @@ internal static class MessageTextDecoder
         return result.ToString();
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=4; Fingerprint=6153AD
+    // Broiler-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=4; Fingerprint=0F4C04
     // Broiler-Falsified-If: an HTML-only message that omits the optional </head> end tag yields no readable text because everything after <head> stays suppressed
     // Broiler-Human:        PENDING
     private static string ExtractHtmlText(string html, CancellationToken token, int maximum)

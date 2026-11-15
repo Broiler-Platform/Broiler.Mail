@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   4
-// Annotated:        4/4
+// Relevant units:   6
+// Annotated:        4/6
 // Exempt:           2
-// Human-reviewed:   0/4
+// Human-reviewed:   0/6
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         4/4
 // Resource impact:  4/10 max
-// Unverified:       4
+// Unverified:       6
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -20,7 +20,7 @@ using Broiler.Mail.Core.Services;
 
 namespace Broiler.Mail.Infrastructure.Persistence;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=07E003
+// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=60FB52
 // Broiler-Falsified-If: a save based on a stale revision overwrites a newer stored draft
 // Broiler-Human:        PENDING
 public sealed partial class JsonDraftStore(string path) : IDraftLibraryStore
@@ -32,7 +32,7 @@ public sealed partial class JsonDraftStore(string path) : IDraftLibraryStore
     // Broiler-Falsified-If: a corrupt or oversized drafts file loads as an empty store (revision 0, no draft) instead of throwing
     // Broiler-Human:        PENDING
     public Task<DraftStoreState> LoadAsync(CancellationToken cancellationToken = default) => _file.ReadAsync(cancellationToken);
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=BBC0FE
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=760835
     // Broiler-Falsified-If: a save whose expectedRevision differs from the stored revision writes the draft instead of throwing DraftConflictException
     // Broiler-Human:        PENDING
     public async Task<DraftStoreState> SaveAsync(long expectedRevision, DraftSnapshot? draft, CancellationToken cancellationToken = default)
@@ -46,7 +46,7 @@ public sealed partial class JsonDraftStore(string path) : IDraftLibraryStore
         return saved!;
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=1E1911
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=702580
     // Broiler-Falsified-If: a saved draft whose Sent-copy state is Pending while its submission state is not Accepted loads without an exception
     // Broiler-Human:        PENDING
     private static void Validate(DraftStoreState state)

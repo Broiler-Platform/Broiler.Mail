@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   3
-// Annotated:        3/3
-// Exempt:           4
-// Human-reviewed:   0/3
+// Relevant units:   5
+// Annotated:        3/5
+// Exempt:           3
+// Human-reviewed:   0/5
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         3/3
 // Resource impact:  7/10 max
-// Unverified:       3
+// Unverified:       5
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -34,7 +34,7 @@ public sealed class ImapSentCopyWriter : ISentCopyWriter
     private readonly Func<ImapProtocolClient> _clientFactory;
     private readonly TimeSpan _timeout;
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=25C087
+    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=E11809
     // Broiler-Falsified-If: a client made by the factory this constructor installs accepts a server certificate that fails platform chain validation
     // Broiler-Human:        PENDING
     public ImapSentCopyWriter(ICredentialStore credentials) : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20)) { }
@@ -49,7 +49,7 @@ public sealed class ImapSentCopyWriter : ISentCopyWriter
         _timeout = timeout;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=4B2DD6
+    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=7; Fingerprint=8AE4A8
     // Broiler-Falsified-If: an APPEND interrupted after it was sent is reported as Failed rather than Unknown
     // Broiler-Human:        PENDING
     public async Task<SentCopyState> AppendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)

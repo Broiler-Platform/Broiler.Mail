@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   15
-// Annotated:        9/15
+// Relevant units:   18
+// Annotated:        9/18
 // Exempt:           10
-// Human-reviewed:   0/15
+// Human-reviewed:   0/18
 // IP risk:          Low
 // Security risk:    Critical
 // Criteria:         5/4
 // Resource impact:  3/10 max
-// Unverified:       15
+// Unverified:       18
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -26,7 +26,7 @@ using Broiler.UI;
 
 namespace Broiler.Mail.Windows.Hosting;
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=3; Fingerprint=FB603E
+// Broiler-AI:           Origin=AI; IP=Low; Security=Critical; Resources=3; Fingerprint=1C4409
 // Broiler-Falsified-If: a paste reads clipboard memory past the size GlobalSize reports for a block another process placed there
 // Broiler-Human:        PENDING
 internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandle) : IUiHost, IUiClipboardHost, IUiTextInputHost, IUiSystemSettingsHost, IUiWindowHost, IUiImageHost

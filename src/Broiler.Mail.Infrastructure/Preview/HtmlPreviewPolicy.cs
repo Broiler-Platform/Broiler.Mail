@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   9
-// Annotated:        9/9
+// Relevant units:   13
+// Annotated:        9/13
 // Exempt:           0
-// Human-reviewed:   0/9
+// Human-reviewed:   0/13
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         8/7
 // Resource impact:  8/10 max
-// Unverified:       9
+// Unverified:       13
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -50,7 +50,7 @@ public static class HtmlPreviewPolicy
     public static HtmlPreviewDocument Create(string html) =>
         Create(html, embeddedImages: null, allowRemoteImages: false);
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=39183E
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=739843
     // Broiler-Falsified-If: one cid: image referenced by many img tags is inlined as a full base64 copy each time, so a message within the 2 MiB and 20,000-token limits produces gigabytes of markup
     // Broiler-Human:        PENDING
     public static HtmlPreviewDocument Create(

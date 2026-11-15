@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   110
-// Annotated:        48/110
-// Exempt:           88
-// Human-reviewed:   0/110
+// Relevant units:   131
+// Annotated:        48/131
+// Exempt:           98
+// Human-reviewed:   0/131
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         39/20
 // Resource impact:  8/10 max
-// Unverified:       110
+// Unverified:       131
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -194,7 +194,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         FollowTextSize(theme.TextScale);
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=42FCE6
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=6E7FBD
     // Broiler-Falsified-If: an ArgumentException from HtmlPreviewPolicy.Create inside LoadRemoteImagesAsync escapes the async Clicked handler of the Load remote images button and terminates the process
     // Broiler-Human:        PENDING
     public HtmlPreviewWindow(
@@ -382,7 +382,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
     /// </summary>
     public HtmlResourceBatchResult? LastResourceBatchResult { get; private set; }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=955FDF
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=8; Fingerprint=AC5A62
     // Broiler-Falsified-If: a remote image response larger than 5,000,000 bytes is read fully into memory before the size check discards it
     // Broiler-Human:        PENDING
     public async Task LoadRemoteImagesAsync()
@@ -917,7 +917,7 @@ internal sealed record HtmlLayoutSnapshot(
 /// </summary>
 internal readonly record struct HtmlReadingAnchor(int Index, string TagName, double Fraction, double Gap);
 
-// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=35E864
+// Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=8; Fingerprint=7F007E
 // Broiler-Falsified-If: a document shown through this view has an http(s) image or stylesheet it names fetched over the network instead of denied
 // Broiler-Human:        PENDING
 internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReaderViewport, IInlineRemoteImages, IInlineRemoteImageReset, IInlineReaderInput
@@ -988,7 +988,7 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
     private readonly StandardScrollView _scroll = new();
     private readonly HtmlViewElement _content;
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=5D5C44
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=D6B4BA
     // Broiler-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the view renders
     // Broiler-Human:        PENDING
     public ScrollableHtmlView(
@@ -1020,7 +1020,7 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
         };
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=1A54E2
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=F2F519
     // Broiler-Falsified-If: an http(s) image named in the html passed to UpdateHtml is fetched over the network when the view next renders
     // Broiler-Human:        PENDING
     public void UpdateHtml(string html, bool preserveReadingPosition = false)
@@ -1060,7 +1060,7 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
         ViewChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=AB27B5
+    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=2BA274
     // Broiler-Human:        PENDING
     public void ScrollToStart()
     {
@@ -1160,7 +1160,7 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
         base.RenderCore(context);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=00F201
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=24120C
     // Broiler-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
@@ -1278,7 +1278,7 @@ internal sealed class HtmlViewElement : UiElement
     public bool IsTileCached(int row, int column = 0) => _tiles.ContainsKey((row, column));
     internal IReadOnlyCollection<(int Row, int Column)> CachedTileIndices => _tiles.Keys.ToArray();
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=0FB8CA
+    // Broiler-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=490A6B
     // Broiler-Falsified-If: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
     // Broiler-Human:        PENDING
     private static HtmlContainer CreateContainer(string html)
@@ -1454,7 +1454,7 @@ internal sealed class HtmlViewElement : UiElement
     protected override UiSemanticNode GetSemanticNodeCore() =>
         base.GetSemanticNodeCore() with { Role = UiSemanticRole.Group, Name = "HTML message" };
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=33C3DE
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=246DD5
     // Broiler-Falsified-If: an allocated tile texture handle is leaked or passed to ReleaseImage after invalidation
     // Broiler-Human:        PENDING
     private void InvalidateTiles()
@@ -1539,7 +1539,7 @@ internal sealed class HtmlViewElement : UiElement
         return new HtmlLayoutSnapshot(width, extentWidth, contentHeight, rawHeight, isTruncated, links, diagnostics, elapsedTicks);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=A109CA
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=2FA422
     // Broiler-Falsified-If: repeated measures with unchanged width rerun the full layout instead of reusing the cached snapshot
     // Broiler-Human:        PENDING
     protected override BSize MeasureCore(BSize availableSize)
@@ -1636,7 +1636,7 @@ internal sealed class HtmlViewElement : UiElement
         statistics?.Drawn(key, painted - started, Stopwatch.GetTimestamp() - painted, _cachedTileBytes);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=3A0021
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=187F30
     // Broiler-Falsified-If: rendering tiles outside the visible viewport window allocates bitmaps for non-visible regions
     // Broiler-Human:        PENDING
     protected override void RenderCore(UiRenderContext context)
@@ -1753,7 +1753,7 @@ internal sealed class HtmlViewElement : UiElement
                 new BRect(Bounds.X + visibleLeft + 2, Bounds.Y + visibleTop + 2, Math.Max(0, viewportWidth - 4), Math.Max(0, parentViewportHeight - 4)), 4);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=676D2C
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=32B254
     // Broiler-Falsified-If: the link callback fires for an input other than a left-button release, such as a pointer-down, a right click or a key press over a link
     // Broiler-Human:        PENDING
     protected override bool OnInput(UiInputEvent e)

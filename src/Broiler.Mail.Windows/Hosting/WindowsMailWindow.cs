@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   37
-// Annotated:        18/37
-// Exempt:           25
-// Human-reviewed:   0/37
+// Relevant units:   38
+// Annotated:        18/38
+// Exempt:           26
+// Human-reviewed:   0/38
 // IP risk:          Low
 // Security risk:    Critical
 // Criteria:         18/3
 // Resource impact:  7/10 max
-// Unverified:       37
+// Unverified:       38
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -163,7 +163,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         Closed += (_, _) => PostQuitMessage(_exitCode);
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=FC1AD0
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=5A3305
     // Broiler-Falsified-If: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
     // Broiler-Human:        PENDING
     protected override int RunCore()
@@ -331,7 +331,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=D95531
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=53A44C
     // Broiler-Falsified-If: after a resize or DPI change the UI session lays out against the old viewport size or scale until another resize arrives
     // Broiler-Human:        PENDING
     /// <summary>
@@ -453,7 +453,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=B11BAC
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=20CB95
     // Broiler-Falsified-If: an HTML preview opened from this mail window stays open after the mail window is disposed
     // Broiler-Human:        PENDING
     protected override void Dispose(bool disposing)

@@ -27,7 +27,7 @@ namespace Broiler.Mail.Application.Views;
 // Broiler-Human:        PENDING
 public sealed class MailKeyboardNavigation(UiSession session, MailShellView shell, MailShellViewModel model)
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=51E59B
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=E6832F
     // Broiler-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
     // Broiler-Human:        PENDING
     public bool Handle(UiInputEvent input)
@@ -124,7 +124,7 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=B660DE
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=B17051
     // Broiler-Falsified-If: Tab moves focus onto a disabled control or into the collapsed SMTP fields
     // Broiler-Human:        PENDING
     public void MoveFocus(int direction)

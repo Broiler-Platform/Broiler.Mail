@@ -34,7 +34,7 @@ namespace Broiler.Mail.Application.Views;
 // Broiler-Human:        PENDING
 public sealed class SettingsView(SettingsViewModel model)
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=1C757E
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=9DC077
     // Broiler-Falsified-If: choosing a theme in the list saves a different AppTheme, because the list order no longer matches the enum
     // Broiler-Human:        PENDING
     public UiElement CreateContent()

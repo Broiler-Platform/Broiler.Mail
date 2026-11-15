@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   5
-// Annotated:        5/5
+// Relevant units:   9
+// Annotated:        5/9
 // Exempt:           0
-// Human-reviewed:   0/5
+// Human-reviewed:   0/9
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         5/4
 // Resource impact:  2/10 max
-// Unverified:       5
+// Unverified:       9
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -26,7 +26,7 @@ namespace Broiler.Mail.Core.Validation;
 // Broiler-Human:        PENDING
 public static class ConfigurationValidator
 {
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=ADB9F9
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=2; Fingerprint=A6E0AF
     // Broiler-Falsified-If: a profile whose EmailAddress carries a display name, such as Eve <eve@example.com>, passes Validate
     // Broiler-Human:        PENDING
     public static void ValidateSenderAliases(AccountProfile profile)
