@@ -281,6 +281,82 @@ public sealed class MessageRowTests
         public void Present(BRenderList renderList) { }
     }
 
+    [Fact]
+    public void ARowDrawnAgainIsTheSameAndFollowsItsMessageWidthReadStateAndDay()
+    {
+        var clock = new MovableClock { Now = new DateTimeOffset(2026, 9, 27, 12, 0, 0, TimeSpan.Zero) };
+        var presenter = new MailMessageItemPresenter(new MessageDateFormatter(clock, CultureInfo.GetCultureInfo("en-US")));
+        BFontStyle font = BFontStyle.Default;
+        (string Sender, string Date, string Subject) Draw(MailMessageSummary message, double width, BFontStyle? size = null)
+        {
+            var list = new BRenderList();
+            presenter.Render(Context(list, message, width, size ?? font, message.IsRead));
+            string[] texts = list.Commands.OfType<BRenderCommand.DrawText>().Select(text => text.Text.Text).ToArray();
+            return (texts[1], texts[0], texts[2]);
+        }
+        const string sender = "Broiler team <hello@example.test>";
+        var message = Message(sender, read: false);
+
+        var first = Draw(message, 600);
+        Assert.Equal(first, Draw(message, 600));
+        // Today a row shows the time, in the culture's own spacing.
+        string time = new DateTime(2026, 9, 27, 9, 30, 0).ToString("t", CultureInfo.GetCultureInfo("en-US"));
+        Assert.Equal((sender, time, "Welcome"), first);
+        // A narrower row with larger text drops the address again rather than reuse the wide row's text.
+        Assert.Equal("Broiler team", Draw(message, 400, font with { Size = font.Size * 2 }).Sender);
+        Assert.Equal(sender, Draw(message, 600).Sender);
+        // Read is drawn without the unread emphasis, from the row's own state.
+        var read = new BRenderList();
+        presenter.Render(Context(read, message, 600, font, read: true));
+        var unread = new BRenderList();
+        presenter.Render(Context(unread, message, 600, font, read: false));
+        Assert.NotEqual(Fonts(read), Fonts(unread));
+        // A changed message is a new instance and is drawn from its own members.
+        Assert.Equal("Agenda", Draw(message with { Subject = "Agenda" }, 600).Subject);
+        Assert.Equal("★ Welcome", Draw(message with { IsStarred = true }, 600).Subject);
+        // The next day the same message shows its day instead of its time.
+        clock.Now = clock.Now.AddDays(1);
+        Assert.Equal("Sep 27", Draw(message, 600).Date);
+    }
+
+    [Fact]
+    public void ManyWidthsDoNotGrowTheRowCacheWithoutBound()
+    {
+        var presenter = new MailMessageItemPresenter(Dates);
+        var message = Message("Broiler team <hello@example.test>", read: true);
+        // A long resize draws the row at every width; the drawn text stays right past the cache's limit.
+        for (int width = 200; width < 1400; width++)
+            presenter.Render(Context(new BRenderList(), message, width, BFontStyle.Default, true));
+        var list = new BRenderList();
+        presenter.Render(Context(list, message, 600, BFontStyle.Default, true));
+        Assert.Contains(list.Commands.OfType<BRenderCommand.DrawText>(), text => text.Text.Text == "Broiler team <hello@example.test>");
+    }
+
+    private static UiListItemRenderContext Context(BRenderList list, MailMessageSummary message, double width, BFontStyle font, bool read) => new()
+    {
+        RenderList = list,
+        Bounds = new BRect(0, 0, width, 120),
+        Item = Item(message),
+        State = new UiListItemState(IsSelected: false, IsFocused: false, IsRead: read, Index: 0),
+        Font = font,
+        Foreground = BColor.Black,
+        SecondaryForeground = BColor.Black,
+        Background = BColor.White,
+        SelectedBackground = BColor.White,
+        FocusRing = BColor.Black,
+        Accent = BColor.Black,
+    };
+
+    private static string Fonts(BRenderList list) =>
+        string.Join("|", list.Commands.OfType<BRenderCommand.DrawText>().Select(text => text.Text.Font.ToString()));
+
+    private sealed class MovableClock : TimeProvider
+    {
+        public DateTimeOffset Now { get; set; }
+        public override DateTimeOffset GetUtcNow() => Now;
+        public override TimeZoneInfo LocalTimeZone => TimeZoneInfo.Utc;
+    }
+
     private static (string Sender, string Date, string Subject) Rendered(MailMessageSummary message, double width, BFontStyle font)
     {
         var list = new BRenderList();

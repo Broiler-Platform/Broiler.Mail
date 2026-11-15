@@ -29,6 +29,12 @@ public sealed class MessageDateFormatter(TimeProvider? clock = null, CultureInfo
     public string List(DateTimeOffset? timestamp) => ListForms(timestamp)[0];
 
     /// <summary>
+    /// What a row date also depends on besides its timestamp: today's date, which decides between a time
+    /// and a day, and the culture. A cached row date is still valid while this is unchanged.
+    /// </summary>
+    internal (DateTime Today, CultureInfo Culture) ListContext => (_clock.GetLocalNow().Date, culture ?? CultureInfo.CurrentCulture);
+
+    /// <summary>
     /// The row date from the longest form to the shortest, for rows too narrow for the first: today's
     /// time; this year's abbreviated month and day ("Sep 27"), then the numeric month and day ("9/27");
     /// an older year's short date ("9/27/2025"), then the year alone ("2025").
