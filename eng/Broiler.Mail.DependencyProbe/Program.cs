@@ -18,7 +18,7 @@ using Broiler.UI;
 // Compile against the published APIs. Reading type metadata does not create native surfaces,
 // request input permissions, or imply that these backends run on the current OS.
 Type[] contracts = [typeof(IUiHost), typeof(IUiClipboardHost), typeof(IUiTextInputHost),
-    typeof(ICredentialStore), typeof(IHtmlPreviewHost), typeof(LinuxOpenGlRenderer),
+    typeof(ICredentialStore), typeof(IInlineHtmlPreviewHost), typeof(LinuxOpenGlRenderer),
     typeof(AndroidOpenGlEsRenderer), typeof(AndroidTouchProvider), typeof(AndroidTextInputProvider),
     typeof(IAndroidEditorTextSource), typeof(AndroidKeyboardProvider),
     typeof(AndroidUiHost), typeof(AndroidBackendDiagnostics),
