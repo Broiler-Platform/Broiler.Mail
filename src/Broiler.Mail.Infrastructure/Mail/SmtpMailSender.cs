@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   7
-// Annotated:        6/7
-// Exempt:           4
-// Human-reviewed:   0/7
+// Relevant units:   9
+// Annotated:        6/9
+// Exempt:           5
+// Human-reviewed:   0/9
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         4/4
 // Resource impact:  3/10 max
-// Unverified:       7
+// Unverified:       9
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -26,7 +26,7 @@ using Broiler.Mail.Infrastructure.Protocols.Smtp;
 
 namespace Broiler.Mail.Infrastructure.Mail;
 
-// Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=8FC6AB
+// Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=03D79A
 // Broiler-Falsified-If: an SMTP server configured for STARTTLS that does not offer it receives the AUTH password over the unencrypted connection
 // Broiler-Human:        PENDING
 public sealed class SmtpMailSender : IProgressMailSender
@@ -40,14 +40,14 @@ public sealed class SmtpMailSender : IProgressMailSender
     private readonly TimeSpan _timeout;
     public bool IsAvailable => true;
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=None; Security=High; Resources=1; Fingerprint=B5D1E4
+    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=None; Security=High; Resources=1; Fingerprint=F8A1A7
     // Broiler-Falsified-If: the client produced by the public constructor accepts a server certificate that system certificate validation rejects
     // Broiler-Human:        PENDING
     public SmtpMailSender(ICredentialStore credentials)
         : this(credentials, (RemoteCertificateValidationCallback?)null, TimeSpan.FromSeconds(20)) { }
 
     // Only tests replace certificate validation and shorten the deadline.
-    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=B7C6FC
+    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=785B29
     // Broiler-Falsified-If: an assembly other than the component's test project can construct the sender with its own client factory or deadline
     // Broiler-Human:        PENDING
     internal SmtpMailSender(ICredentialStore credentials, RemoteCertificateValidationCallback? certValidator, TimeSpan timeout)
@@ -60,7 +60,7 @@ public sealed class SmtpMailSender : IProgressMailSender
         _timeout = timeout;
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=86DE37
+    // Broiler-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=High; Resources=3; Fingerprint=86DC32
     // Broiler-Falsified-If: a disconnect, timeout or cancellation after client.SendAsync has begun is reported as Rejected instead of Unknown
     // Broiler-Human:        PENDING
     public Task<SendResult> SendAsync(AccountProfile account, MailDraft draft, CancellationToken cancellationToken = default)

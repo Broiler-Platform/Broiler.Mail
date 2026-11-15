@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   4
-// Annotated:        4/4
+// Relevant units:   5
+// Annotated:        4/5
 // Exempt:           1
-// Human-reviewed:   0/4
+// Human-reviewed:   0/5
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         4/4
 // Resource impact:  4/10 max
-// Unverified:       4
+// Unverified:       5
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -29,11 +29,8 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
     JsonTypeInfo<ConfigurationEnvelope<T>> typeInfo, long maximumBytes = 1024 * 1024) where T : class
 {
     private readonly string _path = Path.GetFullPath(path);
-    // Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=5E5E32
-    // Broiler-Falsified-If: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
-    // Broiler-Human:        PENDING
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=7A3C57
+    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=5E5E32
     // Broiler-Falsified-If: an existing file that is corrupt, larger than maximumBytes or of another schema version yields the default value instead of an exception
     // Broiler-Human:        PENDING
     public async Task<T> ReadAsync(CancellationToken cancellationToken)
@@ -59,7 +56,7 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
         }
     }
 
-    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=628085
+    // Broiler-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=407654
     // Broiler-Falsified-If: a failure or cancellation while writing leaves the target file truncated or partly written instead of holding its previous content
     // Broiler-Human:        PENDING
     public async Task UpdateAsync(Func<T, T> update, CancellationToken cancellationToken)
@@ -116,7 +113,4 @@ internal sealed class JsonConfigurationFile<T>(string path, Func<T> createDefaul
             }
         }
     }
-
-    // Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=78B419
-    // Broiler-Human:        PENDING
 }

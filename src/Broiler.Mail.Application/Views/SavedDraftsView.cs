@@ -1,6 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   2
+// Annotated:        0/2
+// Exempt:           0
+// Human-reviewed:   0/2
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       2
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Messages;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
@@ -52,11 +70,11 @@ internal static class SavedDraftsView
             updating = false;
         }
         picker.SelectionChanged += (_, _) => { if (!updating) { model.KeepSavedDraft(); Refresh(); } };
-        park.Clicked += async (_, _) => await model.ParkDraftAsync();
-        resume.Clicked += async (_, _) => { if (Selected() is { } row) await model.ResumeDraftAsync(row.Draft.Id); };
+        park.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ParkDraftAsync());
+        resume.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { if (Selected() is { } row) await model.ResumeDraftAsync(row.Draft.Id); });
         remove.Clicked += (_, _) => { if (Selected() is { } row) model.RequestSavedDraftRemoval(row.Draft.Id); };
         keep.Clicked += (_, _) => model.KeepSavedDraft();
-        confirm.Clicked += async (_, _) => await model.ConfirmSavedDraftRemovalAsync();
+        confirm.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmSavedDraftRemovalAsync());
         model.Changed += (_, _) => Refresh(); Refresh(); return section;
     }
 }

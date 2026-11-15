@@ -59,7 +59,7 @@ internal static class Program
         }
     }
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=BB787D
+    // Broiler-AI:           Origin=AI; IP=Low; Security=High; Resources=7; Fingerprint=17B95C
     // Broiler-Falsified-If: an argument list other than none, --help, a valid --demo option list, --smoke-test or --data-directory with a non-blank path starts the application instead of returning exit code 2
     // Broiler-Human:        PENDING
     [STAThread]

@@ -1,9 +1,27 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   19
+// Annotated:        0/19
+// Exempt:           13
+// Human-reviewed:   0/19
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       19
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Graphics.Geometry;
 using Broiler.Mail.Application.Preview;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Services;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
@@ -37,7 +55,7 @@ public sealed class UnifiedSavedInboxView : UiElement
         var actions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 4, Spacing = 6 };
         actions.AddChild(_refresh); actions.AddChild(_read); actions.AddChild(_cancel); _layout.AddChild(actions);
         _layout.AddChild(_picker); _layout.AddChild(_feedback); _layout.AddChild(_details);
-        _refresh.Clicked += async (_, _) => await RefreshAsync(); _read.Clicked += async (_, _) => { if (Selected() is {} row) await ReadAsync(row); };
+        _refresh.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await RefreshAsync()); _read.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { if (Selected() is {} row) await ReadAsync(row); });
         _cancel.Clicked += (_, _) => Cancel();
         _picker.SelectionChanged += (_, _) => { ClearPreview(); if (IsBusy) { ++_generation; _operation?.Cancel(); } UpdateControls(); };
         _feedback.Set(cache is null ? "Unified saved inbox is unavailable in this host." : "Configure accounts, then open and Refresh explicitly. No account is read automatically.", FeedbackKind.Information); UpdateControls();

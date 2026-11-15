@@ -1,3 +1,20 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   7
+// Annotated:        0/7
+// Exempt:           1
+// Human-reviewed:   0/7
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       7
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 namespace Broiler.Mail.Core.Services;
 
 /// <summary>Local repair of already-confirmed server changes. Never repeats a network mutation.</summary>

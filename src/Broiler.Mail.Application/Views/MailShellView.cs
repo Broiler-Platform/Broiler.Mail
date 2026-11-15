@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   20
-// Annotated:        5/20
-// Exempt:           17
-// Human-reviewed:   0/20
+// Relevant units:   21
+// Annotated:        5/21
+// Exempt:           23
+// Human-reviewed:   0/21
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         4/0
 // Resource impact:  7/10 max
-// Unverified:       20
+// Unverified:       21
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -46,7 +46,7 @@ public sealed class MailShellView : IDisposable
 {
     private readonly MailShellViewModel _model;
     private readonly Action<Uri>? _openUrl;
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=ADE6BB
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=7; Fingerprint=D66B9E
     // Broiler-Falsified-If: with an unconfigured account the Account setup dialog is not opened
     // Broiler-Human:        PENDING
     public MailShellView(MailShellViewModel model, IInlineHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, Action<Uri>? openUrl = null)
@@ -449,7 +449,7 @@ public sealed class MailShellView : IDisposable
     // Broiler-Human:        PENDING
     public MailKeyboardNavigation CreateKeyboardNavigation(UiSession session) => new(session, this, _model);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=61DA59
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=64AD9A
     // Broiler-Falsified-If: a connection test still running when the view is disposed is not canceled
     // Broiler-Human:        PENDING
     public void Dispose()

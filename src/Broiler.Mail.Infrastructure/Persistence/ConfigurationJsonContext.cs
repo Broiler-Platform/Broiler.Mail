@@ -4,13 +4,13 @@
 // Broiler Code Assurance
 // ----------------------
 // Relevant units:   2
-// Annotated:        0/2
+// Annotated:        2/2
 // Exempt:           3
 // Human-reviewed:   0/2
-// IP risk:          not assessed
-// Security risk:    not assessed
-// Criteria:         0/0
-// Resource impact:  not assessed
+// IP risk:          None
+// Security risk:    High
+// Criteria:         1/1
+// Resource impact:  1/10 max
 // Unverified:       2
 //
 // GENERATED - DO NOT EDIT MANUALLY
@@ -24,12 +24,17 @@ using Broiler.Mail.Core.Settings;
 
 namespace Broiler.Mail.Infrastructure.Persistence;
 
+// Broiler-AI:           Origin=AI; IP=None; Security=Low; Resources=1; Fingerprint=66937C
+// Broiler-Human:        PENDING
 internal sealed class ConfigurationEnvelope<T> where T : class
 {
     public required int SchemaVersion { get; init; }
     public required T Data { get; init; }
 }
 
+// Broiler-AI:           Origin=AI; IP=None; Security=High; Resources=1; Fingerprint=C943A6
+// Broiler-Falsified-If: a configuration file with an unknown property, or an integer where an enum name belongs, deserializes without a JsonException
+// Broiler-Human:        PENDING
 [JsonSerializable(typeof(ConfigurationEnvelope<LocalOriginalState>), TypeInfoPropertyName = "LocalOriginals")]
 [JsonSerializable(typeof(ConfigurationEnvelope<SourceExportCatalogState>), TypeInfoPropertyName = "SourceExportCatalog")]
 [JsonSerializable(typeof(ConfigurationEnvelope<AccountNavigationState>), TypeInfoPropertyName = "NavigationPreferences")]

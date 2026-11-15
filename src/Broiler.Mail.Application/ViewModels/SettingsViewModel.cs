@@ -3,15 +3,15 @@
 //
 // Broiler Code Assurance
 // ----------------------
-// Relevant units:   5
-// Annotated:        3/5
-// Exempt:           8
-// Human-reviewed:   0/5
+// Relevant units:   6
+// Annotated:        3/6
+// Exempt:           9
+// Human-reviewed:   0/6
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         2/0
 // Resource impact:  2/10 max
-// Unverified:       5
+// Unverified:       6
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -30,7 +30,7 @@ public sealed class SettingsViewModel : SaveViewModel
     private readonly ISettingsStore _store;
     private readonly SemaphoreSlim _layoutWrites = new(1, 1);
 
-    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=6171D5
+    // Broiler-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=E9913B
     // Broiler-Human:        PENDING
     public SettingsViewModel(ISettingsStore store, IUiDispatcher dispatcher, ApplicationSettings settings, string? loadError,
         ProfileStorageViewModel? storage = null)

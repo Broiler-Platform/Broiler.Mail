@@ -1,5 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   24
+// Annotated:        0/24
+// Exempt:           18
+// Human-reviewed:   0/24
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       24
+//
+// GENERATED - DO NOT EDIT MANUALLY
 
 using System.Diagnostics.CodeAnalysis;
 using System.Net;

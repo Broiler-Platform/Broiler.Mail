@@ -1,6 +1,24 @@
+// SPDX-FileCopyrightText: 2026 Broiler Platform contributors
+// SPDX-License-Identifier: Apache-2.0
+//
+// Broiler Code Assurance
+// ----------------------
+// Relevant units:   2
+// Annotated:        0/2
+// Exempt:           0
+// Human-reviewed:   0/2
+// IP risk:          not assessed
+// Security risk:    not assessed
+// Criteria:         0/0
+// Resource impact:  not assessed
+// Unverified:       2
+//
+// GENERATED - DO NOT EDIT MANUALLY
+
 using Broiler.Graphics.Geometry;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.UI;
+using Broiler.UI.Button;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.ComboBox;
 using Broiler.UI.ComboBox.Standard;
@@ -153,33 +171,33 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
                 FocusNavigation.KeepFocusUsable(focusSession, panel, accounts.IsEnabled ? accounts : add);
             updating = false;
         }
-        accounts.SelectionChanged += async (_, _) =>
+        accounts.SelectionChanged += UiAsync.Handler<UiComboBoxSelectionChangedEventArgs>(async (_, _) =>
         {
             if (updating) return;
             int index = accounts.SelectedIndex;
             if (index >= 0 && index < model.Profiles.Count) await model.SwitchAsync(model.Profiles[index].Id);
-        };
+        });
         add.Clicked += (_, _) => { if (model.BeginAdd()) openSetup(); };
         cancel.Clicked += (_, _) => model.CancelAdd();
-        enabled.Clicked += async (_, _) => await model.SetEnabledAsync(model.SelectedProfile?.IsEnabled != true);
-        earlier.Clicked += async (_, _) => await model.MoveSelectedAsync(-1);
-        later.Clicked += async (_, _) => await model.MoveSelectedAsync(1);
+        enabled.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.SetEnabledAsync(model.SelectedProfile?.IsEnabled != true));
+        earlier.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.MoveSelectedAsync(-1));
+        later.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.MoveSelectedAsync(1));
         remove.Clicked += (_, _) =>
         {
             if (model.RequestRemoval() && panel.Session is { } session) FocusNavigation.FocusAndReveal(session, cancelRemoval);
         };
         orphanSection.Toggle!.Clicked += (_, _) => { if (!orphanSection.IsExpanded && !model.IsBusy) model.CancelOrphanCleanup(); };
-        orphanReload.Clicked += async (_, _) => await model.FindOrphanMailAsync();
+        orphanReload.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.FindOrphanMailAsync());
         orphanPicker.SelectionChanged += (_, _) => { if (!updating) model.SelectOrphanMail(orphanPicker.SelectedIndex >= 0 && orphanPicker.SelectedIndex < model.OrphanMail.Count ? model.OrphanMail[orphanPicker.SelectedIndex].AccountId : null); };
         orphanClear.Clicked += (_, _) => { if (model.RequestOrphanCleanup() && panel.Session is {} session) FocusNavigation.FocusAndReveal(session, orphanKeep); };
         orphanKeep.Clicked += (_, _) => model.CancelOrphanCleanup();
-        orphanConfirm.Clicked += async (_, _) => await model.ConfirmOrphanCleanupAsync();
-        inspectMail.Clicked += async (_, _) => await model.InspectLocalMailAsync();
+        orphanConfirm.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmOrphanCleanupAsync());
+        inspectMail.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.InspectLocalMailAsync());
         clearMail.Clicked += (_, _) => { if (model.RequestLocalMailCleanup() && panel.Session is { } session) FocusNavigation.FocusAndReveal(session, keepMail); };
         keepMail.Clicked += (_, _) => model.CancelLocalMailCleanup();
-        confirmClearMail.Clicked += async (_, _) => await model.ConfirmLocalMailCleanupAsync();
-        keepPasswords.Clicked += async (_, _) => await model.ConfirmRemovalAsync(false);
-        forgetPasswords.Clicked += async (_, _) => await model.ConfirmRemovalAsync(true);
+        confirmClearMail.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmLocalMailCleanupAsync());
+        keepPasswords.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmRemovalAsync(false));
+        forgetPasswords.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmRemovalAsync(true));
         cancelRemoval.Clicked += (_, _) => model.CancelRemoval();
         manage.Clicked += (_, _) =>
         {
