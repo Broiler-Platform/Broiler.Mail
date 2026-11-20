@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   2
 // Annotated:        0/2
-// Exempt:           0
+// Exempt:           1
 // Human-reviewed:   0/2
 // IP risk:          not assessed
 // Security risk:    not assessed
@@ -33,6 +33,8 @@ namespace Broiler.Mail.Application.Views;
 
 public sealed class AccountSelectionView(AccountSelectionViewModel model, Action openSetup, AccountReceiveQueueViewModel? receives = null)
 {
+    internal MailShellView? Shell { get; init; }
+
     public UiElement CreateContent()
     {
         var panel = new StandardPanel { Spacing = 4 };
@@ -42,8 +44,17 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
         var cancel = new StandardButton { Text = "Cancel new account" };
         var manage = new StandardButton { Text = "Manage accounts" };
         row.AddChild(accounts); row.AddChild(add); row.AddChild(cancel); row.AddChild(manage); panel.AddChild(row);
-        if (receives is not null) panel.AddChild(new AccountReceiveQueueView(receives, () => model.SelectedId, model).CreateContent());
-        var management = new StandardPanel { Visibility = UiVisibility.Collapsed, Spacing = 4 };
+        var accountTools = new ToolbarDisclosure(MailToolbarButton.WithSymbol("Account tools", "⚙"));
+        var activity = receives is null ? null : new AccountReceiveQueueView(receives, () => model.SelectedId, model).CreateContent(collapsible: Shell is null);
+        if (Shell is null && (activity is not null || model.SupportsOrphanMail))
+        {
+            row.AddChild(accountTools.Button);
+            panel.AddChild(accountTools);
+            if (activity is not null) accountTools.Content.AddChild(activity);
+        }
+        else if (activity is not null)
+            Shell!.RegisterInboxDialog("account-activity", "Account receives", activity, () => true, accountTool: true);
+        var management = new StandardPanel { Visibility = Shell is null ? UiVisibility.Collapsed : UiVisibility.Visible, Spacing = 4 };
         management.AddChild(new StandardLabel
         {
             Text = "Disabling stops receiving and sending for this account. Cached mail, credentials and the current draft are kept. Enabling does not automatically receive mail.",
@@ -52,7 +63,8 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
         var actions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 6, Spacing = 8 };
         var enabled = new StandardButton(); var earlier = new StandardButton { Text = "Move account earlier" }; var later = new StandardButton { Text = "Move account later" };
         var remove = new StandardButton { Text = "Remove account…" };
-        actions.AddChild(enabled); actions.AddChild(earlier); actions.AddChild(later); actions.AddChild(remove); management.AddChild(actions); panel.AddChild(management);
+        actions.AddChild(enabled); actions.AddChild(earlier); actions.AddChild(later); actions.AddChild(remove); management.AddChild(actions);
+        if (Shell is null) panel.AddChild(management);
         var removalExplanation = new StandardLabel { UseMnemonic = false, Wrapping = UiTextWrapping.Wrap }; management.AddChild(removalExplanation);
         var confirmation = new StandardPanel { Visibility = UiVisibility.Collapsed, Spacing = 4 };
         var confirmationText = new StandardLabel { UseMnemonic = false, Wrapping = UiTextWrapping.Wrap }; confirmation.AddChild(confirmationText);
@@ -76,7 +88,7 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
         localConfirmActions.AddChild(keepMail); localConfirmActions.AddChild(confirmClearMail); localConfirmation.AddChild(localConfirmActions); localMail.AddChild(localConfirmation);
         var localBackup = new StandardLabel { UseMnemonic = false, Wrapping = UiTextWrapping.Wrap }; localMail.AddChild(localBackup);
         if (model.SupportsLocalMailCleanup) management.AddChild(localMail);
-        var orphanSection = new FormSection("Mail for removed accounts", "Inspect and explicitly clear local mail whose account ID is no longer configured.", collapsible: true, expanded: false);
+        var orphanSection = new FormSection("Mail for removed accounts", "Inspect and explicitly clear local mail whose account ID is no longer configured.", collapsible: Shell is null, expanded: Shell is not null);
         orphanSection.Content.AccessibleName = "Removed-account mail controls";
         var orphanNotice = new StandardLabel { UseMnemonic = false, Wrapping = UiTextWrapping.Wrap }; orphanSection.Content.AddChild(orphanNotice);
         var orphanReload = new StandardButton { Text = "List removed-account mail" };
@@ -91,9 +103,21 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
         var orphanConfirm = new StandardButton { Text = "Back up and clear removed-account mail" };
         orphanConfirmActions.AddChild(orphanKeep); orphanConfirmActions.AddChild(orphanConfirm); orphanConfirmation.AddChild(orphanConfirmActions); orphanSection.Content.AddChild(orphanConfirmation);
         var orphanBackup = new StandardLabel { UseMnemonic = false, Wrapping = UiTextWrapping.Wrap }; orphanSection.Content.AddChild(orphanBackup);
-        if (model.SupportsOrphanMail) panel.AddChild(orphanSection);
+        if (model.SupportsOrphanMail)
+        {
+            if (Shell is null) accountTools.Content.AddChild(orphanSection);
+            else Shell.RegisterInboxDialog("removed-account-mail", "Mail for removed accounts", orphanSection,
+                () => !model.IsAdding, () => { if (!model.IsBusy) model.CancelOrphanCleanup(); }, accountTool: true);
+        }
         IReadOnlyList<Core.Services.AccountDownloadedMailInfo>? shownOrphans = null;
-        var status = new StandardLabel { UseMnemonic = false, Wrapping = UiTextWrapping.Wrap }; panel.AddChild(status);
+        var status = new StandardLabel { UseMnemonic = false, Wrapping = UiTextWrapping.Wrap };
+        if (Shell is null) panel.AddChild(status);
+        else
+        {
+            management.AddChild(status);
+            Shell.RegisterInboxDialog("manage-accounts", "Manage accounts", management, () => model.Profiles.Count > 0 && !model.IsAdding,
+                () => { if (!model.IsBusy) { model.CancelRemoval(); model.CancelLocalMailCleanup(); } }, accountTool: true);
+        }
         bool updating = false;
         IReadOnlyList<Core.Accounts.AccountProfile>? shown = null;
         void Refresh()
@@ -112,7 +136,7 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
             cancel.Visibility = model.IsAdding ? UiVisibility.Visible : UiVisibility.Collapsed;
             cancel.IsEnabled = model.CanChange;
             manage.IsEnabled = model.Profiles.Count > 0 && !model.IsAdding && !model.IsBusy;
-            if (model.Profiles.Count == 0) { management.Visibility = UiVisibility.Collapsed; manage.Text = "Manage accounts"; }
+            if (Shell is null && model.Profiles.Count == 0) { management.Visibility = UiVisibility.Collapsed; manage.Text = "Manage accounts"; }
             enabled.Text = model.SelectedProfile?.IsEnabled == true ? "Disable account" : "Enable account";
             enabled.IsEnabled = model.CanManage;
             earlier.IsEnabled = model.CanMoveEarlier; later.IsEnabled = model.CanMoveLater;
@@ -125,7 +149,7 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
             confirmClearMail.IsEnabled = model.CanConfirmLocalMailCleanup; keepMail.IsEnabled = true;
             keepMail.Text = model.IsBusy && model.PendingLocalMailCleanup is not null ? "Cancel local mail cleanup" : "Keep downloaded mail";
             localBackup.Text = model.LastLocalMailCleanupBackup is { } localPath ? "Recovery backup (last local mail cleanup): " + localPath : "";
-            orphanSection.Toggle!.IsEnabled = !model.IsChanging;
+            if (orphanSection.Toggle is { } toggle) toggle.IsEnabled = !model.IsChanging;
             orphanNotice.Text = model.OrphanMailNotice;
             if (!ReferenceEquals(shownOrphans, model.OrphanMail))
             {
@@ -140,7 +164,7 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
             orphanConfirm.IsEnabled = model.CanConfirmOrphanCleanup; orphanKeep.IsEnabled = true;
             orphanKeep.Text = model.IsBusy && model.PendingOrphanCleanup is not null ? "Cancel removed-account cleanup" : "Keep removed-account mail";
             orphanBackup.Text = model.LastOrphanCleanupBackup is {} orphanPath ? "Recovery backup (removed-account mail): " + orphanPath : "";
-            if (panel.Session is {} orphanSession && orphanSession.FocusedElement is {} orphanFocus && orphanFocus.IsDescendantOf(orphanConfirmation))
+            if (orphanSection.Session is {} orphanSession && orphanSession.FocusedElement is {} orphanFocus && orphanFocus.IsDescendantOf(orphanConfirmation))
             {
                 if (model.IsBusy && orphanFocus != orphanKeep) FocusNavigation.FocusAndReveal(orphanSession, orphanKeep);
                 else if (model.PendingOrphanCleanup is null && !model.IsChanging) FocusNavigation.FocusAndReveal(orphanSession, orphanReload);
@@ -153,23 +177,31 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
             cancelRemoval.IsEnabled = true;
             status.Text = model.Guidance + (model.LastRemovalBackup is { } backup ? "\nRecovery backup (last removal): " + backup : "");
             if (panel.Session?.FocusedElement == cancel && !model.IsAdding) panel.Session.SetFocus(add);
-            if (!model.IsChanging && panel.Session is { } session &&
+            if (!model.IsChanging && management.Session is { } session &&
                 ((session.FocusedElement == earlier && !earlier.IsEnabled) || (session.FocusedElement == later && !later.IsEnabled)))
-                FocusNavigation.FocusAndReveal(session, enabled.IsEnabled ? enabled : manage);
-            if (panel.Session is { } removalSession && removalSession.FocusedElement is { } removalFocus && removalFocus.IsDescendantOf(confirmation))
+                FocusNavigation.FocusAndReveal(session, enabled.IsEnabled ? enabled : Shell?.NavigationFocus ?? manage);
+            if (management.Session is { } removalSession && removalSession.FocusedElement is { } removalFocus && removalFocus.IsDescendantOf(confirmation))
             {
                 if (model.IsBusy && removalFocus != cancelRemoval) FocusNavigation.FocusAndReveal(removalSession, cancelRemoval);
                 else if (model.PendingRemoval is null && !model.IsChanging)
-                    FocusNavigation.FocusAndReveal(removalSession, remove.IsEnabled ? remove : accounts.IsEnabled ? accounts : add);
+                    FocusNavigation.FocusAndReveal(removalSession, remove.IsEnabled ? remove : Shell?.NavigationFocus ?? (accounts.IsEnabled ? accounts : add));
             }
-            if (panel.Session is { } localSession && localSession.FocusedElement is { } localFocus && localFocus.IsDescendantOf(localConfirmation))
+            if (management.Session is { } localSession && localSession.FocusedElement is { } localFocus && localFocus.IsDescendantOf(localConfirmation))
             {
                 if (model.IsBusy && localFocus != keepMail) FocusNavigation.FocusAndReveal(localSession, keepMail);
-                else if (model.PendingLocalMailCleanup is null && !model.IsChanging) FocusNavigation.FocusAndReveal(localSession, clearMail.IsEnabled ? clearMail : manage);
+                else if (model.PendingLocalMailCleanup is null && !model.IsChanging) FocusNavigation.FocusAndReveal(localSession, clearMail.IsEnabled ? clearMail : Shell?.NavigationFocus ?? manage);
             }
             if (!model.IsChanging && model.PendingRemoval is null && model.PendingLocalMailCleanup is null && model.PendingOrphanCleanup is null && panel.Session is { } focusSession)
                 FocusNavigation.KeepFocusUsable(focusSession, panel, accounts.IsEnabled ? accounts : add);
             updating = false;
+            if (model.Profiles.Count == 0 && !model.IsBusy && Shell is { ActiveViewId: "manage-accounts" } &&
+                panel.Session is { } owner)
+                owner.Dispatcher.Post(() =>
+                {
+                    if (Shell.ActiveViewId != "manage-accounts") return;
+                    Shell.CloseDialog();
+                    FocusNavigation.FocusAndReveal(owner, add);
+                });
         }
         accounts.SelectionChanged += UiAsync.Handler<UiComboBoxSelectionChangedEventArgs>(async (_, _) =>
         {
@@ -184,16 +216,18 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
         later.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.MoveSelectedAsync(1));
         remove.Clicked += (_, _) =>
         {
-            if (model.RequestRemoval() && panel.Session is { } session) FocusNavigation.FocusAndReveal(session, cancelRemoval);
+            if (model.RequestRemoval() && management.Session is { } session) FocusNavigation.FocusAndReveal(session, cancelRemoval);
         };
-        orphanSection.Toggle!.Clicked += (_, _) => { if (!orphanSection.IsExpanded && !model.IsBusy) model.CancelOrphanCleanup(); };
+        accountTools.Button.Clicked += (_, _) => { if (!accountTools.IsExpanded && !model.IsBusy) model.CancelOrphanCleanup(); };
+        if (orphanSection.Toggle is { } orphanToggle)
+            orphanToggle.Clicked += (_, _) => { if (!orphanSection.IsExpanded && !model.IsBusy) model.CancelOrphanCleanup(); };
         orphanReload.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.FindOrphanMailAsync());
         orphanPicker.SelectionChanged += (_, _) => { if (!updating) model.SelectOrphanMail(orphanPicker.SelectedIndex >= 0 && orphanPicker.SelectedIndex < model.OrphanMail.Count ? model.OrphanMail[orphanPicker.SelectedIndex].AccountId : null); };
-        orphanClear.Clicked += (_, _) => { if (model.RequestOrphanCleanup() && panel.Session is {} session) FocusNavigation.FocusAndReveal(session, orphanKeep); };
+        orphanClear.Clicked += (_, _) => { if (model.RequestOrphanCleanup() && orphanSection.Session is {} session) FocusNavigation.FocusAndReveal(session, orphanKeep); };
         orphanKeep.Clicked += (_, _) => model.CancelOrphanCleanup();
         orphanConfirm.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmOrphanCleanupAsync());
         inspectMail.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.InspectLocalMailAsync());
-        clearMail.Clicked += (_, _) => { if (model.RequestLocalMailCleanup() && panel.Session is { } session) FocusNavigation.FocusAndReveal(session, keepMail); };
+        clearMail.Clicked += (_, _) => { if (model.RequestLocalMailCleanup() && management.Session is { } session) FocusNavigation.FocusAndReveal(session, keepMail); };
         keepMail.Clicked += (_, _) => model.CancelLocalMailCleanup();
         confirmClearMail.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmLocalMailCleanupAsync());
         keepPasswords.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmRemovalAsync(false));
@@ -201,6 +235,7 @@ public sealed class AccountSelectionView(AccountSelectionViewModel model, Action
         cancelRemoval.Clicked += (_, _) => model.CancelRemoval();
         manage.Clicked += (_, _) =>
         {
+            if (Shell is not null) { Shell.ShowView("manage-accounts"); return; }
             bool show = management.Visibility != UiVisibility.Visible;
             if (!show && !model.IsBusy) { model.CancelRemoval(); model.CancelLocalMailCleanup(); }
             management.Visibility = show ? UiVisibility.Visible : UiVisibility.Collapsed;

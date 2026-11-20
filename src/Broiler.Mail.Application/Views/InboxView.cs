@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   9
 // Annotated:        3/9
-// Exempt:           4
+// Exempt:           5
 // Human-reviewed:   0/9
 // IP risk:          Low
 // Security risk:    Medium
@@ -36,6 +36,7 @@ using Broiler.UI.ListView;
 using Broiler.UI.ListView.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
+using Broiler.UI.Edit;
 using Broiler.UI.RichEdit;
 using Broiler.UI.RichEdit.Standard;
 using Broiler.UI.Splitter;
@@ -51,6 +52,8 @@ namespace Broiler.Mail.Application.Views;
 // Hairs-Human:        PENDING
 public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? htmlPreview = null, MessageDateFormatter? dates = null, CompositionCommands? commands = null, SettingsViewModel? settings = null)
 {
+    internal MailShellView? Shell { get; init; }
+
     private Func<bool>? _back;
     private Func<bool>? _open;
     private Func<UiInputEvent, bool>? _readerInput;
@@ -78,7 +81,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
     public bool ShowsPaneOf(InboxProblemScope scope) => _layout is not { IsCompact: true } layout
         || (scope == InboxProblemScope.Message ? layout.ShowsReaderOnly : !layout.ShowsReaderOnly);
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=B38E29
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=2D3D22
     // Hairs-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
     // Hairs-Human:        PENDING
     public UiElement CreateContent()
@@ -93,17 +96,22 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             Spacing = 8,
             PreferredSize = new BSize(0, 36),
         };
-        var receive = new StandardButton { Text = "Receive mail" };
+        var compose = MailToolbarButton.WithSymbol("New message", "✎", MailShortcuts.For(MailCommand.NewMessage).Gesture);
+        if (commands is not null)
+        {
+            toolbar.AddChild(compose);
+            compose.Clicked += (_, _) => commands.StartNew();
+        }
+        var receive = new StandardButton { Text = "Receive mail", ToolTipText = $"Receive mail ({MailShortcuts.For(MailCommand.Receive).Gesture})" };
         var older = new StandardButton { Text = "Load older" };
         var read = new StandardButton { Text = "Read message" };
-        var cancel = new StandardButton { Text = "Cancel" };
-        foreach (var button in new[] { receive, older, read, cancel }) toolbar.AddChild(button);
+        var cancel = MailToolbarButton.WithSymbol("Cancel", "×");
+        foreach (var button in new[] { receive, read, older, cancel }) toolbar.AddChild(button);
         var download = new StandardButton { Text = "Download loaded messages" };
-        if (model.HasPersistentCache) toolbar.AddChild(download);
         var folders = new StandardComboBox { AccessibleName = "Mail folder", PreferredSize = new BSize(240, 32) };
         var refreshFolders = new StandardButton { Text = "Refresh folders" };
         IReadOnlyList<MailFolder>? shownFolders = null;
-        if (model.SupportsFolders) { toolbar.AddChild(folders); toolbar.AddChild(refreshFolders); }
+        if (model.SupportsFolders) toolbar.AddChild(folders);
         var offlineToggle = new StandardButton { Text = "Select this folder for offline batches" };
         var offlineDownload = new StandardButton { Text = "Download selected offline folders" };
         var offlineRestart = new StandardButton { Text = "Restart offline batches from newest" };
@@ -125,7 +133,6 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         offlineActions.AddChild(offlineToggle); offlineActions.AddChild(offlineDownload); offlineActions.AddChild(offlineRestart); offlineActions.AddChild(offlineReload); offlineActions.AddChild(offlineHeaders); offlineActions.AddChild(offlineHeadersRestart); offlineActions.AddChild(offlineShowHeaders);
         offlineSection.Content.AddChild(offlineActions); offlineSection.Content.AddChild(offlineHeaderFeedback);
         if (model.SupportsMailboxSnapshots) offlineSection.Content.AddChild(snapshotFeedback);
-        var offlineFrame = new BoundedScrollArea(offlineSection, 0.35, "Offline folder controls");
         var navigationSection = new FormSection("Account folders", "Choose a local start folder and up to eight pinned shortcuts for this account.", collapsible: true, expanded: false)
             { ShowText = "Show account folders", HideText = "Hide account folders" };
         navigationSection.Content.AccessibleName = "Account folder navigation controls";
@@ -140,14 +147,39 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         IReadOnlyList<string>? shownPinnedFolders = null;
         foreach (var element in new UiElement[] { startFolder, pinFolder, pinnedFolders, openPinned, reloadNavigation, resetNavigation }) navigationActions.AddChild(element);
         navigationSection.Content.AddChild(navigationActions); navigationSection.Content.AddChild(navigationNotice);
-        var navigationFrame = new BoundedScrollArea(navigationSection, 0.35, "Account folders");
         var undoMove = new StandardButton { Text = "Undo last move", Visibility = UiVisibility.Collapsed };
         if (model.SupportsMoves) toolbar.AddChild(undoMove);
         undoMove.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.UndoLastMoveAsync());
         bool searchExpanded = false;
-        var showSearch = new StandardButton { Text = "Search saved mail" };
+        var showSearch = MailToolbarButton.WithSymbol("Search saved mail", "⌕");
         if (model.SupportsLocalSearch) toolbar.AddChild(showSearch);
-        var searchText = new StandardEdit { AccessibleName = "Search saved sender or subject", MaxLength = 256, PreferredSize = new BSize(220, 32) };
+        var options = new ToolbarDisclosure(new StandardButton { Text = "Mailbox options" });
+        bool hasMailboxOptions = model.HasPersistentCache || model.SupportsFolders || model.SupportsOfflineFolders ||
+            model.SupportsMailboxSnapshots || model.SupportsAccountNavigation;
+        if (hasMailboxOptions) toolbar.AddChild(options.Button);
+        var mailboxActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 6, Spacing = 8 };
+        if (model.HasPersistentCache) mailboxActions.AddChild(download);
+        if (model.SupportsFolders) mailboxActions.AddChild(refreshFolders);
+        if (mailboxActions.Children.Count > 0) options.Content.AddChild(mailboxActions);
+        var mailboxInfo = new InlineFeedback();
+        options.Content.AddChild(mailboxInfo);
+        if (model.SupportsOfflineFolders || model.SupportsMailboxSnapshots) options.Content.AddChild(offlineSection);
+        if (model.SupportsAccountNavigation) options.Content.AddChild(navigationSection);
+        var optionsFrame = new BoundedScrollArea(options, 0.35, "Mailbox options");
+        var mailboxDialogCancel = new StandardButton { Text = "Cancel operation" };
+        mailboxDialogCancel.Clicked += (_, _) => model.Cancel();
+        if (Shell is not null && hasMailboxOptions)
+        {
+            options.RemoveChild(options.Content);
+            options.Content.InsertChild(0, mailboxDialogCancel);
+            Shell.RegisterInboxDialog("mailbox-options", "Mailbox options", options.Content, () => true);
+            // The toolbar opens the dialog directly in the shell.
+            toolbar.RemoveChild(options.Button);
+            var openMailboxOptions = new StandardButton { Text = "Mailbox options" };
+            openMailboxOptions.Clicked += (_, _) => Shell.ShowView("mailbox-options");
+            toolbar.AddChild(openMailboxOptions);
+        }
+        var searchText = new StandardEdit { PlaceholderText = "Search sender or subject", AccessibleName = "Search saved sender or subject", MaxLength = 256, PreferredSize = new BSize(220, 32) };
         var searchSender = new StandardEdit { AccessibleName = "Saved sender header contains (optional)", PlaceholderText = "Sender contains (optional)", MaxLength = 256, PreferredSize = new BSize(220, 32) };
         var searchScope = new StandardComboBox { AccessibleName = "Saved search folder scope", PreferredSize = new BSize(220,32) };
         searchScope.SetItems(new[] { new UiComboBoxItem("folder","Current folder"),new UiComboBoxItem("account","All saved folders for this account") }); searchScope.SelectedIndex = 0;
@@ -174,12 +206,36 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         var nextSearch = new StandardButton { Text = "Next saved results", Visibility = UiVisibility.Collapsed };
         var clearSearch = new StandardButton { Text = "Close search" };
         var searchRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 6, Spacing = 8, Visibility = UiVisibility.Collapsed };
-        foreach (var control in new UiElement[] { searchText, searchSender, searchScope, searchField, searchFilter, searchDate, customDates, search, previousSearch, nextSearch, clearSearch }) searchRow.AddChild(control);
-        var searchFrame = new BoundedScrollArea(searchRow, 0.35, "Saved search controls");
+        var filters = new ToolbarDisclosure(new StandardButton { Text = "Search filters" });
+        foreach (var control in new UiElement[] { searchText, search, searchScope, filters.Button, previousSearch, nextSearch, clearSearch })
+            searchRow.AddChild(control);
+        var filterRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 6, Spacing = 8 };
+        foreach (var control in new UiElement[] { searchSender, searchField, searchFilter, searchDate, customDates })
+            filterRow.AddChild(control);
+        filters.Content.AddChild(filterRow);
+        var searchDialogCancel = new StandardButton { Text = "Cancel search", Visibility = UiVisibility.Collapsed };
+        searchDialogCancel.Clicked += (_, _) => model.Cancel();
+        var searchDialogFeedback = new InlineFeedback();
+        var searchControls = new StandardPanel();
+        searchControls.AddChild(searchRow);
+        searchControls.AddChild(filters);
+        var searchFrame = new BoundedScrollArea(searchControls, 0.35, "Saved search controls");
         panel.AddChild(toolbar); panel.SetDock(toolbar, UiDock.Top);
-        if (model.SupportsOfflineFolders || model.SupportsMailboxSnapshots) { panel.AddChild(offlineFrame); panel.SetDock(offlineFrame, UiDock.Top); }
-        if (model.SupportsAccountNavigation) { panel.AddChild(navigationFrame); panel.SetDock(navigationFrame, UiDock.Top); }
-        if (model.SupportsLocalSearch) { panel.AddChild(searchFrame); panel.SetDock(searchFrame, UiDock.Top); }
+        if (Shell is null)
+        {
+            if (hasMailboxOptions) { panel.AddChild(optionsFrame); panel.SetDock(optionsFrame, UiDock.Top); }
+            if (model.SupportsLocalSearch) { panel.AddChild(searchFrame); panel.SetDock(searchFrame, UiDock.Top); }
+        }
+        else if (model.SupportsLocalSearch)
+        {
+            searchFrame.Scroll.RemoveChild(searchControls);
+            searchRow.Visibility = UiVisibility.Visible;
+            searchRow.AddChild(searchDialogCancel);
+            searchControls.AddChild(searchDialogFeedback);
+            Shell.RegisterInboxDialog("search-mail", "Search saved mail", searchControls, () => true,
+                opened: () => { if (searchText.Session is { } session) FocusNavigation.FocusAndReveal(session, searchText); });
+            clearSearch.Text = "Clear search";
+        }
         searchText.TextChanged += (_, _) => { if (!updating) model.SetSearchText(searchText.Text); };
         searchSender.TextChanged += (_, _) => { if (!updating) model.SetSearchSenderText(searchSender.Text); };
         searchFilter.SelectionChanged += (_, _) =>
@@ -196,9 +252,19 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             else if (searchDate.SelectedIndex == 4) model.SetSearchCustomDateRange(customDates.Text);
         };
         customDates.TextChanged += (_, _) => { if (!updating && model.SearchUsesCustomDates) model.SetSearchCustomDateRange(customDates.Text); };
-        previousSearch.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.LoadPreviousSearchPageAsync());
-        nextSearch.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.LoadNextSearchPageAsync());
-        search.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.SearchSavedHeadersAsync());
+        async Task RunSearch(Func<Task> run)
+        {
+            var dialog = Shell?.ActiveDialog;
+            await run();
+            if (dialog is not null && Shell is { ActiveViewId: "search-mail" } && Shell.ActiveDialog == dialog && model.IsSearchActive &&
+                model.ListProblem is null && model.SearchDateError is null)
+                Shell.CloseDialog();
+        }
+        previousSearch.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await RunSearch(model.LoadPreviousSearchPageAsync));
+        nextSearch.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await RunSearch(model.LoadNextSearchPageAsync));
+        search.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await RunSearch(model.SearchSavedHeadersAsync));
+        if (Shell is not null)
+            searchText.Submitted += UiAsync.Handler<UiEditSubmittedEventArgs>(async (_, _) => { if (model.CanSearch) await RunSearch(model.SearchSavedHeadersAsync); });
         var list = new StandardListView
         {
             PreferredSize = new BSize(320, 420),
@@ -299,9 +365,9 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         var meta = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Role = StandardLabelRole.Muted };
         // The reader's rows of commands are framed strips like the toolbar, and inset their buttons as it does.
         var replyActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36) };
-        var reply = new StandardButton { Text = "Reply" };
-        var replyAll = new StandardButton { Text = "Reply all" };
-        var forward = new StandardButton { Text = "Forward" };
+        var reply = MailToolbarButton.WithSymbol("Reply", "↶");
+        var replyAll = MailToolbarButton.WithSymbol("Reply all", "⇇");
+        var forward = MailToolbarButton.WithSymbol("Forward", "↪");
         foreach (var button in new[] { reply, replyAll, forward }) replyActions.AddChild(button);
         // The HTML preview's row is collapsed while empty, so it adds no gap below the row above it.
         var previewActions = new StandardPanel { Visibility = UiVisibility.Collapsed };
@@ -309,7 +375,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         var readerTop = new StandardButton { Text = "Top", AccessibleName = "Top of message" };
         var readerEnd = new StandardButton { Text = "End", AccessibleName = "End of message" };
         readerNavigation.AddChild(readerTop); readerNavigation.AddChild(readerEnd);
-        var findMessage = new StandardButton { Text = "Find text", AccessibleName = "Find in selected message text" }; readerNavigation.AddChild(findMessage);
+        var findMessage = new StandardButton { Text = "Find text", AccessibleName = "Find in selected message text" };
+        MessageTextFindBar? messageFind = null;
         var findArea = new StandardPanel { Visibility = UiVisibility.Collapsed, AccessibleName = "Message text find" };
         // A message that could not be loaded explains why below its subject, sender and date, and offers
         // Retry there, in the compact reader as beside the list.
@@ -320,11 +387,6 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         var back = new StandardButton { Text = BackText };
         var backRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
         backRow.AddChild(back);
-        // The parsed-headers toggle shares the compact reader's first row with Back where both fit on one line,
-        // and otherwise has its own row below the date, as beside the list (see PlaceHeadersToggle). Wrapped
-        // beside Back at a large text size, that first row grew taller than the header's share, which cut it.
-        var headersRow = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, PreferredSize = new BSize(0, 36), Visibility = UiVisibility.Collapsed };
-        headersRow.AddChild(inspectHeaders);
         var changeRead = new StandardButton { Text = "Mark read" };
         var changeStar = new StandardButton { Text = "Star message" };
         var readStateActions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = toolbar.Padding, Spacing = 8, Visibility = UiVisibility.Collapsed };
@@ -361,16 +423,62 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         deleteConfirmation.AddChild(deleteConfirmationText); deleteConfirmation.AddChild(deleteConfirmationActions);
         var deleteFeedback = new InlineFeedback();
         requestDelete.Clicked += (_, _) =>
-        { if (model.RequestPermanentDelete() && panel.Session is { } session) FocusNavigation.FocusAndReveal(session, cancelDelete); };
+        { if (model.RequestPermanentDelete() && deleteConfirmation.Session is { } session) FocusNavigation.FocusAndReveal(session, cancelDelete); };
         cancelDelete.Clicked += (_, _) => model.CancelPermanentDeleteConfirmation();
         confirmDelete.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.ConfirmPermanentDeleteAsync());
+        var messageOptions = new ToolbarDisclosure(MailToolbarButton.WithSymbol("More message actions", "⋯"));
+        bool CanOpenMessageOptions() => model.SelectedMessage is not null && (model.Body is not null ||
+            model.SupportsReadStateChanges || model.SupportsStarStateChanges || model.SupportsMoves || model.SupportsPermanentDelete);
+        var openMessageOptions = Shell is null ? messageOptions.Button : MailToolbarButton.WithSymbol("More message actions", "⋯");
+        if (Shell is not null) openMessageOptions.Clicked += (_, _) => Shell.ShowView("message-actions");
+        replyActions.AddChild(openMessageOptions);
+        // Keep secondary actions together so the subject and body have room by default.
+        var messageTools = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 4, Spacing = 8 };
+        messageTools.AddChild(inspectHeaders);
+        messageTools.AddChild(findMessage);
+        messageOptions.Content.AddChild(messageTools);
+        if (model.SupportsReadStateChanges || model.SupportsStarStateChanges) messageOptions.Content.AddChild(readStateActions);
+        messageOptions.Content.AddChild(previewActions);
+        messageOptions.Content.AddChild(readerNavigation);
+        if (model.SupportsMoves) messageOptions.Content.AddChild(moveActions);
+        if (model.SupportsPermanentDelete) messageOptions.Content.AddChild(deleteActions);
         var sourceArea = new StandardPanel { Visibility = UiVisibility.Collapsed };
         MessageSourceExportActions? sourceExportActions = null;
         var headerStack = new StandardPanel { Spacing = 4 };
-        foreach (var element in new UiElement[] { backRow, subjectLine, detailsFrame, meta, headersRow, messageFeedback, messageRetryRow, replyActions, readStateActions, readStateFeedback, previewActions, readerNavigation, findArea, sourceArea })
-            if (model.SupportsReadStateChanges || model.SupportsStarStateChanges || element != readStateActions && element != readStateFeedback) headerStack.AddChild(element);
-        if (model.SupportsMoves) { headerStack.AddChild(moveActions); headerStack.AddChild(moveFeedback); }
-        if (model.SupportsPermanentDelete) { headerStack.AddChild(deleteActions); headerStack.AddChild(deleteConfirmation); headerStack.AddChild(deleteFeedback); }
+        messageOptions.Content.AddChild(sourceArea);
+        foreach (var element in new UiElement[] { backRow, subjectLine, detailsFrame, meta, messageFeedback, messageRetryRow,
+            replyActions, messageOptions, findArea, readStateFeedback }) headerStack.AddChild(element);
+        var parsedHeaders = new StandardLabel { Wrapping = UiTextWrapping.Wrap, UseMnemonic = false, Visibility = UiVisibility.Collapsed };
+        var messageDialogCancel = new StandardButton { Text = "Cancel operation" };
+        messageDialogCancel.Clicked += (_, _) => model.Cancel();
+        if (Shell is null)
+        {
+            if (model.SupportsMoves) headerStack.AddChild(moveFeedback);
+            if (model.SupportsPermanentDelete) { headerStack.AddChild(deleteConfirmation); headerStack.AddChild(deleteFeedback); }
+        }
+        else
+        {
+            headerStack.RemoveChild(readStateFeedback);
+            messageOptions.RemoveChild(messageOptions.Content);
+            messageOptions.Content.InsertChild(1, parsedHeaders);
+            messageOptions.Content.AddChild(readStateFeedback);
+            if (model.SupportsMoves) messageOptions.Content.AddChild(moveFeedback);
+            if (model.SupportsPermanentDelete)
+            {
+                messageOptions.Content.AddChild(deleteConfirmation);
+                messageOptions.Content.AddChild(deleteFeedback);
+            }
+            messageOptions.Content.InsertChild(0, messageDialogCancel);
+            Shell.RegisterInboxDialog("message-actions", "Message actions", messageOptions.Content, CanOpenMessageOptions,
+                () => { extendedHeaders = false; model.CancelPermanentDeleteConfirmation(); parsedHeaders.Visibility = UiVisibility.Collapsed; inspectHeaders.Text = "Show parsed headers"; });
+            headerStack.RemoveChild(findArea);
+            Shell.RegisterInboxDialog("find-message", "Find in message", findArea, () => model.Body is not null,
+                () =>
+                {
+                    findArea.Visibility = UiVisibility.Collapsed;
+                    if (messageFind is not null) messageFind.Visibility = UiVisibility.Collapsed;
+                }, opened: () => messageFind?.ShowFind());
+        }
         // A long subject or many recipients at a large text size scroll within the header, so the
         // message text keeps most of the pane. The header ends between its rows or lines of text, not
         // inside one: while the text keeps a few lines it grows to show the whole header, or the next
@@ -380,7 +488,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         const int textLinesKept = 6;
         var text = new ScrollableMessageText();
         var headerContent = new ReadingColumn(headerStack, verticalMargin: 8);
-        UiElement[] buttonRows = [deleteActions, deleteConfirmationActions, moveActions, backRow, headersRow, messageRetryRow, replyActions, readStateActions, previewActions, readerNavigation, findArea, sourceArea];
+        UiElement[] buttonRows = [backRow, messageRetryRow, replyActions, findArea];
         var headerColumn = new BoundedScrollArea(headerContent, headerShare, "Message header")
         {
             Rows = HeaderRows,
@@ -404,13 +512,14 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         bodyArea.AddChild(text);
         reading.AddChild(bodyArea);
         UiElement? inlineContent = null;
-        MessageTextFindBar? messageFind = null;
         Action? showTextForFind = null;
         bool preferHtml = settings?.Settings.PreferPlainText != true;
         bool findChangedMode = false;
         _readerInput = input =>
         {
-            if (panel.IsDisposed || (layout.IsCompact && !layout.ShowsReaderOnly)) return false;
+            if (panel.IsDisposed) return false;
+            if (Shell?.ActiveViewId == "find-message") return messageFind?.HandleFindInput(input) == true;
+            if (layout.IsCompact && !layout.ShowsReaderOnly) return false;
             var focused = panel.Session?.FocusedElement;
             bool inReader = focused is not null && (focused == text || focused.IsDescendantOf(text) ||
                 (inlineContent is not null && (focused == inlineContent || focused.IsDescendantOf(inlineContent))) ||
@@ -488,7 +597,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             folders.SelectedIndex = model.Folders.ToList().FindIndex(folder => folder.MailboxId == model.SelectedMailboxId);
             folders.IsEnabled = model.CanSwitchFolder;
             refreshFolders.IsEnabled = model.CanRefreshFolders;
-            navigationFrame.Visibility = searchExpanded ? UiVisibility.Collapsed : UiVisibility.Visible;
+
             navigationNotice.Text = model.NavigationNotice;
             startFolder.IsEnabled = model.CanSetStartFolder; pinFolder.IsEnabled = model.CanPinCurrentFolder;
             pinFolder.Text = model.IsCurrentFolderPinned ? "Unpin current folder" : "Pin current folder";
@@ -502,7 +611,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             }
             pinnedFolders.IsEnabled = model.NavigationReady && model.CanSwitchFolder && !model.IsSavingNavigation;
             openPinned.IsEnabled = pinnedFolders.SelectedIndex >= 0 && pinnedFolders.SelectedIndex < model.PinnedFolders.Count && model.CanOpenPinnedFolder(model.PinnedFolders[pinnedFolders.SelectedIndex]);
-            offlineFrame.Visibility = searchExpanded ? UiVisibility.Collapsed : UiVisibility.Visible;
+
             offlineToggle.Text = model.IsSelectedFolderOffline ? "Unselect this folder for offline batches (keep mail)" : "Select this folder for offline batches";
             offlineToggle.IsEnabled = model.CanToggleOfflineFolder;
             offlineDownload.Text = model.HasOfflineFolderContinuation ? "Download next offline batch" : "Download selected offline folders";
@@ -517,6 +626,10 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             offlineRestart.IsEnabled = model.CanRestartOfflineFolderBatches;
             offlineReload.IsEnabled = model.CanSwitchFolder && !model.IsBusy && !model.IsSavingOfflineFolders;
             foreach (var child in toolbar.Children) child.Visibility = searchExpanded && child != cancel ? UiVisibility.Collapsed : UiVisibility.Visible;
+            toolbar.Visibility = searchExpanded && !model.IsBusy ? UiVisibility.Collapsed : UiVisibility.Visible;
+            optionsFrame.Visibility = searchExpanded ? UiVisibility.Collapsed : UiVisibility.Visible;
+            cancel.Visibility = model.IsBusy ? UiVisibility.Visible : UiVisibility.Collapsed;
+            compose.IsEnabled = commands?.CanCompose == true;
             undoMove.Visibility = model.CanUndoMove && !searchExpanded ? UiVisibility.Visible : UiVisibility.Collapsed;
             undoMove.IsEnabled = model.CanUndoMove;
             if (searchText.Text != model.SearchText) searchText.Text = model.SearchText;
@@ -546,7 +659,11 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             older.IsEnabled = model.CanLoadOlder;
             download.IsEnabled = model.CanDownloadLoaded;
             read.IsEnabled = !model.IsBusy && model.SelectedMessage is not null;
-            cancel.IsEnabled = model.IsBusy;
+            cancel.IsEnabled = mailboxDialogCancel.IsEnabled = messageDialogCancel.IsEnabled = searchDialogCancel.IsEnabled = model.IsBusy;
+            mailboxDialogCancel.Visibility = messageDialogCancel.Visibility = searchDialogCancel.Visibility =
+                model.IsBusy ? UiVisibility.Visible : UiVisibility.Collapsed;
+            searchDialogFeedback.Set(model.SearchDateError ?? model.ListProblem?.Text ?? model.SearchNotice ?? "",
+                model.SearchDateError is not null || model.ListProblem is not null ? FeedbackKind.Error : FeedbackKind.Information);
             if (!layout.IsCompact && Math.Abs(split.SplitterFraction - model.SplitterFraction) > 0.001)
                 split.SplitterFraction = model.SplitterFraction;
             if (!ReferenceEquals(shown, model.Messages))
@@ -575,14 +692,21 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             bool empty = model.HasLoaded && model.Messages.Count == 0;
             subjectLine.Text = item is not null ? (item.Subject.Length > 0 ? item.Subject : "(No subject)")
                 : model.IsSearchActive ? "Select a saved search result." : empty ? (model.SelectedMailboxId == "INBOX" ? "The inbox is empty." : "The selected folder is empty.") : "Select a message to read.";
-            if (headersKey != item?.Key) { headersKey = item?.Key; extendedHeaders = false; }
+            if (headersKey != item?.Key) { headersKey = item?.Key; extendedHeaders = false; messageOptions.Collapse(); }
             var sourceHeaders = model.Body is { } loaded && loaded.Key == item?.Key ? loaded.Composition : null;
-            backRow.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
+            headerStack.MoveChild(backRow, layout.ShowsReaderOnly ? 0 : 3);
+            back.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
+            backRow.Visibility = back.Visibility;
             inspectHeaders.Visibility = sourceHeaders is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
-            ShowHeadersRow();
-            details.AccessibleName = extendedHeaders ? "Parsed message headers" : "Sender and recipients";
+            details.AccessibleName = Shell is null && extendedHeaders ? "Parsed message headers" : "Sender and recipients";
             inspectHeaders.Text = extendedHeaders ? "Hide parsed headers" : "Show parsed headers";
-            string detailText = item is null ? "" : string.Join("\n", ParsedMessageHeaders.Lines(item, sourceHeaders, extendedHeaders));
+            string detailText = item is null ? "" : string.Join("\n", ParsedMessageHeaders.Lines(item, sourceHeaders, Shell is null && extendedHeaders));
+            if (Shell is not null)
+            {
+                parsedHeaders.Visibility = extendedHeaders && sourceHeaders is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
+                parsedHeaders.Text = parsedHeaders.Visibility == UiVisibility.Visible && item is not null
+                    ? string.Join("\n", ParsedMessageHeaders.Lines(item, sourceHeaders, true)) : "";
+            }
             if (detailText != details.GetPlainText()) details.SetPlainText(detailText);
             detailsFrame.Visibility = item is null ? UiVisibility.Collapsed : UiVisibility.Visible;
             // The date with its time and the separator that ends it is one phrase, and the read state another
@@ -622,7 +746,11 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             changeStar.IsEnabled = model.CanChangeStarState;
             changeRead.IsEnabled = model.CanChangeReadState;
             readStateFeedback.Set(model.FlagChangeNotice ?? "", model.IsChangingMessageFlags ? FeedbackKind.Progress : FeedbackKind.Information);
-            replyActions.Visibility = item is null || commands is null ? UiVisibility.Collapsed : UiVisibility.Visible;
+            replyActions.Visibility = item is null ? UiVisibility.Collapsed : UiVisibility.Visible;
+            reply.Visibility = replyAll.Visibility = forward.Visibility = commands is null ? UiVisibility.Collapsed : UiVisibility.Visible;
+            messageTools.Visibility = sourceHeaders is not null || model.Body is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
+            findMessage.Visibility = model.Body is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
+            openMessageOptions.IsEnabled = CanOpenMessageOptions();
             reply.IsEnabled = replyAll.IsEnabled = forward.IsEnabled = commands?.CanRespond == true;
             ShowStates();
             var body = model.Body;
@@ -691,10 +819,10 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
                             zoomOut.IsEnabled = preferHtml && readerControls.CanZoomOut;
                             zoomIn.IsEnabled = preferHtml && readerControls.CanZoomIn;
                             zoomReset.IsEnabled = preferHtml;
-                            if (panel.Session?.FocusedElement is { } focused &&
+                            if (modeRow.Session is { FocusedElement: { } focused } modeSession &&
                                 ((focused == zoomIn && !zoomIn.IsEnabled) || (focused == zoomOut && !zoomOut.IsEnabled) ||
                                  (focused == zoomReset && !zoomReset.IsEnabled)))
-                                panel.Session.SetFocus(preferHtml ? zoomReset : toggle);
+                                modeSession.SetFocus(preferHtml ? zoomReset : toggle);
                         }
                         if (readerControls is not null)
                         {
@@ -777,9 +905,15 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
                     messageFind = new MessageTextFindBar(text, findText, offset, () =>
                     {
                         showTextForFind?.Invoke(); findArea.Visibility = UiVisibility.Visible;
+                        if (Shell is not null)
+                        {
+                            if (layout.IsCompact && !layout.ShowsReaderOnly) OpenReader();
+                            if (Shell.ActiveViewId != "find-message") Shell.ShowView("find-message");
+                        }
                     }, () => !panel.IsDisposed && ReferenceEquals(model.Body, currentBody), () =>
                     {
                         findArea.Visibility = UiVisibility.Collapsed;
+                        if (Shell is { ActiveViewId: "find-message" }) Shell.CloseDialog();
                         if (panel.Session is { } session) FocusNavigation.FocusAndReveal(session, text.Editor);
                     });
                     findArea.AddChild(messageFind);
@@ -846,7 +980,6 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
                 model.ListProblem is { } problem ? (limit is null ? problem.Text : $"{problem.Text} {limit}", problem.IsCancellation ? FeedbackKind.Information : FeedbackKind.Error)
                 : model.IsLoadingList ? (model.Status, FeedbackKind.Progress)
                 : limit is not null ? (limit, FeedbackKind.Information)
-                : model.CacheNotice is { } cacheNotice ? (cacheNotice, FeedbackKind.Information)
                 : model.Messages.Count == 0 ? (model.HasLoaded ? (model.SelectedMailboxId == "INBOX" ? "The inbox is empty." : "The selected folder is empty.") : model.CanReceive ? (model.SelectedMailboxId == "INBOX" ? "Receive mail to load your inbox." : "Receive mail to load the selected folder.") : "", FeedbackKind.Information)
                 : ("", FeedbackKind.Information);
             // The notice announces progress and problems itself, then disappears once rows arrive;
@@ -855,7 +988,19 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             if (listWasLoading && !model.IsLoadingList && !listProblem && model.Messages.Count > 0)
                 panel.Session?.AnnounceStatus(list, model.Messages.Count == 1 ? "1 message loaded." : $"{model.Messages.Count} messages loaded.");
             listWasLoading = model.IsLoadingList;
-            listFeedback.Set((model.RecoveryNotice is { } recoveryNotice ? recoveryNotice + "\n" : "") + (searchExpanded && model.SearchDateError is { } dateError ? dateError + "\n" : "") + (model.SearchNotice is { } searchNotice ? searchNotice + "\n" : "") + notice.text + (model.SupportsOfflineFolders ? "\n" + model.OfflineFolderNotice : "") + (model.MoveNotice is { } moveNotice ? "\n" + moveNotice : "") + (model.DeleteNotice is { } deleteNotice ? "\n" + deleteNotice : "") + (model.SupportsFolders && !model.IsLoadingList && model.ListProblem is null ? "\n" + model.FolderNotice + "\n" + model.FolderRoleNotice : ""), notice.kind);
+            listFeedback.Set(string.Join("\n", new[]
+            {
+                model.RecoveryNotice, searchExpanded ? model.SearchDateError : null, model.SearchNotice,
+                model.IsShowingCachedMail && !model.IsLoadingList && !listProblem ? "Showing saved mail." : null,
+                notice.text, model.MoveNotice, model.DeleteNotice,
+            }.Where(value => !string.IsNullOrEmpty(value))), notice.kind);
+            mailboxInfo.Set(string.Join("\n", new[]
+            {
+                Shell is not null ? model.ListProblem?.Text ?? (model.IsBusy ? model.Status : null) : null,
+                model.CacheNotice, model.SupportsOfflineFolders ? model.OfflineFolderNotice : null,
+                model.SupportsFolders ? model.FolderNotice : null,
+                model.SupportsFolders ? model.FolderRoleNotice : null,
+            }.Where(value => !string.IsNullOrEmpty(value))), Shell is not null && listProblem ? notice.kind : FeedbackKind.Information);
             listRetry.Visibility = listProblem ? UiVisibility.Visible : UiVisibility.Collapsed;
             listRetryRow.Visibility = listProblem || model.CanRetryMoveCache || model.CanRetryDeleteCache ? UiVisibility.Visible : UiVisibility.Collapsed;
             listRetry.IsEnabled = model.CanRetryIn(InboxProblemScope.List);
@@ -866,6 +1011,19 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             messageRetryRow.Visibility = messageProblem is not null ? UiVisibility.Visible : UiVisibility.Collapsed;
             messageRetry.IsEnabled = model.CanRetryIn(InboxProblemScope.Message);
             KeepFocusUsable();
+            if (Shell is not null)
+            {
+                var active = Shell.ActiveDialog?.Session;
+                var dialogCancel = Shell.ActiveViewId switch
+                {
+                    "search-mail" => searchDialogCancel,
+                    "message-actions" => messageDialogCancel,
+                    "mailbox-options" => mailboxDialogCancel,
+                    _ => null,
+                };
+                if (active is not null && dialogCancel is not null)
+                    FocusNavigation.KeepFocusUsable(active, Shell.ActiveContent, model.IsBusy ? dialogCancel : Shell.NavigationFocus);
+            }
         }
         void KeepFocusUsable()
         {
@@ -893,10 +1051,22 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             else if (!model.IsBusy) FocusNavigation.KeepFocusUsable(session, panel, focused != older ? null : layout.ShowsReaderOnly ? back : list);
         }
         inspectHeaders.Clicked += (_, _) => { extendedHeaders = !extendedHeaders; Update(); };
-        showSearch.Clicked += (_, _) => { searchExpanded = true; searchRow.Visibility = UiVisibility.Visible; Update(); if (panel.Session is { } session) FocusNavigation.FocusAndReveal(session, searchText); };
+        showSearch.Clicked += (_, _) =>
+        {
+            if (Shell is not null) { Shell.ShowView("search-mail"); return; }
+            searchExpanded = true; searchRow.Visibility = UiVisibility.Visible; Update();
+            if (searchText.Session is { } session) FocusNavigation.FocusAndReveal(session, searchText);
+        };
         clearSearch.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
         {
-            await model.ClearSearchAsync(); searchExpanded = false; searchRow.Visibility = UiVisibility.Collapsed; Update();
+            var dialog = Shell?.ActiveDialog;
+            await model.ClearSearchAsync();
+            if (Shell is not null)
+            {
+                if (dialog is not null && Shell.ActiveDialog == dialog) Shell.CloseDialog();
+                return;
+            }
+            searchExpanded = false; filters.Collapse(); searchRow.Visibility = UiVisibility.Collapsed; Update();
             if (panel.Session is { } session) FocusNavigation.FocusAndReveal(session, showSearch);
         });
         listRetry.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RetryAsync(InboxProblemScope.List));
@@ -910,38 +1080,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         }
         // Called as the reader's header area is measured in its space, once its rows are measured: true when
         // the commands moved, so the area measures them again where they are now.
-        // Both run on every measure; neither may short-circuit the other.
-        bool PlaceCommands(BSize space) => MoveCommands(!layout.IsCompact && CommandsFitBelowHeader(space)) | PlaceHeadersToggle(space);
-        bool PlaceHeadersToggle(BSize space)
-        {
-            bool beside = layout.ShowsReaderOnly && inspectHeaders.Visibility != UiVisibility.Collapsed && ToggleFitsBesideBack(space);
-            UiElement place = beside ? backRow : headersRow;
-            if (inspectHeaders.Parent == place) return ShowHeadersRow();
-            // Removing a child takes focus from it, so a focused toggle gets it back once its new row shows.
-            bool refocus = panel.Session?.FocusedElement == inspectHeaders;
-            inspectHeaders.Parent?.RemoveChild(inspectHeaders);
-            place.AddChild(inspectHeaders);
-            ShowHeadersRow();
-            if (refocus && inspectHeaders.CanFocus) panel.Session!.SetFocus(inspectHeaders);
-            return true;
-        }
-        // On one line at the header column's width, as the toolbar lays them out, also beside the scroll bar of a
-        // header that scrolls, where a narrow column gives way to it; buttons not yet measured do not fit.
-        bool ToggleFitsBesideBack(BSize space)
-        {
-            if (!double.IsFinite(space.Width) || back.DesiredSize.Width <= 0 || inspectHeaders.DesiredSize.Width <= 0) return false;
-            double bar = headerColumn.Scroll.ScrollbarThickness + headerColumn.Scroll.ScrollbarGap;
-            double width = Math.Min(ReadingColumn.ContentWidthIn(space.Width, space.Width), ReadingColumn.ContentWidthIn(space.Width, space.Width - bar));
-            return back.DesiredSize.Width + backRow.Spacing + inspectHeaders.DesiredSize.Width + (2 * backRow.Padding) <= width;
-        }
-        // The toggle's own row shows only while it holds the toggle and the toggle shows. True when that changed.
-        bool ShowHeadersRow()
-        {
-            var visibility = inspectHeaders.Visibility != UiVisibility.Collapsed && inspectHeaders.Parent == headersRow ? UiVisibility.Visible : UiVisibility.Collapsed;
-            if (headersRow.Visibility == visibility) return false;
-            headersRow.Visibility = visibility;
-            return true;
-        }
+        bool PlaceCommands(BSize space) => MoveCommands(!layout.IsCompact && !messageOptions.IsExpanded && CommandsFitBelowHeader(space));
         bool CommandsFitBelowHeader(BSize space)
         {
             // Hidden commands, without a message, stay where they are, as they do in a space without bounds.
@@ -968,7 +1107,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             bool keepFocus = focused is not null && (focused == replyActions || focused.IsDescendantOf(replyActions));
             replyActions.Parent?.RemoveChild(replyActions);
             if (pin) pinnedCommands.AddChild(replyActions);
-            else headerStack.InsertChild(headerStack.Children.ToList().IndexOf(previewActions), replyActions);
+            else headerStack.InsertChild(headerStack.Children.ToList().IndexOf(messageOptions), replyActions);
             if (keepFocus && focused!.CanFocus) panel.Session!.SetFocus(focused);
             return true;
         }
@@ -976,7 +1115,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         {
             // The compact reader keeps them in its header; beside the list, the header area places them as it is measured.
             if (layout.IsCompact) MoveCommands(pin: false);
-            backRow.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
+            back.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
+            backRow.Visibility = back.Visibility;
             FocusVisiblePane();
             PanesChanged?.Invoke(this, EventArgs.Empty);
         };

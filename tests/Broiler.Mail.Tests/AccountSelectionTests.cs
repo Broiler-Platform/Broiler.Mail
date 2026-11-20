@@ -28,9 +28,10 @@ public sealed class AccountSelectionTests
         await model.Accounts!.InspectLocalMailAsync(); fixture.Dispatcher.Drain(); Assert.Equal(1, model.Accounts.LocalMailInfo!.HeaderCount);
         using var shell = new MailShellView(model); using var session = new StandardUiSessionBuilder().WithDispatcher(fixture.Dispatcher).Build(new Host()); shell.Attach(session);
         var theme = StandardThemeTokens.Light.WithTextScale(scale); StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(shell.Window, theme); session.RenderFrame();
-        var root = shell.AccountSelectionContent!;
+        Assert.True(shell.ShowView("manage-accounts"));
+        var root = shell.ActiveContent;
         Broiler.UI.Button.Standard.StandardButton Button(string label) => Descendants(root).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == label);
-        Button("Manage accounts").Click(); Button("Clear this account's downloaded mail…").Click(); session.RenderFrame();
+        Button("Clear this account's downloaded mail…").Click(); session.RenderFrame();
         Assert.Same(Button("Keep downloaded mail"), session.FocusedElement); Assert.False(Button("Back up and clear local mail").IsDefault);
         Assert.Null(model.Accounts.PendingRemoval); Assert.False(model.Accounts.CanSwitch); Assert.False(model.Accounts.CanRemove);
         Button("Keep downloaded mail").Click(); Assert.Null(model.Accounts.PendingLocalMailCleanup); Assert.True(model.Accounts.CanSwitch);
@@ -39,6 +40,7 @@ public sealed class AccountSelectionTests
         Assert.Equal(fixture.First, model.CurrentAccount); Assert.Equal(2, (await fixture.Store.LoadAsync()).Count); Assert.Equal(draftId, model.Composer.DraftId); Assert.Equal("Unsent local text", model.Composer.PlainText);
         Assert.NotNull(model.Accounts.LastLocalMailCleanupBackup); Assert.Null(model.Accounts.PendingLocalMailCleanup); Assert.True(model.Accounts.CanInspectLocalMail);
         var recovered = new SqliteMailCache(Path.Combine(model.Accounts.LastLocalMailCleanupBackup, "mail-cache.db")); Assert.Equal("Body A", (await recovered.ReadBodyAsync(new(fixture.First.Id, "INBOX", 7), 1))!.PlainText);
+        Assert.True(shell.CloseDialog());
         await fixture.Switch(fixture.Second.Id); await model.Inbox.SelectAsync(new(fixture.Second.Id, "INBOX", 7, 1)); fixture.Dispatcher.Drain(); Assert.Equal("Body B", model.Inbox.Body!.PlainText);
         Assert.Null(model.Accounts.LocalMailInfo); Assert.Null(model.Accounts.LastLocalMailCleanupBackup);
     }
@@ -71,9 +73,10 @@ public sealed class AccountSelectionTests
         using var fixture = await Fixture.Create(removal: true); var model = fixture.Model;
         using var shell = new MailShellView(model); using var session = new StandardUiSessionBuilder().WithDispatcher(fixture.Dispatcher).Build(new Host()); shell.Attach(session);
         var theme = StandardThemeTokens.Light.WithTextScale(scale); StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(shell.Window, theme); session.RenderFrame();
-        var root = shell.AccountSelectionContent!;
+        Assert.True(shell.ShowView("manage-accounts"));
+        var root = shell.ActiveContent;
         Broiler.UI.Button.Standard.StandardButton Button(string text) => Descendants(root).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(b => b.Text == text);
-        Button("Manage accounts").Click(); session.RenderFrame(); Button("Remove account…").Click();
+        Button("Remove account…").Click();
         Assert.Equal(fixture.First, model.Accounts!.PendingRemoval); Assert.False(model.Accounts.CanSwitch);
         Assert.Equal("Cancel removal", Assert.IsType<Broiler.UI.Button.Standard.StandardButton>(session.FocusedElement).Text);
         Assert.Equal(2, (await fixture.Store.LoadStateAsync()).Accounts.Length);
@@ -159,15 +162,19 @@ public sealed class AccountSelectionTests
         var theme = StandardThemeTokens.Light.WithTextScale(textScale);
         StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(shell.Window, theme); session.RenderFrame();
         var area = Assert.IsType<BoundedScrollArea>(shell.AccountSelectionContent);
-        var buttons = Descendants(area).OfType<Broiler.UI.Button.Standard.StandardButton>().ToArray();
-        buttons.Single(b => b.Text == "Manage accounts").Click(); session.RenderFrame();
+        var manage = Descendants(area).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(b => b.Text == "Manage accounts");
+        session.SetFocus(manage);
+        manage.Click();
+        Assert.Equal("manage-accounts", shell.ActiveViewId);
+        var buttons = Descendants(shell.ActiveContent).OfType<Broiler.UI.Button.Standard.StandardButton>().ToArray();
+        session.RenderFrame();
         Assert.True(area.Bounds.Height <= area.AvailableHeight * 0.4 + 1);
         var later = buttons.Single(b => b.Text == "Move account later"); session.SetFocus(later); later.Click();
         fixture.Dispatcher.DrainUntil(() => !fixture.Model.Accounts!.IsBusy); session.RenderFrame();
         Assert.False(later.IsEnabled); Assert.Equal("Disable account", Assert.IsType<Broiler.UI.Button.Standard.StandardButton>(session.FocusedElement).Text);
         Assert.True(session.FocusedElement!.CanFocus);
-        Assert.InRange(session.FocusedElement.Bounds.Top, area.Scroll.Bounds.Top - 1, area.Scroll.Bounds.Bottom + 1);
-        var manage = buttons.Single(b => b.Text == "Hide account management"); manage.Click();
+        Assert.True(session.FocusedElement.IsDescendantOf(shell.ActiveContent));
+        Assert.True(shell.CloseDialog());
         Assert.Same(manage, session.FocusedElement); Assert.True(manage.CanFocus);
     }
 

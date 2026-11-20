@@ -28,10 +28,15 @@ public sealed class OfflineDownloadViewTests
         using var content = new InboxView(model).CreateContent();
         using var session = new StandardUiSessionBuilder().Build(new Host()); session.AddRoot(content); session.RenderFrame();
         var toolbar = content.Children.OfType<StandardToolbar>().First();
-        var download = toolbar.Children.OfType<StandardButton>().Single(button => button.Text == "Download loaded messages");
+        var toggle = toolbar.Children.OfType<StandardButton>().Single(button => button.Text == "Mailbox options");
+        Assert.Equal(UiVisibility.Collapsed, toggle.Controls!.Visibility);
+        toggle.Click();
+        session.RenderFrame();
+        var download = toggle.Controls.Children.Single().Children.OfType<StandardToolbar>().Single()
+            .Children.OfType<StandardButton>().Single(button => button.Text == "Download loaded messages");
         var cancel = toolbar.Children.OfType<StandardButton>().Single(button => button.Text == "Cancel");
         Assert.True(download.IsEnabled);
-        foreach (var child in toolbar.Children)
+        foreach (var child in toolbar.Children.Where(child => child.Visibility == UiVisibility.Visible))
         {
             Assert.InRange(child.Bounds.Left, toolbar.Bounds.Left - 1, toolbar.Bounds.Right + 1);
             Assert.InRange(child.Bounds.Right, toolbar.Bounds.Left - 1, toolbar.Bounds.Right + 1);

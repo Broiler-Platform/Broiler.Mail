@@ -5,7 +5,7 @@ GENERATED - DO NOT EDIT MANUALLY. Regenerate with
 `CODE-ASSURANCE.md`, `hairs.manifest.json` and every generated source header from the
 product tree.
 
-> **Status: PENDING.** Human-reviewed: 0 of 2533 relevant units. `dotnet tool run hairs -- assurance check --root . --release`
+> **Status: PENDING.** Human-reviewed: 0 of 2579 relevant units. `dotnet tool run hairs -- assurance check --root . --release`
 > fails while any relevant unit is without a decision bound to its current fingerprint.
 
 ## 1. How To Use This File
@@ -49,13 +49,13 @@ did, which is the narrower and the more useful of the two.
 
 | Metric | Value |
 |---|---:|
-| Files scanned | 245 |
-| Code units | 3931 |
-| Relevant | 2533 |
-| Exempt | 1398 |
-| Assessed | 371 of 2533 (15%) |
-| Human reviewed | 0 of 2533 (0%) |
-| Unverified | 2533 |
+| Files scanned | 246 |
+| Code units | 4012 |
+| Relevant | 2579 |
+| Exempt | 1433 |
+| Assessed | 371 of 2579 (14%) |
+| Human reviewed | 0 of 2579 (0%) |
+| Unverified | 2579 |
 | Aliases naming a decision | 0 |
 
 ## 4. Review States
@@ -65,13 +65,13 @@ annotations and the current fingerprints; nothing stores them.
 
 | State | Units |
 |---|---:|
-| NEW | 2162 |
+| NEW | 2208 |
 | AI_ASSESSED | 0 |
 | HUMAN_PENDING | 371 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
-| EXEMPT | 1398 |
+| EXEMPT | 1433 |
 
 ## 5. Aliases In The Tree
 
@@ -95,7 +95,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Preview/MessageAttachmentActions.cs` | 29 | 15 | 14 | 15 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/MessageSourceExportActions.cs` | 25 | 11 | 14 | 11 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/MessageSourceInspection.cs` | 33 | 20 | 13 | 20 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Preview/MessageTextFindBar.cs` | 25 | 13 | 12 | 13 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Preview/MessageTextFindBar.cs` | 26 | 14 | 12 | 14 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/MessageTextFinder.cs` | 6 | 6 | 0 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/OriginalSourceText.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/PlainTextMessagePreview.cs` | 2 | 2 | 0 | 2 | Low | Medium | 2/0 |
@@ -127,7 +127,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/ViewModels/UnifiedSavedInbox.cs` | 8 | 8 | 0 | 8 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AccountProfileView.cs` | 3 | 3 | 0 | 3 | Low | High | 2/2 |
 | `src/Broiler.Mail.Application/Views/AccountReceiveQueueView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/AccountSelectionView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/AccountSelectionView.cs` | 3 | 2 | 1 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AdaptiveInboxLayout.cs` | 21 | 15 | 6 | 15 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AppearanceController.cs` | 13 | 5 | 8 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AppearancePolicy.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
@@ -140,13 +140,13 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Views/FocusNavigation.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/FocusRingFrame.cs` | 8 | 6 | 2 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/FormRow.cs` | 10 | 4 | 6 | 4 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/InboxView.cs` | 13 | 9 | 4 | 9 | Low | Medium | 3/0 |
+| `src/Broiler.Mail.Application/Views/InboxView.cs` | 14 | 9 | 5 | 9 | Low | Medium | 3/0 |
 | `src/Broiler.Mail.Application/Views/Inset.cs` | 7 | 4 | 3 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/LocalOriginalsView.cs` | 61 | 37 | 24 | 37 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MailAbout.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MailKeyboardNavigation.cs` | 10 | 10 | 0 | 10 | Low | Medium | 5/0 |
 | `src/Broiler.Mail.Application/Views/MailMessageItemPresenter.cs` | 25 | 20 | 5 | 20 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/MailShellView.cs` | 44 | 21 | 23 | 21 | Low | Medium | 4/0 |
+| `src/Broiler.Mail.Application/Views/MailShellView.cs` | 48 | 22 | 26 | 22 | Low | Medium | 4/0 |
 | `src/Broiler.Mail.Application/Views/MailShortcuts.cs` | 26 | 7 | 19 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MeasuredContent.cs` | 7 | 4 | 3 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MessageDateFormatter.cs` | 12 | 10 | 2 | 10 | not assessed | not assessed | 0/0 |
@@ -159,6 +159,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Views/SavedRecipientsView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SenderIdentitiesView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SettingsView.cs` | 2 | 2 | 0 | 2 | Low | Medium | 2/0 |
+| `src/Broiler.Mail.Application/Views/ToolbarDisclosure.cs` | 12 | 10 | 2 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/UiAsync.cs` | 8 | 8 | 0 | 8 | None | Medium | 1/0 |
 | `src/Broiler.Mail.Application/Views/UnifiedSavedInboxView.cs` | 32 | 19 | 13 | 19 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Accounts/AccountFolderOverrides.cs` | 6 | 1 | 5 | 1 | not assessed | not assessed | 0/0 |
@@ -309,7 +310,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Windows/Hosting/UnifiedSavedInboxSmokeCheck.cs` | 18 | 10 | 8 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/WindowGeometry.cs` | 33 | 32 | 1 | 32 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/WindowsHostWindow.cs` | 61 | 45 | 16 | 45 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs` | 64 | 38 | 26 | 38 | Low | Critical | 18/3 |
+| `src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs` | 66 | 40 | 26 | 40 | Low | Critical | 18/3 |
 | `src/Broiler.Mail.Windows/Hosting/WindowsUiHost.cs` | 28 | 18 | 10 | 18 | Low | Critical | 5/4 |
 | `src/Broiler.Mail.Windows/Measurement/AllocationSampler.cs` | 11 | 8 | 3 | 8 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Measurement/FramePhaseTimer.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
@@ -318,15 +319,15 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Windows/Measurement/HtmlTileStatistics.cs` | 17 | 11 | 6 | 11 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Measurement/MeasurementReport.cs` | 16 | 13 | 3 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Measurement/MeasurementRun.cs` | 48 | 25 | 23 | 25 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Preview/HtmlLinkTarget.cs` | 21 | 19 | 2 | 19 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` | 229 | 131 | 98 | 131 | Low | High | 39/20 |
+| `src/Broiler.Mail.Windows/Preview/HtmlLinkTarget.cs` | 22 | 20 | 2 | 20 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` | 285 | 160 | 125 | 160 | Low | High | 39/20 |
 | `src/Broiler.Mail.Windows/Preview/HtmlResourceOutcome.cs` | 27 | 13 | 14 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/HtmlRuntime.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/InlineReaderTheme.cs` | 3 | 3 | 0 | 3 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/InlineRemoteImageSession.cs` | 16 | 7 | 9 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/PreviewZoom.cs` | 15 | 14 | 1 | 14 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/RemoteImageBroker.cs` | 19 | 17 | 2 | 17 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Preview/WindowsHtmlPreviewHost.cs` | 14 | 7 | 7 | 7 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Preview/WindowsHtmlPreviewHost.cs` | 17 | 9 | 8 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Program.cs` | 4 | 4 | 0 | 4 | Low | High | 2/2 |
 | `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` | 27 | 15 | 12 | 15 | Low | Critical | 15/14 |
 | `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` | 17 | 13 | 4 | 13 | Low | High | 6/6 |
@@ -596,7 +597,7 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: a WM_GETMINMAXINFO or WM_DPICHANGED for the render child window reaches WindowsWindowSizing.OnMessage, whose Marshal reads and writes through lParam then act on the wrong window
 - `Broiler.Mail.Windows.Hosting.WindowsMailWindow.RunCore()` in `src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs` - Security=High, Spec=none cited, `5A3305`, PENDING
   - Falsified if: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
-- `Broiler.Mail.Windows.Hosting.WindowsMailWindow.OnNativeWindowMessage(nint, uint, nint, nint)` in `src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs` - Security=Critical, Spec=none cited, `377490`, PENDING
+- `Broiler.Mail.Windows.Hosting.WindowsMailWindow.OnNativeWindowMessage(nint, uint, nint, nint)` in `src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs` - Security=Critical, Spec=none cited, `5BFC39`, PENDING
   - Falsified if: a WM_GETMINMAXINFO or WM_DPICHANGED addressed to a window other than NativeHandle is handed to WindowsWindowSizing.OnMessage, which then writes through that message's lParam
 - `Broiler.Mail.Windows.Hosting.WindowsUiHost` in `src/Broiler.Mail.Windows/Hosting/WindowsUiHost.cs` - Security=Critical, Spec=none cited, `1C4409`, PENDING
   - Falsified if: a paste reads clipboard memory past the size GlobalSize reports for a block another process placed there
@@ -624,19 +625,19 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
 - `Broiler.Mail.Windows.Preview.ScrollableHtmlView` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `7F007E`, PENDING
   - Falsified if: a document shown through this view has an http(s) image or stylesheet it names fetched over the network instead of denied
-- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.ScrollableHtmlView(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `D6B4BA`, PENDING
+- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.ScrollableHtmlView(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `EF8D9F`, PENDING
   - Falsified if: an http(s) image named in the html passed to the constructor is fetched over the network when the view renders
 - `Broiler.Mail.Windows.Preview.ScrollableHtmlView.UpdateHtml(string, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `F2F519`, PENDING
   - Falsified if: an http(s) image named in the html passed to UpdateHtml is fetched over the network when the view next renders
 - `Broiler.Mail.Windows.Preview.HtmlViewElement` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `9D4E0E`, PENDING
   - Falsified if: rendering a document whose img src is an http(s) or file: URL sends a request for it instead of the load being denied
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.CreateContainer(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `490A6B`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.CreateIsolatedContainer(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `40D1B3`, PENDING
   - Falsified if: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.HtmlViewElement(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `E28C87`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.HtmlViewElement(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `88D9BD`, PENDING
   - Falsified if: an http(s) image named in the html passed to the constructor is fetched over the network when the element renders
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.UpdateHtml(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `C4589F`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.UpdateHtml(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `9EFA01`, PENDING
   - Falsified if: after UpdateHtml a paint or link hit-test runs against the container that UpdateHtml disposed
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.OnInput(UiInputEvent)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `32B254`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.OnInput(UiInputEvent)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `6FEED3`, PENDING
   - Falsified if: the link callback fires for an input other than a left-button release, such as a pointer-down, a right click or a key press over a link
 - `Broiler.Mail.Windows.Preview.DenyingRequestTransport` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `B984F4`, PENDING
   - Falsified if: a request the renderer sends through this transport, including one for a file: or loopback URL, is dispatched to the network or the file system

@@ -269,7 +269,10 @@ public sealed class HtmlPreviewIsolationTests
         Assert.True(link.Bounds.Height > 5, "Link bounds height should be positive.");
 
         // Simulate click on the link
-        var clickEvent = MouseClick(link.Bounds.X + (link.Bounds.Width / 2), link.Bounds.Y + (link.Bounds.Height / 2));
+        double clickX = link.Bounds.X + link.Bounds.Width / 2;
+        double clickY = link.Bounds.Y + link.Bounds.Height / 2;
+        element.SendInput(MouseClick(clickX, clickY, MouseButtonTransition.Down));
+        var clickEvent = MouseClick(clickX, clickY);
         bool handled = element.SendInput(clickEvent);
         Assert.True(handled);
         Assert.Equal("https://example.test/rtl-action", clickedUrl);
@@ -511,6 +514,7 @@ public sealed class HtmlPreviewIsolationTests
 
         // Test link hit testing
         var targetLink = snapshot1.Links[0];
+        element.SendInput(MouseClick(targetLink.Bounds.X + 2, targetLink.Bounds.Y + 2, MouseButtonTransition.Down));
         var hitEvent = MouseClick(targetLink.Bounds.X + 2, targetLink.Bounds.Y + 2);
 
         Assert.True(element.SendInput(hitEvent));
@@ -835,9 +839,10 @@ public sealed class HtmlPreviewIsolationTests
 
     private static InputEventHeader Header() => new(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1);
 
-    private static UiInputEvent MouseClick(double x, double y) => UiInputEvent.FromMouseButton(new MouseButtonEvent(
-        Header(), InputPoint.ClientDeviceIndependentPixels(x, y),
-        MouseButtons.None, MouseButton.Left, MouseButtonTransition.Up, InputEventSource.Synthetic));
+    private static UiInputEvent MouseClick(double x, double y, MouseButtonTransition transition = MouseButtonTransition.Up) =>
+        UiInputEvent.FromMouseButton(new MouseButtonEvent(
+            Header(), InputPoint.ClientDeviceIndependentPixels(x, y),
+            MouseButtons.None, MouseButton.Left, transition, InputEventSource.Synthetic));
     [Fact]
     public void RendersInlineDataImageSuccessfully()
     {

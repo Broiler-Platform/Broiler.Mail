@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   38
-// Annotated:        18/38
+// Relevant units:   40
+// Annotated:        18/40
 // Exempt:           26
-// Human-reviewed:   0/38
+// Human-reviewed:   0/40
 // IP risk:          Low
 // Security risk:    Critical
 // Criteria:         18/3
 // Resource impact:  7/10 max
-// Unverified:       38
+// Unverified:       40
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -26,6 +26,7 @@ using Broiler.Mail.Core.Settings;
 using Broiler.Mail.Application.Views;
 using Broiler.Input.Keyboard;
 using Broiler.UI;
+using Broiler.UI.Splitter;
 using Broiler.UI.Standard;
 using Broiler.Hosting.Windows;
 using Broiler.Hosting.Windows.Accessibility;
@@ -57,6 +58,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     private WindowPlacement? _normal;
     private bool _maximized;
     private bool _closePending;
+    private bool _isWindowResizing;
     private readonly WindowsHtmlPreviewHost _htmlPreview;
     private readonly HtmlMeasurementHost? _htmlMeasurement;
     private readonly FrameRecorder? _recorder;
@@ -71,7 +73,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Both bridges subclass native windows, which exist only from WM_CREATE on; see OnCreated.
     private WindowsAutomationBridge? _automationBridge;
     private WindowsInputBridge? _inputBridge;
-    private MailWindowIcon? _icon;
+    //private MailWindowIcon? _icon;
     internal WindowsAutomationBridge? AutomationBridge => _host.ActiveHostWindow?.AutomationBridge ?? _automationBridge;
     internal WindowsInputBridge? InputBridge => _host.ActiveHostWindow?.InputBridge ?? _inputBridge;
     internal MailShellView Shell => _shell;
@@ -130,6 +132,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         {
             RendererProvider = () => Renderer,
             ScaleProvider = () => DpiScale,
+            UseBackgroundRaster = true,
         };
         _shell = new MailShellView(model, _htmlPreview, demo is null ? null : DemoApplication.CreateDateFormatter());
         _shell.Attach(_session);
@@ -230,7 +233,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         });
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=1FF9DE
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=56894F
     // Hairs-Falsified-If: a mail result queued before a paint is not applied until a later frame, so the painted frame shows the state from before that result
     // Hairs-Human:        PENDING
     protected override BRenderList? BuildRenderList(BSize clientSize)
@@ -238,6 +241,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         var frame = _recorder?.BeginFrame();
         _host.Update(clientSize, DpiScale);
         DrainDispatcher();
+        UpdateHtmlResize();
         BRenderList renderList;
         FramePhases? phases = null;
         // --measure --detail times layout and the render list apart; otherwise the frame is built as always.
@@ -331,7 +335,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         }
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=53A44C
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=D95531
     // Hairs-Falsified-If: after a resize or DPI change the UI session lays out against the old viewport size or scale until another resize arrives
     // Hairs-Human:        PENDING
     /// <summary>
@@ -342,7 +346,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     protected override void OnCreated()
     {
         base.OnCreated();
-        _icon = MailWindowIcon.TryAttach(NativeHandle);
+        //_icon = MailWindowIcon.TryAttach(NativeHandle);
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _shell.Window, () => DpiScale);
         _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboard.Handle, () => DpiScale, Invalidate);
         // The focus was set before the render window existed; its IME state follows it from now on.
@@ -365,7 +369,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         Invalidate();
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Critical; Resources=1; Fingerprint=377490
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Critical; Resources=1; Fingerprint=5BFC39
     // Hairs-Falsified-If: a WM_GETMINMAXINFO or WM_DPICHANGED addressed to a window other than NativeHandle is handed to WindowsWindowSizing.OnMessage, which then writes through that message's lParam
     // Hairs-Human:        PENDING
     protected override void OnNativeWindowMessage(nint hwnd, uint message, nint wParam, nint lParam)
@@ -377,8 +381,19 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             if (message == 0x0024 && _simulatedScale is { } simulated)
                 WindowsScreen.SimulatedTrackSize(hwnd, lParam, (int)Math.Ceiling(MinimumClientWidth * simulated), (int)Math.Ceiling(MinimumClientHeight * simulated));
             _inputBridge?.OnTopLevelMessage(message, wParam, lParam);
+            // WM_SIZING: defer expensive HTML reflow and tile re-raster while dragging the window border.
+            if (message == 0x0214)
+            {
+                _isWindowResizing = true;
+                UpdateHtmlResize();
+            }
             // WM_EXITSIZEMOVE: one write when a move or resize ends, never one per pixel.
-            if (message == 0x0232) _ = RememberLayout();
+            if (message == 0x0232)
+            {
+                _isWindowResizing = false;
+                UpdateHtmlResize();
+                _ = RememberLayout();
+            }
             // WM_SETTINGCHANGE, WM_THEMECHANGED, WM_SYSCOLORCHANGE. A switch between two contrast themes changes
             // only the colors, so the palette is resolved again even when the settings stay the same.
             if (message is 0x001A or 0x031A or 0x0015)
@@ -387,6 +402,11 @@ internal sealed class WindowsMailWindow : Direct2DWindow
             }
         }
     }
+
+    private void UpdateHtmlResize() =>
+        _htmlPreview.SetLiveResizing(_isWindowResizing || _session.CapturedElement is UiSplitter);
+
+    protected override void OnGraphicsResourcesReleasing() => _htmlPreview?.ReleaseGraphicsResources();
 
     internal void OnSystemThemeOrColorChanged()
     {
@@ -453,14 +473,14 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         }
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=20CB95
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=C973D8
     // Hairs-Falsified-If: an HTML preview opened from this mail window stays open after the mail window is disposed
     // Hairs-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
-            _icon?.Dispose();
+            //_icon?.Dispose();
             try { _automationBridge?.Dispose(); } catch (Exception) { }
             _automationBridge = null;
             _inputBridge?.Dispose();

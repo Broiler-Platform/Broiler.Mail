@@ -22,6 +22,8 @@ public sealed class OrphanMailViewTests
         using var f=await OrphanMailTests.Fixture.Create(noAccounts);var model=f.Model.Accounts!;
         using var root=new AccountSelectionView(model,()=>{}).CreateContent();using var session=new StandardUiSessionBuilder().Build(new Host());session.AddRoot(root);
         var theme=StandardThemeTokens.Light.WithTextScale(scale);StandardControlPaint.SetSessionTheme(session,theme);StandardThemeController.ApplyToSubtree(root,theme);session.RenderFrame();
+        All(root).OfType<StandardButton>().Single(button => button.Text == "Account tools").Click();
+        session.RenderFrame();
         var section=All(root).OfType<FormSection>().Single(item=>item.Content.AccessibleName=="Removed-account mail controls");Assert.False(section.IsExpanded);section.Toggle!.Click();session.RenderFrame();
         Assert.InRange(root.DesiredSize.Height,1,192);Assert.Empty(model.OrphanMail);
         StandardButton Button(string text)=>All(root).OfType<StandardButton>().Single(button=>button.Text==text);

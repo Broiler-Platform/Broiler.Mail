@@ -385,7 +385,7 @@ public sealed class InboxWorkflowTests
         using var model = new InboxViewModel(new TestMailReceiver(), ui.Dispatcher);
         model.SetAccount(account);
         using var content = new InboxView(model).CreateContent();
-        using var session = new StandardUiSessionBuilder().WithDispatcher(ui.Dispatcher).Build(new HeadlessHost(300, 600));
+        using var session = new StandardUiSessionBuilder().WithDispatcher(ui.Dispatcher).Build(new HeadlessHost(220, 600));
         session.AddRoot(content);
         _ = session.RenderFrame();
 
@@ -396,8 +396,8 @@ public sealed class InboxWorkflowTests
 
         var buttons = Descendants(toolbar).OfType<StandardButton>().ToArray();
         Assert.Equal(4, buttons.Length);
-        // Under 300px width, 4 buttons wrap into at least 2 rows
-        Assert.True(buttons.Select(b => b.Bounds.Top).Distinct().Count() >= 2);
+        Assert.Equal(UiVisibility.Collapsed, buttons.Single(b => b.Text == "Cancel").Visibility);
+        Assert.True(buttons.Where(b => b.Visibility == UiVisibility.Visible).Select(b => b.Bounds.Top).Distinct().Count() >= 2);
     }
 
     [Fact]

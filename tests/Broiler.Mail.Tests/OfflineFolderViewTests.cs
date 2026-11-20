@@ -28,6 +28,8 @@ public sealed class OfflineFolderViewTests
         model.SetAccount(account); await model.CacheLoadTask; await model.OfflineFolderLoadTask;
         using var root = new InboxView(model).CreateContent(); using var session = new StandardUiSessionBuilder().Build(new Host()); session.AddRoot(root);
         var theme = StandardThemeTokens.Light.WithTextScale(scale); StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
+        All(root).OfType<StandardButton>().Single(button => button.Text == "Mailbox options").Click();
+        session.RenderFrame();
         var group = All(root).OfType<FormSection>().Single(item => item.Content.AccessibleName == "Offline-folder batch controls"); Assert.False(group.IsExpanded); group.Toggle!.Click(); session.RenderFrame();
         Assert.Same(group.Content, group.Toggle.Controls); Assert.Contains("500", model.OfflineFolderNotice); Assert.Contains("INBOX", model.OfflineFolderNotice);
         var download = All(root).OfType<StandardButton>().Single(item => item.Text == "Download selected offline folders");
@@ -49,6 +51,8 @@ public sealed class OfflineFolderViewTests
         using var model = new InboxViewModel(receiver, new ImmediateUiDispatcher(), cache, offlineFolders: store); model.SetAccount(account); await model.CacheLoadTask; await model.OfflineFolderLoadTask; await model.DownloadOfflineFoldersAsync();
         using var root = new InboxView(model).CreateContent(); using var session = new StandardUiSessionBuilder().Build(new Host()); session.AddRoot(root);
         var theme = StandardThemeTokens.Light.WithTextScale(scale); StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
+        All(root).OfType<StandardButton>().Single(button => button.Text == "Mailbox options").Click();
+        session.RenderFrame();
         var group = All(root).OfType<FormSection>().Single(item => item.Content.AccessibleName == "Offline-folder batch controls"); group.Toggle!.Click(); session.RenderFrame();
         var next = All(root).OfType<StandardButton>().Single(item => item.Text == "Download next offline batch"); Assert.True(next.IsEnabled);
         var restart = All(root).OfType<StandardButton>().Single(item => item.Text == "Restart offline batches from newest"); Assert.True(restart.IsEnabled); Assert.False(restart.IsDefault);

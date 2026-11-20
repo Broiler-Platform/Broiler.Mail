@@ -13,27 +13,27 @@ and the figures below are the measurement of how far from that claim the per-uni
 
 | Metric | Value |
 |---|---:|
-| Files scanned | 245 |
+| Files scanned | 246 |
 | Files not covered | 0 |
 | Files carrying an annotation | 64 |
-| Code units | 3931 |
-| Relevant | 2533 |
-| Exempt by predicate | 1398 |
-| Annotated | 371 of 2533 (15%) |
-| Human reviewed | 0 of 2533 (0%) |
-| Unverified | 2533 |
+| Code units | 4012 |
+| Relevant | 2579 |
+| Exempt by predicate | 1433 |
+| Annotated | 371 of 2579 (14%) |
+| Human reviewed | 0 of 2579 (0%) |
+| Unverified | 2579 |
 
 ## Review states
 
 | State | Count |
 |---|---:|
-| NEW | 2162 |
+| NEW | 2208 |
 | AI_ASSESSED | 0 |
 | HUMAN_PENDING | 371 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
-| EXEMPT | 1398 |
+| EXEMPT | 1433 |
 
 ## IP risk
 
@@ -44,7 +44,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Medium | 0 |
 | High | 0 |
 | Unknown | 0 |
-| *not annotated* | 2162 |
+| *not annotated* | 2208 |
 
 ## Security risk
 
@@ -55,7 +55,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Medium | 93 |
 | High | 162 |
 | Critical | 10 |
-| *not annotated* | 2162 |
+| *not annotated* | 2208 |
 
 ## Resource impact
 
@@ -206,11 +206,11 @@ and the figures below are the measurement of how far from that claim the per-uni
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.OpenLink(string, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.RunCore()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.ScrollableHtmlView` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.ScrollableHtmlView(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.ScrollableHtmlView(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.ScrollableHtmlView.UpdateHtml(string, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlViewElement` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.CreateContainer(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.HtmlViewElement(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.CreateIsolatedContainer(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.HtmlViewElement(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlViewElement.UpdateHtml(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.HtmlViewElement.OnInput(UiInputEvent)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
 - `Broiler.Mail.Windows.Preview.DenyingRequestTransport` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, human line PENDING
@@ -265,13 +265,13 @@ that the rule is reviewable in one place rather than in several hundred.
 
 | Case | Units |
 |---|---:|
-| TrivialPropertyOrAccessor | 372 |
+| TrivialPropertyOrAccessor | 377 |
 | ParameterAssigningConstructor | 9 |
 | TrivialExpressionBodiedMember | 125 |
 | CompilerSuppliedRecordOrEnumMember | 131 |
 | DelegatingOverrideOrOperator | 2 |
 | InsideAssemblyMarker | 0 |
-| FieldDeclaringStorage | 571 |
+| FieldDeclaringStorage | 601 |
 | EnumMemberOfADeclaredVocabulary | 188 |
 | DeclaredInSource | 0 |
 
@@ -296,14 +296,14 @@ through a `<Compile Include>` it states, is left out of the record.
 ## Change detection
 
 `hairs.manifest.json` lists **every** code unit in the 4 covered assemblies -
-3931 of them, exempt and relevant alike - with the fingerprint of its declaration.
+4012 of them, exempt and relevant alike - with the fingerprint of its declaration.
 This manifest is a change-detection record, not a review. A unit listed there is watched, not reviewed:
 the entry records what the declaration's tokens hashed to when the generator last ran, and
 nothing else. What the manifest adds is that a unit the exemption predicate treats as
 trivial is no longer invisible: a semantic change to one moves a value in a generated file
 the check compares byte for byte. `dotnet tool run hairs -- assurance check --root .` holds the manifest to the tree.
 
-Beside the units it lists **every covered file** - 245 of them - with a
+Beside the units it lists **every covered file** - 246 of them - with a
 fingerprint over the complete token stream of its compilation unit. A unit entry exists only
 for a declaration kind the scanner enumerates, and an enumeration is a whitelist: an
 `[assembly: ...]` attribute is a member of nothing and can be in no unit at all.

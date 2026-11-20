@@ -27,7 +27,7 @@ namespace Broiler.Mail.Application.Views;
 // Hairs-Human:        PENDING
 public sealed class MailKeyboardNavigation(UiSession session, MailShellView shell, MailShellViewModel model)
 {
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=E6832F
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=C9B2A3
     // Hairs-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
     // Hairs-Human:        PENDING
     public bool Handle(UiInputEvent input)
@@ -45,7 +45,7 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         }
         if (session.CapturedElement is not null) return false;
         if (shell.ActiveAboutDialog is not null) return false;
-        if (shell.ActiveDialog is null && shell.ActiveViewId == "inbox" && shell.Inbox.HandleReaderInput(input)) return true;
+        if (shell.ActiveViewId is ("inbox" or "find-message") && shell.Inbox.HandleReaderInput(input)) return true;
         if (MailShortcuts.Match(input) is { } shortcut)
         {
             if (shortcut.Command == MailCommand.OpenMessage && shell.ActiveDialog is { } dialog)

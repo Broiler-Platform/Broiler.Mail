@@ -3,7 +3,9 @@ using Broiler.Graphics.RenderList;
 using Broiler.Graphics.Text;
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Application.Views;
+using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
+using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.UI;
 using Broiler.UI.ScrollView;
@@ -16,6 +18,76 @@ namespace Broiler.Mail.Tests;
 public sealed class ShellLayoutTests
 {
     private static readonly string[] ViewIds = ["inbox", "compose", "account", "settings"];
+
+    [Fact]
+    public async Task FileMenuOpensMessageActionsWithoutInsertingControlsIntoTheInbox()
+    {
+        using var fixture = await Fixture.OpenAsync(1100, 720);
+        var shell = fixture.Shell;
+        var session = fixture.Session;
+        var inbox = shell.GetContent("inbox");
+        var file = shell.Menu.Items[0];
+        Assert.Equal("File", file.Text);
+        int groupIndex = file.Children.ToList().FindIndex(item => item.Id == "mailbox-tools");
+        Assert.True(groupIndex >= 0);
+        var group = file.Children[groupIndex];
+        int index = group.Children.ToList().FindIndex(item => item.Id == "message-actions");
+        Assert.True(index >= 0);
+        Assert.True(group.Children[index].IsEnabled);
+
+        var keyboard = shell.CreateKeyboardNavigation(session);
+        keyboard.Execute(MailCommand.OpenMenu);
+        Assert.True(shell.Menu.SetSelectedPath([0, groupIndex, index]));
+        Assert.True(session.DispatchInput(UiInputEvent.FromKeyboardKey(new Broiler.Input.Keyboard.KeyboardKeyEvent(
+            new Broiler.Input.InputEventHeader(Broiler.Input.InputDeviceId.FromOpaqueValue("file-menu-test"),
+                new Broiler.Input.InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1),
+            Broiler.Input.Keyboard.KeyboardKey.FromName("Enter"), Broiler.Input.Keyboard.KeyboardKeyTransition.Down,
+            Broiler.Input.Keyboard.KeyboardModifierState.None, 0x0D, 0, 1, false, false,
+            Source: Broiler.Input.InputEventSource.Synthetic))));
+        ((TestQueueDispatcher)session.Dispatcher).Drain();
+
+        Assert.Equal("message-actions", shell.ActiveViewId);
+        Assert.NotNull(shell.ActiveDialog);
+        Assert.DoesNotContain(Descendants(inbox), element => element is Broiler.UI.Button.Standard.StandardButton { Text: "Find text" });
+        Assert.Contains(Descendants(shell.ActiveContent), element => element is Broiler.UI.Button.Standard.StandardButton { Text: "Find text" });
+        Assert.True(shell.CloseDialog());
+        Assert.Same(inbox, shell.ActiveContent);
+    }
+
+    [Fact]
+    public async Task ReopeningMessageActionsAfterBodyReplacementDoesNotUseDisposedScrollView()
+    {
+        using var fixture = await Fixture.OpenAsync(1100, 720, withSourceExports: true);
+        var (shell, session, model) = (fixture.Shell, fixture.Session, fixture.Model);
+        var openButton = Descendants(shell.GetContent("inbox"))
+            .OfType<Broiler.UI.Button.Standard.StandardButton>()
+            .Single(button => button.Text == "More message actions");
+
+        openButton.Click();
+        Render(session);
+        Assert.Equal("message-actions", shell.ActiveViewId);
+        var outerScroll = Assert.IsAssignableFrom<UiScrollView>(shell.ActiveContent);
+        var innerScrolls = Descendants(outerScroll).OfType<UiScrollView>().Where(scroll => scroll != outerScroll).ToArray();
+        Assert.NotEmpty(innerScrolls);
+        outerScroll.SetOffset(new BPoint(0, 24));
+        Render(session);
+        var expectedOffset = outerScroll.Offset;
+
+        Assert.True(shell.CloseDialog());
+        Assert.Null(shell.ActiveDialog);
+
+        // Selecting another message (or re-selecting the current one) replaces sourceArea and disposes inner scroll views.
+        await model.Inbox.SelectAsync(model.Inbox.Messages[1].Key);
+        ((TestQueueDispatcher)session.Dispatcher).DrainUntil(() => !model.Inbox.IsBusy);
+        Assert.Contains(innerScrolls, scroll => scroll.IsDisposed);
+
+        openButton.Click();
+        Render(session);
+        Assert.Equal("message-actions", shell.ActiveViewId);
+        Assert.NotNull(shell.ActiveDialog);
+        Assert.Equal(expectedOffset, outerScroll.Offset);
+        Assert.True(shell.CloseDialog());
+    }
 
     [Theory]
     [InlineData(360, 640, 1.0)]
@@ -236,13 +308,14 @@ public sealed class ShellLayoutTests
         Shown(root).Select(element => (element.GetType().Name, element.Bounds)).ToArray();
 
     /// <summary>The shell with a received inbox, a selected message with a long subject, and a new draft.</summary>
-    private sealed class Fixture(MailShellView shell, UiSession session, Host host, TestDirectory directory) : IDisposable
+    private sealed class Fixture(MailShellView shell, MailShellViewModel model, UiSession session, Host host, TestDirectory directory) : IDisposable
     {
         public MailShellView Shell { get; } = shell;
+        public MailShellViewModel Model { get; } = model;
         public UiSession Session { get; } = session;
         public Host Host { get; } = host;
 
-        public static async Task<Fixture> OpenAsync(int width, int height)
+        public static async Task<Fixture> OpenAsync(int width, int height, bool withSourceExports = false)
         {
             var directory = new TestDirectory();
             var account = TestDirectory.Profile();
@@ -252,27 +325,33 @@ public sealed class ShellLayoutTests
             {
                 Key = new(account.Id, "INBOX", 7, (uint)uid), Sender = $"sender{uid}@example.test", Subject = uid == 30 ? subject : $"Subject {uid}",
             }).ToArray();
-            var receiver = new TestMailReceiver
-            {
-                Inbox = (_, _) => Task.FromResult(new MailInboxPage(messages, null)),
-                Body = (key, _) => Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20)))),
-            };
+            IMailReceiver receiver = withSourceExports
+                ? new SourceCapableReceiver(messages)
+                : new TestMailReceiver
+                {
+                    Inbox = (_, _) => Task.FromResult(new MailInboxPage(messages, null)),
+                    Body = (key, _) => Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20)))),
+                };
             var dispatcher = new TestQueueDispatcher();
+            var cache = withSourceExports ? new SqliteMailCache(directory.File("mail.db")) : null;
+            var exports = withSourceExports ? new FileMessageSourceExports(directory.Root) : null;
             var model = new MailShellViewModel(
                 new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
                 new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
-                new(receiver, dispatcher),
+                new(receiver, dispatcher, cache, sourceExports: exports),
                 new ComposerViewModel(dispatcher: dispatcher));
             var shell = new MailShellView(model);
             var host = new Host(width, height);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
             shell.Attach(session);
             Assert.True(model.Composer.StartNew());
+            await model.Inbox.CacheLoadTask;
+            dispatcher.Drain();
             await model.Inbox.ReceiveAsync();
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
             await model.Inbox.SelectAsync(messages[0].Key);
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
-            return new(shell, session, host, directory);
+            return new(shell, model, session, host, directory);
         }
 
         public void Dispose()
@@ -281,6 +360,21 @@ public sealed class ShellLayoutTests
             Shell.Dispose();
             directory.Dispose();
         }
+    }
+
+    private sealed class SourceCapableReceiver(MailMessageSummary[] messages) : IMailReceiver, IMailSourceReceiver
+    {
+        public Task<MailInboxPage> GetInboxAsync(AccountProfile account, int count, MailInboxCursor? older = null, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MailInboxPage(messages, null));
+
+        public Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey key, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20))));
+
+        public Task<MailMessageSource> GetSourceAsync(AccountProfile account, MailMessageKey key, CancellationToken cancellationToken = default) =>
+            Task.FromResult(new MailMessageSource(key, "Subject: Test\r\n\r\nBody"u8.ToArray()));
+
+        public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
     }
 
     private sealed class Host(int width, int height) : IUiHost

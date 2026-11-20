@@ -38,6 +38,7 @@ internal static class MailboxSnapshotSmokeCheck
         await cache.SaveSummariesAsync(box, [new() { Key = retained, Sender = "saved@example.test", Subject = "Retained absent mail" }], DateTimeOffset.UtcNow.AddMinutes(-1)); await cache.SaveBodyAsync(box, new(retained, "Retained offline body"));
         var receiver = new Receiver(); using var model = new InboxViewModel(receiver, new ImmediateUiDispatcher(), cache); model.SetAccount(account with { IsEnabled = true }); await model.CacheLoadTask;
         using var root = new InboxView(model).CreateContent(); using var session = new StandardUiSessionBuilder().Build(new Host()); session.AddRoot(root); session.RenderFrame();
+        All(root).OfType<StandardButton>().Single(button => button.Text == "Mailbox options").Click();
         All(root).OfType<StandardButton>().Single(button => button.Text == "Show offline folders").Click(); session.RenderFrame();
         if (receiver.Calls != 0 || !All(root).OfType<StandardButton>().Single(button => button.Text == "Snapshot all headers in current folder").IsEnabled) throw new InvalidOperationException("Published snapshot controls started networking or were unavailable.");
         await model.CaptureMailboxSnapshotAsync(); session.RenderFrame();

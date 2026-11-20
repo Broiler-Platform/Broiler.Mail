@@ -65,8 +65,12 @@ public sealed class HtmlPreviewZoomTests
         Assert.Equal(zoomed, target.GetSemanticNode().Bounds);
 
         // A click where the zoomed link is drawn opens it; one where it would be unzoomed does not.
+        view.SendInput(Click(zoomed.Right - 2, zoomed.Bottom - 2, MouseButtonTransition.Down));
         Assert.True(view.SendInput(Click(zoomed.Right - 2, zoomed.Bottom - 2)));
-        Assert.False(view.SendInput(Click(view.Bounds.X + link.X + (link.Width / 2), view.Bounds.Y + link.Y + (link.Height / 2))));
+        double x = view.Bounds.X + link.X + link.Width / 2;
+        double y = view.Bounds.Y + link.Y + link.Height / 2;
+        view.SendInput(Click(x, y, MouseButtonTransition.Down));
+        Assert.False(view.SendInput(Click(x, y)));
         Assert.Equal(["https://example.test/a"], opened);
 
         // Focus stays on the same link through another zoom, and Enter opens it.
@@ -766,9 +770,10 @@ public sealed class HtmlPreviewZoomTests
 
     private static InputEventHeader Header() => new(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1);
 
-    private static UiInputEvent Click(double x, double y) => UiInputEvent.FromMouseButton(new MouseButtonEvent(
-        Header(), InputPoint.ClientDeviceIndependentPixels(x, y), MouseButtons.None, MouseButton.Left,
-        MouseButtonTransition.Up, InputEventSource.Synthetic));
+    private static UiInputEvent Click(double x, double y, MouseButtonTransition transition = MouseButtonTransition.Up) =>
+        UiInputEvent.FromMouseButton(new MouseButtonEvent(
+            Header(), InputPoint.ClientDeviceIndependentPixels(x, y), MouseButtons.None, MouseButton.Left,
+            transition, InputEventSource.Synthetic));
 
     private static UiInputEvent Wheel(double x, double y, double notches, InputModifiers modifiers) => UiInputEvent.FromMouseWheel(new MouseWheelEvent(
         Header(), InputPoint.ClientDeviceIndependentPixels(x, y), MouseButtons.None, MouseWheelAxis.Vertical, notches, InputEventSource.Synthetic, modifiers));

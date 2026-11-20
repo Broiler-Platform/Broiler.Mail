@@ -19,7 +19,11 @@
     <ProjectReference Include="../Broiler.Mail.Application/Broiler.Mail.Application.csproj" />
     <ProjectReference Include="../Broiler.Mail.Infrastructure/Broiler.Mail.Infrastructure.csproj" />
     <PackageReference Include="Broiler.Hosting.Windows" />
+    <PackageReference Include="Broiler.Net" />
+    <PackageReference Include="Broiler.UI.Menu.Standard" />
     <PackageReference Include="Broiler.Graphics.Windows" />
     <PackageReference Include="Broiler.Native.Windows" />
   </ItemGroup>
+  <!-- Use the coordinated renderer and bridge changes in the platform checkout. -->
+
 </Project>

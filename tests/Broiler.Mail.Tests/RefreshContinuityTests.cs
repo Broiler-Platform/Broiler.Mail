@@ -153,6 +153,8 @@ public sealed class RefreshContinuityTests
         await model.SelectAsync(open.Key);
         _ = session.RenderFrame();
 
+        Descendants(content).OfType<StandardButton>().Single(button => button.Text == "More message actions").Click();
+        session.RenderFrame();
         Descendants(content).OfType<StandardButton>().Single(button => button.Text == "Plain text").Click();
         _ = session.RenderFrame();
 

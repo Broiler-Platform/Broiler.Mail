@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   7
-// Annotated:        0/7
-// Exempt:           7
-// Human-reviewed:   0/7
+// Relevant units:   9
+// Annotated:        0/9
+// Exempt:           8
+// Human-reviewed:   0/9
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       7
+// Unverified:       9
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -28,6 +28,7 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
 {
     internal Func<Broiler.Graphics.Rendering.IBroilerRenderer?> RendererProvider { get; set; } = () => null;
     internal Func<double> ScaleProvider { get; set; } = () => 1;
+    internal bool UseBackgroundRaster { get; init; }
     private WeakReference<ScrollableHtmlView>? _inlineSurface;
     private WeakReference<ScrollableHtmlView>? _localSurface;
     internal Func<RemoteImageBroker> CreateImageBroker { get; set; } = () => new RemoteImageBroker();
@@ -40,7 +41,8 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
         {
             if (HtmlPreviewPolicy.TryExternalLink(target, out var uri) && document.ExternalLinks.Contains(uri!.AbsoluteUri))
                 Process.Start(new ProcessStartInfo(uri.AbsoluteUri) { UseShellExecute = true });
-        }, ScaleProvider, target => HtmlPreviewPolicy.TryExternalLink(target, out var uri) && document.ExternalLinks.Contains(uri!.AbsoluteUri), recoverManagedFailures: true);
+        }, ScaleProvider, target => HtmlPreviewPolicy.TryExternalLink(target, out var uri) && document.ExternalLinks.Contains(uri!.AbsoluteUri),
+            recoverManagedFailures: true, useBackgroundRaster: UseBackgroundRaster);
         surface.ApplyReaderTheme(ReaderTheme());
         surface.ConfigureRemoteImages(message.HtmlText!, message.EmbeddedImages, document.RemoteImageUrls.Count, CreateImageBroker);
         _inlineSurface = new(surface);
@@ -54,7 +56,7 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
             throw new ArgumentException("HTML exceeds the local original preview limit.", nameof(html));
         var document = HtmlPreviewPolicy.Create(html, embeddedImages: null, textAndFormattingOnly: true);
         var surface = new ScrollableHtmlView(document.Html, RendererProvider, _ => { }, ScaleProvider,
-            canOpenLink: _ => false, recoverManagedFailures: true);
+            canOpenLink: _ => false, recoverManagedFailures: true, useBackgroundRaster: UseBackgroundRaster);
         surface.Scroll.AccessibleName = "Local original HTML";
         surface.Scroll.FocusWhenScrollable = true;
         surface.ApplyReaderTheme(ReaderTheme());
@@ -71,11 +73,27 @@ internal sealed class WindowsHtmlPreviewHost(Func<StandardThemeTokens?>? current
     private StandardThemeTokens? _theme;
     private bool _disposed;
 
+    internal void ReleaseGraphicsResources()
+    {
+        if (_inlineSurface is not null && _inlineSurface.TryGetTarget(out var inline) && !inline.IsDisposed)
+            inline.Content.InvalidateTiles();
+        if (_localSurface is not null && _localSurface.TryGetTarget(out var local) && !local.IsDisposed)
+            local.Content.InvalidateTiles();
+    }
+
     public void ApplyTheme(StandardThemeTokens theme)
     {
         _theme = theme;
         ApplySurfaceTheme(_inlineSurface, theme);
         ApplySurfaceTheme(_localSurface, theme);
+    }
+
+    internal void SetLiveResizing(bool active)
+    {
+        if (_inlineSurface is not null && _inlineSurface.TryGetTarget(out var inline) && !inline.IsDisposed)
+            inline.SetLiveResizing(active);
+        if (_localSurface is not null && _localSurface.TryGetTarget(out var local) && !local.IsDisposed)
+            local.SetLiveResizing(active);
     }
 
     public void Dispose()

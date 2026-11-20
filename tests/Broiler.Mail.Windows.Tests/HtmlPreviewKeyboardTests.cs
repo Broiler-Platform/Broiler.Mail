@@ -1,13 +1,19 @@
+using Broiler.Graphics.Color;
 using Broiler.Graphics.Geometry;
+using Broiler.Graphics.Imaging;
 using Broiler.Graphics.RenderList;
+using Broiler.Graphics.Rendering;
+using Broiler.Graphics.Resources;
 using Broiler.Input;
 using Broiler.Input.Keyboard;
+using Broiler.Input.Mouse;
 using Broiler.Mail.Application.Views;
 using Broiler.Mail.Infrastructure.Preview;
 using Broiler.Mail.Windows.Preview;
 using Broiler.UI;
 using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
+using Broiler.UI.Menu.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.Standard;
@@ -54,8 +60,90 @@ public sealed class HtmlPreviewKeyboardTests
         // Broiler.HTML reports a wrapped link's first line only, so its single target covers that line.
         var target = Assert.Single(view.LinkTargets);
         Assert.Equal(view.Snapshot!.Links[0].Bounds.Height, target.Bounds.Height, 3);
+        view.SendInput(Click(target.Bounds.X + 10, target.Bounds.Bottom + 10, MouseButtonTransition.Down));
         Assert.True(view.SendInput(Click(target.Bounds.X + 10, target.Bounds.Bottom + 10)));
         Assert.Equal(["https://example.test/long"], opened);
+    }
+
+    [Fact]
+    public void ZoomedHtmlCopiesADragAcrossALinkAndSupportsSelectAll()
+    {
+        var opened = new List<string>();
+        var view = new HtmlViewElement(
+            "<p style='font:24px monospace'><a href='https://example.test'>Alpha Beta Gamma</a> Delta</p>",
+            () => null, opened.Add);
+        view.Zoom = 1.5;
+        using var fixture = new Fixture(view);
+        BRect link = Assert.Single(view.LinkTargets).Bounds;
+        double x = link.Left + 1;
+        double y = link.Top + link.Height / 2;
+        double endX = link.Left + link.Width * 0.7;
+        Assert.True(HtmlViewElement.HasSelectableTextAt(fixture.Session, new BPoint(x, y)));
+        Assert.False(HtmlViewElement.HasSelectableTextAt(fixture.Session, new BPoint(x, link.Bottom + 60)));
+        var header = new InputEventHeader(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1);
+
+        fixture.Session.DispatchInput(UiInputEvent.FromMouseButton(new MouseButtonEvent(
+            header, InputPoint.ClientDeviceIndependentPixels(x, y), MouseButtons.Left, MouseButton.Left,
+            MouseButtonTransition.Down, InputEventSource.Synthetic)));
+        fixture.Session.DispatchInput(UiInputEvent.FromMouseMove(new MouseMoveEvent(
+            header, InputPoint.ClientDeviceIndependentPixels(endX, y), MouseButtons.Left, InputEventSource.Synthetic)));
+        fixture.Session.DispatchInput(Click(endX, y));
+        Assert.Empty(opened);
+        Assert.Null(fixture.Session.CapturedElement);
+        Assert.True(fixture.Press(0x43, KeyboardModifierState.Control));
+        Assert.Contains("Alpha Beta", fixture.Clipboard);
+        Assert.DoesNotContain("Delta", fixture.Clipboard);
+
+        Assert.True(fixture.Press(0x41, KeyboardModifierState.Control));
+        Assert.True(fixture.Press(0x43, KeyboardModifierState.Control));
+        Assert.Equal("Alpha Beta Gamma Delta", fixture.Clipboard);
+
+        view.UpdateHtml("<p>Replacement</p>");
+        Assert.True(fixture.Press(0x43, KeyboardModifierState.Control));
+        Assert.Equal("Alpha Beta Gamma Delta", fixture.Clipboard);
+    }
+
+    [Fact]
+    public void ContextMenuCopiesTextOrLinkAndOpensLinksOnlyOnRequest()
+    {
+        var opened = new List<string>();
+        const string url = "https://example.test/agenda";
+        var view = new HtmlViewElement($"<p><a href='{url}'>Agenda</a></p>", () => null, opened.Add);
+        using var fixture = new Fixture(view);
+        BRect link = Assert.Single(view.LinkTargets).Bounds;
+        double x = link.Left + 4;
+        double y = link.Top + link.Height / 2;
+
+        StandardMenu OpenMenu()
+        {
+            fixture.Session.DispatchInput(Click(x, y, MouseButtonTransition.Down, MouseButton.Right));
+            fixture.Session.DispatchInput(Click(x, y, MouseButtonTransition.Up, MouseButton.Right));
+            return Assert.IsType<StandardMenu>(fixture.Session.CapturedElement);
+        }
+
+        void Choose(StandardMenu menu, string label)
+        {
+            BRect row = Assert.Single(menu.GetSemanticNode().Children, item => item.Name == label).Bounds;
+            fixture.Session.DispatchInput(Click(row.Left + 5, row.Top + 5, MouseButtonTransition.Down));
+            fixture.Session.DispatchInput(Click(row.Left + 5, row.Top + 5));
+        }
+
+        var menu = OpenMenu();
+        Assert.False(Assert.Single(menu.Items, item => item.Id == "copy").IsEnabled);
+        Choose(menu, "Copy Link Address");
+        Assert.Equal(url, fixture.Clipboard);
+        Assert.Empty(opened);
+
+        Choose(OpenMenu(), "Select All");
+        menu = OpenMenu();
+        Assert.True(Assert.Single(menu.Items, item => item.Id == "copy").IsEnabled);
+        Choose(menu, "Copy");
+        Assert.Equal("Agenda", fixture.Clipboard);
+        Assert.Empty(opened);
+
+        Choose(OpenMenu(), "Open Link");
+        Assert.Equal([url], opened);
+        Assert.Null(fixture.Session.CapturedElement);
     }
 
     [Fact]
@@ -257,6 +345,130 @@ public sealed class HtmlPreviewKeyboardTests
             Assert.True(HasLinkColor(pixels, link.Bounds, tileTop, scale), $"No link colour at {link.Href}, {link.Bounds}, scale {scale}.");
     }
 
+    [Fact]
+    public void PointerSelectionOnlyInvalidatesAffectedTilesInMultiTileDocument()
+    {
+        var renderer = new TileCountingRenderer();
+        string html = "<p style='font:20px monospace'>Selectable start line in tile zero.</p>" + TallDocument;
+        var view = new ScrollableHtmlView(html, () => renderer, _ => { });
+        using var fixture = new Fixture(view, width: 600, height: 400);
+
+        // Scroll to tile 1 so both tile 0 and tile 1 are cached, then back to top.
+        view.Scroll.SetOffset(new BPoint(0, HtmlViewElement.DefaultTileHeight + 10));
+        fixture.Session.RenderFrame();
+        view.Scroll.SetOffset(new BPoint(0, 0));
+        fixture.Session.RenderFrame();
+        Assert.True(view.Content.IsTileCached(0));
+        Assert.True(view.Content.IsTileCached(1));
+
+        int createdBefore = renderer.CreatedCount;
+        int releasedBefore = renderer.ReleasedCount;
+
+        var header = new InputEventHeader(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1);
+        fixture.Session.DispatchInput(UiInputEvent.FromMouseButton(new MouseButtonEvent(
+            header, InputPoint.ClientDeviceIndependentPixels(20, 20), MouseButtons.Left, MouseButton.Left,
+            MouseButtonTransition.Down, InputEventSource.Synthetic)));
+        fixture.Session.DispatchInput(UiInputEvent.FromMouseMove(new MouseMoveEvent(
+            header, InputPoint.ClientDeviceIndependentPixels(160, 20), MouseButtons.Left, InputEventSource.Synthetic)));
+        fixture.Session.DispatchInput(Click(160, 20));
+        fixture.Session.RenderFrame();
+
+        // Only tile 0 should have been invalidated and re-rastered; tile 1 stays cached.
+        Assert.Equal(releasedBefore + 1, renderer.ReleasedCount);
+        Assert.Equal(createdBefore + 1, renderer.CreatedCount);
+        Assert.True(view.Content.IsTileCached(0));
+        Assert.True(view.Content.IsTileCached(1));
+    }
+
+    [Fact]
+    public void LiveResizeDefersHtmlReflowAndReusesLinkTargetsOnSettle()
+    {
+        var renderer = new TileCountingRenderer();
+        var view = new ScrollableHtmlView(
+            "<p><a href='https://example.test/one'>First link</a></p>" + TallDocument,
+            () => renderer, _ => { });
+        using var fixture = new Fixture(view, width: 600, height: 400);
+
+        double initialLayoutWidth = view.Snapshot!.Width;
+        var firstLinkTarget = view.Content.LinkTargets[0];
+        int releasedBefore = renderer.ReleasedCount;
+
+        view.SetLiveResizing(true);
+        fixture.Resize(480);
+        // During live resize, layout and tiles are preserved without discarding GPU tiles.
+        Assert.Equal(initialLayoutWidth, view.Snapshot.Width);
+        Assert.Equal(releasedBefore, renderer.ReleasedCount);
+        Assert.True(view.Content.CachedTileCount > 0);
+
+        view.SetLiveResizing(false);
+        fixture.Session.RenderFrame();
+        fixture.Session.RenderFrame();
+
+        Assert.True(view.Snapshot.Width < initialLayoutWidth);
+        Assert.Same(firstLinkTarget, view.Content.LinkTargets[0]);
+    }
+
+    [Fact]
+    public async Task InteractiveSessionPrefetchesLookaheadTileInBackground()
+    {
+        var renderer = new TileCountingRenderer();
+        var dispatcher = new QueuedCallbackDispatcher();
+        using var view = new ScrollableHtmlView(TallDocument, () => renderer, _ => { });
+        var host = new Host { Width = 600, Height = 850 };
+        using var session = new StandardUiSessionBuilder()
+            .WithDispatcher(dispatcher)
+            .Build(host);
+        StandardControlPaint.SetSessionTheme(session, StandardThemeTokens.Light);
+        StandardThemeController.ApplyToSubtree(view, StandardThemeTokens.Light);
+        session.AddRoot(view);
+        session.RenderFrame();
+
+        // Viewport height 850 leaves tile 1 within the lookahead window (850 + 512 > 1024) without being visible yet.
+        Assert.True(view.Content.IsTileCached(0));
+        await dispatcher.Signal.WaitAsync(TimeSpan.FromSeconds(10));
+        dispatcher.Drain();
+        Assert.True(view.Content.IsTileCached(1));
+    }
+
+    [Fact]
+    public void BackgroundTilesDiscardStaleResultsAndSelectionReusesTheBitmap()
+    {
+        var renderer = new TileCountingRenderer();
+        var dispatcher = new StandardQueuedUiDispatcher();
+        using var view = new ScrollableHtmlView("<p>Earlier message</p>", () => renderer, _ => { }, useBackgroundRaster: true);
+        using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new Host { Width = 600, Height = 400 });
+        StandardControlPaint.SetSessionTheme(session, StandardThemeTokens.Light);
+        StandardThemeController.ApplyToSubtree(view, StandardThemeTokens.Light);
+        session.AddRoot(view);
+        session.RenderFrame();
+        Assert.Equal(0, renderer.CreatedCount);
+        Assert.True(SpinWait.SpinUntil(() => dispatcher.HasPendingWork, TimeSpan.FromSeconds(10)));
+
+        view.UpdateHtml("<p style='font:20px monospace'>Selectable start line of the new message.</p>");
+        session.RenderFrame();
+        dispatcher.Drain();
+        Assert.Equal(0, renderer.CreatedCount);
+        Assert.True(SpinWait.SpinUntil(() => dispatcher.HasPendingWork, TimeSpan.FromSeconds(10)));
+        dispatcher.Drain();
+        Assert.Equal(1, renderer.CreatedCount);
+
+        var header = new InputEventHeader(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1);
+        session.DispatchInput(Click(20, 20, MouseButtonTransition.Down));
+        session.DispatchInput(UiInputEvent.FromMouseMove(new MouseMoveEvent(
+            header, InputPoint.ClientDeviceIndependentPixels(160, 20), MouseButtons.Left, InputEventSource.Synthetic)));
+        session.DispatchInput(Click(160, 20));
+        var selected = session.RenderFrame().Commands.OfType<BRenderCommand.FillRect>();
+        var highlight = BColor.FromArgb(0x60, 0x33, 0x99, 0xFF);
+        Assert.Contains(selected, command => command.Color == highlight && command.Rect.Width > 0);
+        Assert.Equal(1, renderer.CreatedCount);
+        Assert.Equal(0, renderer.ReleasedCount);
+
+        session.DispatchInput(Click(500, 70, MouseButtonTransition.Down));
+        session.DispatchInput(Click(500, 70));
+        Assert.DoesNotContain(session.RenderFrame().Commands.OfType<BRenderCommand.FillRect>(), command => command.Color == highlight);
+        Assert.Equal(1, renderer.CreatedCount);
+    }
+
     private static bool HasLinkColor(Broiler.Graphics.Imaging.BPixelBuffer pixels, BRect linkBounds, double tileTop, double scale)
     {
         int top = (int)((linkBounds.Y - tileTop) * scale), bottom = (int)((linkBounds.Bottom - tileTop) * scale);
@@ -270,10 +482,10 @@ public sealed class HtmlPreviewKeyboardTests
         return false;
     }
 
-    private static UiInputEvent Click(double x, double y) => UiInputEvent.FromMouseButton(new Broiler.Input.Mouse.MouseButtonEvent(
+    private static UiInputEvent Click(double x, double y, MouseButtonTransition transition = MouseButtonTransition.Up,
+        MouseButton button = MouseButton.Left) => UiInputEvent.FromMouseButton(new MouseButtonEvent(
         new InputEventHeader(InputDeviceId.FromOpaqueValue("test"), new InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1),
-        InputPoint.ClientDeviceIndependentPixels(x, y), Broiler.Input.Mouse.MouseButtons.None, Broiler.Input.Mouse.MouseButton.Left,
-        Broiler.Input.Mouse.MouseButtonTransition.Up, InputEventSource.Synthetic));
+        InputPoint.ClientDeviceIndependentPixels(x, y), MouseButtons.None, button, transition, InputEventSource.Synthetic));
 
     private static UiInputEvent Key(int code, KeyboardModifierState modifiers = KeyboardModifierState.None) =>
         UiInputEvent.FromKeyboardKey(new KeyboardKeyEvent(
@@ -300,6 +512,7 @@ public sealed class HtmlPreviewKeyboardTests
         }
 
         public UiSession Session { get; }
+        public string Clipboard => _host.Clipboard;
 
         public bool Press(int code, KeyboardModifierState modifiers = KeyboardModifierState.None)
         {
@@ -323,8 +536,11 @@ public sealed class HtmlPreviewKeyboardTests
         }
     }
 
-    private sealed class Host : IUiHost
+    private sealed class Host : IUiHost, IUiClipboardHost
     {
+        public string Clipboard { get; private set; } = "";
+        public bool TryGetText(out string text) { text = Clipboard; return true; }
+        public void SetText(string text) => Clipboard = text;
         public int Width { get; set; }
         public int Height { get; set; }
         public BSize ViewportSize => new(Width, Height);
@@ -332,5 +548,45 @@ public sealed class HtmlPreviewKeyboardTests
         public BRenderList CreateRenderList(int capacity = 0) => new(capacity);
         public void Invalidate(UiInvalidation invalidation) { }
         public void Present(BRenderList renderList) { }
+    }
+
+    private sealed class TileCountingRenderer : IBroilerRenderer
+    {
+        private uint _nextId = 1;
+        public int CreatedCount { get; private set; }
+        public int ReleasedCount { get; private set; }
+        public BImageHandle CreateImage(ReadOnlySpan<byte> encodedImage) => Create(100, 100);
+        public BImageHandle CreateImage(BPixelBuffer pixels) => Create(pixels.Width, pixels.Height);
+        public void ReleaseImage(BImageHandle image)
+        {
+            if (image.IsValid) ReleasedCount++;
+        }
+        public IBroilerSurface CreateSurface(BSurfaceDescriptor descriptor) => throw new NotImplementedException();
+        public void Render(IBroilerSurface surface, BRenderList renderList, BFrameContext frameContext) { }
+        public Broiler.Graphics.Imaging.BBitmap RenderToImage(BRenderList renderList, BSurfaceDescriptor descriptor, BFrameContext frameContext) => throw new NotImplementedException();
+        public void Dispose() { }
+        private BImageHandle Create(int width, int height)
+        {
+            CreatedCount++;
+            return new BImageHandle(new BResourceHandle(BResourceKind.Image, _nextId++), new BSize(width, height));
+        }
+    }
+
+    private sealed class QueuedCallbackDispatcher : IUiDispatcher
+    {
+        private readonly System.Collections.Concurrent.ConcurrentQueue<Action> _queue = new();
+        private readonly TaskCompletionSource _signal = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public Task Signal => _signal.Task;
+        public bool CheckAccess() => true;
+        public void Post(Action action)
+        {
+            _queue.Enqueue(action);
+            _signal.TrySetResult();
+        }
+        public void Drain()
+        {
+            while (_queue.TryDequeue(out var action))
+                action();
+        }
     }
 }

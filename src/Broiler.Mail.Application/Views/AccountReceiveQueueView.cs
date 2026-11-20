@@ -33,9 +33,9 @@ namespace Broiler.Mail.Application.Views;
 
 public sealed class AccountReceiveQueueView(AccountReceiveQueueViewModel model, Func<AccountId?> selectedAccount, AccountSelectionViewModel? availability = null)
 {
-    public UiElement CreateContent()
+    public UiElement CreateContent(bool collapsible = true)
     {
-        var section = new FormSection("Account receives", "Explicit background header jobs for saved accounts. Two receive slots; one pending/active job per account. Opening this section starts nothing and jobs are not replayed after restart.", collapsible: true, expanded: false) { ShowText = "Show account receives", HideText = "Hide account receives" };
+        var section = new FormSection("Account receives", "Explicit background header jobs for saved accounts. Two receive slots; one pending/active job per account. Opening this section starts nothing and jobs are not replayed after restart.", collapsible: collapsible, expanded: !collapsible) { ShowText = "Show account receives", HideText = "Hide account receives" };
         var picker = new StandardComboBox { AccessibleName = "Account receive job", PreferredSize = new BSize(400, 32) };
         var actions = new StandardToolbar { Overflow = UiToolbarOverflow.Wrap, Padding = 4, Spacing = 6 };
         var queueAll = new StandardButton { Text = "Queue enabled accounts" }; var queueOne = new StandardButton { Text = "Queue selected account receive" };

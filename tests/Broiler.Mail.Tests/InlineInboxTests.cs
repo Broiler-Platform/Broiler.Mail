@@ -32,6 +32,7 @@ public sealed class InlineInboxTests
         await model.SelectAsync(SqliteMailCacheTests.Key(mailbox, 1)); session.RenderFrame();
         var surface = Assert.IsType<ControlledSurface>(host.Surface);
         StandardButton Button(string name) => Descendants(root).OfType<StandardButton>().Single(b => b.Text == name);
+        Button("More message actions").Click(); session.RenderFrame();
         var zoomIn = Button("Zoom in"); var zoomOut = Button("Zoom out");
         var reset = Button("100 %");
         session.SetFocus(zoomIn);
@@ -110,6 +111,8 @@ public sealed class InlineInboxTests
             var surface = Assert.IsType<ControlledSurface>(host.Surface);
             Assert.Equal(UiVisibility.Visible, surface.Visibility);
             Assert.Same(surface.Children.Single(), session.FocusedElement);
+            Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
+            session.RenderFrame();
             var toggle = Descendants(root).OfType<StandardButton>().Single(b => b.Text == "Plain text");
             toggle.Click(); Assert.Equal(UiVisibility.Collapsed, surface.Visibility); Assert.Equal("HTML", toggle.Text);
             toggle.Click(); Assert.Equal(UiVisibility.Visible, surface.Visibility);
@@ -142,6 +145,7 @@ public sealed class InlineInboxTests
         using var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(new UiHost()); session.AddRoot(root); await model.SelectAsync(SqliteMailCacheTests.Key(mailbox, 1)); session.RenderFrame();
         StandardButton Button(string value) => Descendants(root).OfType<StandardButton>().Single(item => item.Text == value);
         var old = Assert.IsType<ControlledSurface>(host.Surface); var text = Descendants(root).OfType<ScrollableMessageText>().Single();
+        Button("More message actions").Click(); session.RenderFrame();
         old.RestoreReadingPosition(0.6); Button("Plain text").Click(); session.RenderFrame(); Assert.InRange(text.ReadingPosition, 0.59, 0.61);
         text.RestoreReadingPosition(0.35); session.RenderFrame(); Button("HTML").Click(); Assert.InRange(old.ReadingPosition, 0.34, 0.36);
         var endButton = Descendants(root).OfType<StandardButton>().Single(item => item.AccessibleName == "End of message"); session.SetFocus(endButton);

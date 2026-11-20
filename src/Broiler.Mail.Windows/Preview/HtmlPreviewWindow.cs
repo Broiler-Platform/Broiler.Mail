@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   131
-// Annotated:        48/131
-// Exempt:           98
-// Human-reviewed:   0/131
+// Relevant units:   160
+// Annotated:        48/160
+// Exempt:           125
+// Human-reviewed:   0/160
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         39/20
 // Resource impact:  8/10 max
-// Unverified:       131
+// Unverified:       160
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -32,6 +32,7 @@ using Broiler.Graphics.Windows;
 using Broiler.Hosting.Windows;
 using Broiler.Hosting.Windows.Accessibility;
 using Broiler.HTML.Image;
+using Broiler.Layout.IR;
 using Broiler.Mail.Core.Diagnostics;
 using Broiler.Net.Http;
 using Broiler.Input.Keyboard;
@@ -51,6 +52,8 @@ using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel;
 using Broiler.UI.Panel.Standard;
 using Broiler.UI.ScrollView.Standard;
+using Broiler.UI.Menu;
+using Broiler.UI.Menu.Standard;
 using Broiler.UI.Standard;
 using Broiler.UI.Toolbar;
 using Broiler.UI.Toolbar.Standard;
@@ -720,7 +723,14 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         // WM_GETMINMAXINFO: a simulated scale gets its pixels even beyond the real desktop, as the main window does.
         if (message == 0x0024 && hwnd == NativeHandle && _measurement?.SimulatedScale is not null)
             WindowsScreen.LiftMaximumTrackSize(lParam);
+        if (hwnd == NativeHandle)
+        {
+            if (message == 0x0214) _htmlView.SetLiveResizing(true);
+            else if (message == 0x0232) _htmlView.SetLiveResizing(false);
+        }
     }
+
+    protected override void OnGraphicsResourcesReleasing() => _htmlView?.Content.InvalidateTiles();
 
     protected override BRenderList? BuildRenderList(BSize clientSize)
     {
@@ -801,7 +811,7 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
         recorder?.EndDispatch(started);
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=4053CA
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=CD5455
     // Hairs-Falsified-If: an input event the UI session reports as handled leaves the window without an invalidation, so the frame on screen stays stale
     // Hairs-Human:        PENDING
     internal void Dispatch(UiInputEvent input)
@@ -818,6 +828,9 @@ internal sealed class HtmlPreviewWindow : Direct2DWindow
             Invalidate();
             return;
         }
+        if (input.Kind == UiInputEventKind.PointerMove)
+            WindowsPointerCursor.SetTextCursor(HtmlViewElement.HasSelectableTextAt(_session, input.Position));
+
         if (_session.DispatchInput(input))
             Invalidate();
         // Escape closes the preview unless a control used it first, for example to dismiss a menu.
@@ -991,7 +1004,7 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
     private readonly StandardScrollView _scroll = new();
     private readonly HtmlViewElement _content;
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=D6B4BA
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=EF8D9F
     // Hairs-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the view renders
     // Hairs-Human:        PENDING
     public ScrollableHtmlView(
@@ -1000,10 +1013,11 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
         Action<string> onLinkClicked,
         Func<double>? dpiScaleProvider = null,
         Func<string, bool>? canOpenLink = null,
-        bool recoverManagedFailures = false)
+        bool recoverManagedFailures = false,
+        bool useBackgroundRaster = false)
     {
         _sourceHtml = html;
-        _content = new HtmlViewElement(html, rendererProvider, onLinkClicked, dpiScaleProvider, canOpenLink);
+        _content = new HtmlViewElement(html, rendererProvider, onLinkClicked, dpiScaleProvider, canOpenLink, useBackgroundRaster);
         if (recoverManagedFailures) _content.RenderingFailed += (_, _) => RenderingFailed?.Invoke(this, EventArgs.Empty);
         _scroll.AddChild(_content);
         AddChild(_scroll);
@@ -1079,6 +1093,7 @@ internal sealed class ScrollableHtmlView : UiElement, IInlineHtmlReader, IReader
     }
     internal HtmlViewElement Content => _content;
     internal StandardScrollView Scroll => _scroll;
+    internal void SetLiveResizing(bool active) => _content.SetLiveResizing(active);
 
     private double _readFraction;
     private double? _restoreFraction;
@@ -1206,7 +1221,32 @@ internal sealed class HtmlViewElement : UiElement
     private readonly Action<string> _onLinkClicked;
     private readonly Func<double>? _dpiScaleProvider;
     private readonly Func<string, bool>? _canOpenLink;
+    private readonly bool _useBackgroundRaster;
     private readonly List<HtmlLinkTarget> _linkTargets = new();
+    private IReadOnlyList<(string Href, string Text)>? _cachedLinkNames;
+    private bool _selectingWithPointer;
+    private bool _rightPressed;
+    private double _selectionLastDocY;
+    private double _selectionCurrentDocY;
+    private readonly HashSet<(int Row, int Column)> _selectionTiles = new();
+    private readonly HashSet<(int Row, int Column)> _dirtySelectionTiles = new();
+    private readonly List<BRect> _selectionRects = new();
+    private bool _selectionOverlayDirty;
+    private bool? _hasActiveSelection;
+    private bool _isLiveResizing;
+    private bool _deferredResizeLayout;
+    private (int First, int Last) _lastVisibleRows = (-1, -1);
+    private (int First, int Last) _lastVisibleColumns = (-1, -1);
+    private long _prefetchGeneration;
+    private HtmlTilePrefetcher? _prefetcher;
+    private readonly List<HtmlTilePrefetchRequest> _tileRequests = new();
+    private readonly StandardMenu _htmlMenu = new()
+    {
+        PresentationMode = UiMenuPresentationMode.ContextMenu,
+        IsTabStop = false,
+        AccessibleName = "Message context menu",
+    };
+    private string? _menuLink;
     // Keyed by row and column; a page that fits the viewport has one column.
     private readonly Dictionary<(int Row, int Column), (BImageHandle Handle, int PixelWidth, int PixelHeight, double WidthDip, double HeightDip)> _tiles = new();
     private readonly LinkedList<(int Row, int Column)> _lruTiles = new();
@@ -1281,10 +1321,10 @@ internal sealed class HtmlViewElement : UiElement
     public bool IsTileCached(int row, int column = 0) => _tiles.ContainsKey((row, column));
     internal IReadOnlyCollection<(int Row, int Column)> CachedTileIndices => _tiles.Keys.ToArray();
 
-    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=490A6B
+    // Hairs-AI:           Origin=AI; Spec=ADR-0005; IP=Low; Security=High; Resources=6; Fingerprint=40D1B3
     // Hairs-Falsified-If: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
     // Hairs-Human:        PENDING
-    private static HtmlContainer CreateContainer(string html)
+    internal static HtmlContainer CreateIsolatedContainer(string html)
     {
         HtmlRuntime.Initialize();
         var container = new HtmlContainer();
@@ -1308,7 +1348,14 @@ internal sealed class HtmlViewElement : UiElement
         return container;
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=E28C87
+    private HtmlContainer CreateContainer(string html)
+    {
+        var container = CreateIsolatedContainer(html);
+        container.SelectionInvalidated += InvalidateSelection;
+        return container;
+    }
+
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=88D9BD
     // Hairs-Falsified-If: an http(s) image named in the html passed to the constructor is fetched over the network when the element renders
     // Hairs-Human:        PENDING
     public HtmlViewElement(
@@ -1316,27 +1363,39 @@ internal sealed class HtmlViewElement : UiElement
         Func<IBroilerRenderer?> rendererProvider,
         Action<string> onLinkClicked,
         Func<double>? dpiScaleProvider = null,
-        Func<string, bool>? canOpenLink = null)
+        Func<string, bool>? canOpenLink = null,
+        bool useBackgroundRaster = false)
     {
         _html = html;
         _rendererProvider = rendererProvider;
         _onLinkClicked = onLinkClicked;
         _dpiScaleProvider = dpiScaleProvider;
         _canOpenLink = canOpenLink;
+        _useBackgroundRaster = useBackgroundRaster;
+        AddChild(_htmlMenu);
+        _htmlMenu.ItemInvoked += (_, e) => InvokeHtmlMenuItem(e.Item.Id);
         _container = CreateContainer(_html);
         // The document takes focus so the keyboard can scroll it; its links follow in Tab order.
         Focusable = true;
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=C4589F
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=6; Fingerprint=9EFA01
     // Hairs-Falsified-If: after UpdateHtml a paint or link hit-test runs against the container that UpdateHtml disposed
     // Hairs-Human:        PENDING
     public void UpdateHtml(string html)
     {
         bool focusInside = _linkTargets.Any(target => target.IsFocused);
         _html = html;
+        _cachedLinkNames = null;
+        _deferredResizeLayout = false;
+        _htmlMenu.ClosePopup();
+        _rightPressed = false;
+        EndSelectionGesture();
         _container.Dispose();
         _container = CreateContainer(_html);
+        _selectionRects.Clear();
+        _selectionOverlayDirty = false;
+        _hasActiveSelection = null;
         _layoutSnapshot = null;
         ClearLinkTargets();
         if (focusInside) Session?.SetFocus(this);
@@ -1344,11 +1403,28 @@ internal sealed class HtmlViewElement : UiElement
         Invalidate(UiInvalidationKind.Measure);
     }
 
+    internal void SetLiveResizing(bool active)
+    {
+        if (_isLiveResizing == active) return;
+        _isLiveResizing = active;
+        if (active)
+        {
+            _prefetcher?.ClearQueue();
+        }
+        else
+        {
+            var invalidation = _deferredResizeLayout ? UiInvalidationKind.Measure | UiInvalidationKind.Render : UiInvalidationKind.Render;
+            _deferredResizeLayout = false;
+            Invalidate(invalidation);
+        }
+    }
+
     private void EnsureLayout(float width)
     {
         if (_layoutSnapshot is not null && Math.Abs(_layoutSnapshot.Width - width) <= 0.5f) return;
         InvalidateTiles();
         _layoutSnapshot = CalculateLayout(width);
+        _selectionOverlayDirty |= _selectionRects.Count > 0;
         Statistics?.LaidOut(_layoutSnapshot.LayoutDurationTicks);
         RebuildLinkTargets();
     }
@@ -1360,7 +1436,6 @@ internal sealed class HtmlViewElement : UiElement
     private void RebuildLinkTargets()
     {
         int focused = _linkTargets.FindIndex(target => target.IsFocused);
-        ClearLinkTargets();
         var snapshot = _layoutSnapshot!;
         var merged = new List<(string Href, string? Id, BRect Bounds)>();
         foreach (var link in snapshot.Links)
@@ -1371,11 +1446,42 @@ internal sealed class HtmlViewElement : UiElement
                 merged[^1] = merged[^1] with { Bounds = Union(merged[^1].Bounds, link.Bounds) };
             else merged.Add((link.Href, link.Id, link.Bounds));
         }
-        var names = HtmlLinkNames.From(_html);
+        var names = _cachedLinkNames ??= HtmlLinkNames.From(_html);
         var used = new HashSet<int>();
+        var resolved = new List<(string Href, string Name, BRect Bounds)>(merged.Count);
         foreach (var (href, _, bounds) in merged)
+            resolved.Add((href, HtmlLinkNames.NameFor(href, names, used), bounds));
+
+        bool canReuse = _linkTargets.Count == resolved.Count;
+        if (canReuse)
         {
-            var target = new HtmlLinkTarget(href, HtmlLinkNames.NameFor(href, names, used), bounds, _zoom);
+            for (int i = 0; i < resolved.Count; i++)
+            {
+                if (!string.Equals(_linkTargets[i].Href, resolved[i].Href, StringComparison.Ordinal) ||
+                    !string.Equals(_linkTargets[i].Text, resolved[i].Name, StringComparison.Ordinal))
+                {
+                    canReuse = false;
+                    break;
+                }
+            }
+        }
+
+        if (canReuse)
+        {
+            for (int i = 0; i < resolved.Count; i++)
+            {
+                var target = _linkTargets[i];
+                target.UpdateGeometry(resolved[i].Bounds, _zoom);
+                target.Measure(target.PreferredSize);
+            }
+            ArrangeLinkTargets(Bounds);
+            return;
+        }
+
+        ClearLinkTargets();
+        foreach (var (href, name, bounds) in resolved)
+        {
+            var target = new HtmlLinkTarget(href, name, bounds, _zoom);
             target.Clicked += (_, _) => _onLinkClicked(target.Href);
             AddChild(target);
             target.Measure(target.PreferredSize);
@@ -1457,11 +1563,16 @@ internal sealed class HtmlViewElement : UiElement
     protected override UiSemanticNode GetSemanticNodeCore() =>
         base.GetSemanticNodeCore() with { Role = UiSemanticRole.Group, Name = "HTML message" };
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=246DD5
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=417E8A
     // Hairs-Falsified-If: an allocated tile texture handle is leaked or passed to ReleaseImage after invalidation
     // Hairs-Human:        PENDING
-    private void InvalidateTiles()
+    internal void InvalidateTiles()
     {
+        _prefetchGeneration++;
+        _prefetcher?.ClearQueue();
+        _tileRequests.Clear();
+        _dirtySelectionTiles.Clear();
+        _selectionTiles.Clear();
         Statistics?.Discarded(_tiles.Count);
         var renderer = _tileRenderer;
         foreach (var entry in _tiles.Values)
@@ -1492,14 +1603,12 @@ internal sealed class HtmlViewElement : UiElement
         return (scale, (int)Math.Max(1, round(widthDip * scale)), (int)Math.Max(1, round(heightDip * scale)));
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=99266D
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=BC44AF
     // Hairs-Falsified-If: layout geometry calculation ignores trailing content, leaving bare text or tail elements outside measured height
     // Hairs-Human:        PENDING
     internal HtmlLayoutSnapshot CalculateLayout(float width)
     {
         long start = Stopwatch.GetTimestamp();
-        _container.MaxSize = new SizeF(width, 0);
-        _container.PerformLayout();
         var geom = _container.GetLayoutGeometry(new SizeF(width, 0));
 
         float maxBottom = 0;
@@ -1560,6 +1669,16 @@ internal sealed class HtmlViewElement : UiElement
     private BSize MeasureDocument(BSize availableSize)
     {
         _viewportWidth = double.IsFinite(availableSize.Width) && availableSize.Width > 50 ? availableSize.Width : ContentWidth;
+        if (_isLiveResizing && _layoutSnapshot is { } existing)
+        {
+            if (Math.Abs(existing.Width - LayoutWidth) > 0.5f)
+                _deferredResizeLayout = true;
+            double width = existing.ExtentWidth <= existing.Width + 0.5f
+                ? _viewportWidth
+                : Math.Max(_viewportWidth, existing.ExtentWidth * _zoom);
+            return new BSize(width, existing.ContentHeight * _zoom);
+        }
+        _deferredResizeLayout = false;
         EnsureLayout(LayoutWidth);
         var snapshot = _layoutSnapshot!;
         // As wide as the viewport, or wider where content the renderer could not wrap runs past it:
@@ -1581,19 +1700,38 @@ internal sealed class HtmlViewElement : UiElement
         var bitmap = new HtmlBitmap(pixelWidth, pixelHeight);
         try
         {
-            _container.ViewportZoom = (float)scale;
-            _container.ScrollOffset = new PointF(-(float)layoutLeft, -(float)layoutTop);
-            _container.PerformPaint(bitmap, new RectangleF(0, 0, pixelWidth, pixelHeight));
+            PaintTile(_container, bitmap, layoutTop, scale, layoutLeft);
             return bitmap;
         }
         catch { bitmap.Dispose(); throw; }
-        finally { _container.ScrollOffset = PointF.Empty; _container.ViewportZoom = 1.0f; }
+    }
+
+    internal static void PaintTile(HtmlContainer container, HtmlBitmap bitmap, double layoutTop, double scale, double layoutLeft)
+    {
+        try
+        {
+            container.ViewportZoom = (float)scale;
+            container.ScrollOffset = new PointF(-(float)layoutLeft, -(float)layoutTop);
+            container.PerformPaint(bitmap, new RectangleF(0, 0, bitmap.Width, bitmap.Height));
+        }
+        finally
+        {
+            container.ScrollOffset = PointF.Empty;
+            container.ViewportZoom = 1.0f;
+        }
     }
 
     private void EnsureTile((int Row, int Column) key, double pageWidth, double columnWidth, double dpiScale, IBroilerRenderer renderer)
     {
         if (_tileRenderer is not null && !ReferenceEquals(_tileRenderer, renderer)) InvalidateTiles();
         _tileRenderer = renderer;
+        if (_dirtySelectionTiles.Remove(key) && _tiles.Remove(key, out var stale))
+        {
+            _cachedTileBytes -= (long)stale.PixelWidth * stale.PixelHeight * BytesPerPixel;
+            _lruTiles.Remove(key);
+            _selectionTiles.Remove(key);
+            if (stale.Handle.IsValid) renderer.ReleaseImage(stale.Handle);
+        }
         if (_tiles.ContainsKey(key))
         {
             _lruTiles.Remove(key);
@@ -1611,17 +1749,7 @@ internal sealed class HtmlViewElement : UiElement
 
         (double tileScale, int pixelW, int pixelH) = TilePixelSize(tileW, tileH, dpiScale);
         long tileBytes = (long)pixelW * pixelH * BytesPerPixel;
-        while ((_tiles.Count >= MaxCachedTiles || _cachedTileBytes + tileBytes > MaxCachedTileBytes) && _lruTiles.Count > 0)
-        {
-            var lru = _lruTiles.Last!.Value;
-            _lruTiles.RemoveLast();
-            if (_tiles.Remove(lru, out var evicted))
-            {
-                _cachedTileBytes -= (long)evicted.PixelWidth * evicted.PixelHeight * BytesPerPixel;
-                if (evicted.Handle.IsValid) renderer.ReleaseImage(evicted.Handle);
-                Statistics?.Evicted();
-            }
-        }
+        EvictForTileBytes(tileBytes, renderer);
 
         // Timed only while measured.
         var statistics = Statistics;
@@ -1632,20 +1760,51 @@ internal sealed class HtmlViewElement : UiElement
         // The renderer keeps RGBA pixels. Encoding a PNG for it to decode straight back cost far more
         // than painting the tile; the pixels are identical either way.
         BImageHandle handle = renderer.CreateImage(bitmap.ToPixelBuffer());
-
-        _tiles[key] = (handle, pixelW, pixelH, tileW, tileH);
-        _lruTiles.AddFirst(key);
-        _cachedTileBytes += tileBytes;
+        StoreTileHandle(key, handle, pixelW, pixelH, tileW, tileH, tileBytes);
+        if (_selectingWithPointer || HasActiveSelection())
+            _selectionTiles.Add(key);
         statistics?.Drawn(key, painted - started, Stopwatch.GetTimestamp() - painted, _cachedTileBytes);
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=187F30
+    private void EvictForTileBytes(long tileBytes, IBroilerRenderer renderer)
+    {
+        while ((_tiles.Count >= MaxCachedTiles || _cachedTileBytes + tileBytes > MaxCachedTileBytes) && _lruTiles.Count > 0)
+        {
+            var lru = _lruTiles.Last!.Value;
+            _lruTiles.RemoveLast();
+            if (_tiles.Remove(lru, out var evicted))
+            {
+                _cachedTileBytes -= (long)evicted.PixelWidth * evicted.PixelHeight * BytesPerPixel;
+                _selectionTiles.Remove(lru);
+                _dirtySelectionTiles.Remove(lru);
+                if (evicted.Handle.IsValid) renderer.ReleaseImage(evicted.Handle);
+                Statistics?.Evicted();
+            }
+        }
+    }
+
+    private void StoreTileHandle((int Row, int Column) key, BImageHandle handle, int pixelW, int pixelH, double tileW, double tileH, long tileBytes)
+    {
+        _tiles[key] = (handle, pixelW, pixelH, tileW, tileH);
+        _lruTiles.AddFirst(key);
+        _cachedTileBytes += tileBytes;
+    }
+
+    private bool HasActiveSelection() => _hasActiveSelection ??= !string.IsNullOrEmpty(_container.GetSelectedText());
+    private StandardQueuedUiDispatcher? BackgroundDispatcher =>
+        _useBackgroundRaster ? Session?.Dispatcher as StandardQueuedUiDispatcher : null;
+
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=8; Fingerprint=9FBB3B
     // Hairs-Falsified-If: rendering tiles outside the visible viewport window allocates bitmaps for non-visible regions
     // Hairs-Human:        PENDING
     protected override void RenderCore(UiRenderContext context)
     {
         if (_renderingFailed) return;
-        try { RenderDocument(context); }
+        try
+        {
+            RenderDocument(context);
+            _htmlMenu.Render(context);
+        }
         catch (Exception error) when (RenderingFailed is not null && error is not OutOfMemoryException)
         {
             _renderingFailed = true;
@@ -1657,7 +1816,8 @@ internal sealed class HtmlViewElement : UiElement
     {
         // The width measure laid the document out at; the arranged width also holds any overflow.
         if (_viewportWidth <= 0) _viewportWidth = Math.Max(1, Bounds.Width);
-        EnsureLayout(LayoutWidth);
+        bool liveResizing = _isLiveResizing && _layoutSnapshot is not null;
+        if (!liveResizing) EnsureLayout(LayoutWidth);
         if (_layoutSnapshot is null) return;
 
         double dpiScale = _dpiScaleProvider?.Invoke() ?? context.Host?.Scale ?? 1.0;
@@ -1692,10 +1852,21 @@ internal sealed class HtmlViewElement : UiElement
         // scale; drawn across the whole page, one long address made every tile of the message soft.
         double columnWidth = pageWidth > viewportWidth + 0.5 ? Math.Max(1, viewportWidth) : pageWidth;
         int totalColumns = Math.Max(1, (int)Math.Ceiling((pageWidth / columnWidth) - 0.001));
+        var backgroundDispatcher = BackgroundDispatcher;
+        if (parentViewportHeight <= 0) parentViewportHeight = docHeight;
+        if (backgroundDispatcher is not null)
+        {
+            // Leave space for every visible tile and its neighbours. At extreme DPI a cache
+            // smaller than the viewport would otherwise keep evicting and rescheduling tiles in view.
+            double rows = Math.Min(totalTiles, Math.Ceiling(parentViewportHeight / DefaultTileHeight) + 2);
+            double slots = rows * Math.Min(totalColumns, 2);
+            if (slots * MaxTilePixels * BytesPerPixel > MaxCachedTileBytes)
+                dpiScale = Math.Min(dpiScale, Math.Sqrt(MaxCachedTileBytes / (slots * BytesPerPixel * columnWidth * DefaultTileHeight)));
+        }
 
         // Tiles hold one page and column width, zoom, and display scale; a change to any of them discards them all.
         var tileKey = (Math.Round(pageWidth, 1), Math.Round(columnWidth, 1), _zoom, dpiScale);
-        if (tileKey != _tileKey)
+        if (tileKey != _tileKey && !liveResizing)
         {
             InvalidateTiles();
             _tileKey = tileKey;
@@ -1703,8 +1874,8 @@ internal sealed class HtmlViewElement : UiElement
 
         var renderer = _rendererProvider();
         if (renderer is null) return;
+        if (_tileRenderer is not null && !ReferenceEquals(_tileRenderer, renderer)) InvalidateTiles();
 
-        if (parentViewportHeight <= 0) parentViewportHeight = docHeight;
         double visibleBottom = Math.Min(docHeight, visibleTop + parentViewportHeight);
         if (visibleBottom < visibleTop) visibleBottom = visibleTop;
 
@@ -1713,23 +1884,91 @@ internal sealed class HtmlViewElement : UiElement
 
         int firstTile = Math.Clamp((int)(bufferTop / DefaultTileHeight), 0, totalTiles - 1);
         int lastTile = Math.Clamp((int)(bufferBottom / DefaultTileHeight), 0, totalTiles - 1);
-        // Only the columns in view: at most two, when the page is scrolled part of a column sideways.
-        int firstColumn = Math.Clamp((int)(visibleLeft / columnWidth), 0, totalColumns - 1);
-        int lastColumn = Math.Clamp((int)((visibleLeft + viewportWidth - 0.5) / columnWidth), firstColumn, totalColumns - 1);
+        int visFirstTile = Math.Clamp((int)(visibleTop / DefaultTileHeight), 0, totalTiles - 1);
+        int visLastTile = Math.Clamp((int)(Math.Max(visibleTop, visibleBottom - 0.5) / DefaultTileHeight), visFirstTile, totalTiles - 1);
+        _lastVisibleRows = (visFirstTile, visLastTile);
+        double scaleX = 1;
 
-        for (int i = firstTile; i <= lastTile; i++)
+        if (liveResizing)
         {
-            for (int column = firstColumn; column <= lastColumn; column++)
+            scaleX = _tileKey.PageWidth > 0 ? pageWidth / _tileKey.PageWidth : 1;
+            double cachedColumnWidth = _tileKey.ColumnWidth > 0 ? _tileKey.ColumnWidth : columnWidth;
+            int cachedColumns = Math.Max(1, (int)Math.Ceiling((_tileKey.PageWidth / cachedColumnWidth) - 0.001));
+            for (int i = firstTile; i <= lastTile; i++)
             {
-                EnsureTile((i, column), pageWidth, columnWidth, dpiScale, renderer);
-                if (_tiles.TryGetValue((i, column), out var tile) && tile.Handle.IsValid)
+                for (int column = 0; column < cachedColumns; column++)
                 {
-                    var srcRect = new BRect(0, 0, tile.PixelWidth, tile.PixelHeight);
-                    var destRect = new BRect(Bounds.X + (column * columnWidth), Bounds.Y + (i * DefaultTileHeight), tile.WidthDip, tile.HeightDip);
-                    context.RenderList.DrawImage(tile.Handle, srcRect, destRect, 1.0);
+                    if (_tiles.TryGetValue((i, column), out var tile) && tile.Handle.IsValid)
+                    {
+                        var srcRect = new BRect(0, 0, tile.PixelWidth, tile.PixelHeight);
+                        var destRect = new BRect(Bounds.X + (column * cachedColumnWidth * scaleX), Bounds.Y + (i * DefaultTileHeight), tile.WidthDip * scaleX, tile.HeightDip);
+                        context.RenderList.DrawImage(tile.Handle, srcRect, destRect, 1.0);
+                    }
                 }
             }
         }
+        else
+        {
+            // Only the columns in view: at most two, when the page is scrolled part of a column sideways.
+            int firstColumn = Math.Clamp((int)(visibleLeft / columnWidth), 0, totalColumns - 1);
+            int lastColumn = Math.Clamp((int)((visibleLeft + viewportWidth - 0.5) / columnWidth), firstColumn, totalColumns - 1);
+            _lastVisibleColumns = (firstColumn, lastColumn);
+            var prefetchDispatcher = backgroundDispatcher ?? (Statistics is null && totalTiles > 1 &&
+                !_selectingWithPointer && !HasActiveSelection() && Session?.Dispatcher is not ImmediateUiDispatcher ? Session?.Dispatcher : null);
+            _tileRequests.Clear();
+
+            for (int i = firstTile; i <= lastTile; i++)
+            {
+                bool isVisibleRow = i >= visFirstTile && i <= visLastTile;
+                for (int column = firstColumn; column <= lastColumn; column++)
+                {
+                    var key = (i, column);
+                    if (backgroundDispatcher is not null)
+                    {
+                        if (_tiles.ContainsKey(key))
+                        {
+                            _lruTiles.Remove(key);
+                            _lruTiles.AddFirst(key);
+                        }
+                        else if (isVisibleRow)
+                        {
+                            RequestTile(key, pageWidth, columnWidth, dpiScale, backgroundDispatcher);
+                        }
+                    }
+                    else if (prefetchDispatcher is null || isVisibleRow || (_tiles.ContainsKey(key) && !_dirtySelectionTiles.Contains(key)))
+                    {
+                        EnsureTile(key, pageWidth, columnWidth, dpiScale, renderer);
+                    }
+                    if (_tiles.TryGetValue(key, out var tile) && tile.Handle.IsValid)
+                    {
+                        var srcRect = new BRect(0, 0, tile.PixelWidth, tile.PixelHeight);
+                        var destRect = new BRect(Bounds.X + (column * columnWidth), Bounds.Y + (i * DefaultTileHeight), tile.WidthDip, tile.HeightDip);
+                        context.RenderList.DrawImage(tile.Handle, srcRect, destRect, 1.0);
+                    }
+                }
+            }
+
+            if (prefetchDispatcher is not null)
+            {
+                int prefetchFirst = Math.Clamp((int)(Math.Max(0, visibleTop - (DefaultTileHeight * 0.5)) / DefaultTileHeight), 0, totalTiles - 1);
+                int prefetchLast = Math.Clamp((int)(Math.Min(docHeight, visibleBottom + (DefaultTileHeight * 0.5)) / DefaultTileHeight), 0, totalTiles - 1);
+                for (int i = prefetchFirst; i <= prefetchLast; i++)
+                {
+                    if (i >= visFirstTile && i <= visLastTile) continue;
+                    for (int column = firstColumn; column <= lastColumn; column++)
+                    {
+                        var key = (i, column);
+                        if (_tiles.ContainsKey(key) || _dirtySelectionTiles.Contains(key)) continue;
+                        RequestTile(key, pageWidth, columnWidth, dpiScale, prefetchDispatcher);
+                    }
+                }
+            }
+            if (_tileRequests.Count > 0) _prefetcher ??= new HtmlTilePrefetcher(this);
+            _prefetcher?.SetRequests(_tileRequests);
+        }
+
+        if (backgroundDispatcher is not null)
+            RenderSelection(context, visibleLeft, visibleTop, viewportWidth, visibleBottom, scaleX);
 
         if (_layoutSnapshot.IsTruncated)
         {
@@ -1749,18 +1988,137 @@ internal sealed class HtmlViewElement : UiElement
             }
         }
 
-        foreach (var target in _linkTargets) target.Render(context);
+        var focused = Session?.FocusedElement;
+        foreach (var target in _linkTargets)
+        {
+            if (ReferenceEquals(focused, target))
+            {
+                target.Render(context);
+                continue;
+            }
+            var b = target.DocumentBounds;
+            double top = b.Y * _zoom, bottom = b.Bottom * _zoom;
+            double left = b.X * _zoom, right = b.Right * _zoom;
+            if (bottom >= visibleTop - 8 && top <= visibleBottom + 8 && right >= visibleLeft - 8 && left <= visibleLeft + viewportWidth + 8)
+                target.Render(context);
+        }
         // The document's own focus ring frames the viewport, even below a short document's end.
         if (Session is { IsFocusVisible: true } session && session.FocusedElement == this)
             StandardControlPaint.DrawFocusRing(context.RenderList,
                 new BRect(Bounds.X + visibleLeft + 2, Bounds.Y + visibleTop + 2, Math.Max(0, viewportWidth - 4), Math.Max(0, parentViewportHeight - 4)), 4);
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=32B254
+    private void RequestTile(
+        (int Row, int Column) key,
+        double pageWidth,
+        double columnWidth,
+        double dpiScale,
+        IUiDispatcher dispatcher)
+    {
+        double tileTop = key.Row * DefaultTileHeight;
+        double tileLeft = key.Column * columnWidth;
+        double tileH = Math.Min(DefaultTileHeight, (_layoutSnapshot!.ContentHeight * _zoom) - tileTop);
+        double tileW = Math.Min(columnWidth, pageWidth - tileLeft);
+        if (tileH <= 0 || tileW <= 0) return;
+
+        (double tileScale, int pixelW, int pixelH) = TilePixelSize(tileW, tileH, dpiScale);
+        _tileRequests.Add(new HtmlTilePrefetchRequest(
+            _prefetchGeneration,
+            _html,
+            _layoutSnapshot!.Width,
+            key,
+            tileTop / _zoom,
+            tileLeft / _zoom,
+            tileScale * _zoom,
+            pixelW,
+            pixelH,
+            tileW,
+            tileH,
+            _tileKey,
+            dispatcher));
+    }
+
+    internal void ApplyPrefetchedTile(HtmlTilePrefetchRequest request, BPixelBuffer? pixels, Exception? failure)
+    {
+        if (IsDisposed || _renderingFailed || _isLiveResizing)
+            return;
+        bool renderInBackground = BackgroundDispatcher is not null;
+        if (!renderInBackground && (_selectingWithPointer || HasActiveSelection()))
+            return;
+        if (request.Generation != _prefetchGeneration || request.TileKey != _tileKey)
+            return;
+        if (_dirtySelectionTiles.Contains(request.Key) || _tiles.ContainsKey(request.Key))
+            return;
+
+        bool visible = request.Key.Row >= _lastVisibleRows.First && request.Key.Row <= _lastVisibleRows.Last
+            && request.Key.Column >= _lastVisibleColumns.First && request.Key.Column <= _lastVisibleColumns.Last;
+        try
+        {
+            if (failure is not null)
+            {
+                if (renderInBackground && visible) throw new InvalidOperationException("Could not paint the HTML tile.", failure);
+                return;
+            }
+            var renderer = _rendererProvider();
+            if (renderer is null || (_tileRenderer is not null && !ReferenceEquals(_tileRenderer, renderer)))
+                return;
+            _tileRenderer = renderer;
+
+            long tileBytes = (long)request.PixelWidth * request.PixelHeight * BytesPerPixel;
+            EvictForTileBytes(tileBytes, renderer);
+            BImageHandle handle = renderer.CreateImage(pixels!);
+            if (!handle.IsValid) return;
+            StoreTileHandle(request.Key, handle, request.PixelWidth, request.PixelHeight, request.TileWidth, request.TileHeight, tileBytes);
+            if (visible) Invalidate(UiInvalidationKind.Render);
+        }
+        catch (Exception error) when (RenderingFailed is not null && error is not OutOfMemoryException)
+        {
+            _renderingFailed = true;
+            RenderingFailed.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=6FEED3
     // Hairs-Falsified-If: the link callback fires for an input other than a left-button release, such as a pointer-down, a right click or a key press over a link
     // Hairs-Human:        PENDING
     protected override bool OnInput(UiInputEvent e)
     {
+        if (_htmlMenu.IsOpen && e.Kind is UiInputEventKind.PointerButton or UiInputEventKind.PointerMove or UiInputEventKind.PointerWheel)
+        {
+            if (e.Kind == UiInputEventKind.PointerButton && e.MouseButtonTransition == MouseButtonTransition.Down)
+                _htmlMenu.ClosePopup();
+            return true;
+        }
+
+        if (e.Kind == UiInputEventKind.PointerButton && e.MouseButton == MouseButton.Right)
+        {
+            if (e.MouseButtonTransition == MouseButtonTransition.Down)
+                _rightPressed = true;
+            else if (e.MouseButtonTransition == MouseButtonTransition.Up)
+            {
+                bool open = _rightPressed;
+                _rightPressed = false;
+                if (open && !_selectingWithPointer)
+                    OpenHtmlMenu(e.Position);
+            }
+            return true;
+        }
+
+        if (e.Kind == UiInputEventKind.KeyboardKey && e.KeyTransition == KeyboardKeyTransition.Down
+            && PreviewModifiers.Control(e.KeyModifiers) && !PreviewModifiers.Alt(e.KeyModifiers))
+        {
+            if (e.NativeKeyCode == 0x41)
+            {
+                _container.HandleKeyDown(controlKey: true, aKeyCode: true, cKeyCode: false);
+                return true;
+            }
+            if (e.NativeKeyCode == 0x43)
+            {
+                CopySelectedText();
+                return true;
+            }
+        }
+
         // Space and Shift+Space page through the document, as in a browser; other keys reach the scroll view.
         if (e.Kind == UiInputEventKind.KeyboardKey && e.KeyTransition == KeyboardKeyTransition.Down && e.NativeKeyCode == 0x20
             && !PreviewModifiers.ControlOrAlt(e.KeyModifiers)
@@ -1770,17 +2128,46 @@ internal sealed class HtmlViewElement : UiElement
             pager.ScrollBy(0, PreviewModifiers.Shift(e.KeyModifiers) ? -page : page);
             return true;
         }
+        if (e.Kind == UiInputEventKind.PointerMove && _selectingWithPointer)
+        {
+            var docPoint = ToDocumentPoint(e.Position);
+            _selectionCurrentDocY = docPoint.Y;
+            _container.HandleMouseMove(docPoint, leftButton: true);
+            _selectionLastDocY = _selectionCurrentDocY;
+            return true;
+        }
+        if (e.Kind == UiInputEventKind.PointerButton && e.MouseButton == MouseButton.Left
+            && e.MouseButtonTransition == MouseButtonTransition.Down && e.TouchContactState is null)
+        {
+            Session?.SetFocus(this);
+            Session?.CaptureInput(this);
+            _selectingWithPointer = true;
+            var docPoint = ToDocumentPoint(e.Position);
+            _selectionLastDocY = _selectionCurrentDocY = docPoint.Y;
+            _container.HandleMouseDown(docPoint);
+            return true;
+        }
         if (e.Kind == UiInputEventKind.PointerButton && e.MouseButton == MouseButton.Left && e.MouseButtonTransition == MouseButtonTransition.Up)
         {
-            // Links are found in document coordinates, CSS pixels before the zoom.
-            float relX = (float)((e.Position.X - Bounds.X) / _zoom);
-            float relY = (float)((e.Position.Y - Bounds.Y) / _zoom);
+            if (!_selectingWithPointer && e.TouchContactState != Broiler.Input.Touch.TouchContactState.Released)
+                return false;
+
+            PointF point = ToDocumentPoint(e.Position);
+            if (_selectingWithPointer)
+            {
+                bool suppressLink = _container.IsSelecting || !Bounds.Contains(e.Position)
+                    || (Parent is StandardScrollView scroll && !scroll.ContentBounds.Contains(e.Position));
+                _container.HandleMouseUp(point, leftButton: true, rightButton: false, activateLink: false);
+                EndSelectionGesture();
+                if (suppressLink)
+                    return true;
+            }
 
             if (_layoutSnapshot is not null)
             {
                 foreach (var link in _layoutSnapshot.Links)
                 {
-                    if (link.Bounds.Contains(new BPoint(relX, relY)))
+                    if (link.Bounds.Contains(new BPoint(point.X, point.Y)))
                     {
                         _onLinkClicked(link.Href);
                         return true;
@@ -1789,7 +2176,7 @@ internal sealed class HtmlViewElement : UiElement
             }
 
             _container.ScrollOffset = PointF.Empty;
-            string? linkUrl = _container.GetLinkAt(new PointF(relX, relY));
+            string? linkUrl = _container.GetLinkAt(point);
             if (!string.IsNullOrEmpty(linkUrl))
             {
                 _onLinkClicked(linkUrl);
@@ -1799,19 +2186,342 @@ internal sealed class HtmlViewElement : UiElement
         return base.OnInput(e);
     }
 
+    private void OpenHtmlMenu(BPoint position)
+    {
+        if (Session is not { } session)
+            return;
+
+        var point = ToDocumentPoint(position);
+        _container.ClearSelectionOutside(point);
+        _menuLink = _container.GetLinkAt(point);
+        bool hasClipboard = session.Host is IUiClipboardHost;
+        var items = new List<UiMenuItem>
+        {
+            new("copy", "Copy") { IsEnabled = hasClipboard && _container.GetSelectedText() is { Length: > 0 } },
+            new("selectAll", "Select All"),
+        };
+        if (_menuLink is { Length: > 0 } link && (_canOpenLink?.Invoke(link) ?? true))
+        {
+            items.Add(new("openLink", "Open Link"));
+            items.Add(new("copyLink", "Copy Link Address") { IsEnabled = hasClipboard });
+        }
+
+        _htmlMenu.SetItems(items);
+        _htmlMenu.Arrange(new BRect(position.X, position.Y, 0, 0));
+        session.SetFocus(this);
+        _htmlMenu.OpenPopup();
+    }
+
+    private void InvokeHtmlMenuItem(string id)
+    {
+        switch (id)
+        {
+            case "copy": CopySelectedText(); break;
+            case "selectAll": _container.HandleKeyDown(controlKey: true, aKeyCode: true, cKeyCode: false); break;
+            case "openLink" when _menuLink is { } link: _onLinkClicked(link); break;
+            case "copyLink" when _menuLink is { } link && Session?.Host is IUiClipboardHost clipboard:
+                clipboard.SetText(link);
+                break;
+        }
+    }
+
+    private void CopySelectedText()
+    {
+        if (Session?.Host is IUiClipboardHost clipboard && _container.GetSelectedText() is { Length: > 0 } text)
+            clipboard.SetText(text);
+    }
+
+    internal static bool HasSelectableTextAt(UiSession session, BPoint position)
+    {
+        for (var target = session.CapturedElement ?? session.HitTest(position); target is not null; target = target.Parent)
+        {
+            if (target is HtmlViewElement reader)
+                return !reader._htmlMenu.IsOpen && reader.Bounds.Contains(position)
+                    && (reader.Parent is not StandardScrollView scroll || scroll.ContentBounds.Contains(position))
+                    && (reader._container.IsSelecting || reader._container.HasSelectableTextAt(reader.ToDocumentPoint(position)));
+        }
+        return false;
+    }
+
+    private PointF ToDocumentPoint(BPoint point) =>
+        new((float)((point.X - Bounds.X) / _zoom), (float)((point.Y - Bounds.Y) / _zoom));
+
+    private void EndSelectionGesture()
+    {
+        _selectingWithPointer = false;
+        Session?.ReleaseInputCapture(this);
+    }
+
+    private void InvalidateSelection()
+    {
+        _hasActiveSelection = null;
+        if (BackgroundDispatcher is not null)
+        {
+            _selectionOverlayDirty = true;
+            Invalidate(UiInvalidationKind.Render);
+            return;
+        }
+
+        _prefetchGeneration++;
+        _prefetcher?.ClearQueue();
+        foreach (var key in _selectionTiles)
+            _dirtySelectionTiles.Add(key);
+
+        if (_selectingWithPointer)
+        {
+            double topDip = Math.Min(_selectionLastDocY, _selectionCurrentDocY) * _zoom - 64;
+            double bottomDip = Math.Max(_selectionLastDocY, _selectionCurrentDocY) * _zoom + 64;
+            foreach (var key in _tiles.Keys)
+            {
+                double tileTop = key.Row * DefaultTileHeight;
+                double tileBottom = tileTop + DefaultTileHeight;
+                if (tileBottom >= topDip && tileTop <= bottomDip)
+                    _dirtySelectionTiles.Add(key);
+            }
+        }
+        else if (HasActiveSelection())
+        {
+            foreach (var key in _tiles.Keys)
+                _dirtySelectionTiles.Add(key);
+        }
+
+        Invalidate(UiInvalidationKind.Render);
+    }
+
+    private void RenderSelection(UiRenderContext context, double left, double top, double viewportWidth, double bottom, double scaleX)
+    {
+        if (_selectionOverlayDirty)
+        {
+            _selectionOverlayDirty = false;
+            _selectionRects.Clear();
+            // Selection changes mark the laid-out fragment tree dirty. Building the display list
+            // refreshes its character offsets without reflowing or rasterizing the message.
+            _container.CreateDisplayList();
+            if (_container.LatestFragmentTree is { } fragments) AddSelectionRects(fragments);
+        }
+
+        double zoomX = _zoom * scaleX;
+        var highlight = BColor.FromArgb(0x60, 0x33, 0x99, 0xFF);
+        foreach (var rect in _selectionRects)
+        {
+            if (rect.Bottom * _zoom <= top || rect.Top * _zoom >= bottom ||
+                rect.Right * zoomX <= left || rect.Left * zoomX >= left + viewportWidth)
+                continue;
+            context.RenderList.FillRect(new BRect(
+                Bounds.X + rect.X * zoomX, Bounds.Y + rect.Y * _zoom, rect.Width * zoomX, rect.Height * _zoom), highlight);
+        }
+    }
+
+    private void AddSelectionRects(Fragment fragment)
+    {
+        if (fragment.Style.Display == "none") return;
+        if (fragment.Style.Visibility == "visible" && fragment.Lines is { } lines)
+        {
+            foreach (var line in lines)
+            {
+                foreach (var inline in line.Inlines)
+                {
+                    if (!inline.Selected) continue;
+                    double start = Math.Max(0, inline.SelectedStartOffset);
+                    double end = inline.SelectedEndOffset < 0 ? inline.Width : inline.SelectedEndOffset;
+                    if (end > start)
+                        _selectionRects.Add(new BRect(inline.X + start, inline.Y, end - start, line.Height));
+                }
+            }
+        }
+        foreach (var child in fragment.Children) AddSelectionRects(child);
+    }
+
     internal bool SendInput(UiInputEvent e) => OnInput(e);
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=AB1C79
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=22E3F6
     // Hairs-Falsified-If: disposing the element leaves cached tile image handles or the container undisposed
     // Hairs-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
+            _prefetcher?.Dispose();
+            _prefetcher = null;
             InvalidateTiles();
             _container.Dispose();
         }
         base.Dispose(disposing);
+    }
+}
+
+internal sealed record HtmlTilePrefetchRequest(
+    long Generation,
+    string Html,
+    float LayoutWidth,
+    (int Row, int Column) Key,
+    double LayoutTop,
+    double LayoutLeft,
+    double Scale,
+    int PixelWidth,
+    int PixelHeight,
+    double TileWidth,
+    double TileHeight,
+    (double PageWidth, double ColumnWidth, double Zoom, double DpiScale) TileKey,
+    IUiDispatcher Dispatcher);
+
+internal sealed class HtmlTilePrefetcher : IDisposable
+{
+    private readonly HtmlViewElement _owner;
+    private readonly object _gate = new();
+    private readonly Queue<HtmlTilePrefetchRequest> _queue = new();
+    private readonly HashSet<(long Generation, (int Row, int Column) Key)> _requested = new();
+    private readonly AutoResetEvent _signal = new(false);
+    private HtmlTilePrefetchRequest? _active;
+    private bool _disposed;
+
+    public HtmlTilePrefetcher(HtmlViewElement owner)
+    {
+        _owner = owner;
+        new Thread(Run) { IsBackground = true, Name = "Broiler.HTML tile raster" }.Start();
+    }
+
+    public void SetRequests(IReadOnlyList<HtmlTilePrefetchRequest> requests)
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            // Each frame submits its visible tiles first. Replace speculative work when the
+            // viewport moves, and keep at most one bitmap in flight through the dispatcher.
+            _queue.Clear();
+            _requested.Clear();
+            foreach (var request in requests)
+            {
+                _requested.Add((request.Generation, request.Key));
+                if (_active?.Generation != request.Generation || _active.Key != request.Key)
+                    _queue.Enqueue(request);
+            }
+            if (_active is null && _queue.Count > 0) _signal.Set();
+        }
+    }
+
+    public void ClearQueue()
+    {
+        lock (_gate)
+        {
+            _queue.Clear();
+            _requested.Clear();
+        }
+    }
+
+    private void Run()
+    {
+        string? html = null;
+        HtmlContainer? container = null;
+        float layoutWidth = 0;
+        try
+        {
+            while (true)
+            {
+                HtmlTilePrefetchRequest? request = null;
+                lock (_gate)
+                {
+                    if (_disposed) break;
+                    if (_active is null && _queue.TryDequeue(out request))
+                        _active = request;
+                }
+                if (request is null)
+                {
+                    _signal.WaitOne();
+                    continue;
+                }
+
+                BPixelBuffer? pixels = null;
+                Exception? failure = null;
+                try
+                {
+                    if (container is null || !string.Equals(html, request.Html, StringComparison.Ordinal))
+                    {
+                        container?.Dispose();
+                        container = null;
+                        container = HtmlViewElement.CreateIsolatedContainer(request.Html);
+                        html = request.Html;
+                        layoutWidth = 0;
+                    }
+                    if (Math.Abs(layoutWidth - request.LayoutWidth) > 0.5f)
+                    {
+                        container.MaxSize = new SizeF(request.LayoutWidth, 0);
+                        container.PerformLayout(new RectangleF(0, 0, request.LayoutWidth, 0));
+                        layoutWidth = request.LayoutWidth;
+                    }
+
+                    if (!StillRequested(request))
+                    {
+                        CompleteRequest();
+                        continue;
+                    }
+                    using var bitmap = new HtmlBitmap(request.PixelWidth, request.PixelHeight);
+                    HtmlViewElement.PaintTile(container, bitmap, request.LayoutTop, request.Scale, request.LayoutLeft);
+                    pixels = bitmap.ToPixelBuffer();
+                }
+                catch (Exception ex) when (ex is not OutOfMemoryException)
+                {
+                    failure = ex;
+                    layoutWidth = 0;
+                }
+                if (!StillRequested(request))
+                {
+                    CompleteRequest();
+                    continue;
+                }
+
+                try
+                {
+                    request.Dispatcher.Post(() =>
+                    {
+                        try
+                        {
+                            if (StillRequested(request)) _owner.ApplyPrefetchedTile(request, pixels, failure);
+                        }
+                        finally { CompleteRequest(); }
+                    });
+                }
+                catch (ObjectDisposedException)
+                {
+                    CompleteRequest();
+                }
+            }
+        }
+        finally
+        {
+            container?.Dispose();
+            lock (_gate)
+            {
+                _disposed = true;
+                _signal.Dispose();
+            }
+        }
+    }
+
+    private bool StillRequested(HtmlTilePrefetchRequest request)
+    {
+        lock (_gate) return !_disposed && _requested.Contains((request.Generation, request.Key));
+    }
+
+    private void CompleteRequest()
+    {
+        lock (_gate)
+        {
+            _active = null;
+            if (!_disposed) _signal.Set();
+        }
+    }
+
+    public void Dispose()
+    {
+        lock (_gate)
+        {
+            if (_disposed) return;
+            _disposed = true;
+            _queue.Clear();
+            _requested.Clear();
+            _signal.Set();
+        }
     }
 }
 

@@ -815,10 +815,9 @@ public sealed class ResponsiveInboxTests
         Assert.Equal(pane.Right, row.Bounds.Right, 0.5);
         Assert.Equal(notice.Bounds.Bottom + inset, row.Bounds.Top, 0.5);
         Assert.Equal(row.Bounds.Bottom, fixture.List.Bounds.Top, 0.5);
-        // Retry is inset within its row as Receive mail is within the toolbar, so the two line up.
-        Assert.Equal(receive.Bounds.Left, retry.Bounds.Left, 0.5);
-        Assert.Equal(receive.Bounds.Top - toolbar.Bounds.Top, retry.Bounds.Top - row.Bounds.Top, 0.5);
-        Assert.Equal(toolbar.Bounds.Bottom - receive.Bounds.Bottom, row.Bounds.Bottom - retry.Bounds.Bottom, 0.5);
+        Assert.Equal(inset, retry.Bounds.Left - row.Bounds.Left, 0.5);
+        Assert.Equal(inset, retry.Bounds.Top - row.Bounds.Top, 0.5);
+        Assert.Equal(inset, row.Bounds.Bottom - retry.Bounds.Bottom, 0.5);
     }
 
     /// <summary>
@@ -846,9 +845,9 @@ public sealed class ResponsiveInboxTests
             Assert.True(button.Bounds.Height > 0, where);
             if (text is "Reply all" or "Forward") continue;
             // The first button of a row is inset from its start, top and bottom as Receive mail is in the toolbar.
-            Assert.True(Math.Abs(receive.Bounds.Left - toolbar.Bounds.Left - (button.Bounds.Left - row.Left)) < 0.5, where);
-            Assert.True(Math.Abs(receive.Bounds.Top - toolbar.Bounds.Top - (button.Bounds.Top - row.Top)) < 0.5, where);
-            Assert.True(Math.Abs(toolbar.Bounds.Bottom - receive.Bounds.Bottom - (row.Bottom - button.Bounds.Bottom)) < 0.5, where);
+            Assert.True(Math.Abs(toolbar.Padding - (button.Bounds.Left - row.Left)) < 0.5, where);
+            Assert.True(Math.Abs(toolbar.Padding - (button.Bounds.Top - row.Top)) < 0.5, where);
+            Assert.True(Math.Abs(toolbar.Padding - (row.Bottom - button.Bounds.Bottom)) < 0.5, where);
         }
     }
 
@@ -879,7 +878,7 @@ public sealed class ResponsiveInboxTests
         Assert.Equal(InboxProblemScope.Message, fixture.Model.ProblemScope);
 
         var header = Descendants(fixture.Content).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
-        var problem = Descendants(header).OfType<InlineFeedback>().Single();
+        var problem = Descendants(header).OfType<InlineFeedback>().Single(feedback => feedback.Kind == FeedbackKind.Error);
         var retry = fixture.Button("Retry loading");
         // The reader a line of text taller than Retry's row needs.
         double needed = retry.Parent!.Bounds.Bottom - header.Bounds.Top + BTextMeasurer.GetLineHeight(fixture.ReaderText.Editor.Font);
@@ -910,8 +909,7 @@ public sealed class ResponsiveInboxTests
     /// would cut, or between two of its lines, as for a long sender at 640x480 or a long subject at twice
     /// the text size, so the text keeps its room. Beside the list, Reply, Reply all and Forward stay in
     /// view below the header, even when it scrolls, where they fit on one row and leave the subject's first
-    /// line and six lines of text. In a reader too narrow or short for that, such as at 700x480, 700x1000
-    /// or 1100x500 with twice the text size, they end the header, as in the compact reader, which has no
+    /// line and six lines of text. In a reader too narrow or short for that, such as at 700x480 or 1100x500 with twice the text size, they end the header, as in the compact reader, which has no
     /// height to spare for them: at 700x480, pinned on two rows, they left the subject less than a line and
     /// the text less than one. Beside the list the subject's first line and two lines of text are always
     /// shown. A line across the reader separates the header from the message text. How the rows wrap, and
@@ -1045,7 +1043,7 @@ public sealed class ResponsiveInboxTests
     [InlineData(640, 640, 2.0, "long", false, false)]
     [InlineData(700, 480, 2.0, "plain", false, false)]
     [InlineData(700, 520, 2.0, "long", false, false)]
-    [InlineData(700, 1000, 2.0, "plain", false, true)]
+    [InlineData(700, 1000, 2.0, "plain", true, true)]
     [InlineData(1100, 720, 1.0, "plain", true, true)]
     [InlineData(1100, 720, 1.0, "longer", true, true)]
     [InlineData(1100, 720, 2.0, "plain", true, true)]
@@ -1189,11 +1187,11 @@ public sealed class ResponsiveInboxTests
 
     /// <summary>
     /// Beside the list, at twice the text size, Reply, Reply all and Forward stay below the header while the
-    /// reader is wide enough for them on one row, and end the header in a narrower reader, where they would
-    /// wrap and take the text's room; resizing moves them as it is laid out, once, and keeps keyboard focus.
+    /// reader has room, and move into the header when the reader is too short to leave room for the message.
+    /// Resizing keeps keyboard focus on the same action.
     /// </summary>
     [Fact]
-    public async Task BesideTheListTheCommandsEndTheHeaderWhereTheyWouldWrapAndKeepTheirFocus()
+    public async Task BesideTheListTheCommandsMoveIntoAShortHeaderAndKeepTheirFocus()
     {
         StandardThemeTokens previous = StandardControlPaint.Theme;
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
@@ -1205,7 +1203,7 @@ public sealed class ResponsiveInboxTests
             Assert.False(replyAll.IsDescendantOf(header));
             reader.Session.SetFocus(replyAll);
 
-            reader.Resize(700);
+            reader.Resize(700, 340);
             Assert.False(reader.Layout.IsCompact);
             Assert.True(replyAll.IsDescendantOf(header));
             Assert.Same(replyAll, reader.Session.FocusedElement);
@@ -1214,7 +1212,7 @@ public sealed class ResponsiveInboxTests
             Assert.Equal(shown, replyAll.Bounds);
             Assert.True(replyAll.IsDescendantOf(header));
 
-            reader.Resize(1100);
+            reader.Resize(1100, 720);
             Assert.False(replyAll.IsDescendantOf(header));
             Assert.Same(replyAll, reader.Session.FocusedElement);
             Assert.Equal(reader.Button("Reply").Bounds.Top, replyAll.Bounds.Top, 0.5);
@@ -1317,7 +1315,7 @@ public sealed class ResponsiveInboxTests
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
         try
         {
-            using var reader = await ReaderFixture.OpenAsync(640, 360);
+            using var reader = await ReaderFixture.OpenAsync(640, 340);
             var header = reader.Header;
             BRect shown = header.Scroll.ContentBounds;
             var back = Descendants(header).OfType<StandardButton>().Single(button => button.Text == InboxView.BackText);

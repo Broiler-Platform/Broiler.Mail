@@ -1,31 +1,31 @@
 {
-  "reviewedOn": "2026-11-02",
-  "normalizedSubstitutionsSha256": "710723948b63a4fc81dc2f0d55430755e04975611b94ea2e8d95eaf1e720e6c3",
+  "reviewedOn": "2026-11-20",
+  "normalizedSubstitutionsSha256": "417f5695c0a0b258bc147875174e05ac58ad782c63d90625bb1261e8301212c0",
   "packages": [
     {
-      "identity": "Broiler.HTML.Image/0.1.0-preview.30",
+      "identity": "Broiler.HTML.Image/0.1.0-preview.35",
       "asset": "lib/net10.0/Broiler.HTML.Image.dll",
-      "sha256": "725f5a771c9b6962c79dbe8dd317564109d36e44036ee7d41d2a98ad8baa016d"
+      "sha256": "cac41d3108889dda465d471eecf3825c7f2ed30d3f2a452431ab32ac00487b9a"
     },
     {
-      "identity": "Broiler.HTML.Image.Compat/0.1.0-preview.30",
+      "identity": "Broiler.HTML.Image.Compat/0.1.0-preview.35",
       "asset": "lib/net10.0/Broiler.HTML.Image.Compat.dll",
-      "sha256": "a5e14b240f3f6fa63959f15d0f8ed121a59fc3c6058ad8b492fe9e90983b62df"
+      "sha256": "b4ada81a2df643cd2bdffac3a7528cf3cafaa142fe59f39a71a255f84dce1429"
     },
     {
-      "identity": "Broiler.HTML.Core/0.1.0-preview.30",
+      "identity": "Broiler.HTML.Core/0.1.0-preview.35",
       "asset": "lib/net10.0/Broiler.HTML.Core.dll",
-      "sha256": "522b91ec22405703fcc1f9887cfe502cb5a3ccaa957d6b61eb10f24119bf6f05"
+      "sha256": "bf9dd8600a2a48a560f75db02033cf8def77b5d33881a7cd58f37ce6d3266c92"
     },
     {
-      "identity": "Broiler.HTML.Dom/0.1.0-preview.30",
+      "identity": "Broiler.HTML.Dom/0.1.0-preview.35",
       "asset": "lib/net10.0/Broiler.HTML.Dom.dll",
-      "sha256": "522b613d9850eb157410ab2e92265adcfd77dee22f9af7948244b09afffae8f3"
+      "sha256": "98a4e16a9238773ab2f60522d381a290a072f8c69f497478dded6c93c7b8cf05"
     },
     {
-      "identity": "Broiler.HTML.Orchestration/0.1.0-preview.30",
+      "identity": "Broiler.HTML.Orchestration/0.1.0-preview.35",
       "asset": "lib/net10.0/Broiler.HTML.Orchestration.dll",
-      "sha256": "be2084a052fea1fa5d201594a6c1fe427e56dccc5be93371afaa72f670894b04"
+      "sha256": "fe219e70f21cb1dd5966e4a001f662b2dcaeb2c2a772b2f3afe5d281f14919bd"
     }
   ]
 }

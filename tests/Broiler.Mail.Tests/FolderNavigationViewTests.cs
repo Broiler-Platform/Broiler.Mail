@@ -33,6 +33,8 @@ public sealed class FolderNavigationViewTests
         Assert.Equal("Archive", model.SelectedMailboxId); Assert.Null(model.Body); Assert.Same(selector, session.FocusedElement);
         await model.ReceiveAsync(); dispatcher.Drain(); session.RenderFrame();
         Assert.Equal("Archive", Assert.Single(model.Messages).Key.MailboxId);
+        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "Mailbox options").Click();
+        session.RenderFrame();
         foreach (var control in new UiElement[] { selector, Descendants(root).OfType<StandardButton>().Single(b => b.Text == "Refresh folders") })
         {
             Assert.True(control.Bounds.Width > 0 && control.Bounds.Height > 0);
@@ -59,6 +61,8 @@ public sealed class FolderNavigationViewTests
         var theme = StandardThemeTokens.Light.WithTextScale(scale);
         StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
         Assert.True(view.OpenSelected()); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
+        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
+        session.RenderFrame();
         var button = Descendants(root).OfType<StandardButton>().Single(control => control.Text == (starred ? "Star message" : "Mark read"));
         session.SetFocus(button);
         for (var parent = button.Parent; parent is not null; parent = parent.Parent)
@@ -94,6 +98,8 @@ public sealed class FolderNavigationViewTests
         Assert.True(view.OpenSelected()); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
         var picker = Descendants(root).OfType<StandardComboBox>().Single(control => control.AccessibleName == "Move destination");
         Assert.DoesNotContain(model.MoveDestinations, folder => folder.MailboxId is "INBOX" or "Container");
+        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
+        session.RenderFrame();
         var button = Descendants(root).OfType<StandardButton>().Single(control => control.Text == (action == "move" ? "Move message" : action == "archive" ? "Archive" : "Move to trash"));
         if (action == "move") { Assert.False(button.IsEnabled); picker.SelectedIndex = model.MoveDestinations.ToList().FindIndex(folder => folder.MailboxId == "Archive"); }
         session.SetFocus(button);
@@ -160,6 +166,8 @@ public sealed class FolderNavigationViewTests
         var theme = StandardThemeTokens.Light.WithTextScale(scale); StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
         view.OpenSelected(); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
         StandardButton Button(string text) => Descendants(root).OfType<StandardButton>().Single(button => button.Text == text);
+        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
+        session.RenderFrame();
         var request = Button("Delete permanently…"); request.Click(); session.RenderFrame();
         var keep = Button("Keep message"); var confirm = Button("Confirm permanent deletion");
         Assert.Same(keep, session.FocusedElement); Assert.False(confirm.IsDefault); Assert.True(model.CanConfirmPermanentDelete); Assert.Equal(0, deleter.Calls);
@@ -190,6 +198,7 @@ public sealed class FolderNavigationViewTests
         StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
         StandardButton Button(string text) => Descendants(root).OfType<StandardButton>().Single(button => button.Text == text);
         Button("Search saved mail").Click(); session.RenderFrame();
+        Button("Search filters").Click(); session.RenderFrame();
         var input = Descendants(root).OfType<Broiler.UI.Edit.Standard.StandardEdit>().Single(control => control.AccessibleName == "Search saved sender or subject");
         Assert.Same(input, session.FocusedElement); input.Text = "needle";
         var field = Descendants(root).OfType<StandardComboBox>().Single(control => control.AccessibleName == "Saved search header field");
@@ -235,6 +244,8 @@ public sealed class FolderNavigationViewTests
         view.OpenSelected(); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame(); var body = model.Body;
         var details = Descendants(root).OfType<Broiler.UI.RichEdit.Standard.StandardRichEdit>().Single(control => control.AccessibleName == "Sender and recipients");
         Assert.DoesNotContain("Message-ID:", details.GetPlainText());
+        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
+        session.RenderFrame();
         var show = Descendants(root).OfType<StandardButton>().Single(button => button.Text == "Show parsed headers"); show.Click(); session.RenderFrame();
         Assert.Contains("Message-ID: fixture@example.test", details.GetPlainText()); Assert.Same(body, model.Body); Assert.Equal(0, receiver.Calls);
         show.Click(); Assert.DoesNotContain("Message-ID:", details.GetPlainText());

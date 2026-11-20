@@ -21,6 +21,8 @@ public sealed class OfflineHeaderViewTests
         f.Receiver.Override=(_,_,_)=>{entered.TrySetResult();return release.Task;};
         using var model=await f.Model();using var root=new InboxView(model).CreateContent();using var session=new StandardUiSessionBuilder().Build(new Host());session.AddRoot(root);
         var theme=StandardThemeTokens.Light.WithTextScale(scale);StandardControlPaint.SetSessionTheme(session,theme);StandardThemeController.ApplyToSubtree(root,theme);session.RenderFrame();
+        All(root).OfType<StandardButton>().Single(button => button.Text == "Mailbox options").Click();
+        session.RenderFrame();
         var section=All(root).OfType<FormSection>().Single(item=>item.Content.AccessibleName=="Offline-folder batch controls");Assert.False(section.IsExpanded);section.Toggle!.Click();session.RenderFrame();
         Assert.InRange(All(root).OfType<BoundedScrollArea>().Single(area=>All(area).Contains(section)).Bounds.Height,1,168);
         var receive=All(root).OfType<StandardButton>().Single(button=>button.Text=="Receive selected-folder headers");var restart=All(root).OfType<StandardButton>().Single(button=>button.Text=="Restart selected-folder headers");var show=All(root).OfType<StandardButton>().Single(button=>button.Text=="Show saved headers");var cancel=All(root).OfType<StandardButton>().Single(button=>button.Text=="Cancel");

@@ -1,27 +1,28 @@
 # Renderer NativeAOT compatibility audit
 
-Reviewed 2026-11-02 against restored Broiler.HTML.Image and
-Broiler.HTML.Image.Compat 0.1.0-preview.30 assets, with the Core/Dom/Orchestration
+Reviewed 2026-11-20 against restored Broiler.HTML.Image and
+Broiler.HTML.Image.Compat 0.1.0-preview.35 assets, with the Core/Dom/Orchestration
 runtime assemblies fingerprinted alongside them (not an assumption about sibling
 source revisions). Exact assembly SHA-256 values are recorded in
 [renderer-aot-audit.json](../eng/renderer-aot-audit.json), together with a
 line-ending-normalized fingerprint of NativeAot.Substitutions.xml.
 
-Two method substitutions remain narrowly scoped:
+One method substitution remains narrowly scoped:
 
-1. CompatProvider.TryLoadDefaultProvider: the fallback uses Assembly.Load and
-   reflected bootstrapper discovery. Mail's HtmlRuntime explicitly registers
-   StubCompatBootstrapper before creating a container. The substitution removes
-   only fallback discovery; EnsureDefaultProvider still throws if registration is
-   missing. Published HTML layout/raster acceptance now exercises this registration.
-2. CompatCanvasOperations.InvokeVoid: Save/Restore/Translate dispatch uses runtime
-   reflection. The pinned compatibility assembly's StubCanvas methods were inspected
-   through their method bodies: all three contain only the IL `ret` opcode (2A).
-   The managed raster pipeline owns transforms; substituting this dispatch is valid
-   only for that registered backend, not for arbitrary future canvas providers.
+1. CompatProvider.TryLoadDefaultProvider: the fallback delegates to
+   TryLoadDynamicCompatProvider (Assembly.Load + reflected bootstrapper discovery)
+   only when RuntimeFeature.IsDynamicCodeSupported is true. Mail's HtmlRuntime
+   explicitly registers StubCompatBootstrapper before creating a container. The
+   substitution removes only fallback discovery; EnsureDefaultProvider still
+   throws if registration is missing.
+2. CompatCanvasOperations.InvokeVoid was removed in 0.1.0-preview.35 in favor of
+   direct ICompatCanvas interface dispatch (Save/Restore/Translate); its obsolete
+   substitution was removed from NativeAot.Substitutions.xml. StubCanvas's
+   Save/Restore/Translate methods were inspected and still contain only the IL
+   `ret` opcode (2A).
 
 The supporting source implementations are CompatProvider.cs,
-CompatCanvasOperations.cs, and StubBitmapCompatSurface.cs in Broiler.HTML. The gate
+CompatCanvasOperations.cs, and StubCanvas.cs in Broiler.HTML. The gate
 pins the consumed binary assets because sibling source alone is insufficient.
 Any renderer package or substitution change fails the Windows publisher until the
 audit is repeated. Refreshing hashes without reviewing semantics is not an audit.

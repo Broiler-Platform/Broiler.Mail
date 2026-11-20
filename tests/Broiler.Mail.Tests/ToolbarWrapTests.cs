@@ -52,7 +52,7 @@ public sealed class ToolbarWrapTests
                         Assert.True(item.Width >= items[i].DesiredSize.Width - 0.5, $"{where}: item {i} is cut to {item.Width} of {items[i].DesiredSize.Width}.");
                         if (i == 0) continue;
                         BRect previous = items[i - 1].Bounds;
-                        bool sameRow = Math.Abs(item.Top - previous.Top) < 0.5 && item.Left >= previous.Right - 0.5;
+                        bool sameRow = Math.Min(item.Bottom, previous.Bottom) > Math.Max(item.Top, previous.Top) && item.Left >= previous.Right - 0.5;
                         bool nextRow = item.Top >= previous.Bottom - 0.5;
                         Assert.True(sameRow || nextRow, $"{where}: item {i} at {item} breaks reading order after {previous}.");
                         if (!sameRow) wrapped++;

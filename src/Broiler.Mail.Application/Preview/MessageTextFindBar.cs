@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   13
-// Annotated:        0/13
+// Relevant units:   14
+// Annotated:        0/14
 // Exempt:           12
-// Human-reviewed:   0/13
+// Human-reviewed:   0/14
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       13
+// Unverified:       14
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -102,6 +102,8 @@ public sealed class MessageTextFindBar : UiElement
         _copy.IsEnabled = _index >= 0;
         _feedback.Set(value, error ? FeedbackKind.Error : FeedbackKind.Information);
     }
+    protected override bool OnInput(UiInputEvent input) => HandleFindInput(input) || base.OnInput(input);
+
     public bool HandleFindInput(UiInputEvent input)
     {
         if (!Current || input.Kind != UiInputEventKind.KeyboardKey || input.KeyTransition != KeyboardKeyTransition.Down) return false;

@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   19
-// Annotated:        0/19
+// Relevant units:   20
+// Annotated:        0/20
 // Exempt:           2
-// Human-reviewed:   0/19
+// Human-reviewed:   0/20
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       19
+// Unverified:       20
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -19,7 +19,6 @@ using System.Net;
 using System.Text.RegularExpressions;
 using Broiler.Graphics.Geometry;
 using Broiler.Input.Keyboard;
-using Broiler.Input.Mouse;
 using Broiler.UI;
 using Broiler.UI.Button;
 using Broiler.UI.Standard;
@@ -44,7 +43,13 @@ internal sealed class HtmlLinkTarget : UiButton
     public string Href { get; }
 
     /// <summary>The link's rectangle in document coordinates (CSS pixels), before the view's zoom and position.</summary>
-    public BRect DocumentBounds { get; }
+    public BRect DocumentBounds { get; private set; }
+
+    internal void UpdateGeometry(BRect documentBounds, double zoom)
+    {
+        DocumentBounds = documentBounds;
+        PreferredSize = new BSize(documentBounds.Width * zoom, documentBounds.Height * zoom);
+    }
 
     protected override BSize MeasureCore(BSize availableSize) => PreferredSize;
 
@@ -54,12 +59,6 @@ internal sealed class HtmlLinkTarget : UiButton
             && input.NativeKeyCode == 0x0D && !PreviewModifiers.Any(input.KeyModifiers))
         {
             Click(UiButtonActivationReason.Keyboard);
-            return true;
-        }
-        if (input.Kind == UiInputEventKind.PointerButton && input.MouseButton == MouseButton.Left)
-        {
-            if (input.MouseButtonTransition == MouseButtonTransition.Up && Bounds.Contains(input.Position))
-                Click(UiButtonActivationReason.Pointer);
             return true;
         }
         return false;

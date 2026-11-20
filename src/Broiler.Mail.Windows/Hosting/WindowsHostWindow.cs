@@ -26,6 +26,7 @@ using Broiler.Graphics.Resources;
 using Broiler.Graphics.Windowing;
 using Broiler.Graphics.Windows;
 using Broiler.Hosting.Windows;
+using Broiler.Mail.Windows.Preview;
 using Broiler.Hosting.Windows.Accessibility;
 using Broiler.Hosting.Windows.Input;
 using Broiler.Input.Keyboard;
@@ -256,6 +257,8 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
     private void Dispatch(UiInputEvent input)
     {
         if (_session is null || _session.IsDisposed) return;
+        if (input.Kind == UiInputEventKind.PointerMove)
+            WindowsPointerCursor.SetTextCursor(HtmlViewElement.HasSelectableTextAt(_session, input.Position));
         if (_session.DispatchInput(input))
             InvalidateIfAlive();
     }

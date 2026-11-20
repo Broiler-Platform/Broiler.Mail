@@ -26,6 +26,8 @@ public sealed class AccountNavigationViewTests
         using var model = new InboxViewModel(new TestMailReceiver(), new ImmediateUiDispatcher(), cache, navigation: store); model.SetAccount(account); await model.CacheLoadTask;
         using var root = new InboxView(model).CreateContent(); using var session = new StandardUiSessionBuilder().Build(new Host()); session.AddRoot(root);
         var theme = StandardThemeTokens.Light.WithTextScale(scale); StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
+        All(root).OfType<StandardButton>().Single(button => button.Text == "Mailbox options").Click();
+        session.RenderFrame();
         var section = All(root).OfType<FormSection>().Single(item => item.Content.AccessibleName == "Account folder navigation controls"); Assert.False(section.IsExpanded); section.Toggle!.Click(); session.RenderFrame();
         StandardButton Button(string text) => All(root).OfType<StandardButton>().Single(button => button.Text == text);
         var pin = Button("Pin current folder"); Assert.True(pin.IsEnabled);
