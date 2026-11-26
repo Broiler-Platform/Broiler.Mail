@@ -6,8 +6,8 @@ checkboxes can include already delivered subitems. Original baseline: commit `6b
 See the [5 October status](roadmap-status-2026-10-05.md) for current cross-roadmap
 status and the [5 October acceptance record](ui-acceptance-2026-10-05.md) for the native
 runs; the [4 October consolidated audit](roadmap-status-2026-10-04.md) records the state
-before the 4–5 October round. This document is the execution plan for UI work;
-the [experience review](experience-roadmap.md) remains the original design rationale.
+before the 4–5 October round. This document records the October UI execution plan (written against the earlier 4-tab Version 2 shell);
+the [experience review](experience-roadmap.md) remains the original design rationale. For the authoritative post-M4 UI/UX architecture and `UX-01`–`UX-10` refinement slices unifying multi-account, offline SQLite storage, folders, search, attachments, inline HTML, and cross-platform hosts, see the [Refined UI/UX concept specification](ui-ux-concept.md) and [26 November critical UI/UX review](ui-ux-review-2026-11-26.md).
 
 The 4–5 October records describe two Mail branches (pushed to `origin` on 5 October; no pull
 request yet), stacked on `main`

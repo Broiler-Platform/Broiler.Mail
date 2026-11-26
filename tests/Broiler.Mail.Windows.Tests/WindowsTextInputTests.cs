@@ -38,8 +38,8 @@ public sealed class WindowsTextInputTests
             new WindowsTextInput(() => window, () => scale).PublishCaret(new UiTextCaretInfo(new StandardEdit(), Caret, 0, 0, 0, true));
 
             var form = ReadCompositionForm(window);
-            Assert.Equal(CfsPoint, form.Style);
-            Assert.Equal((x, y), (form.X, form.Y));
+            Assert.Equal(CfsPoint, form.DwStyle);
+            Assert.Equal((x, y), (form.PtCurrentPos.X, form.PtCurrentPos.Y));
         });
     }
 
@@ -243,9 +243,9 @@ public sealed class WindowsTextInputTests
         // window's own shows the position is set through the render window, which holds keyboard focus.
         nint own = fixture.Ui(() =>
         {
-            nint context = ImmCreateContext();
+            nint context = Broiler.Native.Windows.Input.ImmNative.ImmCreateContext();
             Assert.NotEqual(0, context);
-            ImmAssociateContext(fixture.Render, context);
+            Broiler.Native.Windows.Input.ImmNative.ImmAssociateContext(fixture.Render, context);
             return context;
         });
         Assert.Equal(own, fixture.Ui(() => ContextOf(fixture.Render)));
@@ -265,45 +265,45 @@ public sealed class WindowsTextInputTests
         fixture.Type(" there");
         fixture.Layout();
         var further = fixture.Ui(() => ReadCompositionForm(fixture.Render));
-        Assert.True(further.X > inBody.X, "The composition window follows the caret along the line.");
-        Assert.Equal(inBody.Y, further.Y);
+        Assert.True(further.PtCurrentPos.X > inBody.PtCurrentPos.X, "The composition window follows the caret along the line.");
+        Assert.Equal(inBody.PtCurrentPos.Y, further.PtCurrentPos.Y);
 
         // The window keeps the context until it is destroyed; giving it back its default one lets it be freed now.
         fixture.Ui(() =>
         {
-            ImmAssociateContextEx(fixture.Render, 0, 0x0010 /* IACE_DEFAULT */);
-            ImmDestroyContext(own);
+            Broiler.Native.Windows.Input.ImmNative.ImmAssociateContextEx(fixture.Render, 0, 0x0010 /* IACE_DEFAULT */);
+            Broiler.Native.Windows.Input.ImmNative.ImmDestroyContext(own);
         });
     }
 
     private static nint ContextOf(nint window)
     {
-        nint context = ImmGetContext(window);
-        if (context != 0) ImmReleaseContext(window, context);
+        nint context = Broiler.Native.Windows.Input.ImmNative.ImmGetContext(window);
+        if (context != 0) Broiler.Native.Windows.Input.ImmNative.ImmReleaseContext(window, context);
         return context;
     }
 
-    private static void AssertWithin(BRect field, CompositionForm form, double scale)
+    private static void AssertWithin(BRect field, Broiler.Native.Windows.Input.ImmNative.COMPOSITIONFORM form, double scale)
     {
-        Assert.Equal(CfsPoint, form.Style);
-        Assert.InRange(form.X, (int)Math.Floor(field.Left * scale), (int)Math.Ceiling(field.Right * scale));
-        Assert.InRange(form.Y, (int)Math.Floor(field.Top * scale), (int)Math.Ceiling(field.Bottom * scale));
+        Assert.Equal(CfsPoint, form.DwStyle);
+        Assert.InRange(form.PtCurrentPos.X, (int)Math.Floor(field.Left * scale), (int)Math.Ceiling(field.Right * scale));
+        Assert.InRange(form.PtCurrentPos.Y, (int)Math.Floor(field.Top * scale), (int)Math.Ceiling(field.Bottom * scale));
     }
 
-    private static (int X, int Y) Position(CompositionForm form) => (form.X, form.Y);
+    private static (int X, int Y) Position(Broiler.Native.Windows.Input.ImmNative.COMPOSITIONFORM form) => (form.PtCurrentPos.X, form.PtCurrentPos.Y);
 
     private static bool HasInputContext(nint window) => ContextOf(window) != 0;
 
-    private static CompositionForm ReadCompositionForm(nint window)
+    private static Broiler.Native.Windows.Input.ImmNative.COMPOSITIONFORM ReadCompositionForm(nint window)
     {
-        nint context = ImmGetContext(window);
+        nint context = Broiler.Native.Windows.Input.ImmNative.ImmGetContext(window);
         Assert.NotEqual(0, context);
         try
         {
-            Assert.True(ImmGetCompositionWindow(context, out var form), "The input context has no composition form.");
+            Assert.True(Broiler.Native.Windows.Input.ImmNative.ImmGetCompositionWindow(context, out var form), "The input context has no composition form.");
             return form;
         }
-        finally { ImmReleaseContext(window, context); }
+        finally { Broiler.Native.Windows.Input.ImmNative.ImmReleaseContext(window, context); }
     }
 
     /// <summary>Runs <paramref name="test"/> with a hidden native window, on its own thread, as the input context requires.</summary>
@@ -326,15 +326,4 @@ public sealed class WindowsTextInputTests
         Assert.True(thread.Join(TimeSpan.FromSeconds(15)));
         if (failure is not null) ExceptionDispatchInfo.Capture(failure).Throw();
     }
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct CompositionForm { public uint Style; public int X, Y, Left, Top, Right, Bottom; }
-
-    [DllImport("imm32.dll")] private static extern nint ImmGetContext(nint window);
-    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmReleaseContext(nint window, nint context);
-    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmGetCompositionWindow(nint context, out CompositionForm form);
-    [DllImport("imm32.dll")] private static extern nint ImmCreateContext();
-    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmDestroyContext(nint context);
-    [DllImport("imm32.dll")] private static extern nint ImmAssociateContext(nint window, nint context);
-    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmAssociateContextEx(nint window, nint context, uint flags);
 }

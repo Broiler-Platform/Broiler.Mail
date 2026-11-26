@@ -192,19 +192,6 @@ internal static unsafe class WindowsScreen
         catch (EntryPointNotFoundException) { return 1.0; }
     }
 
-    [DllImport("user32.dll")]
-    private static extern int EnumDisplayMonitors(nint hdc, nint clip, delegate* unmanaged<nint, nint, RECT*, nint, int> callback, nint state);
-
-    [DllImport("user32.dll", SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowPos(nint window, nint insertAfter, int x, int y, int width, int height, uint flags);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForSystem();
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
-    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
-
     [StructLayout(LayoutKind.Sequential)]
     private struct MINMAXINFO
     {

@@ -214,13 +214,13 @@ public sealed class NativeInputFidelityTests
         fixture.Ui(() => fixture.Window.Session.SetFocus(body));
         fixture.Type("Hi");
         var menuKeys = new List<nint>();
-        SubclassProc keepMenuKeys = (window, message, wParam, lParam, id, data) =>
+        Broiler.Native.Windows.WindowNative.SubclassProc keepMenuKeys = (window, message, wParam, lParam, id, data) =>
         {
             // WM_SYSCOMMAND with SC_KEYMENU: the low four bits are Windows' own.
             if (message == WmSysCommand && (wParam & 0xFFF0) == ScKeyMenu) { menuKeys.Add(lParam); return 0; }
-            return DefSubclassProc(window, message, wParam, lParam);
+            return Broiler.Native.Windows.WindowNative.DefSubclassProc(window, message, wParam, lParam);
         };
-        Assert.True(fixture.Ui(() => SetWindowSubclass(fixture.Frame, keepMenuKeys, 0x4D41, 0) && SetWindowSubclass(fixture.Render, keepMenuKeys, 0x4D41, 0)));
+        Assert.True(fixture.Ui(() => Broiler.Native.Windows.WindowNative.SetWindowSubclass(fixture.Frame, keepMenuKeys, 0x4D41, 0) && Broiler.Native.Windows.WindowNative.SetWindowSubclass(fixture.Render, keepMenuKeys, 0x4D41, 0)));
         try
         {
             fixture.Post(WmSysChar, 'f', AltDownContext);
@@ -237,7 +237,7 @@ public sealed class NativeInputFidelityTests
         }
         finally
         {
-            fixture.Ui(() => RemoveWindowSubclass(fixture.Frame, keepMenuKeys, 0x4D41) & RemoveWindowSubclass(fixture.Render, keepMenuKeys, 0x4D41));
+            fixture.Ui(() => Broiler.Native.Windows.WindowNative.RemoveWindowSubclass(fixture.Frame, keepMenuKeys, 0x4D41) & Broiler.Native.Windows.WindowNative.RemoveWindowSubclass(fixture.Render, keepMenuKeys, 0x4D41));
             GC.KeepAlive(keepMenuKeys);
         }
     }
@@ -247,19 +247,6 @@ public sealed class NativeInputFidelityTests
     private const nint ScKeyMenu = 0xF100;
     // The context code of a key message: repeat count 1, and bit 29 set while Alt is down.
     private const nint AltDownContext = 0x20000001;
-
-    private delegate nint SubclassProc(nint window, uint message, nint wParam, nint lParam, nuint id, nuint data);
-
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(nint window, SubclassProc procedure, nuint id, nuint data);
-
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(nint window, SubclassProc procedure, nuint id);
-
-    [DllImport("comctl32.dll")]
-    private static extern nint DefSubclassProc(nint window, uint message, nint wParam, nint lParam);
 
     private static HiddenMailWindow OpenFixture(DemoScenario scenario)
     {

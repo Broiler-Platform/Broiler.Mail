@@ -4,7 +4,7 @@ Updated: 2026-11-04. This is the active forward plan. It supersedes the delivery
 order of versions 3–7 in [the original roadmap](roadmap.md#historical-milestone-plan),
 while preserving their acceptance records. All work below is planned unless the
 baseline explicitly identifies existing implementation. Milestones are ordered
-outcomes, not promised dates or package version numbers.
+outcomes, not promised dates or package version numbers. For the consolidated user-experience architecture and `UX-01`–`UX-10` interaction refinements across all M0–M4 capabilities, see the [Refined UI/UX concept specification](ui-ux-concept.md) and [26 November critical UI/UX review](ui-ux-review-2026-11-26.md).
 
 ## Direction and implementation baseline
 
@@ -554,6 +554,19 @@ The Windows AOT lane stays mandatory; Linux AOT becomes mandatory when Linux shi
   management, mailbox export/backup formats, JMAP, and advanced server search as
   separately scoped features. Never imply cryptographic verification from a UI badge
   without implementing and testing its trust model.
+
+### Network and cloud file dialogs
+
+Let users choose **Local**, **Network**, **OneDrive**, or **Google Drive** in Open and Save. Start with one Windows Mail workflow for opening and exporting `.eml` files. The same storage contract can serve attachments and document editors later.
+
+Broiler.UI.Shell already has an asynchronous `IUiFileDialogDirectoryProvider`, while `UiFileDialog.SelectedPath` resolves a filesystem path. Build on the existing listing behavior with a small storage-provider contract for browsing or picking items, opening read streams, and saving from streams. Cloud selections carry the provider, account and item IDs. New saves carry a destination folder and filename. Keep the path API available for local callers. Start API calls with .NET `HttpClient`. Broiler.Net is a candidate for shared HTTP transport if it fits streaming and NativeAOT. Keep provider authentication and file operations in the adapters.
+
+1. **Prove the contract locally.** Wrap local files and OS-mounted network shares, including Windows UNC paths. Test slow listings and cancellation with a fake provider before adding sign-in.
+2. **Pilot OneDrive on Windows.** Browse, download and upload through Microsoft Graph with delegated `Files.ReadWrite`. Use MSAL.NET as the first sign-in candidate and verify it in a published NativeAOT build. [Microsoft Graph file API](https://learn.microsoft.com/graph/api/resources/onedrive?view=graph-rest-1.0) · [Upload permissions](https://learn.microsoft.com/en-us/graph/api/driveitem-put-content) · [MSAL desktop sign-in](https://learn.microsoft.com/entra/identity-platform/scenario-desktop-acquire-token-interactive)
+3. **Add Google Drive.** Use Google Picker and the Drive API with `drive.file` for files the user grants or the app creates. Verify destination-folder selection for Save As early. Start with ordinary files such as `.eml` and `.docx`. Treat native Google Docs, Sheets and Slides as export workflows in a later slice. [Desktop Picker](https://developers.google.com/workspace/drive/picker/guides/desktop-mobile-picker) · [Drive scopes](https://developers.google.com/workspace/drive/api/guides/api-specific-auth) · [Drive export](https://developers.google.com/workspace/drive/api/reference/rest/v3/files/get)
+4. **Expand after the pilot.** Add resumable transfers and consider Dropbox, WebDAV, or other platforms once the same Open and Save workflow works across both cloud providers.
+
+Use provider app registrations and system-browser OAuth with PKCE. Reuse the browser's signed-in session where available, request consent per provider, and cache tokens in protected OS storage per account. Keep cloud connections separate from mail accounts and provide a disconnect action. A pilot passes when a real account can open, save and reopen the same bytes, and the UI handles expired consent, cancellation and save conflicts without losing the user's work. [Google desktop OAuth](https://developers.google.com/identity/protocols/oauth2/native-app) · [Microsoft token caching](https://learn.microsoft.com/en-us/entra/msal/dotnet/acquiring-tokens/overview)
 
 ## First implementation slices
 

@@ -137,7 +137,7 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
     public void Activate()
     {
         if (IsDisposed || NativeHandle == 0) return;
-        SetForegroundWindow(NativeHandle);
+        Broiler.Native.Windows.WindowNative.SetForegroundWindow(NativeHandle);
         InvalidateIfAlive();
     }
 
@@ -325,8 +325,4 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
 
     private static int ToClientExtent(double requested, int fallback) =>
         requested > 1 ? (int)Math.Round(requested) : fallback;
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetForegroundWindow(nint hwnd);
 }

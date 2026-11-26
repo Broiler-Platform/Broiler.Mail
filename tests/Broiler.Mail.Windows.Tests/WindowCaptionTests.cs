@@ -115,8 +115,5 @@ internal static class DwmCaption
     public static bool IsSupported => OperatingSystem.IsWindowsVersionAtLeast(10, 0, 19041);
 
     /// <summary>DWMWA_USE_IMMERSIVE_DARK_MODE as the window manager reports it; false when it cannot be read.</summary>
-    public static bool IsDark(nint window) => DwmGetWindowAttribute(window, 20, out int value, sizeof(int)) == 0 && value != 0;
-
-    [DllImport("dwmapi.dll")]
-    private static extern int DwmGetWindowAttribute(nint window, int attribute, out int value, int size);
+    public static bool IsDark(nint window) => Broiler.Native.Windows.DwmNative.DwmGetWindowAttribute(window, 20, out int value, sizeof(int)) == 0 && value != 0;
 }

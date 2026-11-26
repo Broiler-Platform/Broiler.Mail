@@ -93,7 +93,7 @@ public sealed class NativeBridgeAttachmentTests
             Assert.True(handles.Input);
 
             // An external client asks the render window for its provider; an unattached bridge returned 0.
-            nint provider = SendMessage(handles.Render, WmGetObject, 0, UiaRootObjectId);
+            nint provider = Broiler.Native.Windows.WindowNative.SendMessage(handles.Render, WmGetObject, 0, UiaRootObjectId);
             Assert.NotEqual(0, provider);
 
             Assert.True(PostMessage(handles.Render, 0x0102, 'x', 1));
@@ -111,7 +111,4 @@ public sealed class NativeBridgeAttachmentTests
         foreach (var child in root.Children)
             foreach (var item in Descendants(child)) yield return item;
     }
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
-    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
 }

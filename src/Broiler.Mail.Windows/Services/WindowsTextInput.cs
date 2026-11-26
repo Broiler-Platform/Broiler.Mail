@@ -15,7 +15,8 @@
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
-using System.Runtime.InteropServices;
+using Broiler.Native.Windows;
+using Broiler.Native.Windows.Input;
 using Broiler.UI;
 using Broiler.UI.Edit;
 using Broiler.UI.RichEdit.Standard;
@@ -54,19 +55,22 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
             return;
         }
         RestoreIme();
-        nint context = ImmGetContext(hwnd);
+        nint context = ImmNative.ImmGetContext(hwnd);
         if (context == 0) return;
         try
         {
-            var form = new CompositionForm
+            var form = new ImmNative.COMPOSITIONFORM
             {
-                Style = 2, // CFS_POINT, in client pixels.
-                X = (int)Math.Round(caret.Bounds.Left * scale()),
-                Y = (int)Math.Round(caret.Bounds.Bottom * scale()),
+                DwStyle = 2, // CFS_POINT, in client pixels.
+                PtCurrentPos = new WindowNative.POINT
+                {
+                    X = (int)Math.Round(caret.Bounds.Left * scale()),
+                    Y = (int)Math.Round(caret.Bounds.Bottom * scale()),
+                },
             };
-            ImmSetCompositionWindow(context, ref form);
+            ImmNative.ImmSetCompositionWindow(context, ref form);
         }
-        finally { ImmReleaseContext(hwnd, context); }
+        finally { ImmNative.ImmReleaseContext(hwnd, context); }
     }
 
     // Hairs-AI:           Origin=AI; IP=None; Security=None; Resources=0; Fingerprint=8B53CF
@@ -107,7 +111,7 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
         {
             RestoreIme();
             // A null context turns the IME off for the window until the default context is restored.
-            if (!ImmAssociateContextEx(hwnd, 0, 0)) return;
+            if (!ImmNative.ImmAssociateContextEx(hwnd, 0, 0)) return;
             _imeOffIn = hwnd;
         }
         _imeOffFor = owner;
@@ -116,27 +120,8 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
     private void RestoreIme()
     {
         if (_imeOffIn == 0) return;
-        ImmAssociateContextEx(_imeOffIn, 0, RestoreDefaultContext);
+        ImmNative.ImmAssociateContextEx(_imeOffIn, 0, RestoreDefaultContext);
         _imeOffIn = 0;
         _imeOffFor = null;
     }
-
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=7817E6
-    // Hairs-Falsified-If: the struct is smaller than Win32 COMPOSITIONFORM (28 bytes), so ImmSetCompositionWindow reads past the end of the caller's copy
-    // Hairs-Human:        PENDING
-    [StructLayout(LayoutKind.Sequential)]
-    private struct CompositionForm { public uint Style; public int X, Y, Left, Top, Right, Bottom; }
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=964CC6
-    // Hairs-Falsified-If: the window or context handle is declared narrower than a pointer, so a 64-bit HIMC is truncated before ImmSetCompositionWindow uses it
-    // Hairs-Human:        PENDING
-    [DllImport("imm32.dll")] private static extern nint ImmGetContext(nint window);
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=1742AC
-    // Hairs-Falsified-If: a parameter is declared narrower than a pointer, so the context released is not the one ImmGetContext returned
-    // Hairs-Human:        PENDING
-    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmReleaseContext(nint window, nint context);
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=3139A5
-    // Hairs-Falsified-If: the form is passed by value rather than by reference, so IMM32 dereferences the struct's first field as a pointer
-    // Hairs-Human:        PENDING
-    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmSetCompositionWindow(nint context, ref CompositionForm form);
-    [DllImport("imm32.dll")] [return: MarshalAs(UnmanagedType.Bool)] private static extern bool ImmAssociateContextEx(nint window, nint context, uint flags);
 }

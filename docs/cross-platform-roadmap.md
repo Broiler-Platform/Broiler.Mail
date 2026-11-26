@@ -3,6 +3,8 @@
 Status: Proposal / Planning. Reviewed: 2026-09-30.  
 Target platforms: Windows (x64, arm64), Linux (x64, arm64), Android (arm64, x64). These are planned targets, not a claim of validated support.
 
+> **Update (November 2026):** `src/Broiler.Mail.Android/` is now implemented with Android Keystore AES-GCM credentials and APK/AAB packaging (see [android.md](android.md)), and `Broiler.Launcher` (`Broiler.Office`) hosts Mail in-process on both Windows (`OfficeMailWindow`) and Linux (`OfficeLinuxHostRunner`). See [product-completion-roadmap.md](product-completion-roadmap.md#m6--publishrelease-parity-and-supported-targets) and [ui-ux-concept.md](ui-ux-concept.md#8-cross-platform-broiler-office--cloud-storage-cohesion) for current platform parity targets.
+
 ## 1. Portability Assessment and Existing Contracts
 
 Static inspection supports reusing the domain, infrastructure, and application layers. A portable target framework does not establish runtime compatibility; platform support must be demonstrated by the test and acceptance matrix below.

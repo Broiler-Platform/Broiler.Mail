@@ -117,8 +117,8 @@ internal sealed class HiddenMailWindow : IDisposable
     public nint ScreenLParam(double x, double y)
     {
         double scale = Ui(() => Window.DpiScale);
-        var point = new Point { X = (int)Math.Round(x * scale), Y = (int)Math.Round(y * scale) };
-        Assert.True(ClientToScreen(Render, ref point));
+        var point = new Broiler.Native.Windows.WindowNative.POINT { X = (int)Math.Round(x * scale), Y = (int)Math.Round(y * scale) };
+        Assert.True(Broiler.Native.Windows.WindowNative.ClientToScreen(Render, ref point));
         return (nint)(((point.Y & 0xFFFF) << 16) | (point.X & 0xFFFF));
     }
 
@@ -145,11 +145,4 @@ internal sealed class HiddenMailWindow : IDisposable
     private static T Wait<T>(Task<T> task) => task.WaitAsync(Timeout).GetAwaiter().GetResult();
 
     private static void Wait(Task task) => task.WaitAsync(Timeout).GetAwaiter().GetResult();
-
-    [StructLayout(LayoutKind.Sequential)]
-    private struct Point { public int X, Y; }
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool ClientToScreen(nint window, ref Point point);
 }

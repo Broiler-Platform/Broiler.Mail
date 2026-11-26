@@ -17,6 +17,7 @@
 
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Services;
+using Broiler.Native.Windows.Credentials;
 using System.Runtime.InteropServices;
 
 namespace Broiler.Mail.Windows.Services;
@@ -53,26 +54,26 @@ public sealed class WindowsCredentialStore : ICredentialStore
         return Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!CredRead(Target(key), Generic, 0, out var pointer))
+            if (!CredentialNative.CredRead(Target(key), Generic, 0, out var pointer))
             {
                 int error = Marshal.GetLastWin32Error();
                 if (error == NotFound) return null;
                 throw Failure("read", error);
             }
-            NativeCredential credential = default;
+            CredentialNative.CREDENTIAL credential = default;
             try
             {
-                credential = Marshal.PtrToStructure<NativeCredential>(pointer);
+                credential = Marshal.PtrToStructure<CredentialNative.CREDENTIAL>(pointer);
                 if (credential.UserName != key.Binding) return null;
-                if (credential.BlobSize > MaximumBlobBytes || credential.BlobSize % 2 != 0 || credential.Blob == IntPtr.Zero)
+                if (credential.CredentialBlobSize > MaximumBlobBytes || credential.CredentialBlobSize % 2 != 0 || credential.CredentialBlob == IntPtr.Zero)
                     throw new InvalidDataException("The saved credential is invalid. Save the password again.");
-                return Marshal.PtrToStringUni(credential.Blob, checked((int)credential.BlobSize / 2));
+                return Marshal.PtrToStringUni(credential.CredentialBlob, checked((int)credential.CredentialBlobSize / 2));
             }
             finally
             {
-                if (credential.Blob != IntPtr.Zero && credential.BlobSize <= MaximumBlobBytes)
-                    Marshal.Copy(new byte[credential.BlobSize], 0, credential.Blob, (int)credential.BlobSize);
-                CredFree(pointer);
+                if (credential.CredentialBlob != IntPtr.Zero && credential.CredentialBlobSize <= MaximumBlobBytes)
+                    Marshal.Copy(new byte[credential.CredentialBlobSize], 0, credential.CredentialBlob, (int)credential.CredentialBlobSize);
+                CredentialNative.CredFree(pointer);
             }
         }, cancellationToken);
     }
@@ -92,12 +93,12 @@ public sealed class WindowsCredentialStore : ICredentialStore
             IntPtr blob = Marshal.StringToCoTaskMemUni(secret);
             try
             {
-                var credential = new NativeCredential
+                var credential = new CredentialNative.CREDENTIAL
                 {
                     Type = Generic, TargetName = Target(key), UserName = key.Binding,
-                    Blob = blob, BlobSize = checked((uint)secret.Length * 2), Persist = PersistLocalMachine,
+                    CredentialBlob = blob, CredentialBlobSize = checked((uint)secret.Length * 2), Persist = PersistLocalMachine,
                 };
-                if (!CredWrite(ref credential, 0)) throw Failure("save", Marshal.GetLastWin32Error());
+                if (!CredentialNative.CredWrite(ref credential, 0)) throw Failure("save", Marshal.GetLastWin32Error());
             }
             finally { Marshal.ZeroFreeCoTaskMemUnicode(blob); }
         }, cancellationToken);
@@ -112,7 +113,7 @@ public sealed class WindowsCredentialStore : ICredentialStore
         return Task.Run(() =>
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (CredDelete(Target(key), Generic, 0)) return;
+            if (CredentialNative.CredDelete(Target(key), Generic, 0)) return;
             int error = Marshal.GetLastWin32Error();
             if (error != NotFound) throw Failure("remove", error);
         }, cancellationToken);
@@ -127,48 +128,4 @@ public sealed class WindowsCredentialStore : ICredentialStore
     // Hairs-Human:        PENDING
     private static IOException Failure(string action, int code) =>
         new($"Windows Credential Manager could not {action} the password (error {code}).");
-
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Critical; Resources=0; Fingerprint=FEEA36
-    // Hairs-Falsified-If: a field's order or width differs from Win32 CREDENTIALW, so BlobSize and Blob are read from the wrong offsets on x64
-    // Hairs-Human:        PENDING
-    [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Unicode)]
-    private struct NativeCredential
-    {
-        public uint Flags;
-        public uint Type;
-        public string? TargetName;
-        public string? Comment;
-        public System.Runtime.InteropServices.ComTypes.FILETIME LastWritten;
-        public uint BlobSize;
-        public IntPtr Blob;
-        public uint Persist;
-        public uint AttributeCount;
-        public IntPtr Attributes;
-        public string? TargetAlias;
-        public string? UserName;
-    }
-
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=6B9172
-    // Hairs-Falsified-If: the declaration omits SetLastError, so ReadAsync compares a stale Win32 error with ERROR_NOT_FOUND
-    // Hairs-Human:        PENDING
-    [DllImport("advapi32.dll", EntryPoint = "CredReadW", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CredRead(string target, uint type, uint flags, out IntPtr credential);
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=D111B8
-    // Hairs-Falsified-If: the credential's strings are marshalled as ANSI, so CredWriteW stores a TargetName and UserName that CredReadW never finds
-    // Hairs-Human:        PENDING
-    [DllImport("advapi32.dll", EntryPoint = "CredWriteW", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CredWrite(ref NativeCredential credential, uint flags);
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=7C4E10
-    // Hairs-Falsified-If: the declaration omits SetLastError, so DeleteAsync compares a stale Win32 error with ERROR_NOT_FOUND and can report a failed delete as done
-    // Hairs-Human:        PENDING
-    [DllImport("advapi32.dll", EntryPoint = "CredDeleteW", CharSet = CharSet.Unicode, SetLastError = true)]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool CredDelete(string target, uint type, uint flags);
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=B6E4D2
-    // Hairs-Falsified-If: the declaration binds an export other than advapi32 CredFree, so the buffer CredRead returns is released by the wrong allocator
-    // Hairs-Human:        PENDING
-    [DllImport("advapi32.dll")]
-    private static extern void CredFree(IntPtr pointer);
 }

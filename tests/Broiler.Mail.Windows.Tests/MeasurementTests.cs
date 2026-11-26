@@ -457,14 +457,11 @@ public sealed class MeasurementTests
         try
         {
             for (int offset = 0; offset < 40; offset += 4) Marshal.WriteInt32(info, offset, 0);
-            SendMessage(window, 0x0024, 0, info);
+            Broiler.Native.Windows.WindowNative.SendMessage(window, 0x0024, 0, info);
             return (Marshal.ReadInt32(info, 32), Marshal.ReadInt32(info, 36));
         }
         finally { Marshal.FreeHGlobal(info); }
     }
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
-    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
 
     [Fact]
     public void The_Summary_Compares_Medians_With_The_Proposed_Budgets_And_Fails_Only_When_Strict()

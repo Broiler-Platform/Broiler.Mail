@@ -6,8 +6,11 @@ For the current implementation/remaining-work split, see the
 [4 October consolidated audit](roadmap-status-2026-10-04.md). In particular,
 two-line rows, adjustable panes, selectable body text, and C-04 form surfaces have
 since been delivered; the findings below preserve the original investigation.
-Use the [UI implementation roadmap](ui-implementation-roadmap.md) for the current
-task sequence and acceptance criteria.
+Use the [UI implementation roadmap](ui-implementation-roadmap.md) for the October
+task sequence and acceptance criteria, and see the
+[Refined UI/UX concept specification](ui-ux-concept.md) and
+[26 November critical UI/UX review](ui-ux-review-2026-11-26.md) for the authoritative
+post-M4 consolidated design.
 
 Broiler.Mail can feel substantially better without replacing its architecture. The highest-return changes are to correct rendering defaults, give messages a readable hierarchy, keep composition actions visible, and make state changes predictable. Then improve the shared controls that make every Broiler application smoother.
 

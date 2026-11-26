@@ -25,14 +25,17 @@ with cancellation and retry that skips already saved bodies.
 See [M1 persistence and recovery](docs/m1-persistence.md) for current limits and
 remaining offline-download policies.
 
-In the Windows reader, expand **Offline folders** to select up to eight folders per account, then choose **Download selected offline folders**. Each explicit batch covers up to 500 saved headers per unfinished folder. **Download next offline batch** continues into older saved headers; **Restart offline batches from newest** rechecks from the top without deleting mail. Session cursors advance only after success, and retry skips saved bodies. It does not receive headers or mirror whole folders. [Coverage and controls](docs/m1-selected-offline-folders.md).
+In the Windows reader, expand **Offline folders** to select up to eight folders per account, then choose **Download selected offline folders**. Each explicit batch covers up to 500 saved headers per unfinished folder. **Download next offline batch** continues into older saved headers; **Restart offline batches from newest** rechecks from the top without deleting mail. Persisted body-batch cursors advance only after success, and retry skips saved bodies. It does not receive headers or mirror whole folders. [Coverage and controls](docs/m1-selected-offline-folders.md).
 
 The [component reuse review](docs/component-reuse-review.md) identifies code that
 can move upstream and the recommended order for removing application workarounds.
 
-The [experience roadmap](docs/experience-roadmap.md) reviews visual polish,
-reading/composing flows, accessibility, and smoothness, with
-[native screenshot evidence](docs/ux-review-2026-09-30/README.md) and a
+The [refined UI/UX concept specification](docs/ui-ux-concept.md) defines the unified,
+implementation-ready post-M4 interaction architecture, paired with the
+[detailed UI/UX refinement roadmap](docs/ui-ux-roadmap.md) (`UX-M0`–`UX-M6`) and the
+[26 November critical UI/UX review](docs/ui-ux-review-2026-11-26.md). Earlier historical UX baseline
+records remain in the [experience roadmap](docs/experience-roadmap.md),
+[native screenshot evidence](docs/ux-review-2026-09-30/README.md), and
 [shared Broiler component roadmap](docs/broiler-experience-components-roadmap.md).
 
 See the [roadmap status of 5 October](docs/roadmap-status-2026-10-05.md)
@@ -129,7 +132,8 @@ To check application composition and render the inbox and all three dialogs with
 dotnet run --project src/Broiler.Mail.Windows --no-build -c Release -- --smoke-test
 ```
 
-The inbox is the main workspace. **Mail** opens a new message or the current draft,
+The inbox is the main workspace. **File** opens a new message, the current draft,
+or secondary mail views (**Outbox**, **Unified saved inbox**, **Saved originals**),
 **Message** offers Reply, Reply all, and Forward, and **Tools** opens the **Account**
 and **Settings** dialogs. Compose also opens in a dialog. Close or Escape returns
 to the inbox; unsaved fields and the current draft remain available when reopened.
@@ -239,11 +243,11 @@ identifiers are included in outgoing MIME headers. Forward starts with empty rec
 fields and no reply-thread identifiers. Quotes identify truncated or HTML-derived
 text; attachments are not forwarded.
 
-**Unified saved inbox** (Mail menu / Ctrl+7) provides explicit offline browsing across configured accounts, including disabled accounts, with account-attributed rows and exact saved-text reading. It keeps the active account and pinned draft unchanged, never receives automatically, and shows up to 50 newest saved INBOX UIDs per account. [Coverage and limits](docs/m3-unified-saved-inbox.md).
+**Unified saved inbox** (File → Other mail views / Ctrl+7) provides explicit offline browsing across configured accounts, including disabled accounts, with account-attributed rows and exact saved-text reading. It keeps the active account and pinned draft unchanged, never receives automatically, and shows up to 50 newest saved INBOX UIDs per account. [Coverage and limits](docs/m3-unified-saved-inbox.md).
 
-**Saved originals** (Mail menu / Ctrl+6) also opens local `.eml` files as read-only byte-source previews. Choose **Import opened original** separately to retain exact bytes for the selected account, then **List local imports** to reopen them. Imports use local identities, survive cache cleanup and are included in verified profile backups. Current limits are 2 MiB per file and 16 files/4 MiB per profile. [Local opening/import details](docs/m4-local-originals.md).
+**Saved originals** (File → Other mail views / Ctrl+6) also opens local `.eml` files as read-only byte-source previews. Choose **Import opened original** separately to retain exact bytes for the selected account, then **List local imports** to reopen them. Imports use local identities, survive cache cleanup and are included in verified profile backups. Current local-import limits are 2 MiB per file and 16 files/4 MiB per profile. [Local opening/import details](docs/m4-local-originals.md).
 
-One draft is active at a time. In the Windows profile-backed composer, expand **Saved drafts** to save and close it, start another message, or resume a saved draft. Resuming atomically saves any open draft first. Up to 20 other drafts/submission records fit in the library, within the shared 4 MiB file limit. Account selection filters the library; each draft retains its original sender. Closing/reopening Compose or changing inbox selection keeps the active draft intact. [Multiple-draft details and compatibility](docs/m4-multiple-drafts.md).
+One draft is active at a time. In the Windows profile-backed composer, expand **Saved drafts** to save and close it, start another message, or resume a saved draft. Resuming atomically saves any open draft first. Up to 20 other drafts/submission records fit in the library, within the shared 32 MiB draft-store limit (up to 4 files / 8 MiB of attachments per draft and 16 MiB of attachments across drafts; see [compose attachments](docs/m4-compose-attachments.md)). Account selection filters the library; each draft retains its original sender. Closing/reopening Compose or changing inbox selection keeps the active draft intact. [Multiple-draft details and compatibility](docs/m4-multiple-drafts.md).
 Use **Discard draft** before starting another composition. The displayed sender is
 fixed when the draft starts; changing the saved email address does not silently
 change that draft's sender. Edits are automatically saved, including incomplete
@@ -314,14 +318,14 @@ resets when the reader is replaced; these images are not saved in the mail cache
 Broader networking/TLS and full native UI acceptance remain M2 work;
 the older pop-out preview is retained for measurement tools. See [M2 progress](docs/m2-inline-reader.md).
 
-Current limits: 50 headers per page, 500 loaded headers per session, 2 MiB per raw
-message including attachments, and a 32,000-character text preview. Larger messages
+Current limits: 50 headers per page, 500 loaded headers per session, 12 MiB per raw
+message/exported `.eml` original including attachments (2 MiB for standalone local `.eml` imports), and a 32,000-character text preview (with up to 1,048,576 characters retained in cache v4 for search). Larger messages
 show an error; long text shows a truncation notice. At the session limit, an information
 notice above the list says so. Bodies are fetched only on
 selection or explicit **Download loaded messages**. Windows saves headers and,
 according to the configured download policy, decoded bodies/CID images to the local
 profile. Saved bodies remain readable after restart without a connection.
-Attachments can be part of the bounded MIME download but cannot be opened or saved.
+Received attachments can be inventoried and saved from verified exported `.eml` originals (see [received attachments](docs/m4-received-attachments.md)), and Compose supports up to four local attachments / 8 MiB per draft ([compose attachments](docs/m4-compose-attachments.md)).
 
 Each network operation has a 20-second deadline. If messages arrive or disappear
 between pages, **Load older** asks you to receive again. A changed mailbox identity
@@ -430,7 +434,7 @@ in Windows Credential Manager afterward.
 Version 2 adds SMTP outgoing mail configuration, the plain-text composer with
 reply and forward threading, durable draft recovery, secure SMTP submission with
 configurable Sent-copy handling, and HTML preview with a plain-text toggle,
-page zoom, and bounded inline images. The Account tab also tests the SMTP sign-in
+page zoom, and bounded inline images. The Account dialog also tests the SMTP sign-in
 without sending. OAuth enum values describe future configuration only.
 The current HTML preview runs inside the mail process; OS process isolation remains
 an open [security gate](docs/html-renderer-security.md). Passing preview fixtures

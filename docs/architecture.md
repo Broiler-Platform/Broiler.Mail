@@ -8,6 +8,8 @@ durable recovery of the active draft, secure SMTP submission, configurable
 Sent-copy handling, and HTML preview. The current renderer runs in the mail process;
 the [process-isolation specification](html-renderer-security.md) remains to implement.
 
+> **Post-M4 Baseline Note (November 2026):** The sections below preserve the original Version 1–2 architectural record. Subsequent M0–M4 milestones ([product-completion-roadmap.md](product-completion-roadmap.md)) replaced MailKit/MimeKit with a managed in-tree IMAP/SMTP/MIME implementation, migrated single-account storage to `account-collection.json` (up to 32 accounts), `SqliteMailCache` v5 (`mail-cache.db` + optional FTS5 `mail-cache.db.search.db`), a 21-draft `drafts.json` store (up to 32 MiB with compose attachments), `12 MiB` streamed `.eml` exports and received attachments, inline `IInlineHtmlPreviewHost` with `Broiler.Net` DNS-pinned HTTPS:443 remote images, an Android head ([android.md](android.md)), and a menu-and-dialog shell. See [ui-ux-concept.md](ui-ux-concept.md) and [ui-ux-review-2026-11-26.md](ui-ux-review-2026-11-26.md) for the consolidated UI/UX specification.
+
 ## Project boundaries
 
 ```text

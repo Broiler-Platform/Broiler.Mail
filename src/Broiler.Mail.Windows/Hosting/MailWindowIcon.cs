@@ -15,7 +15,7 @@
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
-using System.Runtime.InteropServices;
+using static Broiler.Native.Windows.WindowNative;
 
 namespace Broiler.Mail.Windows.Hosting;
 
@@ -77,7 +77,7 @@ internal sealed class MailWindowIcon : IDisposable
 
     private bool Load(uint dpi)
     {
-        nint module = GetModuleHandle(nint.Zero);
+        nint module = GetModuleHandle(null);
         nint big = LoadImage(module, ApplicationIconId, ImageIcon,
             MetricForDpi(SmCxIcon, dpi), MetricForDpi(SmCyIcon, dpi), 0);
         nint small = LoadImage(module, ApplicationIconId, ImageIcon,
@@ -133,41 +133,4 @@ internal sealed class MailWindowIcon : IDisposable
         OperatingSystem.IsWindowsVersionAtLeast(10, 0, 14393)
             ? GetSystemMetricsForDpi(index, dpi)
             : GetSystemMetrics(index);
-
-    [UnmanagedFunctionPointer(CallingConvention.Winapi)]
-    private delegate nint SubclassProc(nint window, uint message, nint wParam, nint lParam,
-        nuint subclassId, nuint referenceData);
-
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool SetWindowSubclass(nint window, SubclassProc callback, nuint id, nuint data);
-
-    [DllImport("comctl32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool RemoveWindowSubclass(nint window, SubclassProc callback, nuint id);
-
-    [DllImport("comctl32.dll")]
-    private static extern nint DefSubclassProc(nint window, uint message, nint wParam, nint lParam);
-
-    [DllImport("kernel32.dll", EntryPoint = "GetModuleHandleW")]
-    private static extern nint GetModuleHandle(nint moduleName);
-
-    [DllImport("user32.dll", EntryPoint = "LoadImageW")]
-    private static extern nint LoadImage(nint instance, nint name, uint type, int width, int height, uint flags);
-
-    [DllImport("user32.dll")]
-    [return: MarshalAs(UnmanagedType.Bool)]
-    private static extern bool DestroyIcon(nint icon);
-
-    [DllImport("user32.dll", EntryPoint = "SendMessageW")]
-    private static extern nint SendMessage(nint window, uint message, nint wParam, nint lParam);
-
-    [DllImport("user32.dll")]
-    private static extern uint GetDpiForWindow(nint window);
-
-    [DllImport("user32.dll")]
-    private static extern int GetSystemMetricsForDpi(int index, uint dpi);
-
-    [DllImport("user32.dll")]
-    private static extern int GetSystemMetrics(int index);
 }
