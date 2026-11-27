@@ -61,8 +61,7 @@ public sealed class IndexedSearchTests
     {
         using var directory = new TestDirectory(); string path = directory.File("mail.db"); var cache = new SqliteMailCache(path); var mailbox = new MailboxKey(AccountId.New(), "INBOX", 7);
         await cache.SaveSummariesAsync(mailbox, [Row(new(mailbox.AccountId, "INBOX", 7, 1), "needle")], DateTimeOffset.UtcNow);
-        using (var connection = new SqliteConnection($"Data Source={path};Pooling=False"))
-        { connection.Open(); using var command = connection.CreateCommand(); command.CommandText = "DROP TABLE mailbox_snapshots; DROP TABLE mailbox_snapshot_uids; DROP TRIGGER search_insert; DROP TRIGGER search_update; DROP TRIGGER search_delete; DROP TABLE cache_search_state; PRAGMA user_version=2;"; command.ExecuteNonQuery(); }
+        CacheSchemaFixture.DowngradeTo(path, 2);
         await cache.RebuildSearchIndexAsync(); Assert.Single(Directory.GetFiles(directory.Root, "mail.db.schema-v2-*.backup"));
         byte[] before = await File.ReadAllBytesAsync(path + ".search.db"); await Assert.ThrowsAnyAsync<OperationCanceledException>(() => cache.RebuildSearchIndexAsync(new CancellationToken(true)));
         Assert.Equal(before, await File.ReadAllBytesAsync(path + ".search.db")); Assert.True((await cache.GetSearchIndexInfoAsync()).Ready);

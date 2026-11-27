@@ -257,6 +257,35 @@ Legacy v1 snapshots remain accepted and migrate on opening in a new profile.
 See [M4 cache migration and recovery](m4-folders.md#cache-upgrade-and-recovery) for
 compatibility and rollback limits.
 
+### UX-M2 attachment-mark cache upgrade (schema v6)
+
+New caches now start at SQLite schema v6, which adds a nullable
+`messages.has_attachments` column (`0`, `1`, or `NULL` for unknown) and lets the
+saved body JSON carry the decoded attachment list. Opening a v5 cache first writes a
+verified `mail-cache.db.schema-v5-<id>.backup` beside it, then adds the column in one
+transaction. Existing rows are not backfilled by the upgrade: they stay unknown until
+their body is decoded or downloaded again, or until a receive brings the server's
+attachment hint for them (below). A v4 cache upgrades through v5 to v6 in a single open.
+Like the v4→v5 step, the upgrade waits while the cache quota has fewer than four free
+pages. Until then the cache stays at v5, bodies still save without their attachment
+list, and no row is marked. Receiving headers again never changes a recorded mark, a
+body without an attachment list never clears one, and a move carries the mark to the
+destination.
+
+Each received IMAP page is followed by one best-effort `FETCH n:m (UID BODYSTRUCTURE)`.
+It applies the MIME parser's attachment rule to the structure (disposition `attachment`,
+or a file name that is not `inline` and has no Content-ID or Content-Location), under a
+bounded parser: 64 KiB per response, 8 KiB per literal, 32 nesting levels, 256 parts.
+A hinted header only fills a mark that is still `NULL` with `1`; it never overrides a
+`0` or `1` recorded from a decoded body, and a header without the hint writes nothing.
+A rejected command, a malformed or oversized reply, a dropped connection, or the hint's
+own time budget (half the receive deadline, at most 10 s) leaves the page without hints
+and never fails the receive. In the list a body-recorded `0` also overrides a hint.
+
+The upgrade is forward-only. **Older builds refuse a v6 cache** ("unsupported
+schema") and do not reset it. To roll back, restore the automatic verified v5 backup
+taken before the upgrade. It does not contain anything saved after the upgrade.
+
 ### Saved-recipient profile data (2026-11-03)
 
 The optional `recipients.json` is now part of the verified snapshot allowlist and

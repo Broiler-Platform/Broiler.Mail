@@ -137,7 +137,7 @@ internal sealed class LocalSmtpServer : IAsyncDisposable
                             while (await reader.ReadLineAsync(_lifetime.Token) is { } data && data != ".")
                             {
                                 body.Append(data.StartsWith("..", StringComparison.Ordinal) ? data[1..] : data).Append("\r\n");
-                                if (body.Length > 2 * 1024 * 1024) throw new InvalidOperationException("Fixture data limit exceeded.");
+                                if (body.Length > 12 * 1024 * 1024) throw new InvalidOperationException("Fixture data limit exceeded.");
                             }
                             RawMessage = body.ToString(); DataReceived.TrySetResult();
                             if (_outcome == SmtpFixtureOutcome.DropAfterData) return;

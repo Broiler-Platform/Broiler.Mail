@@ -27,7 +27,8 @@ public sealed class InboxSearchTests
         await model.SelectAsync(one.Key); dispatcher.Drain(); Assert.Equal("saved body", model.Body!.PlainText);
         await model.SelectAsync(two.Key); dispatcher.Drain(); Assert.Null(model.Body);
         Assert.Contains("not saved", model.MessageProblem!.Text);
-        Assert.Contains("sender and subject only", model.SearchNotice);
+        Assert.Equal(MailSearchScope.Everywhere, model.SearchScope);
+        Assert.Contains("sender, subject or downloaded message text", model.SearchNotice);
         Assert.Equal(0, receiver.Calls);
         await model.ClearSearchAsync(); dispatcher.Drain();
         Assert.False(model.IsSearchActive); Assert.True(model.CanReceive); Assert.Equal(2, model.Messages.Count);
@@ -100,26 +101,28 @@ public sealed class InboxSearchTests
         await storage.SaveSummariesAsync(mailbox, rows.Skip(500).ToArray(), DateTimeOffset.UtcNow);
         var cache = new DelayedSearchCache(storage, false); var receiver = new NoNetworkReceiver(); var dispatcher = new TestQueueDispatcher();
         using var model = new InboxViewModel(receiver, dispatcher, cache);
-        model.SetAccount(account); await model.CacheLoadTask; dispatcher.Drain(); model.SetSearch("match", true, true); model.SetSearchField(MailHeaderSearchField.Subject); model.SetSearchBodyAvailability(false); model.SetSearchCustomDateRange("0001-01-01..9999-12-31");
+        model.SetAccount(account); await model.CacheLoadTask; dispatcher.Drain(); model.SetSearch("match", true, true); model.SetSearchScope(MailSearchScope.SenderOrSubject); model.SetSearchBodyAvailability(false); model.SetSearchCustomDateRange("0001-01-01..9999-12-31");
         await model.SearchSavedHeadersAsync(); dispatcher.Drain();
         Assert.Equal(500, model.Messages.Count); Assert.Equal(1, model.SearchPageNumber); Assert.True(model.CanLoadNextSearchPage);
-        var first = cache.Queries.Single(); model.SetSearchBodyAvailability(true); model.SetSearchField(MailHeaderSearchField.Sender); model.SetSearch("", false, false); model.SetSearchReceivedWithinDays(null);
+        var first = cache.Queries.Single(); model.SetSearchBodyAvailability(true); model.SetSearchScope(MailSearchScope.MessageBody); model.SetSearch("", false, false); model.SetSearchReceivedWithinDays(null);
         cache.FailNext = true; await model.LoadNextSearchPageAsync(); dispatcher.Drain(); Assert.NotNull(model.ListProblem);
         Assert.True(model.CanRetryIn(InboxProblemScope.List));
         await model.RetryAsync(InboxProblemScope.List); dispatcher.Drain();
         Assert.Equal(1u, Assert.Single(model.Messages).Key.Uid); Assert.Equal(2, model.SearchPageNumber); Assert.False(model.CanLoadNextSearchPage);
+        // A sender-or-subject search has no message text, so no engine is pinned and the stored query is the submitted one.
+        Assert.Null(first.Engine); Assert.Equal(MailSearchScope.SenderOrSubject, first.Scope);
         Assert.Equal(first with { BeforeMessage = rows[1].Key }, cache.Queries[1]);
         Assert.Equal(cache.Queries[1], cache.Queries[2]); Assert.Equal(0, receiver.Calls);
         Assert.True(model.CanLoadPreviousSearchPage); await model.LoadPreviousSearchPageAsync(); dispatcher.Drain();
         Assert.Equal(500, model.Messages.Count); Assert.Equal(1, model.SearchPageNumber); Assert.False(model.CanLoadPreviousSearchPage);
         Assert.Equal(first, cache.Queries[^1]); await model.LoadNextSearchPageAsync(); dispatcher.Drain();
         Assert.Contains("match", model.SearchNotice); Assert.Contains("Page 2", model.SearchNotice);
-        model.SetSearch("match"); model.SetSearchBodyAvailability(false); model.SetSearchField(MailHeaderSearchField.Subject); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
+        model.SetSearch("match"); model.SetSearchBodyAvailability(false); model.SetSearchScope(MailSearchScope.SenderOrSubject); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
         Assert.Equal(1, model.SearchPageNumber); Assert.Equal(500, model.Messages.Count); Assert.Null(cache.Queries[^1].BeforeMessage);
     }
 
     [Fact]
-    public async Task FilterOnlyAndFieldSearchAreExplicitAndResetWithAccount()
+    public async Task FilterOnlyAndScopeSearchAreExplicitAndResetWithAccount()
     {
         using var directory = new TestDirectory(); var account = TestDirectory.Profile();
         var cache = new SqliteMailCache(directory.File("mail.db")); var mailbox = new MailboxKey(account.Id, "INBOX", 7);
@@ -129,13 +132,17 @@ public sealed class InboxSearchTests
         model.SetAccount(account); await model.CacheLoadTask; dispatcher.Drain(); Assert.False(model.CanSearch);
         model.SetSearch(" ", true); Assert.True(model.CanSearch); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
         Assert.Equal(1u, model.Messages.Single().Key.Uid); Assert.Contains("No keyword", model.SearchNotice);
-        model.SetSearch("needle"); model.SetSearchField(MailHeaderSearchField.Sender); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
-        Assert.Equal(1u, model.Messages.Single().Key.Uid); Assert.Contains("sender only", model.SearchNotice);
-        model.SetSearchField(MailHeaderSearchField.Subject); Assert.Equal(1u, model.Messages.Single().Key.Uid);
-        await model.SearchSavedHeadersAsync(); dispatcher.Drain(); Assert.Equal(2u, model.Messages.Single().Key.Uid);
-        Assert.Throws<ArgumentOutOfRangeException>(() => model.SetSearchField((MailHeaderSearchField)99));
+        model.SetSearch("needle"); model.SetSearchScope(MailSearchScope.SenderOrSubject); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
+        Assert.Equal(2, model.Messages.Count); Assert.Contains("sender and subject only", model.SearchNotice);
+        // Sender-only search is the separate sender filter; an edited scope does not change the shown results.
+        model.SetSearch(""); model.SetSearchSenderText("needle"); model.SetSearchScope(MailSearchScope.MessageBody); Assert.Equal(2, model.Messages.Count);
+        model.SetSearchScope(MailSearchScope.SenderOrSubject); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
+        Assert.Equal(1u, model.Messages.Single().Key.Uid); Assert.Contains("Saved sender header contains", model.SearchNotice);
+        Assert.Throws<ArgumentOutOfRangeException>(() => model.SetSearchScope((MailSearchScope)99));
+        model.SetSearchReadState(true); model.SetSearchStarState(false); model.SetSearchBodyAvailability(true);
         model.SetAccount(account with { Id = AccountId.New() }); await model.CacheLoadTask; dispatcher.Drain();
-        Assert.Equal(MailHeaderSearchField.SenderOrSubject, model.SearchField); Assert.False(model.CanSearch);
+        Assert.Equal(MailSearchScope.Everywhere, model.SearchScope); Assert.False(model.CanSearch);
+        Assert.Null(model.SearchReadState); Assert.Null(model.SearchStarState); Assert.Null(model.SearchBodyCached); Assert.Equal("", model.SearchSenderText);
     }
 
     [Fact]
@@ -149,12 +156,15 @@ public sealed class InboxSearchTests
         var receiver = new NoNetworkReceiver(); var dispatcher = new TestQueueDispatcher();
         using var model = new InboxViewModel(receiver, dispatcher, cache);
         model.SetAccount(account); await model.CacheLoadTask; dispatcher.Drain();
-        model.SetSearch("needle"); model.SetSearchField(MailHeaderSearchField.BodyPreview);
+        model.SetSearch("needle"); model.SetSearchScope(MailSearchScope.MessageBody);
         await model.SearchSavedHeadersAsync(); dispatcher.Drain(); Assert.Equal(one.Key, model.Messages.Single().Key);
-        Assert.Contains("32,000", model.SearchNotice); Assert.Contains("uncached bodies", model.SearchNotice);
+        Assert.Contains("32,000", model.SearchNotice); Assert.Contains("message text only", model.SearchNotice);
+        Assert.Equal(MailSearchEngine.Literal, model.SearchEngineUsed); Assert.True(model.SearchHasHeaderOnlyMessages);
+        Assert.Contains("Search index is off", model.SearchCoverageNote); Assert.Contains("headers only, so they were skipped", model.SearchCoverageNote);
         await model.SelectAsync(one.Key); dispatcher.Drain(); Assert.True(model.Body!.IsTruncated); Assert.True(model.IsBodyFromCache);
-        model.SetSearchField(MailHeaderSearchField.HeadersOrBodyPreview); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
+        model.SetSearchScope(MailSearchScope.Everywhere); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
         Assert.Equal(2, model.Messages.Count); Assert.Equal(0, receiver.Calls);
+        Assert.Contains("they matched on sender and subject only", model.SearchCoverageNote);
     }
 
     [Theory]

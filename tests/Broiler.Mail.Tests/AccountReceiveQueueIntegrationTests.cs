@@ -33,7 +33,8 @@ public sealed class AccountReceiveQueueIntegrationTests
             queue.CancelAll(); Assert.True(queue.HasWork); await Pump(settings.BackupAsync(), dispatcher); Assert.False(Directory.Exists(settings.BackupDestination));
             release.SetResult(); await queue.WhenIdle.WaitAsync(TimeSpan.FromSeconds(10)); dispatcher.Drain(); Assert.Null(await cache.GetLatestMailboxAsync(first.Id, "INBOX")); Assert.Null(await cache.GetLatestMailboxAsync(second.Id, "INBOX"));
             Assert.Equal(first.Id, model.Composer.DraftAccountId); Assert.Equal(second.Id, (await store.LoadStateAsync()).SelectedAccountId);
-            settings.BackupDestination = dir.File("finished-backup"); await Pump(settings.BackupAsync(), dispatcher); Assert.True(Directory.Exists(settings.BackupDestination)); Assert.True(model.Accounts.CanRemove);
+            settings.BackupDestination = dir.File("finished-backup"); await Pump(settings.BackupAsync(), dispatcher); Assert.True(Directory.Exists(dir.File("finished-backup"))); Assert.True(model.Accounts.CanRemove);
+            Assert.NotEqual(dir.File("finished-backup"), settings.BackupDestination); // the next backup gets a new folder
         }
         finally { model.AccountReceives?.Dispose(); model.Inbox.Dispose(); model.Composer.Dispose(); model.Settings.Storage?.Dispose(); }
     }

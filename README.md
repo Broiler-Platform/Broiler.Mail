@@ -241,11 +241,12 @@ reply-all includes the original To/Cc recipients, removes duplicates and the
 current account's address, and never copies received Bcc recipients. Reply thread
 identifiers are included in outgoing MIME headers. Forward starts with empty recipient
 fields and no reply-thread identifiers. Quotes identify truncated or HTML-derived
-text; attachments are not forwarded.
+text. Forwarding a message with attachments offers **Include original attachments**;
+nothing is attached unless you choose it.
 
 **Unified saved inbox** (File → Other mail views / Ctrl+7) provides explicit offline browsing across configured accounts, including disabled accounts, with account-attributed rows and exact saved-text reading. It keeps the active account and pinned draft unchanged, never receives automatically, and shows up to 50 newest saved INBOX UIDs per account. [Coverage and limits](docs/m3-unified-saved-inbox.md).
 
-**Saved originals** (File → Other mail views / Ctrl+6) also opens local `.eml` files as read-only byte-source previews. Choose **Import opened original** separately to retain exact bytes for the selected account, then **List local imports** to reopen them. Imports use local identities, survive cache cleanup and are included in verified profile backups. Current local-import limits are 2 MiB per file and 16 files/4 MiB per profile. [Local opening/import details](docs/m4-local-originals.md).
+**Saved originals** (File → Other mail views / Ctrl+6) also opens local `.eml` files of up to 12 MiB read-only: choose **Open .eml file…** there or File → **Open .eml file…** (Ctrl+O). The decoded message shows by default, with a raw-source toggle. Choose **Import opened original** separately to retain exact bytes for the selected account, then **List local imports** to reopen them. Imports use local identities, survive cache cleanup and are included in verified profile backups. Current local-import limits are 2 MiB per file and 16 files/4 MiB per profile; larger files can be viewed but not kept. File → **Save message as .eml…** (Ctrl+Shift+S) saves the open message's exact original to a file you choose. [Local opening/import details](docs/m4-local-originals.md).
 
 One draft is active at a time. In the Windows profile-backed composer, expand **Saved drafts** to save and close it, start another message, or resume a saved draft. Resuming atomically saves any open draft first. Up to 20 other drafts/submission records fit in the library, within the shared 32 MiB draft-store limit (up to 4 files / 8 MiB of attachments per draft and 16 MiB of attachments across drafts; see [compose attachments](docs/m4-compose-attachments.md)). Account selection filters the library; each draft retains its original sender. Closing/reopening Compose or changing inbox selection keeps the active draft intact. [Multiple-draft details and compatibility](docs/m4-multiple-drafts.md).
 Use **Discard draft** before starting another composition. The displayed sender is
@@ -319,13 +320,13 @@ Broader networking/TLS and full native UI acceptance remain M2 work;
 the older pop-out preview is retained for measurement tools. See [M2 progress](docs/m2-inline-reader.md).
 
 Current limits: 50 headers per page, 500 loaded headers per session, 12 MiB per raw
-message/exported `.eml` original including attachments (2 MiB for standalone local `.eml` imports), and a 32,000-character text preview (with up to 1,048,576 characters retained in cache v4 for search). Larger messages
+message/exported or opened local `.eml` original including attachments (2 MiB for keeping a local `.eml` import in the profile), and a 32,000-character text preview (with up to 1,048,576 characters retained in cache v4 for search). Larger messages
 show an error; long text shows a truncation notice. At the session limit, an information
 notice above the list says so. Bodies are fetched only on
 selection or explicit **Download loaded messages**. Windows saves headers and,
 according to the configured download policy, decoded bodies/CID images to the local
 profile. Saved bodies remain readable after restart without a connection.
-Received attachments can be inventoried and saved from verified exported `.eml` originals (see [received attachments](docs/m4-received-attachments.md)), and Compose supports up to four local attachments / 8 MiB per draft ([compose attachments](docs/m4-compose-attachments.md)).
+Messages with attachments show a paperclip in the list and an attachment strip above the reader body; **Save as…** and **Save all…** save to files you choose, never replace an existing file, and do not use the profile's export quotas. Received attachments can also be inventoried and saved from verified exported `.eml` originals (see [received attachments](docs/m4-received-attachments.md)), and Compose supports up to four attached files / 8 MiB per draft ([compose attachments](docs/m4-compose-attachments.md)).
 
 Each network operation has a 20-second deadline. If messages arrive or disappear
 between pages, **Load older** asks you to receive again. A changed mailbox identity

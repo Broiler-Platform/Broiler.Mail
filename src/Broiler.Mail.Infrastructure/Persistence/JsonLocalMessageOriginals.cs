@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   19
-// Annotated:        0/19
+// Relevant units:   23
+// Annotated:        0/23
 // Exempt:           0
-// Human-reviewed:   0/19
+// Human-reviewed:   0/23
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       19
+// Unverified:       23
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -26,11 +26,11 @@ internal sealed record LocalOriginalEntry(LocalOriginalReceipt Receipt, byte[] B
 internal sealed record LocalOriginalState(IReadOnlyList<LocalOriginalEntry> Entries);
 
 /// <summary>Small, irreplaceable local originals, atomically stored and included in profile backups.</summary>
-public sealed class JsonLocalMessageOriginals(string profileDirectory, IProfileStorage? profileStorage = null) : ILocalMessageOriginals, ILocalOriginalManagement
+public sealed class JsonLocalMessageOriginals(string profileDirectory, IProfileStorage? profileStorage = null) : ILocalMessageOriginals, ILocalOriginalManagement, ILocalOriginalStreamSource
 {
     public bool CanRemove => profileStorage is not null && string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(profileStorage.ProfileDirectory)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(profileDirectory)), OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
-    public const int MaximumFiles = 16;
-    public const int MaximumTotalBytes = 4 * 1024 * 1024;
+    public const int MaximumFiles = LocalOriginalLimits.ImportFiles;
+    public const int MaximumTotalBytes = LocalOriginalLimits.ImportTotalBytes;
     private string StorePath => Path.Combine(Path.GetFullPath(profileDirectory), "local-originals.json");
     private JsonConfigurationFile<LocalOriginalState> Store
     {
@@ -50,16 +50,43 @@ public sealed class JsonLocalMessageOriginals(string profileDirectory, IProfileS
         if ((File.GetAttributes(full) & (FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0)
             throw new IOException("Open a regular .eml file, not a file link or directory.");
         await using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, FileOptions.Asynchronous);
-        if (stream.Length is < 1 or > MailMessageSource.MaximumBytes) throw new InvalidDataException("Local originals must contain 1 byte to 2 MiB.");
-        byte[] bytes = new byte[checked((int)stream.Length)]; await stream.ReadExactlyAsync(bytes, token).ConfigureAwait(false);
-        if (stream.ReadByte() != -1) throw new InvalidDataException("The local file changed while being read.");
-        token.ThrowIfCancellationRequested();
+        if (stream.Length is < 1 or > LocalOriginalLimits.OpenBytes) throw new InvalidDataException(OpenSizeMessage);
+        byte[] bytes = await ReadBoundedAsync(stream, token).ConfigureAwait(false);
         return new(MimeAttachmentCatalog.SafeFileName(Path.GetFileName(full)), bytes);
     }
+    public async Task<LocalOriginalContent> OpenStreamAsync(string displayName, Stream source, CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(source); token.ThrowIfCancellationRequested();
+        byte[] bytes = await ReadBoundedAsync(source, token).ConfigureAwait(false);
+        return new(MimeAttachmentCatalog.SafeFileName(string.IsNullOrWhiteSpace(displayName) ? "message.eml" : Path.GetFileName(displayName)), bytes);
+    }
+    /// <summary>Reads at most one byte past the open limit, whatever the stream reports as its length.</summary>
+    private static async Task<byte[]> ReadBoundedAsync(Stream source, CancellationToken token)
+    {
+        byte[] buffer = System.Buffers.ArrayPool<byte>.Shared.Rent(81920);
+        try
+        {
+            using var memory = new MemoryStream();
+            while (true)
+            {
+                int room = (int)Math.Min(buffer.Length, LocalOriginalLimits.OpenBytes + 1L - memory.Length);
+                int read = await source.ReadAsync(buffer.AsMemory(0, room), token).ConfigureAwait(false);
+                if (read == 0) break;
+                memory.Write(buffer, 0, read);
+                if (memory.Length > LocalOriginalLimits.OpenBytes) throw new InvalidDataException(OpenSizeMessage);
+            }
+            token.ThrowIfCancellationRequested();
+            if (memory.Length < 1) throw new InvalidDataException(OpenSizeMessage);
+            return memory.ToArray();
+        }
+        finally { System.Buffers.ArrayPool<byte>.Shared.Return(buffer); }
+    }
+    public const string OpenSizeMessage = "Local .eml files must contain 1 byte to 12 MiB.";
+    public const string ImportSizeMessage = "Keeping a copy in the profile is limited to 2 MiB per file (16 files, 4 MiB total). Keep the original file where you saved it; it can still be opened and viewed.";
     public async Task<LocalOriginalReceipt> ImportAsync(AccountId account, LocalOriginalContent content, CancellationToken token = default)
     {
         CheckAccount(account); ArgumentNullException.ThrowIfNull(content); ArgumentNullException.ThrowIfNull(content.Bytes);
-        if (content.Bytes.Length is < 1 or > MailMessageSource.MaximumBytes) throw new ArgumentException("Local originals must contain 1 byte to 2 MiB.");
+        if (content.Bytes.Length is < 1 or > LocalOriginalLimits.ImportBytes) throw new ArgumentException(ImportSizeMessage);
         byte[] bytes = content.Bytes.ToArray();
         var receipt = new LocalOriginalReceipt(Guid.NewGuid(), account, content.FileName, bytes.Length, Hash(bytes), DateTimeOffset.UtcNow);
         var entry = new LocalOriginalEntry(receipt, bytes); Validate(new([entry])); token.ThrowIfCancellationRequested();
@@ -86,8 +113,8 @@ public sealed class JsonLocalMessageOriginals(string profileDirectory, IProfileS
     public async Task<LocalOriginalPreview> DecodeAsync(LocalOriginalContent content, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(content); ArgumentNullException.ThrowIfNull(content.Bytes);
-        if (content.Bytes.Length is < 1 or > MailMessageSource.MaximumBytes) throw new ArgumentException("Local originals must contain 1 byte to 2 MiB.");
-        token.ThrowIfCancellationRequested(); using var stream = new MemoryStream(content.Bytes.ToArray(), writable: false);
+        if (content.Bytes.Length is < 1 or > LocalOriginalLimits.OpenBytes) throw new ArgumentException(OpenSizeMessage);
+        token.ThrowIfCancellationRequested(); using var stream = new MemoryStream(content.Bytes, writable: false);
         return await Broiler.Mail.Infrastructure.Mail.MessageTextDecoder.DecodeLocalAsync(stream, token).ConfigureAwait(false);
     }
     public async Task<LocalOriginalExport> ExportAsync(LocalOriginalReceipt receipt, string destination, CancellationToken token = default)
@@ -132,8 +159,8 @@ public sealed class JsonLocalMessageOriginals(string profileDirectory, IProfileS
         {
             if (entry is null || entry.Receipt is not {} row || entry.Bytes is null) throw new ArgumentException("Invalid local original.");
             CheckAccount(row.AccountId);
-            if (row.Id == Guid.Empty || !ids.Add(row.Id) || row.FileName is null || row.FileName.Length is < 1 or > 120 || row.FileName != MimeAttachmentCatalog.SafeFileName(row.FileName) ||
-                row.Bytes is < 1 or > MailMessageSource.MaximumBytes || row.Bytes != entry.Bytes.Length || row.ImportedAt == default || row.Sha256 != Hash(entry.Bytes))
+            if (row.Id == Guid.Empty || !ids.Add(row.Id) || row.FileName is null || row.FileName.Length is < 1 or > 120 || row.FileName != MimeAttachmentCatalog.SafeFileName(row.FileName, prefixReserved: false) ||
+                row.Bytes is < 1 or > LocalOriginalLimits.ImportBytes || row.Bytes != entry.Bytes.Length || row.ImportedAt == default || row.Sha256 != Hash(entry.Bytes))
                 throw new ArgumentException("Local-original identity, size or checksum is invalid.");
             total += entry.Bytes.Length;
         }

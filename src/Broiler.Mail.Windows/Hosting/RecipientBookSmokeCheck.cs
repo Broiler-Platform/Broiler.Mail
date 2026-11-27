@@ -17,6 +17,7 @@
 
 using Broiler.Mail.Application.ViewModels;
 using Broiler.Mail.Core.Accounts;
+using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
 using Broiler.Mail.Infrastructure.Persistence;
 
@@ -37,14 +38,14 @@ internal static class RecipientBookSmokeCheck
             if (!model.StartNew() || model.RecipientBook.Suggest("SAVED").Single() != recipient || model.RecipientBook.Suggest("other").Count != 0 ||
                 !model.InsertRecipient("Bcc", recipient) || !await model.SaveAsync()) throw new InvalidOperationException("Published recipient suggestions/insertion failed.");
         }
-        if ((await drafts.LoadAsync()).Draft?.BccText != recipient.Address) throw new InvalidOperationException("Published recipient draft persistence failed.");
+        if ((await drafts.LoadAsync()).Draft?.BccText != MailComposition.FormatMailbox(recipient.Address, recipient.Name)) throw new InvalidOperationException("Published recipient draft persistence failed.");
         var storage = new ProfileStorageService(profile, new SqliteMailCache(profile.CachePath));
         string backup = await storage.CreateBackupAsync(directory + "-backup");
         string restored = await storage.RestoreBackupAsync(backup, directory + "-restored");
         if ((await new JsonRecipientBook(Path.Combine(restored, "recipients.json")).LoadAsync(account.Id)).Single() != recipient)
             throw new InvalidOperationException("Published recipient backup/restore failed.");
         await book.RemoveAsync(account.Id, recipient.Address);
-        if ((await book.LoadAsync(account.Id)).Count != 0 || (await drafts.LoadAsync()).Draft?.BccText != recipient.Address)
+        if ((await book.LoadAsync(account.Id)).Count != 0 || (await drafts.LoadAsync()).Draft?.BccText != MailComposition.FormatMailbox(recipient.Address, recipient.Name))
             throw new InvalidOperationException("Published recipient removal changed draft.");
         string bookPath = Path.Combine(directory, "recipients.json"); byte[] validBook = File.ReadAllBytes(bookPath);
         File.WriteAllText(bookPath, "synthetic corrupt recipient book");

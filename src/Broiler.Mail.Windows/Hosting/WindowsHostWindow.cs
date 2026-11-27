@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   45
 // Annotated:        0/45
-// Exempt:           16
+// Exempt:           18
 // Human-reviewed:   0/45
 // IP risk:          not assessed
 // Security risk:    not assessed
@@ -34,6 +34,7 @@ using Broiler.Input.Mouse;
 using Broiler.Mail.Windows.Services;
 using Broiler.UI;
 using Broiler.UI.Standard;
+using Broiler.UI.Window;
 
 namespace Broiler.Mail.Windows.Hosting;
 
@@ -51,12 +52,14 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
     private UiSession? _session;
     private WindowsAutomationBridge? _automationBridge;
     private WindowsInputBridge? _inputBridge;
+    private readonly Func<UiInputEvent, bool>? _keyboardFilter;
+    private MailTooltips? _tooltips;
 
 #pragma warning disable CS0618
     private readonly StandardLegacyGraphicsInputAdapter _legacyInput = new("broiler-mail-breakout-window");
 #pragma warning restore CS0618
 
-    public WindowsHostWindow(Direct2DWindow owner, UiHostWindowRequest request)
+    public WindowsHostWindow(Direct2DWindow owner, UiHostWindowRequest request, Func<UiInputEvent, bool>? keyboardFilter = null)
         : base(new BWindowOptions
         {
             Title = string.IsNullOrWhiteSpace(request.Title) ? "Broiler Mail" : request.Title,
@@ -72,6 +75,7 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
         })
     {
         _owner = owner;
+        _keyboardFilter = keyboardFilter;
         _clipboard = new WindowsClipboard(() => NativeHandle);
         _textInput = new WindowsTextInput(() => RenderNativeHandle, () => DpiScale);
         StateChanged += (_, _) => WindowStateChanged?.Invoke(this, EventArgs.Empty);
@@ -94,12 +98,18 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
     {
         if (_session is null || RenderNativeHandle == 0) return;
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _session.Roots.Count > 0 ? _session.Roots[0] : null!, () => DpiScale);
-        _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, null, () => DpiScale, InvalidateIfAlive);
+        _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboardFilter, () => DpiScale, InvalidateIfAlive);
+        if (_tooltips is null && _session.Roots.Count > 0 && _session.Roots[0] is UiWindow root)
+        {
+            _tooltips = new MailTooltips(this, _session, root, InvalidateIfAlive);
+            _tooltips.ApplyTheme(StandardControlPaint.Theme);
+        }
         _textInput.FollowFocus(_session.FocusedElement);
     }
 
     public void ApplyTheme(StandardThemeTokens theme)
     {
+        _tooltips?.ApplyTheme(theme);
         if (NativeHandle != 0) WindowsTitleBar.ApplyDarkMode(NativeHandle, theme.IsDark);
         if (_session is { IsDisposed: false } session)
         {
@@ -259,9 +269,12 @@ internal sealed class WindowsHostWindow : Direct2DWindow, IUiHostWindow, IUiWind
         if (_session is null || _session.IsDisposed) return;
         if (input.Kind == UiInputEventKind.PointerMove)
             WindowsPointerCursor.SetTextCursor(HtmlViewElement.HasSelectableTextAt(_session, input.Position));
-        if (_session.DispatchInput(input))
+        // Keyboard navigation first, as in the main window: Tab must not insert a tab into the body.
+        if (_keyboardFilter?.Invoke(input) == true || _session.DispatchInput(input))
             InvalidateIfAlive();
     }
+
+    protected override void OnAnimationTick() => _tooltips?.Tick();
 
     private void InvalidateIfAlive()
     {

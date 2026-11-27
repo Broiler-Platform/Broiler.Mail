@@ -49,7 +49,7 @@ public sealed partial class SqliteMailCache
         if (!File.Exists(IndexPath)) { _indexIssue = "Search index is disabled. Rebuild it in Settings → Storage."; return; }
         try
         {
-            if (Scalar(connection, "PRAGMA user_version") is not (4 or 5)) throw new InvalidDataException("Search/body-retention schema is not ready; increase the cache quota.");
+            if (Scalar(connection, "PRAGMA user_version") is not (4 or 5 or 6)) throw new InvalidDataException("Search/body-retention schema is not ready; increase the cache quota.");
             using var mode = connection.CreateCommand(); mode.CommandText = "PRAGMA main.journal_mode";
             if (!string.Equals((string?)mode.ExecuteScalar(), "delete", StringComparison.OrdinalIgnoreCase)) throw new InvalidDataException("Indexed maintenance requires SQLite DELETE journal mode.");
             using var attach = connection.CreateCommand(); attach.CommandText = "ATTACH DATABASE $path AS search"; attach.Parameters.AddWithValue("$path", IndexPath); attach.ExecuteNonQuery();
@@ -84,7 +84,7 @@ public sealed partial class SqliteMailCache
     { token.ThrowIfCancellationRequested(); File.Delete(IndexPath); _indexIssue = "Search index disabled. Saved mail is unchanged; literal search remains available."; return true; }, token, attachIndex: false);
     public Task RebuildSearchIndexAsync(CancellationToken token = default) => RunAsync(connection =>
     {
-        if (Scalar(connection, "PRAGMA user_version") is not (4 or 5)) throw new MailSearchIndexUnavailableException(_indexIssue);
+        if (Scalar(connection, "PRAGMA user_version") is not (4 or 5 or 6)) throw new MailSearchIndexUnavailableException(_indexIssue);
         _ = SearchRevision(connection);
         string stage = IndexPath + "." + Guid.NewGuid().ToString("N") + ".partial";
         try

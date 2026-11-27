@@ -33,7 +33,10 @@ public sealed class ImapReceivingTests
         Assert.Equal(10u, Assert.Single(last.Messages).Key.Uid);
         Assert.Null(last.Older);
         Assert.Contains(server.MailCommands, command => command.StartsWith("FETCH 4:5 ", StringComparison.Ordinal));
-        Assert.DoesNotContain(server.MailCommands, command => command.Contains("BODY", StringComparison.Ordinal));
+        // Only the structure hint per page; never a body or a part of one.
+        Assert.Contains("FETCH 4:5 (UID BODYSTRUCTURE)", server.MailCommands);
+        Assert.DoesNotContain(server.MailCommands, command => command.Contains("BODY", StringComparison.Ordinal) && !command.EndsWith("(UID BODYSTRUCTURE)", StringComparison.Ordinal));
+        Assert.All(first.Messages.Concat(second.Messages).Concat(last.Messages), message => Assert.False(message.HasAttachments));
         AssertReadOnly(server);
     }
 
@@ -60,7 +63,8 @@ public sealed class ImapReceivingTests
         server.Messages.Add(new(3, Plain));
         var error = await Assert.ThrowsAsync<MailConnectionException>(() => receiver.GetInboxAsync(account, 1, page.Older));
         Assert.Contains("inbox changed", error.Message);
-        Assert.Single(server.MailCommands, command => command.StartsWith("FETCH", StringComparison.Ordinal));
+        Assert.Single(server.MailCommands, command => command.StartsWith("FETCH", StringComparison.Ordinal) && !command.EndsWith("(UID BODYSTRUCTURE)", StringComparison.Ordinal));
+        Assert.Equal(1, server.BodyStructureFetchCount);
         Assert.Equal(3u, Assert.Single((await receiver.GetInboxAsync(account, 1)).Messages).Key.Uid);
     }
 
@@ -99,6 +103,52 @@ public sealed class ImapReceivingTests
         Assert.Contains("no longer available", removed.Message);
         var large = await Assert.ThrowsAsync<MailConnectionException>(() => receiver.GetBodyAsync(account, Key(account, 2)));
         Assert.Contains("12 MiB", large.Message);
+    }
+
+    [Fact]
+    public async Task OversizedBodyIsRefusedByItsReportedSizeBeforeAnyBodyIsRequested()
+    {
+        await using var server = new LocalImapServer(TransportSecurity.Tls);
+        server.Messages.Add(new(1, Plain + new string('x', ImapMailReceiver.MaximumMessageBytes + 1 - Plain.Length)));
+        var (receiver, account) = await Setup(server, timeout: TimeSpan.FromSeconds(30));
+        for (int attempt = 0; attempt < 2; attempt++)
+        {
+            var started = System.Diagnostics.Stopwatch.StartNew();
+            var error = await Assert.ThrowsAsync<MailConnectionException>(() => receiver.GetBodyAsync(account, Key(account, 1)));
+            Assert.Equal("This message exceeds the 12 MiB limit (including attachments).", error.Message);
+            Assert.True(started.Elapsed < TimeSpan.FromSeconds(10), $"Attempt {attempt} took {started.Elapsed}.");
+        }
+        Assert.Equal(2, server.MailCommands.Count(command => command == "UID FETCH 1 (RFC822.SIZE)"));
+        Assert.DoesNotContain(server.MailCommands, command => command.Contains("BODY.PEEK[]", StringComparison.Ordinal));
+        AssertReadOnly(server);
+    }
+
+    [Fact]
+    public async Task ASizeAnswerWithFlagsInAnyOrderAndAnotherMessagesFetchStillOpensTheMessage()
+    {
+        await using var server = new LocalImapServer(TransportSecurity.Tls) { SizeResponseFlagsAndOtherMessage = true };
+        server.Messages.Add(new(1, Plain));
+        var (receiver, account) = await Setup(server);
+        var body = await receiver.GetBodyAsync(account, Key(account, 1));
+        Assert.False(string.IsNullOrEmpty(body.PlainText));
+        Assert.Contains(server.MailCommands, command => command == "UID FETCH 1 (RFC822.SIZE)");
+        AssertReadOnly(server);
+    }
+
+    [Fact]
+    public async Task LiteralLargerThanTheReportedSizeIsRefusedWithoutMaskingTheLimitOrStallingTheNextRequest()
+    {
+        await using var server = new LocalImapServer(TransportSecurity.Tls);
+        server.Messages.Add(new(1, Plain + new string('x', ImapMailReceiver.MaximumMessageBytes + 1 - Plain.Length)));
+        // The size reported first fits; the literal that follows announces one byte more than the limit.
+        server.SourceReportedSize = Plain.Length;
+        var (receiver, account) = await Setup(server, timeout: TimeSpan.FromSeconds(30));
+        var started = System.Diagnostics.Stopwatch.StartNew();
+        var error = await Assert.ThrowsAsync<MailConnectionException>(() => receiver.GetBodyAsync(account, Key(account, 1)));
+        Assert.Equal("This message exceeds the 12 MiB limit (including attachments).", error.Message);
+        // The abandoned literal ends only that connection: the next request is served at once.
+        Assert.Single((await receiver.GetInboxAsync(account, 50)).Messages);
+        Assert.True(started.Elapsed < TimeSpan.FromSeconds(10), $"Refusing and receiving again took {started.Elapsed}.");
     }
 
     [Theory]
@@ -172,6 +222,10 @@ public sealed class ImapReceivingTests
         Assert.Equal(32_000, longBody.PlainText.Length);
         var attachment = await Decode("Content-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=data.bin\r\n\r\nabc");
         Assert.Contains("No readable text", attachment.PlainText);
+        var listed = Assert.Single(attachment.Attachments!);
+        Assert.Equal("data.bin", listed.FileName);
+        Assert.Equal(3, listed.DecodedBytes);
+        Assert.False(attachment.IsAttachmentListIncomplete);
     }
 
     [Theory]

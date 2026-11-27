@@ -57,7 +57,7 @@ internal static class SavedDraftsView
             updating = true; var selected = Selected(); var rows = model.SavedDrafts.ToArray();
             if (!shown.SequenceEqual(rows))
             {
-                shown = rows; picker.SetItems(rows.Select(row => new UiComboBoxItem(Title(row), row.Draft.Id.ToString())));
+                shown = rows; picker.SetItems(rows.Select(row => new UiComboBoxItem(row.Draft.Id.ToString(), Title(row))));
                 picker.SelectedIndex = selected is null ? -1 : Array.FindIndex(rows, row => row.Draft.Id == selected.Draft.Id);
             }
             section.Summary = $"{shown.Length} saved for selected account; {model.SavedDraftLibraryCount}/20 across this profile.";

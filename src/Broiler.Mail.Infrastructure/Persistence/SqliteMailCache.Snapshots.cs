@@ -100,10 +100,16 @@ public sealed partial class SqliteMailCache
         command.CommandText = "SELECT count(*) FROM messages m WHERE m.account=$a AND m.mailbox=$m AND m.epoch=$e AND NOT EXISTS(SELECT 1 FROM mailbox_snapshot_uids u WHERE u.account=m.account AND u.mailbox=m.mailbox AND u.epoch=m.epoch AND u.uid=m.uid)";
         return (long)command.ExecuteScalar()!;
     }
-    private static void UpsertHeaderAndIndex(SqliteConnection connection, SqliteTransaction transaction, MailboxKey box, MailMessageSummary row, CancellationToken token)
+    private void UpsertHeaderAndIndex(SqliteConnection connection, SqliteTransaction transaction, MailboxKey box, MailMessageSummary row, CancellationToken token)
     {
         using var command = Scoped(connection, box); command.Transaction = transaction;
-        command.CommandText = "INSERT INTO messages(account,mailbox,epoch,uid,sender,subject,received,is_read,is_starred) VALUES($a,$m,$e,$uid,$sender,$subject,$date,$read,$star) ON CONFLICT(account,mailbox,epoch,uid) DO UPDATE SET sender=excluded.sender,subject=excluded.subject,received=excluded.received,is_read=excluded.is_read,is_starred=excluded.is_starred";
+        // A header write never clears or overrides has_attachments: a mark recorded from a decoded body (1 or 0) survives
+        // receiving the same headers again. A received header that carries the server's structure hint only fills a
+        // mark nothing has recorded yet (NULL), and a header without the hint leaves the column alone.
+        bool hint = HasAttachmentColumn && row.HasAttachments;
+        command.CommandText = hint
+            ? "INSERT INTO messages(account,mailbox,epoch,uid,sender,subject,received,is_read,is_starred,has_attachments) VALUES($a,$m,$e,$uid,$sender,$subject,$date,$read,$star,1) ON CONFLICT(account,mailbox,epoch,uid) DO UPDATE SET sender=excluded.sender,subject=excluded.subject,received=excluded.received,is_read=excluded.is_read,is_starred=excluded.is_starred,has_attachments=COALESCE(messages.has_attachments,1)"
+            : "INSERT INTO messages(account,mailbox,epoch,uid,sender,subject,received,is_read,is_starred) VALUES($a,$m,$e,$uid,$sender,$subject,$date,$read,$star) ON CONFLICT(account,mailbox,epoch,uid) DO UPDATE SET sender=excluded.sender,subject=excluded.subject,received=excluded.received,is_read=excluded.is_read,is_starred=excluded.is_starred";
         command.Parameters.AddWithValue("$uid", (long)row.Key.Uid); command.Parameters.AddWithValue("$sender", row.Sender); command.Parameters.AddWithValue("$subject", row.Subject);
         command.Parameters.AddWithValue("$date", row.ReceivedAt is {} date ? FormatDate(date) : DBNull.Value); command.Parameters.AddWithValue("$read", row.IsRead); command.Parameters.AddWithValue("$star", row.IsStarred); command.ExecuteNonQuery();
         SyncSearchDocument(connection, transaction, row.Key, token);

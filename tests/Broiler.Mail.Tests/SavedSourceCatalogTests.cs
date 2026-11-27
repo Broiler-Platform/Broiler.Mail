@@ -92,6 +92,81 @@ public sealed class SavedSourceCatalogTests
         var copied=new FileMessageSourceExports(copy);var row=Assert.Single(await copied.ListSavedExportsAsync(key));Assert.NotEqual(receipt.Path,row.Export.Path);Assert.Equal(Bytes,(await copied.ReadVerifiedAsync(row.Export)).Bytes);
         Assert.DoesNotContain(receipt.Path,File.ReadAllText(directory.File("source-export-catalog.json")));
     }
+    [Fact]
+    public async Task RemoveExportDeletesVerifiedFileThenReceiptAndFreesQuota()
+    {
+        using var directory=new TestDirectory();directory.Create();var store=new FileMessageSourceExports(directory.Root);var key=Key();
+        for(int index=0;index<64;index++)await store.SaveAsync(new(key,Bytes));
+        await Assert.ThrowsAsync<IOException>(()=>store.SaveStreamAsync(key,CopyBytes));
+        var chosen=(await store.ListSavedExportsAsync(key))[5];ISourceExportCatalogMaintenance maintenance=new FileMessageSourceExports(directory.Root);
+        var removed=await maintenance.RemoveExportAsync(chosen);
+        Assert.Equal(chosen,removed.Removed);Assert.False(removed.FileWasMissing);Assert.False(File.Exists(chosen.Export.Path));
+        var after=await store.ListSavedExportsAsync(key);Assert.Equal(63,after.Count);Assert.DoesNotContain(chosen,after);Assert.Equal(63,Directory.GetFiles(store.ExportDirectory,"*.eml").Length);
+        var again=await store.SaveStreamAsync(key,CopyBytes);Assert.Equal(64,(await store.ListSavedExportsAsync(key)).Count);Assert.Equal(Bytes,(await store.ReadVerifiedAsync(again)).Bytes);
+        await Assert.ThrowsAsync<InvalidDataException>(()=>maintenance.RemoveExportAsync(chosen));Assert.Equal(64,Directory.GetFiles(store.ExportDirectory,"*.eml").Length);
+    }
+    [Fact]
+    public async Task RemoveExportDeletesTheFileBeforeItsReceipt()
+    {
+        if(!OperatingSystem.IsWindows())return; // A read-only catalog refuses replacement only on Windows.
+        using var directory=new TestDirectory();directory.Create();var store=new FileMessageSourceExports(directory.Root);var key=Key();var receipt=await store.SaveAsync(new(key,Bytes));var chosen=Assert.Single(await store.ListSavedExportsAsync(key));
+        string catalog=directory.File("source-export-catalog.json");File.SetAttributes(catalog,FileAttributes.ReadOnly);
+        try{await Assert.ThrowsAnyAsync<Exception>(()=>store.RemoveExportAsync(chosen));}finally{File.SetAttributes(catalog,FileAttributes.Normal);}
+        Assert.False(File.Exists(receipt.Path));Assert.Equal(chosen,Assert.Single(await store.ListSavedExportsAsync(key)));
+        Assert.True((await store.RemoveExportAsync(chosen)).FileWasMissing);Assert.Empty(await store.ListSavedExportsAsync(key));
+    }
+    [Theory]
+    [InlineData("changed")]
+    [InlineData("shorter")]
+    [InlineData("open")]
+    [InlineData("canceled")]
+    public async Task RemoveExportRefusesChangedFileAndKeepsEverything(string mode)
+    {
+        using var directory=new TestDirectory();directory.Create();var store=new FileMessageSourceExports(directory.Root);var key=Key();var receipt=await store.SaveAsync(new(key,Bytes));await store.SaveAsync(new(key,Bytes));
+        var chosen=(await store.ListSavedExportsAsync(key)).Single(row=>row.Export==receipt);byte[] content=mode=="changed"?Bytes.Select((value,index)=>index==0?(byte)(value^1):value).ToArray():mode=="shorter"?Bytes[..^1]:Bytes;File.WriteAllBytes(receipt.Path,content);
+        if(mode=="open"&&!OperatingSystem.IsWindows())return; // Only Windows refuses a file another handle holds.
+        if(mode=="open"){using var held=new FileStream(receipt.Path,FileMode.Open,FileAccess.Read,FileShare.Read);await Assert.ThrowsAsync<IOException>(()=>store.RemoveExportAsync(chosen));}
+        else if(mode=="canceled")await Assert.ThrowsAnyAsync<OperationCanceledException>(()=>store.RemoveExportAsync(chosen,new(true)));
+        else Assert.Equal("The saved file no longer matches its receipt. Nothing was deleted.",(await Assert.ThrowsAsync<InvalidDataException>(()=>store.RemoveExportAsync(chosen))).Message);
+        Assert.Equal(content,File.ReadAllBytes(receipt.Path));Assert.Equal(2,(await store.ListSavedExportsAsync(key)).Count);Assert.Equal(2,Directory.GetFiles(store.ExportDirectory,"*.eml").Length);
+    }
+    [Fact]
+    public async Task RemoveExportOfMissingFileRemovesReceiptOnly()
+    {
+        using var directory=new TestDirectory();directory.Create();var store=new FileMessageSourceExports(directory.Root);var key=Key();var gone=await store.SaveAsync(new(key,Bytes));var kept=await store.SaveAsync(new(key,Bytes));
+        File.Delete(gone.Path);var removed=await store.RemoveExportAsync((await store.ListSavedExportsAsync(key)).Single(row=>row.Export==gone));
+        Assert.True(removed.FileWasMissing);Assert.Equal(kept,Assert.Single(await store.ListSavedExportsAsync(key)).Export);Assert.Equal(Bytes,File.ReadAllBytes(kept.Path));
+    }
+    [Theory]
+    [InlineData("savedAt")]
+    [InlineData("hash")]
+    [InlineData("bytes")]
+    [InlineData("account")]
+    [InlineData("uid")]
+    [InlineData("outside")]
+    [InlineData("otherProfile")]
+    [InlineData("name")]
+    public async Task RemoveExportRejectsStaleOrForeignReceipt(string mode)
+    {
+        using var directory=new TestDirectory();directory.Create();var store=new FileMessageSourceExports(directory.Root);var key=Key();await store.SaveAsync(new(key,Bytes));var chosen=Assert.Single(await store.ListSavedExportsAsync(key));
+        var other=new FileMessageSourceExports(directory.File("other"));Directory.CreateDirectory(directory.File("other"));var foreign=await other.SaveAsync(new(key,Bytes));var export=chosen.Export;
+        SavedMessageSourceExport stale=mode switch
+        {
+            "savedAt"=>chosen with{SavedAt=chosen.SavedAt.AddSeconds(-1)},
+            "hash"=>chosen with{Export=export with{Sha256=new string('0',64)}},
+            "bytes"=>chosen with{Export=export with{Bytes=export.Bytes+1}},
+            "account"=>chosen with{Export=export with{Key=key with{AccountId=AccountId.New()}}},
+            "uid"=>chosen with{Export=export with{Key=key with{Uid=2}}},
+            "outside"=>chosen with{Export=export with{Path=directory.File(Path.GetFileName(export.Path))}},
+            "otherProfile"=>chosen with{Export=foreign},
+            _=>chosen with{Export=export with{Path=Path.Combine(store.ExportDirectory,"message-"+Guid.NewGuid().ToString("N")+".eml")}},
+        };
+        var failure=await Assert.ThrowsAnyAsync<Exception>(()=>store.RemoveExportAsync(stale));
+        if(mode is "outside" or "otherProfile")Assert.IsAssignableFrom<ArgumentException>(failure);
+        else Assert.Equal("This saved original changed or was already removed. List again; nothing was deleted.",Assert.IsType<InvalidDataException>(failure).Message);
+        Assert.Equal(chosen,Assert.Single(await store.ListSavedExportsAsync(key)));Assert.Equal(Bytes,File.ReadAllBytes(export.Path));Assert.Equal(Bytes,File.ReadAllBytes(foreign.Path));
+    }
+    private static async Task<int> CopyBytes(Stream destination,int maximum,CancellationToken token){await destination.WriteAsync(Bytes,token);return Bytes.Length;}
     internal static readonly byte[] Bytes=Encoding.ASCII.GetBytes("Subject: Saved source\r\nContent-Type: text/plain\r\n\r\nSaved original bytes");
     internal static MailMessageKey Key()=>new(AccountId.New(),"Archive/台北",7,1);
 }

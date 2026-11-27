@@ -23,7 +23,9 @@ internal sealed class MailSession : IDisposable
         Model = application.CreateViewModel(_dispatcher);
         StandardControlPaint.ApplyTheme(AppearancePolicy.Resolve(Model.Settings.Settings.Theme,
             (host as IUiSystemSettingsHost)?.Settings ?? UiSystemSettings.Default));
-        Shell = new MailShellView(Model);
+        // No document picker yet (UX-M5): Compose keeps its typed attachment path. CompositionRoot wires no saved-original
+        // store or profile storage, so there are no .eml or backup fields here, and received attachments cannot be saved.
+        Shell = new MailShellView(Model, files: UnavailableMailFilePicker.NotOnThisDeviceYet);
         Shell.Attach(Session);
         _keyboard = Shell.CreateKeyboardNavigation(Session);
         _appearance = new AppearanceController(Session, Model.Settings, host as IUiSystemSettingsHost);
@@ -62,7 +64,9 @@ internal sealed class MailSession : IDisposable
         }
         if (Shell.ActiveDialog is not null || Shell.ActiveAboutDialog is not null || Model.Inbox.IsBusy || Model.Account.IsBusy)
             return _keyboard.Execute(MailCommand.BackOrCancel);
-        return Shell.Inbox.GoBackToList();
+        // As Escape does: Back first closes the open message's find bar, then clears the search header's query
+        // or exits search where the list shows it, then leaves the compact reader.
+        return Shell.Inbox.CloseFindInMessage() || Shell.Inbox.ClearOrExitSearch() || Shell.Inbox.GoBackToList();
     }
 
     // OnPause must not mark the composer as closing: the user may return to it.

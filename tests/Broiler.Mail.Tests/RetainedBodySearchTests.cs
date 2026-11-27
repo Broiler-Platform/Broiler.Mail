@@ -120,8 +120,9 @@ public sealed class RetainedBodySearchTests
         using var directory = new TestDirectory(); var cache = new SqliteMailCache(directory.File("mail.db")); var account = TestDirectory.Profile() with { IsEnabled = false }; var box = new MailboxKey(account.Id, "INBOX", 1); var key = new MailMessageKey(account.Id, "INBOX", 1, 1);
         await cache.SaveSummariesAsync(box, [Row(key, "subject")], DateTimeOffset.UtcNow); await cache.SaveBodyAsync(box, new(key, "short display preview") { RetainedBodyText = "retained tail needle" }); await cache.RebuildSearchIndexAsync();
         var dispatcher = new TestQueueDispatcher(); using var model = new InboxViewModel(new NoNetworkReceiver(), dispatcher, cache); model.SetAccount(account); await model.CacheLoadTask; dispatcher.Drain();
-        model.SetSearchField(MailHeaderSearchField.IndexedRetainedBody); model.SetSearch("tail needle"); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
-        Assert.Equal(key, Assert.Single(model.Messages).Key); Assert.Contains("Older preview-only", model.SearchNotice); Assert.Contains("beyond the preview", model.SearchNotice);
+        model.SetSearchScope(MailSearchScope.MessageBody); model.SetSearch("tail needle"); await model.SearchSavedHeadersAsync(); dispatcher.Drain();
+        Assert.Equal(key, Assert.Single(model.Messages).Key); Assert.Equal(MailSearchEngine.Indexed, model.SearchEngineUsed);
+        Assert.Contains("otherwise the 32,000-character preview", model.SearchNotice); Assert.Contains("beyond the preview", model.SearchNotice); Assert.Null(model.SearchCoverageNote);
         await model.SelectAsync(key); dispatcher.Drain(); Assert.Equal("short display preview", model.Body!.PlainText); Assert.True(model.IsBodyFromCache);
     }
 
@@ -134,12 +135,11 @@ public sealed class RetainedBodySearchTests
         var box = new MailboxKey(AccountId.New(), "INBOX", 1); var key = new MailMessageKey(box.AccountId, box.MailboxId, 1, 1);
         await cache.SaveSummariesAsync(box, [Row(key, "legacy")], DateTimeOffset.UtcNow); await cache.SaveBodyAsync(box, new(key, "legacy preview"));
         static long Version(string file, int? set = null) { using var db = new SqliteConnection($"Data Source={file};Pooling=False"); db.Open(); using var command = db.CreateCommand(); command.CommandText = set is {} value ? $"PRAGMA user_version={value}" : "PRAGMA user_version"; return Convert.ToInt64(command.ExecuteScalar()); }
-        using (var db = new SqliteConnection($"Data Source={path};Pooling=False")) { db.Open(); using var command = db.CreateCommand(); command.CommandText = "DROP TABLE mailbox_snapshots; DROP TABLE mailbox_snapshot_uids"; command.ExecuteNonQuery(); }
-        Version(path, 3); var reopened = new SqliteMailCache(path); Assert.Equal("legacy preview", (await reopened.ReadBodyAsync(box, 1))!.PlainText);
-        string backup = Assert.Single(Directory.GetFiles(directory.Root, "mail.db.schema-v3-*.backup")); Assert.Equal(3, Version(backup)); Assert.Equal(5, Version(path));
+        CacheSchemaFixture.DowngradeTo(path, 3); var reopened = new SqliteMailCache(path); Assert.Equal("legacy preview", (await reopened.ReadBodyAsync(box, 1))!.PlainText);
+        string backup = Assert.Single(Directory.GetFiles(directory.Root, "mail.db.schema-v3-*.backup")); Assert.Equal(3, Version(backup)); Assert.Equal(6, Version(path));
         using (var db = new SqliteConnection($"Data Source={backup};Pooling=False")) { db.Open(); using var command = db.CreateCommand(); command.CommandText = "SELECT body FROM messages"; Assert.DoesNotContain("RetainedBodyText", Encoding.UTF8.GetString((byte[])command.ExecuteScalar()!)); }
         await reopened.SaveBodyAsync(box, new(key, "preview") { RetainedBodyText = "retained body" }); Assert.Single(Directory.GetFiles(directory.Root, "mail.db.schema-v3-*.backup"));
-        Version(path, 6); await Assert.ThrowsAsync<InvalidDataException>(() => reopened.ReadBodyAsync(box, 1)); Assert.Equal(6, Version(path));
+        Version(path, 7); await Assert.ThrowsAsync<InvalidDataException>(() => reopened.ReadBodyAsync(box, 1)); Assert.Equal(7, Version(path));
     }
 
     [Fact]

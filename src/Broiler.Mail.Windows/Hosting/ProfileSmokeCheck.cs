@@ -132,7 +132,7 @@ internal static class ProfileSmokeCheck
                 using var legacy = new Microsoft.Data.Sqlite.SqliteConnection(new Microsoft.Data.Sqlite.SqliteConnectionStringBuilder
                 { DataSource = storedProfile.CachePath, Pooling = false }.ToString());
                 legacy.Open(); using var downgrade = legacy.CreateCommand();
-                downgrade.CommandText = "DROP TABLE mailbox_snapshots; DROP TABLE mailbox_snapshot_uids; DROP TRIGGER search_insert; DROP TRIGGER search_update; DROP TRIGGER search_delete; DROP TABLE cache_search_state; ALTER TABLE messages DROP COLUMN is_starred; PRAGMA user_version=1;";
+                downgrade.CommandText = "ALTER TABLE messages DROP COLUMN has_attachments; DROP TABLE mailbox_snapshots; DROP TABLE mailbox_snapshot_uids; DROP TRIGGER search_insert; DROP TRIGGER search_update; DROP TRIGGER search_delete; DROP TABLE cache_search_state; ALTER TABLE messages DROP COLUMN is_starred; PRAGMA user_version=1;";
                 downgrade.ExecuteNonQuery();
             }
 

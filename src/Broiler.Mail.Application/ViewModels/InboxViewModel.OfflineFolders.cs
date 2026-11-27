@@ -161,9 +161,10 @@ public sealed partial class InboxViewModel
                 token.ThrowIfCancellationRequested(); var key = targets[index]; var mailbox = new MailboxKey(key.AccountId, key.MailboxId, key.UidValidity);
                 var head = await cache!.GetLatestMailboxAsync(account.Id, key.MailboxId, token).ConfigureAwait(false);
                 if (head?.Key != mailbox) throw new InvalidDataException("Saved mailbox epoch changed; retry the selected-folder batch.");
-                if (await cache.ReadBodyAsync(mailbox, key.Uid, token).ConfigureAwait(false) is null)
+                var body = await cache.ReadBodyAsync(mailbox, key.Uid, token).ConfigureAwait(false);
+                if (body is null)
                 {
-                    var body = await receiver.GetBodyAsync(account, key, token).ConfigureAwait(false); token.ThrowIfCancellationRequested();
+                    body = await receiver.GetBodyAsync(account, key, token).ConfigureAwait(false); token.ThrowIfCancellationRequested();
                     if (body.Key != key) throw new InvalidDataException("The receiver returned another message identity.");
                     if ((await cache.GetLatestMailboxAsync(account.Id, key.MailboxId, token).ConfigureAwait(false))?.Key != mailbox)
                         throw new InvalidDataException("Mailbox epoch changed during download; the returned body was not saved.");
@@ -174,8 +175,8 @@ public sealed partial class InboxViewModel
                 {
                     if (_disposed || generation != _generation || _account?.Id != account.Id) return;
                     DownloadCompleted = completed;
-                    Messages = Messages.Select(row => row.Key == key ? row with { IsBodyCached = true } : row).ToArray();
-                    if (SelectedMessage?.Key == key) SelectedMessage = SelectedMessage with { IsBodyCached = true };
+                    Messages = Messages.Select(row => row.Key == key ? WithBody(row, body, cached: true) : row).ToArray();
+                    if (SelectedMessage?.Key == key) SelectedMessage = WithBody(SelectedMessage, body, cached: true);
                     Status = $"Selected-folder download: {completed}/{targets.Count} saved bodies available; folder {key.MailboxId}. Cancel keeps confirmed saves."; Notify();
                 });
             }

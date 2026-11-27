@@ -52,12 +52,14 @@ public sealed class OfflineFolderTests
     [Fact]
     public async Task ExplicitMultiFolderBatchUsesOnlyCurrentSavedHeadersAndSkipsAlreadySavedBodies()
     {
-        using var f = await Fixture.Create(); await f.Cache.SaveBodyAsync(new(f.Account.Id, "INBOX", 7), new(new(f.Account.Id, "INBOX", 7, 2), "Already saved"));
+        using var f = await Fixture.Create(); await f.Cache.SaveBodyAsync(new(f.Account.Id, "INBOX", 7), new(new(f.Account.Id, "INBOX", 7, 2), "Already saved") { Attachments = [new(2, "saved.pdf", "application/pdf", 7)] });
         using var model = f.Model(); model.SetAccount(f.Account); await model.CacheLoadTask; await model.OfflineFolderLoadTask;
         Assert.Empty(f.Receiver.Calls); Assert.True(model.CanDownloadOfflineFolders); await model.DownloadOfflineFoldersAsync();
         Assert.Equal(3, model.DownloadCompleted); Assert.Equal(3, model.DownloadTotal); Assert.Equal(2, f.Receiver.Calls.Count);
         Assert.Contains(f.Receiver.Calls, key => key.MailboxId == "INBOX" && key.Uid == 1); Assert.Contains(f.Receiver.Calls, key => key.MailboxId == "Archive" && key.Uid == 1);
         Assert.All(f.Receiver.Calls, key => Assert.Equal(f.Account.Id, key.AccountId)); Assert.Equal(0, f.Receiver.HeaderReceives); Assert.All(model.Messages, row => Assert.True(row.IsBodyCached));
+        // The already-saved body is read rather than fetched, and its attachment list marks its row; the others have none.
+        Assert.Equal(new uint[] { 2 }, model.Messages.Where(row => row.HasAttachments).Select(row => row.Key.Uid));
         Assert.Contains("No headers were received", model.Status); Assert.Equal("INBOX", model.SelectedMailboxId); Assert.Null(model.Body);
     }
 

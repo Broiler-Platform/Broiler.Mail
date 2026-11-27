@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   2
 // Annotated:        2/2
-// Exempt:           0
+// Exempt:           1
 // Human-reviewed:   0/2
 // IP risk:          Low
 // Security risk:    Medium
@@ -17,6 +17,7 @@
 
 using Broiler.UI.Forms.Standard;
 using Broiler.Mail.Application.ViewModels;
+using Broiler.Mail.Core.Services;
 using Broiler.Mail.Core.Settings;
 using Broiler.UI;
 using Broiler.UI.Button;
@@ -30,12 +31,15 @@ using Broiler.UI.Panel.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=C168E3
+// Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=C688A3
 // Hairs-Falsified-If: choosing a theme in the list saves a different AppTheme, because the list order no longer matches the enum
 // Hairs-Human:        PENDING
-public sealed class SettingsView(SettingsViewModel model)
+public sealed class SettingsView(SettingsViewModel model, IMailFilePicker? files = null)
 {
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=60F366
+    /// <summary>Chooses files for this view; an unavailable picker when none was given, so views keep their typed paths.</summary>
+    internal IMailFilePicker Files { get; } = files ?? UnavailableMailFilePicker.NotOnThisDeviceYet;
+
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=957692
     // Hairs-Falsified-If: choosing a theme in the list saves a different AppTheme, because the list order no longer matches the enum
     // Hairs-Human:        PENDING
     public UiElement CreateContent()
@@ -76,7 +80,7 @@ public sealed class SettingsView(SettingsViewModel model)
         if (model.Storage is { } storage)
         {
             var section = new FormSection("Local mail storage", "Profile, offline mail, backups and recovery.", collapsible: true, expanded: false);
-            section.Content.AddChild(new ProfileStorageView(storage).CreateContent());
+            section.Content.AddChild(new ProfileStorageView(storage, Files).CreateContent());
             panel.AddChild(section);
         }
         var save = new StandardButton { Text = "Save settings", IsDefault = true };

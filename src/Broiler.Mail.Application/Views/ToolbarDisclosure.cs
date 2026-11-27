@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   10
-// Annotated:        0/10
+// Relevant units:   11
+// Annotated:        0/11
 // Exempt:           2
-// Human-reviewed:   0/10
+// Human-reviewed:   0/11
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       10
+// Unverified:       11
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -64,6 +64,16 @@ internal sealed class ToolbarDisclosure : UiElement, IUiExpandable
 
 internal static class MailToolbarButton
 {
+    /// <summary>
+    /// A primary or consequential command: its name stays visible, and the tooltip adds the shortcut.
+    /// An icon-only button would show only a glyph, since a button paints its icon instead of its text.
+    /// </summary>
+    public static StandardButton Labeled(string text, MailCommand? command = null) => new()
+    {
+        Text = text,
+        ToolTipText = command is { } shortcut ? $"{text} ({MailShortcuts.For(shortcut).Gesture})" : text,
+    };
+
     public static StandardButton WithSymbol(string text, string symbol, string? shortcut = null)
     {
         var button = new StandardButton

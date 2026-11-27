@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   138
-// Annotated:        17/138
-// Exempt:           66
-// Human-reviewed:   0/138
+// Relevant units:   148
+// Annotated:        17/148
+// Exempt:           71
+// Human-reviewed:   0/148
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         15/0
 // Resource impact:  7/10 max
-// Unverified:       138
+// Unverified:       148
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -43,6 +43,8 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
     public AccountProfile? CurrentAccountProfile => _account;
     public bool SupportsSourceExport => SourceExports is not null && SourceReceiver is not null;
     public bool CanDownloadOriginalSource => SupportsSourceExport && CanReceive && SelectedMessage is not null;
+    /// <summary>Reads a message's attachments for an interactive save; null when this host offers none.</summary>
+    public IMessageAttachmentReader? AttachmentReader { get; init; }
     // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=None; Security=Low; Resources=0; Fingerprint=75CF89
     // Hairs-Falsified-If: PageSize is larger than ImapMailReceiver.MaximumPageSize, so every receive is refused with ArgumentOutOfRangeException
     // Hairs-Human:        PENDING
@@ -358,13 +360,33 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
     public string SearchText { get; private set; } = "";
     public string SearchSenderText { get; private set; } = "";
     public void SetSearchSenderText(string text) { ArgumentNullException.ThrowIfNull(text); if (_disposed) return; SearchSenderText = text; Notify(); }
-    public MailHeaderSearchField SearchField { get; private set; }
-    public void SetSearchField(MailHeaderSearchField field)
+    /// <summary>Where the query text is looked for. The cache picks the engine; see <see cref="SearchEngineUsed"/>.</summary>
+    public MailSearchScope SearchScope { get; private set; }
+    public void SetSearchScope(MailSearchScope scope)
     {
-        if (!Enum.IsDefined(field)) throw new ArgumentOutOfRangeException(nameof(field));
+        if (!Enum.IsDefined(scope)) throw new ArgumentOutOfRangeException(nameof(scope));
         if (_disposed) return;
-        SearchField = field; Notify();
+        SearchScope = scope; Notify();
     }
+    /// <summary>The engine the submitted search matched message text with (pinned for its later pages).</summary>
+    public MailSearchEngine SearchEngineUsed { get; private set; }
+    /// <summary>Whether the submitted search's scope holds saved messages with headers only.</summary>
+    public bool SearchHasHeaderOnlyMessages { get; private set; }
+    /// <summary>Why the submitted search scanned text directly although the search index is enabled; null when it is off or was used.</summary>
+    public string? SearchIndexIssue { get; private set; }
+    public void SetSearchReadState(bool? isRead)
+    {
+        if (_disposed) return;
+        SearchReadState = isRead; Notify();
+    }
+    public void SetSearchStarState(bool? isStarred)
+    {
+        if (_disposed) return;
+        SearchStarState = isStarred; Notify();
+    }
+    /// <summary>Why the edited scope and filters cannot find anything, or null.</summary>
+    public string? SearchFilterConflict => SearchScope == MailSearchScope.MessageBody && SearchBodyCached == false
+        ? "Message body search needs downloaded mail. Set Offline availability to Downloaded or not, or to Downloaded, instead of Headers only." : null;
     public bool? SearchReadState { get; private set; }
     public bool? SearchStarState { get; private set; }
     public bool? SearchBodyCached { get; private set; }
@@ -435,22 +457,43 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
     public Task LoadNextSearchPageAsync()
     {
         if (!CanLoadNextSearchPage) return Task.CompletedTask;
-        var query = _searchQuery! with { BeforeMessage = Messages[^1].Key }; int page = SearchPageNumber + 1;
+        // All folders continue after the last row's date as well as its key; a folder continues after its UID.
+        var last = Messages[^1];
+        var query = _searchQuery! with { BeforeMessage = last.Key, BeforeReceivedAt = _searchQuery.MailboxId is null ? last.ReceivedAt : null }; int page = SearchPageNumber + 1;
         if (_searchBack.Count == 128) _searchBack.RemoveAt(0);
         _searchBack.Add((_searchQuery!, SearchPageNumber));
         return LoadSearchPageAsync(query, page);
     }
     public bool SearchHasMore { get; private set; }
+    private bool _lastFailureWasSearchScope;
+
+    /// <summary>
+    /// Whether the submitted search can start again from its newest page: its last page failed because the saved
+    /// folders or their UIDVALIDITY changed, or because the search index its pages were pinned to is no longer usable,
+    /// so Retry would only repeat the stale continuation or engine.
+    /// </summary>
+    public bool CanRefreshSearchResults => !_disposed && !_storageMaintenance && !IsBusy && IsSearchActive &&
+        ListProblem is not null && _lastFailureWasSearchScope;
+
+    /// <summary>
+    /// Runs the submitted search again from its first page, with no continuation, snapshot or pinned engine, so it
+    /// matches the folders and search index saved now. The edited search controls are not used.
+    /// </summary>
+    public Task RefreshSearchResultsAsync()
+    {
+        if (!CanRefreshSearchResults) return Task.CompletedTask;
+        _searchBack.Clear();
+        return LoadSearchPageAsync(_searchQuery! with { BeforeMessage = null, BeforeReceivedAt = null, AccountMailboxSnapshot = null, Engine = null }, 1);
+    }
     public bool CanSearch => SupportsLocalSearch && !_disposed && !_storageMaintenance && !IsBusy && _account is not null &&
-        SearchDateError is null && SearchText.Length <= 256 && !SearchText.Any(char.IsControl) && SearchSenderText.Length <= 256 && !SearchSenderText.Any(char.IsControl) &&
+        SearchDateError is null && SearchFilterConflict is null && SearchText.Length <= 256 && !SearchText.Any(char.IsControl) && SearchSenderText.Length <= 256 && !SearchSenderText.Any(char.IsControl) &&
         (!string.IsNullOrWhiteSpace(SearchText) || !string.IsNullOrWhiteSpace(SearchSenderText) || SearchReadState is not null || SearchStarState is not null || SearchBodyCached is not null || SearchReceivedWithinDays is not null || SearchUsesCustomDates);
     public string? SearchNotice => !IsSearchActive ? null :
-        $"Saved-header search for \"{_searchQuery!.Text}\" in {(_searchQuery.MailboxId ?? "all saved folders for " + (_account?.EmailAddress ?? _searchQuery.AccountId.ToString()))}: {SearchFieldLabel(_searchQuery.Field)}. " +
-        (_searchQuery.Field is MailHeaderSearchField.IndexedRetainedBody or MailHeaderSearchField.IndexedHeadersOrRetainedBody
-            ? "Body coverage is complete retained decoded reader text (up to 1,048,576 characters), including HTML text alternatives. Older preview-only, incomplete, over-limit and uncached bodies are excluded; attachments and raw HTML are excluded. A hit beyond the preview may not appear in the reader. Storage shows coverage counts. "
-            : _searchQuery.Field is MailHeaderSearchField.BodyPreview or MailHeaderSearchField.HeadersOrBodyPreview or MailHeaderSearchField.IndexedBodyPreview or MailHeaderSearchField.IndexedHeadersOrBodyPreview
-            ? "Body coverage is downloaded plain-text previews only (up to 32,000 characters, including any HTML text fallback). HTML source, attachments, uncached bodies and text beyond the preview are excluded. "
-            : "Bodies, attachments and server-only mail are excluded. ") +
+        $"Saved-mail search for \"{_searchQuery!.Text}\" in {(_searchQuery.MailboxId ?? "all saved folders for " + (_account?.EmailAddress ?? _searchQuery.AccountId.ToString()))}: {SearchScopeLabel(_searchQuery.Scope ?? MailSearchScope.SenderOrSubject, SearchEngineUsed)}. " +
+        (_searchQuery.Scope is null or MailSearchScope.SenderOrSubject
+            ? "Bodies, attachments and server-only mail are excluded. "
+            : "Message text covers complete retained decoded text where it was saved (up to 1,048,576 characters, including HTML text alternatives), otherwise the 32,000-character preview. " +
+              "Headers-only mail, attachments, raw HTML and server-only mail are excluded. A hit beyond the preview may not appear in the reader. ") +
         (string.IsNullOrWhiteSpace(_searchQuery.Text) ? "No keyword; matching the submitted filters. " : "") +
         (_searchQuery.SenderContains is {} sender ? $"Saved sender header contains \"{sender}\" (case-insensitive; not verified identity). " : "") +
         (_searchQuery.IsRead is { } read ? (read ? "Read only. " : "Unread only. ") : "") +
@@ -459,20 +502,58 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         (_searchQuery.ReceivedFrom is not null || _searchQuery.ReceivedBefore is not null
             ? $"Received from {(_searchQuery.ReceivedFrom is { } from ? from.ToString("u", CultureInfo.InvariantCulture) : "any earlier date")} (inclusive) to {(_searchQuery.ReceivedBefore is { } end ? end.ToString("u", CultureInfo.InvariantCulture) : "any later date")} (exclusive); unknown dates excluded. "
             : "All received dates, including unknown dates. ") +
+        (_searchQuery.MailboxId is null ? "Sorted by newest received date across folders; unknown dates last. " : "") +
         $"Page {SearchPageNumber}: {Messages.Count} saved headers shown. " +
-        (SearchHasMore ? "More matches are available with Next saved results. " : "") +
-        "Find starts a new search from the first page. Saved mail can change between pages. " +
-        "Results reflect the saved copy. Clear search to receive, download or change server mail.";
+        (SearchHasMore ? "More matches are available with Next. " : "") +
+        "Search starts a new search from the first page. Saved mail can change between pages. " +
+        "Results reflect the saved copy. Exit search to receive, download or change server mail.";
 
-    private static string SearchFieldLabel(MailHeaderSearchField field) => field is MailHeaderSearchField.IndexedRetainedBody or MailHeaderSearchField.IndexedHeadersOrRetainedBody
-        ? (field == MailHeaderSearchField.IndexedRetainedBody ? "complete retained bodies only" : "sender, subject or complete retained bodies") + " (indexed word phrase)"
-        : (int)field >= 5
-        ? SearchFieldLabel((MailHeaderSearchField)((int)field % 5)) + " (indexed word phrase; rebuild index in Settings → Storage)"
-        : field switch
+    /// <summary>
+    /// One short line for the search header's results strip while a search is active, so it stays one line in a
+    /// narrow list at a large text size: the page, how many saved matches it shows, across all folders when it
+    /// searched them, and whether more follow. Null without a search. The coverage is <see cref="SearchNotice"/>,
+    /// and <see cref="SearchPausesReceiving"/> says why Receive waits.
+    /// </summary>
+    public string? SearchSummary => !IsSearchActive ? null :
+        IsLoadingList ? $"Searching page {SearchPageNumber}…"
+            : $"Page {SearchPageNumber} · {Messages.Count} {(Messages.Count == 1 ? "match" : "matches")}{(IsAccountSearchActive ? " in all folders" : "")}{(SearchHasMore ? " · more" : "")}";
+
+    /// <summary>Why Receive is unavailable while a search is active, as the results strip explains it.</summary>
+    public const string SearchPausesReceiving = "Saved-mail search. Receiving is paused until you exit search.";
+
+    /// <summary>
+    /// One line for the results strip about what the submitted search could not cover: the literal scan used when the
+    /// search index is off, and headers-only mail whose text was never downloaded. Null when the scope has no message
+    /// text, the text was blank, or nothing was left out.
+    /// </summary>
+    public string? SearchCoverageNote
     {
-        MailHeaderSearchField.Sender => "sender only", MailHeaderSearchField.Subject => "subject only",
-        MailHeaderSearchField.BodyPreview => "saved body previews only",
-        MailHeaderSearchField.HeadersOrBodyPreview => "sender, subject or saved body previews", _ => "sender and subject only",
+        get
+        {
+            if (!IsSearchActive || _searchQuery!.Scope is null or MailSearchScope.SenderOrSubject || string.IsNullOrWhiteSpace(_searchQuery.Text)) return null;
+            string note = SearchEngineUsed != MailSearchEngine.Literal ? ""
+                : SearchIndexIssue is { } issue ? "Search index is on but was not used; downloaded text was scanned directly. " + issue
+                : "Search index is off; downloaded text was scanned directly. Turn it on in Settings → Storage for faster word search.";
+            if (SearchHasHeaderOnlyMessages)
+                note += (note.Length > 0 ? " " : "") + "Some messages have headers only, so " +
+                    (_searchQuery.Scope == MailSearchScope.Everywhere ? "they matched on sender and subject only." : "they were skipped.");
+            return note.Length > 0 ? note : null;
+        }
+    }
+
+    /// <summary>A few words of <see cref="SearchCoverageNote"/> that keep the results strip on one line; null with no note.</summary>
+    public string? SearchCoverageSummary => SearchCoverageNote is null ? null
+        : SearchEngineUsed == MailSearchEngine.Literal
+            ? SearchIndexIssue is null ? "Index off" : "Index not used"
+            : "Some headers only";
+
+    private static string SearchScopeLabel(MailSearchScope scope, MailSearchEngine engine) => scope switch
+    {
+        MailSearchScope.SenderOrSubject => "sender and subject only",
+        MailSearchScope.MessageBody => engine == MailSearchEngine.Indexed ? "message text only (indexed word phrase)" : "message text only",
+        _ => engine == MailSearchEngine.Indexed
+            ? "sender, subject or message text (indexed word phrase for text; sender and subject match partial text)"
+            : "sender, subject or downloaded message text",
     };
 
     public void SetSearch(string text, bool unreadOnly = false, bool starredOnly = false)
@@ -488,7 +569,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         TryCustomDates(out var customStart, out var customEnd);
         var query = new MailHeaderSearchQuery(_account!.Id, SearchText)
         {
-            Field = SearchField, MailboxId = SearchAllSavedFolders ? null : SelectedMailboxId, IsRead = SearchReadState,
+            Scope = SearchScope, MailboxId = SearchAllSavedFolders ? null : SelectedMailboxId, IsRead = SearchReadState,
             SenderContains = string.IsNullOrWhiteSpace(SearchSenderText) ? null : SearchSenderText.Trim(),
             IsStarred = SearchStarState, IsBodyCached = SearchBodyCached, MaximumCount = MaximumLoadedMessages,
             ReceivedFrom = SearchUsesCustomDates ? customStart : SearchReceivedWithinDays is { } days ? now.AddDays(-days) : null,
@@ -503,19 +584,30 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         return RunAsync(async token =>
         {
             var result = await ((IMailLocalSearch)cache!).SearchHeadersAsync(query, token).ConfigureAwait(false);
+            // All folders list newest first; one folder lists by UID. Either way every row follows the cursor, strictly.
+            bool chronological = query.MailboxId is null;
+            int Order(MailMessageKey left, DateTimeOffset? leftReceived, MailMessageKey right, DateTimeOffset? rightReceived) => chronological
+                ? MailHeaderSearchOrder.CompareChronological(leftReceived, left, rightReceived, right)
+                : MailHeaderSearchOrder.Compare(left, right);
             if (result.Messages.Count > query.MaximumCount || result.Messages.Any(message =>
                 message.Key.AccountId != query.AccountId || query.MailboxId is {} folder && message.Key.MailboxId != folder || message.Key.Uid == 0 || message.Key.UidValidity == 0 ||
-                query.BeforeMessage is {} before && (MailHeaderSearchOrder.Compare(message.Key,before) >= 0 || message.Key.MailboxId == before.MailboxId && message.Key.UidValidity != before.UidValidity)) ||
+                query.BeforeMessage is {} before && (Order(message.Key, message.ReceivedAt, before, query.BeforeReceivedAt) >= 0 || message.Key.MailboxId == before.MailboxId && message.Key.UidValidity != before.UidValidity)) ||
                 result.Messages.Select(message=>message.Key).Distinct().Count()!=result.Messages.Count ||
                 result.Messages.GroupBy(message=>message.Key.MailboxId).Any(group=>group.Select(message=>message.Key.UidValidity).Distinct().Count()!=1) ||
-                result.Messages.Zip(result.Messages.Skip(1)).Any(pair => MailHeaderSearchOrder.Compare(pair.First.Key,pair.Second.Key) <= 0) ||
+                result.Messages.Zip(result.Messages.Skip(1)).Any(pair => Order(pair.First.Key, pair.First.ReceivedAt, pair.Second.Key, pair.Second.ReceivedAt) <= 0) ||
                 query.MailboxId is null && (result.AccountMailboxSnapshot is not {} snapshot || snapshot.Length!=64 || !snapshot.All(Uri.IsHexDigit) ||
                     query.AccountMailboxSnapshot is {} expected && !string.Equals(expected,snapshot,StringComparison.OrdinalIgnoreCase)))
                 throw new InvalidDataException("Search returned messages outside its scope or snapshot.");
             return result;
         }, result =>
         {
-            _searchQuery = query.MailboxId is null ? query with { AccountMailboxSnapshot = result.AccountMailboxSnapshot } : query;
+            // Later pages keep the engine page 1 used, so an index switched on or off between pages never mixes engines.
+            _searchQuery = (query.MailboxId is null ? query with { AccountMailboxSnapshot = result.AccountMailboxSnapshot } : query) with
+            {
+                Engine = query.Engine ?? (query.Scope is MailSearchScope.Everywhere or MailSearchScope.MessageBody ? result.Engine : null),
+            };
+            SearchEngineUsed = result.Engine; SearchHasHeaderOnlyMessages = result.HasHeaderOnlyMessages;
+            SearchIndexIssue = result.Engine == MailSearchEngine.Literal ? result.SearchIndexIssue : null;
             Messages = result.Messages; SearchHasMore = result.HasMore;
             IsShowingCachedMail = true;
             Status = $"{Messages.Count} saved headers matched. This is not a complete server search.";
@@ -533,7 +625,8 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
     {
         MailboxSnapshotNotice = "Inspect the saved checkpoint for this account/folder, or explicitly capture a complete header snapshot. Ordinary pages and offline batch cursors do not establish complete membership.";
         if (clearSearchHistory) _searchBack.Clear();
-        _searchQuery = null; SearchHasMore = false; SearchPageNumber = 0;
+        _searchQuery = null; SearchHasMore = false; SearchPageNumber = 0; _lastFailureWasSearchScope = false;
+        SearchEngineUsed = MailSearchEngine.Literal; SearchHasHeaderOnlyMessages = false; SearchIndexIssue = null;
         PendingPermanentDelete = null; _deleteProfile = null;
         FlagChangeNotice = null;
         Messages = []; SelectedMessage = null; Body = null; _older = null; HasLoaded = false;
@@ -695,7 +788,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         }
     }
 
-    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=3; Fingerprint=DC3FBA
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=3; Fingerprint=F5D703
     // Hairs-Falsified-If: a receive started before SetAccount switches to another profile still commits its messages afterwards
     // Hairs-Human:        PENDING
     public void SetAccount(AccountProfile? account)
@@ -704,7 +797,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         StopPending();
         _account = account;
         SearchAllSavedFolders = false;
-        SearchText = ""; SearchSenderText = ""; SearchReadState = SearchStarState = SearchBodyCached = null; SearchReceivedWithinDays = null; SearchUsesCustomDates = false; SearchCustomDateRange = ""; SearchField = MailHeaderSearchField.SenderOrSubject;
+        SearchText = ""; SearchSenderText = ""; SearchReadState = SearchStarState = SearchBodyCached = null; SearchReceivedWithinDays = null; SearchUsesCustomDates = false; SearchCustomDateRange = ""; SearchScope = MailSearchScope.Everywhere;
         SelectedMailboxId = "INBOX"; _serverFolders = null; _cachedMailboxIds = [];
         MoveNotice = null; _moveCacheRetry = null; _undoMove = null; MoveDestinationMailboxId = null;
         DeleteNotice = null; _deleteCacheRetry = null;
@@ -777,7 +870,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
     public Task LoadOlderAsync() => !CanLoadOlder ? Task.CompletedTask
         : IsShowingCachedMail ? LoadCachedAsync(_account!, older: true) : LoadPageAsync(_older);
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=6B62D5
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=B6EB78
     // Hairs-Falsified-If: a page that repeats a message key already loaded leaves two entries with that key in Messages
     // Hairs-Human:        PENDING
     private Task LoadPageAsync(MailInboxCursor? cursor)
@@ -787,6 +880,9 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         string mailboxId = SelectedMailboxId; _lastFailureWasDiscovery = false;
         _loadingPage = true;
         _lastPageWasOlder = cursor is not null;
+        var marked = new HashSet<MailMessageKey>();
+        var unmarked = new HashSet<MailMessageKey>();
+        var downloaded = new HashSet<MailMessageKey>();
         return RunAsync(async token =>
         {
             var page = receiver is IMailFolderReceiver folderReceiver
@@ -802,10 +898,37 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
                 if (key is null || key.AccountId != account.Id || key.MailboxId != mailboxId)
                     throw new InvalidDataException("The receiver did not identify the requested mailbox epoch.");
                 await cache.SaveSummariesAsync(key, page.Messages, DateTimeOffset.UtcNow, token).ConfigureAwait(false);
+                // Received headers may carry the server's structure hint; a mark recorded from a decoded body wins over it.
+                // The same read tells which bodies are saved, which received headers never say.
+                if (cache is IMailAttachmentStateCache states)
+                {
+                    var uids = page.Messages.Where(message => key.Contains(message.Key) && message.Key.Uid != 0)
+                        .Select(message => message.Key.Uid).Distinct().ToArray();
+                    foreach (var chunk in uids.Chunk(IMailAttachmentStateCache.MaximumRequestedUids))
+                        foreach (var (uid, state) in await states.ReadSavedRowStatesAsync(key, chunk, token).ConfigureAwait(false))
+                        {
+                            var saved = new MailMessageKey(key.AccountId, key.MailboxId, key.UidValidity, uid);
+                            if (state.HasAttachments is { } hasAttachments) (hasAttachments ? marked : unmarked).Add(saved);
+                            if (state.IsBodyCached) downloaded.Add(saved);
+                        }
+                }
             }
             return page;
         }, page =>
         {
+            // A received page keeps every mark the cache or this session already knows of; a saved "none" from a
+            // decoded body overrides the server's structure hint.
+            foreach (var known in Messages.Append(SelectedMessage))
+                if (known is { HasAttachments: true } && !unmarked.Contains(known.Key)) marked.Add(known.Key);
+            // A body saved in the cache keeps its row available offline.
+            if (marked.Count > 0 || unmarked.Count > 0 || downloaded.Count > 0)
+                page = page with { Messages = page.Messages.Select(message =>
+                {
+                    bool hasAttachments = marked.Contains(message.Key) || (message.HasAttachments && !unmarked.Contains(message.Key));
+                    bool isBodyCached = message.IsBodyCached || downloaded.Contains(message.Key);
+                    return hasAttachments == message.HasAttachments && isBodyCached == message.IsBodyCached
+                        ? message : message with { HasAttachments = hasAttachments, IsBodyCached = isBodyCached };
+                }).ToArray() };
             if (cache is not null && !_cachedMailboxIds.Contains(mailboxId, StringComparer.Ordinal))
                 _cachedMailboxIds = _cachedMailboxIds.Append(mailboxId).ToArray();
             UpdateFolders();
@@ -855,7 +978,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         return "The open message is older than the newest page and stays open. Use Load older to show it in the list.";
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=61A21D
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=0D0556
     // Hairs-Falsified-If: a body whose Key differs from the requested key is committed to Body
     // Hairs-Human:        PENDING
     public Task SelectAsync(MailMessageKey key)
@@ -878,7 +1001,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
             var mailbox = new MailboxKey(key.AccountId, key.MailboxId, key.UidValidity);
             if (cache is not null && await cache.ReadBodyAsync(mailbox, key.Uid, token).ConfigureAwait(false) is { } saved)
             { fromCache = savedForOffline = true; return saved; }
-            if (searchOnly) throw new MailConnectionException("This body is not saved. Clear search and explicitly receive or download mail to read it.");
+            if (searchOnly) throw new MailConnectionException("This body is not saved. Exit search and explicitly receive or download mail to read it.");
             MailMessageBody body;
             try { body = await receiver.GetBodyAsync(account, key, token).ConfigureAwait(false); }
             catch (MailConnectionException error) when (cache is not null)
@@ -891,16 +1014,35 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         {
             Body = body;
             IsBodyFromCache = fromCache;
-            if (cache is not null && savedForOffline && SelectedMessage is { } selected)
+            // Every load, saved or not, tells the row whether the message has attachments.
+            if (SelectedMessage is { } selected && selected.Key == body.Key &&
+                WithBody(selected, body, cache is not null && savedForOffline) is var updated && !ReferenceEquals(updated, selected))
             {
-                SelectedMessage = selected with { IsBodyCached = true };
-                Messages = Messages.Select(item => item.Key == selected.Key ? SelectedMessage : item).ToArray();
+                SelectedMessage = updated;
+                Messages = Messages.Select(item => item.Key == selected.Key ? updated : item).ToArray();
             }
             Status = body.IsHtmlFallback ? "Reading text extracted from HTML. External resources are not loaded." : "Reading plain text. This does not mark the message as read on the server.";
-            if (body.IsTruncated) Status += " Preview limited to 32,000 characters.";
+            if (body.IsTruncated) Status += " Preview limited to 32,000 characters." +
+                (Preview.ReaderBodyText.CanExpand(body) ? " Use Show full message text to read the rest." : "");
             if (cache is not null) Status += fromCache ? " Reading the saved offline copy." : savedForOffline
                 ? " Downloaded body saved for offline reading." : " This body was not saved under the headers-only policy.";
         }, "Loading message…", InboxProblemScope.Message);
+    }
+
+    /// <summary>
+    /// <paramref name="row"/> as a loaded <paramref name="body"/> describes it: saved for offline reading when
+    /// <paramref name="cached"/>, and marked by the body's attachment list when it has one. A body decoded before
+    /// attachment lists existed (<see cref="MailMessageBody.Attachments"/> null) never clears a mark. Returns
+    /// <paramref name="row"/> itself when nothing changes, so an unchanged row is not drawn again.
+    /// </summary>
+    private static MailMessageSummary WithBody(MailMessageSummary row, MailMessageBody body, bool cached)
+    {
+        // An incomplete structure that listed nothing is unknown and leaves the mark alone, as a missing list does.
+        bool hasAttachments = body.Attachments is { } attachments && (attachments.Count > 0 || !body.IsAttachmentListIncomplete)
+            ? attachments.Count > 0 : row.HasAttachments;
+        bool isBodyCached = row.IsBodyCached || cached;
+        return hasAttachments == row.HasAttachments && isBodyCached == row.IsBodyCached
+            ? row : row with { HasAttachments = hasAttachments, IsBodyCached = isBodyCached };
     }
 
     /// <summary>Deliberate, bounded offline download of only the current loaded inbox headers (up to 500).</summary>
@@ -918,9 +1060,10 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
                 token.ThrowIfCancellationRequested(); var key = targets[index].Key;
                 var mailbox = new MailboxKey(key.AccountId, key.MailboxId, key.UidValidity);
                 if (key.AccountId != account.Id) throw new InvalidDataException("Offline batch contains a different account.");
-                if (await cache!.ReadBodyAsync(mailbox, key.Uid, token).ConfigureAwait(false) is null)
+                var body = await cache!.ReadBodyAsync(mailbox, key.Uid, token).ConfigureAwait(false);
+                if (body is null)
                 {
-                    var body = openBody?.Key == key ? openBody : await receiver.GetBodyAsync(account, key, token).ConfigureAwait(false);
+                    body = openBody?.Key == key ? openBody : await receiver.GetBodyAsync(account, key, token).ConfigureAwait(false);
                     if (body.Key != key) throw new InvalidDataException("The receiver returned a different message.");
                     await cache.SaveBodyAsync(mailbox, body, token).ConfigureAwait(false);
                 }
@@ -929,8 +1072,8 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
                 {
                     if (_disposed || generation != _generation || _account?.Id != account.Id) return;
                     DownloadCompleted = completed;
-                    Messages = Messages.Select(item => item.Key == key ? item with { IsBodyCached = true } : item).ToArray();
-                    if (SelectedMessage?.Key == key) SelectedMessage = SelectedMessage with { IsBodyCached = true };
+                    Messages = Messages.Select(item => item.Key == key ? WithBody(item, body, cached: true) : item).ToArray();
+                    if (SelectedMessage?.Key == key) SelectedMessage = WithBody(SelectedMessage, body, cached: true);
                     Status = $"Offline download: {completed}/{targets.Length} bodies available. Saved bodies are kept if canceled.";
                     Notify();
                 });
@@ -1012,7 +1155,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         catch (Exception ex) when (ex is ObjectDisposedException or OperationCanceledException or AggregateException) { }
     }
 
-    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=F070FC
+    // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=Medium; Resources=7; Fingerprint=81D874
     // Hairs-Falsified-If: a callback from an operation superseded by a later RunAsync or StopPending still commits its result on the dispatcher
     // Hairs-Human:        PENDING
     private async Task RunAsync<T>(Func<CancellationToken, Task<T>> operation, Action<T> commit, string busy, InboxProblemScope scope,
@@ -1038,7 +1181,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         Status = busy;
         Notify();
         T? result = default;
-        string? failure = null;
+        string? failure = null; bool searchScopeChanged = false;
         try
         {
             result = await Task.Run(() => operation(cancellation.Token), cancellation.Token).ConfigureAwait(false);
@@ -1049,8 +1192,9 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
         catch (MailMailboxSnapshotUnavailableException error) { failure = error.Message; }
         catch (OfflineHeaderChangedException error) { failure = error.Message; }
         catch (OfflineBatchEpochChangedException error) { failure = error.Message; }
-        catch (MailSearchScopeChangedException error) { failure = error.Message; }
-        catch (MailSearchIndexUnavailableException error) { failure = error.Message; }
+        catch (MailSearchScopeChangedException error) { failure = error.Message; searchScopeChanged = true; }
+        // Only a page pinned to the Indexed engine throws this: Refresh results runs the search again with the engine chosen now.
+        catch (MailSearchIndexUnavailableException error) { failure = error.Message + " Use Refresh results to run this search again without the index."; searchScopeChanged = true; }
         catch (Exception error) when (cache is not null && error is IOException or InvalidDataException)
         { failure = "Local mail storage could not be read or saved. Check free disk space, quota and profile/cache recovery instructions. " +
             (IsSearchActive ? "Saved search did not complete; no server search was sent." : downloading ? "The current body's save was not confirmed." : "No new download was confirmed as saved."); }
@@ -1070,6 +1214,7 @@ public sealed partial class InboxViewModel(IMailReceiver receiver, IUiDispatcher
                 _operation = null;
                 IsBusy = _loadingPage = _downloadingBodies = _changingFlags = _moving = _deleting = false;
                 if (failure is not null && _loadingNavigation) { _loadingNavigation = false; NavigationNotice = "Navigation restore did not finish. Reload navigation to retry; ordinary folder navigation is available."; }
+                if (scope == InboxProblemScope.List) _lastFailureWasSearchScope = failure is not null && searchScopeChanged;
                 if (failure is null) commit(result!);
                 else if (deleting)
                 { DeleteNotice = Status = UncertainDelete; }

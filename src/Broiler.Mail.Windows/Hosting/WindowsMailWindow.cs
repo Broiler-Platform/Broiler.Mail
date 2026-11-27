@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   40
-// Annotated:        18/40
-// Exempt:           26
-// Human-reviewed:   0/40
+// Relevant units:   41
+// Annotated:        18/41
+// Exempt:           28
+// Human-reviewed:   0/41
 // IP risk:          Low
 // Security risk:    Critical
 // Criteria:         18/3
 // Resource impact:  7/10 max
-// Unverified:       40
+// Unverified:       41
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -73,7 +73,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Both bridges subclass native windows, which exist only from WM_CREATE on; see OnCreated.
     private WindowsAutomationBridge? _automationBridge;
     private WindowsInputBridge? _inputBridge;
-    //private MailWindowIcon? _icon;
+    private MailWindowIcon? _icon;
+    private readonly MailTooltips _tooltips;
     internal WindowsAutomationBridge? AutomationBridge => _host.ActiveHostWindow?.AutomationBridge ?? _automationBridge;
     internal WindowsInputBridge? InputBridge => _host.ActiveHostWindow?.InputBridge ?? _inputBridge;
     internal MailShellView Shell => _shell;
@@ -137,13 +138,26 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         _shell = new MailShellView(model, _htmlPreview, demo is null ? null : DemoApplication.CreateDateFormatter());
         _shell.Attach(_session);
         _keyboard = _shell.CreateKeyboardNavigation(_session);
+        _host.KeyboardFilter = _keyboard.Handle;
+        _tooltips = new MailTooltips(this, _session, _shell.Window, Invalidate);
+        // The caption names the folder and account; a demo keeps its fixture title so a capture is never taken for real mail.
+        if (demo is null)
+        {
+            string caption = "";
+            void UpdateCaption() { if (model.WindowTitle is var next && next != caption) SetTitle(caption = next); }
+            model.Inbox.Changed += (_, _) => UpdateCaption();
+            model.Account.Changed += (_, _) => UpdateCaption();
+            UpdateCaption();
+        }
         (_shell.ActiveDialog?.Session ?? _session).SetFocus(_shell.NavigationFocus);
         // Saved theme and OS appearance changes re-theme the live controls; no restart is needed. In high
         // contrast the palette comes from the system's own contrast colors.
         _appearance = new AppearanceController(_session, model.Settings, _host, MailSystemSettings.HighContrastTheme);
+        _tooltips.ApplyTheme(_appearance.Current ?? StandardControlPaint.Theme);
         _appearance.Applied += (_, _) =>
         {
             WindowsTitleBar.ApplyDarkMode(NativeHandle, _appearance.Current!.IsDark);
+            _tooltips.ApplyTheme(_appearance.Current);
             // An open HTML preview follows too; it runs its own session on its own thread.
             _htmlPreview.ApplyTheme(_appearance.Current);
             _htmlMeasurement?.ApplyTheme(_appearance.Current);
@@ -335,7 +349,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         }
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=D95531
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=53A44C
     // Hairs-Falsified-If: after a resize or DPI change the UI session lays out against the old viewport size or scale until another resize arrives
     // Hairs-Human:        PENDING
     /// <summary>
@@ -346,7 +360,7 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     protected override void OnCreated()
     {
         base.OnCreated();
-        //_icon = MailWindowIcon.TryAttach(NativeHandle);
+        _icon = MailWindowIcon.TryAttach(NativeHandle);
         _automationBridge ??= new WindowsAutomationBridge(RenderNativeHandle, _session, _shell.Window, () => DpiScale);
         _inputBridge ??= new WindowsInputBridge(NativeHandle, RenderNativeHandle, _session, _keyboard.Handle, () => DpiScale, Invalidate);
         // The focus was set before the render window existed; its IME state follows it from now on.
@@ -445,6 +459,8 @@ internal sealed class WindowsMailWindow : Direct2DWindow
     // Hairs-Human:        PENDING
     protected override void OnTextInput(BTextInputEventArgs e) => _inputBridge?.ProcessTextInput(e.Character);
 
+    protected override void OnAnimationTick() => _tooltips.Tick();
+
     // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=7ABD26
     // Hairs-Falsified-If: an input that MailKeyboardNavigation handles, such as Tab, is also dispatched to the UI session and inserts text into the focused editor
     // Hairs-Human:        PENDING
@@ -473,14 +489,14 @@ internal sealed class WindowsMailWindow : Direct2DWindow
         }
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=C973D8
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=1; Fingerprint=20CB95
     // Hairs-Falsified-If: an HTML preview opened from this mail window stays open after the mail window is disposed
     // Hairs-Human:        PENDING
     protected override void Dispose(bool disposing)
     {
         if (disposing)
         {
-            //_icon?.Dispose();
+            _icon?.Dispose();
             try { _automationBridge?.Dispose(); } catch (Exception) { }
             _automationBridge = null;
             _inputBridge?.Dispose();

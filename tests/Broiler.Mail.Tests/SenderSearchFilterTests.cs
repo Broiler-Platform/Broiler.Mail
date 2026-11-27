@@ -32,6 +32,41 @@ public sealed class SenderSearchFilterTests
     }
 
     [Theory]
+    [InlineData(MailSearchScope.Everywhere, true)]
+    [InlineData(MailSearchScope.Everywhere, false)]
+    [InlineData(MailSearchScope.MessageBody, true)]
+    [InlineData(MailSearchScope.MessageBody, false)]
+    public async Task SenderIsAnIndependentLiteralFilterCombinedWithHumanScopesOnEitherEngine(MailSearchScope scope, bool index)
+    {
+        using var directory = new TestDirectory(); var cache = new SqliteMailCache(directory.File("mail.db")); var account = AccountId.New(); var now = DateTimeOffset.UtcNow;
+        var box = new MailboxKey(account, "INBOX", 1);
+        var rows = new[] { Row(account, "INBOX", 1, "Ålice+%_@example.test", now), Row(account, "INBOX", 2, "Bob@example.test", now), Row(account, "INBOX", 3, "Ålice+%_@example.test", now.AddDays(-20)) with { IsRead = true } };
+        await cache.SaveSummariesAsync(box, rows, now);
+        foreach (var row in rows) await cache.SaveBodyAsync(box, new(row.Key, "short preview") { RetainedBodyText = "matching body phrase" });
+        var archive = Row(account, "Archive", 1, rows[0].Sender, now); await cache.SaveSummariesAsync(new(account, "Archive", 1), [archive], now); await cache.SaveBodyAsync(new(account, "Archive", 1), new(archive.Key, "short preview") { RetainedBodyText = "matching body phrase" });
+        if (index) await cache.RebuildSearchIndexAsync();
+        var query = new MailHeaderSearchQuery(account, "matching body phrase") { Scope = scope, SenderContains = "åLICE+%_@", MailboxId = "INBOX", IsRead = false, ReceivedFrom = now.AddDays(-1), ReceivedBefore = now.AddDays(1) };
+        var result = await cache.SearchHeadersAsync(query);
+        Assert.Equal(rows[0].Key, Assert.Single(result.Messages).Key);
+        Assert.Equal(index ? MailSearchEngine.Indexed : MailSearchEngine.Literal, result.Engine); Assert.False(result.HasHeaderOnlyMessages);
+        Assert.Equal(2, (await cache.SearchHeadersAsync(query with { MailboxId = null })).Messages.Count);
+        Assert.Equal(rows[1].Key, Assert.Single((await cache.SearchHeadersAsync(query with { SenderContains = "BOB" })).Messages).Key);
+        Assert.Empty((await cache.SearchHeadersAsync(query with { SenderContains = "alice+%_@" })).Messages);
+        Assert.Empty((await cache.SearchHeadersAsync(query with { SenderContains = "*" })).Messages);
+    }
+
+    [Theory]
+    [InlineData(MailSearchScope.Everywhere)]
+    [InlineData(MailSearchScope.SenderOrSubject)]
+    public async Task SenderOnlyScopedQueryNeedsNoKeywordAndDoesNotRequireBodyDownload(MailSearchScope scope)
+    {
+        using var directory = new TestDirectory(); var cache = new SqliteMailCache(directory.File("mail.db")); var account = AccountId.New(); var box = new MailboxKey(account, "INBOX", 1);
+        await cache.SaveSummariesAsync(box, [Row(account, "INBOX", 1, "Alice@example.test", DateTimeOffset.UtcNow), Row(account, "INBOX", 2, "Bob@example.test", DateTimeOffset.UtcNow)], DateTimeOffset.UtcNow); await cache.RebuildSearchIndexAsync();
+        var result = await cache.SearchHeadersAsync(new(account, "") { SenderContains = "ALICE", Scope = scope });
+        Assert.Equal(1u, Assert.Single(result.Messages).Key.Uid); Assert.Equal(MailSearchEngine.Literal, result.Engine);
+    }
+
+    [Theory]
     [InlineData(MailHeaderSearchField.SenderOrSubject)]
     [InlineData(MailHeaderSearchField.IndexedHeadersOrRetainedBody)]
     public async Task SenderOnlyQueryNeedsNoKeywordAndDoesNotRequireBodyDownload(MailHeaderSearchField mode)
@@ -59,8 +94,8 @@ public sealed class SenderSearchFilterTests
         var rows = Enumerable.Range(1, 501).Select(uid => Row(account.Id, "INBOX", (uint)uid, "Alice@example.test", DateTimeOffset.UtcNow)).ToArray();
         await cache.SaveSummariesAsync(box, rows.Take(500).ToArray(), DateTimeOffset.UtcNow); await cache.SaveSummariesAsync(box, rows.Skip(500).Append(Row(account.Id, "INBOX", 502, "Bob@example.test", DateTimeOffset.UtcNow)).ToArray(), DateTimeOffset.UtcNow); await cache.RebuildSearchIndexAsync();
         using var model = new InboxViewModel(new InboxSearchTests.NoNetworkReceiver(), new ImmediateUiDispatcher(), cache); model.SetAccount(account); await model.CacheLoadTask;
-        model.SetSearch("match"); model.SetSearchField(MailHeaderSearchField.IndexedHeadersOrRetainedBody); model.SetSearchSenderText(" Alice@example.test "); await model.SearchSavedHeadersAsync();
-        Assert.Equal(500, model.Messages.Count); Assert.True(model.CanLoadNextSearchPage);
+        model.SetSearch("match"); model.SetSearchScope(MailSearchScope.Everywhere); model.SetSearchSenderText(" Alice@example.test "); await model.SearchSavedHeadersAsync();
+        Assert.Equal(500, model.Messages.Count); Assert.True(model.CanLoadNextSearchPage); Assert.Equal(MailSearchEngine.Indexed, model.SearchEngineUsed);
         model.SetSearchSenderText("Bob@example.test"); await model.LoadNextSearchPageAsync(); Assert.Equal(1u, Assert.Single(model.Messages).Key.Uid); Assert.Contains("Alice@example.test", model.SearchNotice); Assert.DoesNotContain("Bob@example.test", model.SearchNotice);
         await model.SearchSavedHeadersAsync(); Assert.Equal(502u, Assert.Single(model.Messages).Key.Uid);
         model.SetAccount(account with { Id = AccountId.New() }); await model.CacheLoadTask; Assert.Equal("", model.SearchSenderText);

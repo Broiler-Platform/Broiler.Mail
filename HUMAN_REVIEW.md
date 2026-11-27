@@ -5,7 +5,7 @@ GENERATED - DO NOT EDIT MANUALLY. Regenerate with
 `CODE-ASSURANCE.md`, `hairs.manifest.json` and every generated source header from the
 product tree.
 
-> **Status: PENDING.** Human-reviewed: 0 of 2579 relevant units. `dotnet tool run hairs -- assurance check --root . --release`
+> **Status: PENDING.** Human-reviewed: 0 of 3045 relevant units. `dotnet tool run hairs -- assurance check --root . --release`
 > fails while any relevant unit is without a decision bound to its current fingerprint.
 
 ## 1. How To Use This File
@@ -49,13 +49,13 @@ did, which is the narrower and the more useful of the two.
 
 | Metric | Value |
 |---|---:|
-| Files scanned | 246 |
-| Code units | 4012 |
-| Relevant | 2579 |
-| Exempt | 1433 |
-| Assessed | 371 of 2579 (14%) |
-| Human reviewed | 0 of 2579 (0%) |
-| Unverified | 2579 |
+| Files scanned | 265 |
+| Code units | 4696 |
+| Relevant | 3045 |
+| Exempt | 1651 |
+| Assessed | 365 of 3045 (12%) |
+| Human reviewed | 0 of 3045 (0%) |
+| Unverified | 3045 |
 | Aliases naming a decision | 0 |
 
 ## 4. Review States
@@ -65,13 +65,13 @@ annotations and the current fingerprints; nothing stores them.
 
 | State | Units |
 |---|---:|
-| NEW | 2208 |
+| NEW | 2680 |
 | AI_ASSESSED | 0 |
-| HUMAN_PENDING | 371 |
+| HUMAN_PENDING | 365 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
-| EXEMPT | 1433 |
+| EXEMPT | 1651 |
 
 ## 5. Aliases In The Tree
 
@@ -85,42 +85,45 @@ relevant units in a state that blocks a release.
 
 | File | Units | Relevant | Exempt | Unverified | IP risk | Security risk | Criteria |
 |---|---:|---:|---:|---:|---|---|---:|
-| `src/Broiler.Mail.Application/MailApplication.cs` | 26 | 9 | 17 | 9 | Low | High | 3/2 |
+| `src/Broiler.Mail.Application/MailApplication.cs` | 27 | 9 | 18 | 9 | Low | High | 3/2 |
 | `src/Broiler.Mail.Application/Persistence/CoordinatedAccountCollectionStore.cs` | 14 | 13 | 1 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Persistence/DraftJournal.cs` | 17 | 9 | 8 | 9 | Low | High | 7/7 |
 | `src/Broiler.Mail.Application/Persistence/MemoryDraftStore.cs` | 6 | 3 | 3 | 3 | Low | High | 3/3 |
+| `src/Broiler.Mail.Application/Preview/EmlFileName.cs` | 8 | 8 | 0 | 8 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/IInlineHtmlPreviewHost.cs` | 22 | 18 | 4 | 18 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/IMessagePreview.cs` | 2 | 2 | 0 | 2 | Low | High | 2/2 |
 | `src/Broiler.Mail.Application/Preview/IReaderViewport.cs` | 3 | 2 | 1 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/MessageAttachmentActions.cs` | 29 | 15 | 14 | 15 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Preview/MessageSourceExportActions.cs` | 25 | 11 | 14 | 11 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Preview/MessageAttachmentStrip.cs` | 79 | 50 | 29 | 50 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Preview/MessageSourceExportActions.cs` | 58 | 31 | 27 | 31 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/MessageSourceInspection.cs` | 33 | 20 | 13 | 20 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Preview/MessageTextFindBar.cs` | 26 | 14 | 12 | 14 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Preview/MessageTextFindBar.cs` | 31 | 16 | 15 | 16 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/MessageTextFinder.cs` | 6 | 6 | 0 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/OriginalSourceText.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/PlainTextMessagePreview.cs` | 2 | 2 | 0 | 2 | Low | Medium | 2/0 |
-| `src/Broiler.Mail.Application/Preview/RemoteImageActions.cs` | 16 | 6 | 10 | 6 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Preview/ReaderBodyText.cs` | 8 | 8 | 0 | 8 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Preview/RemoteImageActions.cs` | 25 | 11 | 14 | 11 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/SavedSourceExportPicker.cs` | 28 | 15 | 13 | 15 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Preview/ScrollableMessageText.cs` | 24 | 15 | 9 | 15 | Low | Medium | 3/0 |
+| `src/Broiler.Mail.Application/Preview/ScrollableMessageText.cs` | 33 | 22 | 11 | 22 | Low | Medium | 3/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` | 92 | 35 | 57 | 35 | Low | High | 14/9 |
 | `src/Broiler.Mail.Application/ViewModels/AccountReceiveQueueViewModel.cs` | 56 | 32 | 24 | 32 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountSelectionViewModel.LocalMail.cs` | 17 | 12 | 5 | 12 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountSelectionViewModel.OrphanMail.cs` | 19 | 13 | 6 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountSelectionViewModel.cs` | 39 | 25 | 14 | 25 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/AttachmentReminder.cs` | 3 | 3 | 0 | 3 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.Attachments.cs` | 11 | 9 | 2 | 9 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.Attachments.cs` | 35 | 31 | 4 | 31 | Low | Medium | 1/0 |
 | `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.Library.cs` | 15 | 13 | 2 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.Outbox.cs` | 27 | 21 | 6 | 21 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.Recipients.cs` | 3 | 2 | 1 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.cs` | 73 | 43 | 30 | 43 | Low | High | 25/5 |
+| `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.cs` | 80 | 47 | 33 | 47 | Low | High | 27/7 |
 | `src/Broiler.Mail.Application/ViewModels/CompositionCommands.cs` | 19 | 10 | 9 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/InboxViewModel.MailboxSnapshot.cs` | 14 | 9 | 5 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/InboxViewModel.Navigation.cs` | 25 | 19 | 6 | 19 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/InboxViewModel.OfflineFolders.cs` | 27 | 18 | 9 | 18 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/InboxViewModel.OfflineHeaders.cs` | 31 | 24 | 7 | 24 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/ViewModels/InboxViewModel.cs` | 204 | 138 | 66 | 138 | Low | Medium | 15/0 |
-| `src/Broiler.Mail.Application/ViewModels/MailShellViewModel.cs` | 13 | 4 | 9 | 4 | Low | Low | 2/0 |
-| `src/Broiler.Mail.Application/ViewModels/ProfileStorageViewModel.cs` | 56 | 33 | 23 | 33 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/ViewModels/InboxViewModel.cs` | 219 | 148 | 71 | 148 | Low | Medium | 15/0 |
+| `src/Broiler.Mail.Application/ViewModels/MailShellViewModel.cs` | 19 | 11 | 8 | 11 | Low | Low | 2/0 |
+| `src/Broiler.Mail.Application/ViewModels/ProfileStorageViewModel.cs` | 75 | 49 | 26 | 49 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/RecipientBookViewModel.cs` | 19 | 9 | 10 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/ViewModels/SaveViewModel.cs` | 22 | 12 | 10 | 12 | Low | Medium | 4/0 |
 | `src/Broiler.Mail.Application/ViewModels/SettingsViewModel.cs` | 15 | 6 | 9 | 6 | Low | Medium | 2/0 |
@@ -131,36 +134,43 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Views/AdaptiveInboxLayout.cs` | 21 | 15 | 6 | 15 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AppearanceController.cs` | 13 | 5 | 8 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AppearancePolicy.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/BoundedScrollArea.cs` | 15 | 6 | 9 | 6 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/ComposerView.cs` | 5 | 2 | 3 | 2 | Low | High | 2/2 |
+| `src/Broiler.Mail.Application/Views/AttachmentGlyph.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/BoundedScrollArea.cs` | 17 | 7 | 10 | 7 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/ComposerAttachments.cs` | 43 | 23 | 20 | 23 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/ComposerView.cs` | 11 | 4 | 7 | 4 | Low | High | 2/2 |
 | `src/Broiler.Mail.Application/Views/ConfigurationForm.cs` | 8 | 8 | 0 | 8 | Low | Low | 2/0 |
 | `src/Broiler.Mail.Application/Views/Divider.cs` | 4 | 3 | 1 | 3 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/FillLastStack.cs` | 7 | 4 | 3 | 4 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/FirstTakesRestStack.cs` | 7 | 5 | 2 | 5 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/FirstTakesRestStack.cs` | 10 | 6 | 4 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/FocusNavigation.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/FocusRingFrame.cs` | 8 | 6 | 2 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/FormRow.cs` | 10 | 4 | 6 | 4 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/InboxView.cs` | 14 | 9 | 5 | 9 | Low | Medium | 3/0 |
+| `src/Broiler.Mail.Application/Views/InboxView.cs` | 32 | 18 | 14 | 18 | Low | Medium | 3/0 |
 | `src/Broiler.Mail.Application/Views/Inset.cs` | 7 | 4 | 3 | 4 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/LocalOriginalsView.cs` | 61 | 37 | 24 | 37 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/LocalOriginalsView.cs` | 85 | 57 | 28 | 57 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MailAbout.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/MailKeyboardNavigation.cs` | 10 | 10 | 0 | 10 | Low | Medium | 5/0 |
-| `src/Broiler.Mail.Application/Views/MailMessageItemPresenter.cs` | 25 | 20 | 5 | 20 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/MailShellView.cs` | 48 | 22 | 26 | 22 | Low | Medium | 4/0 |
-| `src/Broiler.Mail.Application/Views/MailShortcuts.cs` | 26 | 7 | 19 | 7 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/MailByteSize.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/MailFileDialogs.cs` | 68 | 55 | 13 | 55 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/MailFolderDialog.cs` | 46 | 27 | 19 | 27 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/MailKeyboardNavigation.cs` | 11 | 11 | 0 | 11 | Low | Medium | 5/0 |
+| `src/Broiler.Mail.Application/Views/MailMenuButton.cs` | 25 | 20 | 5 | 20 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/MailMessageItemPresenter.cs` | 30 | 25 | 5 | 25 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/MailShellView.cs` | 58 | 28 | 30 | 28 | Low | Medium | 4/0 |
+| `src/Broiler.Mail.Application/Views/MailShortcuts.cs` | 30 | 7 | 23 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MeasuredContent.cs` | 7 | 4 | 3 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/MessageDateFormatter.cs` | 12 | 10 | 2 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/OutboxView.cs` | 3 | 2 | 1 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ParsedMessageHeaders.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/ProfileStorageView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/ProfileStorageView.cs` | 3 | 2 | 1 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ReadingColumn.cs` | 18 | 14 | 4 | 14 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SavedDraftsView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/SavedOriginalsView.cs` | 33 | 18 | 15 | 18 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/SavedOriginalsView.cs` | 56 | 34 | 22 | 34 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SavedRecipientsView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/SenderIdentitiesView.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/SettingsView.cs` | 2 | 2 | 0 | 2 | Low | Medium | 2/0 |
-| `src/Broiler.Mail.Application/Views/ToolbarDisclosure.cs` | 12 | 10 | 2 | 10 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/SettingsView.cs` | 3 | 2 | 1 | 2 | Low | Medium | 2/0 |
+| `src/Broiler.Mail.Application/Views/ToolbarDisclosure.cs` | 13 | 11 | 2 | 11 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/UiAsync.cs` | 8 | 8 | 0 | 8 | None | Medium | 1/0 |
+| `src/Broiler.Mail.Application/Views/UnavailableMailFilePicker.cs` | 7 | 5 | 2 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/UnifiedSavedInboxView.cs` | 32 | 19 | 13 | 19 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Accounts/AccountFolderOverrides.cs` | 6 | 1 | 5 | 1 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Accounts/AccountId.cs` | 3 | 2 | 1 | 2 | None | Medium | 2/0 |
@@ -174,16 +184,17 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Core/Diagnostics/GlobalExceptionHandler.cs` | 28 | 19 | 9 | 19 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Diagnostics/MailLogger.cs` | 16 | 9 | 7 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Messages/DraftSnapshot.cs` | 23 | 4 | 19 | 4 | None | Medium | 2/0 |
-| `src/Broiler.Mail.Core/Messages/MailComposition.cs` | 15 | 12 | 3 | 12 | Low | High | 11/8 |
+| `src/Broiler.Mail.Core/Messages/MailAttachmentDescriptor.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Core/Messages/MailComposition.cs` | 16 | 13 | 3 | 13 | Low | High | 11/8 |
 | `src/Broiler.Mail.Core/Messages/MailCompositionSource.cs` | 9 | 1 | 8 | 1 | None | Medium | 1/0 |
-| `src/Broiler.Mail.Core/Messages/MailDraft.cs` | 19 | 6 | 13 | 6 | None | Medium | 1/0 |
+| `src/Broiler.Mail.Core/Messages/MailDraft.cs` | 23 | 10 | 13 | 10 | None | Medium | 1/0 |
 | `src/Broiler.Mail.Core/Messages/MailEmbeddedImage.cs` | 4 | 4 | 0 | 4 | None | High | 4/4 |
 | `src/Broiler.Mail.Core/Messages/MailFolder.cs` | 1 | 1 | 0 | 1 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Messages/MailFolderRoles.cs` | 9 | 4 | 5 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Messages/MailInboxPage.cs` | 4 | 2 | 2 | 2 | None | Medium | 1/0 |
-| `src/Broiler.Mail.Core/Messages/MailMessageBody.cs` | 9 | 2 | 7 | 2 | None | Medium | 0/0 |
+| `src/Broiler.Mail.Core/Messages/MailMessageBody.cs` | 11 | 2 | 9 | 2 | None | Medium | 0/0 |
 | `src/Broiler.Mail.Core/Messages/MailMessageKey.cs` | 1 | 1 | 0 | 1 | None | High | 1/1 |
-| `src/Broiler.Mail.Core/Messages/MailMessageSummary.cs` | 8 | 1 | 7 | 1 | None | Medium | 0/0 |
+| `src/Broiler.Mail.Core/Messages/MailMessageSummary.cs` | 9 | 1 | 8 | 1 | None | Medium | 0/0 |
 | `src/Broiler.Mail.Core/Messages/MailboxKey.cs` | 6 | 3 | 3 | 3 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Messages/SendResult.cs` | 5 | 2 | 3 | 2 | None | Low | 1/0 |
 | `src/Broiler.Mail.Core/Services/IAccountCollectionStore.cs` | 7 | 7 | 0 | 7 | not assessed | not assessed | 0/0 |
@@ -194,12 +205,14 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Core/Services/ICredentialStore.cs` | 5 | 5 | 0 | 5 | Low | High | 4/4 |
 | `src/Broiler.Mail.Core/Services/IDraftLibraryStore.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IDraftStore.cs` | 5 | 4 | 1 | 4 | Low | High | 3/3 |
-| `src/Broiler.Mail.Core/Services/ILocalMessageOriginals.cs` | 18 | 15 | 3 | 15 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Core/Services/ILocalMessageOriginals.cs` | 29 | 22 | 7 | 22 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Core/Services/IMailAttachmentStateCache.cs` | 6 | 6 | 0 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailCache.cs` | 7 | 7 | 0 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailCacheRecovery.cs` | 8 | 7 | 1 | 7 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Core/Services/IMailFilePicker.cs` | 49 | 21 | 28 | 21 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailFolderCache.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailFolderReceiver.cs` | 3 | 3 | 0 | 3 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Core/Services/IMailLocalSearch.cs` | 32 | 8 | 24 | 8 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Core/Services/IMailLocalSearch.cs` | 48 | 13 | 35 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailMailboxSnapshot.cs` | 9 | 9 | 0 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailMover.cs` | 9 | 6 | 3 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailPermanentDeleter.cs` | 9 | 6 | 3 | 6 | not assessed | not assessed | 0/0 |
@@ -207,9 +220,10 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Core/Services/IMailReceiver.cs` | 4 | 4 | 0 | 4 | Low | High | 4/4 |
 | `src/Broiler.Mail.Core/Services/IMailSearchIndex.cs` | 7 | 6 | 1 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailSender.cs` | 5 | 4 | 1 | 4 | Low | High | 2/2 |
-| `src/Broiler.Mail.Core/Services/IMailSourceReceiver.cs` | 20 | 19 | 1 | 19 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Core/Services/IMailSourceReceiver.cs` | 23 | 22 | 1 | 22 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMailStarStateWriter.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IMessageAttachmentExports.cs` | 6 | 5 | 1 | 5 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Core/Services/IMessageAttachmentReader.cs` | 8 | 5 | 3 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IOfflineFolderStore.cs` | 9 | 8 | 1 | 8 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IOrphanDownloadedMailStorage.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Core/Services/IOutgoingConnectionTester.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
@@ -224,33 +238,35 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Core/Validation/ConfigurationValidator.cs` | 9 | 9 | 0 | 9 | Low | High | 5/4 |
 | `src/Broiler.Mail.Infrastructure/Html/HtmlTokenizer.cs` | 42 | 24 | 18 | 24 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Mail/ImapMailReceiver.Snapshot.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Infrastructure/Mail/ImapMailReceiver.cs` | 32 | 28 | 4 | 28 | Low | High | 10/9 |
+| `src/Broiler.Mail.Infrastructure/Mail/ImapMailReceiver.cs` | 34 | 30 | 4 | 30 | Low | High | 10/9 |
 | `src/Broiler.Mail.Infrastructure/Mail/ImapSentCopyWriter.cs` | 8 | 5 | 3 | 5 | Low | High | 3/3 |
-| `src/Broiler.Mail.Infrastructure/Mail/MessageTextDecoder.cs` | 12 | 12 | 0 | 12 | Low | High | 7/7 |
+| `src/Broiler.Mail.Infrastructure/Mail/MessageTextDecoder.cs` | 14 | 14 | 0 | 14 | Low | High | 7/7 |
 | `src/Broiler.Mail.Infrastructure/Mail/SmtpConnectionTester.cs` | 14 | 10 | 4 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Mail/SmtpMailSender.cs` | 14 | 9 | 5 | 9 | Low | High | 4/4 |
 | `src/Broiler.Mail.Infrastructure/Mime/Encodings/Base64Decoder.cs` | 3 | 3 | 0 | 3 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Mime/Encodings/MimeTransferLength.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Mime/Encodings/QuotedPrintable.cs` | 6 | 6 | 0 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Mime/Encodings/Rfc2047Decoder.cs` | 7 | 7 | 0 | 7 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Infrastructure/Mime/MimeAttachmentCatalog.cs` | 6 | 6 | 0 | 6 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Mime/MessageAttachmentReader.cs` | 22 | 16 | 6 | 16 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Mime/MimeAttachmentCatalog.cs` | 9 | 9 | 0 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Mime/MimeFileNameParameters.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Mime/MimeParser.cs` | 30 | 30 | 0 | 30 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Mime/MimeSerializer.cs` | 7 | 7 | 0 | 7 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Infrastructure/Mime/ParsedMimeMessage.cs` | 29 | 2 | 27 | 2 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Mime/ParsedMimeMessage.cs` | 30 | 2 | 28 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/AccountRemovalService.cs` | 3 | 3 | 0 | 3 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/CacheRecoveryJournal.cs` | 15 | 11 | 4 | 11 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/ConfigurationJsonContext.cs` | 5 | 2 | 3 | 2 | None | High | 1/1 |
 | `src/Broiler.Mail.Infrastructure/Persistence/EncryptedCredentialStore.cs` | 11 | 10 | 1 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/FileMessageSourceExports.Attachments.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Infrastructure/Persistence/FileMessageSourceExports.Catalog.cs` | 13 | 13 | 0 | 13 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Infrastructure/Persistence/FileMessageSourceExports.cs` | 25 | 20 | 5 | 20 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Persistence/FileMessageSourceExports.Catalog.cs` | 14 | 14 | 0 | 14 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Persistence/FileMessageSourceExports.cs` | 27 | 22 | 5 | 22 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountCollectionStore.cs` | 18 | 15 | 3 | 15 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountNavigationStore.cs` | 8 | 7 | 1 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonAccountStore.cs` | 6 | 5 | 1 | 5 | Low | High | 5/5 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonConfigurationFile.cs` | 6 | 5 | 1 | 5 | Low | High | 4/4 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonDraftStore.Library.cs` | 6 | 5 | 1 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonDraftStore.cs` | 8 | 6 | 2 | 6 | Low | High | 4/4 |
-| `src/Broiler.Mail.Infrastructure/Persistence/JsonLocalMessageOriginals.cs` | 19 | 19 | 0 | 19 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Persistence/JsonLocalMessageOriginals.cs` | 23 | 23 | 0 | 23 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonOfflineFolderStore.cs` | 10 | 9 | 1 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonRecipientBook.cs` | 8 | 7 | 1 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/JsonSettingsStore.cs` | 4 | 3 | 1 | 3 | Low | High | 3/3 |
@@ -263,13 +279,14 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Infrastructure/Persistence/SqliteMailCache.AccountSearch.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/SqliteMailCache.SearchIndex.cs` | 15 | 14 | 1 | 14 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Persistence/SqliteMailCache.Snapshots.cs` | 7 | 7 | 0 | 7 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Infrastructure/Persistence/SqliteMailCache.cs` | 45 | 36 | 9 | 36 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Persistence/SqliteMailCache.cs` | 50 | 40 | 10 | 40 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Preview/HtmlPreviewPolicy.cs` | 13 | 13 | 0 | 13 | Low | High | 8/7 |
+| `src/Broiler.Mail.Infrastructure/Protocols/Imap/ImapBodyStructure.cs` | 26 | 22 | 4 | 22 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Protocols/Imap/ImapEnvelopeParser.cs` | 28 | 12 | 16 | 12 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Protocols/Imap/ImapExceptions.cs` | 10 | 8 | 2 | 8 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Protocols/Imap/ImapFolderParser.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Protocols/Imap/ImapMailboxName.cs` | 5 | 5 | 0 | 5 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Infrastructure/Protocols/Imap/ImapProtocolClient.cs` | 47 | 37 | 10 | 37 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Infrastructure/Protocols/Imap/ImapProtocolClient.cs` | 48 | 38 | 10 | 38 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Protocols/Smtp/SmtpExceptions.cs` | 16 | 9 | 7 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Protocols/Smtp/SmtpProtocolClient.cs` | 18 | 13 | 5 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Infrastructure/Protocols/Transport/MailTransportConnection.cs` | 16 | 10 | 6 | 10 | not assessed | not assessed | 0/0 |
@@ -281,14 +298,15 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Windows/Hosting/AccountMailCleanupSmokeCheck.cs` | 14 | 8 | 6 | 8 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/AccountNavigationSmokeCheck.cs` | 10 | 9 | 1 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/AccountReceiveQueueSmokeCheck.cs` | 21 | 12 | 9 | 12 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Hosting/AccountSearchSmokeCheck.cs` | 7 | 4 | 3 | 4 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Hosting/AccountSearchSmokeCheck.cs` | 8 | 5 | 3 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/AccountSelectionSmokeCheck.cs` | 14 | 8 | 6 | 8 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/CacheRecoverySmokeCheck.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/DraftLibrarySmokeCheck.cs` | 7 | 4 | 3 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/FolderNavigationSmokeCheck.cs` | 10 | 5 | 5 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/HtmlRasterSmokeCheck.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/MailSystemSettings.cs` | 6 | 3 | 3 | 3 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Hosting/MailWindowIcon.cs` | 35 | 31 | 4 | 31 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Hosting/MailTooltips.cs` | 13 | 7 | 6 | 7 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Hosting/MailWindowIcon.cs` | 24 | 20 | 4 | 20 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/MailboxSnapshotSmokeCheck.cs` | 15 | 10 | 5 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/MessageFindSmokeCheck.cs` | 14 | 10 | 4 | 10 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/MoveWorkflowSmokeCheck.cs` | 11 | 5 | 6 | 5 | not assessed | not assessed | 0/0 |
@@ -299,19 +317,19 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Windows/Hosting/OutboxSmokeCheck.cs` | 13 | 7 | 6 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/PermanentDeleteSmokeCheck.cs` | 10 | 5 | 5 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/ProfileSmokeCheck.cs` | 8 | 8 | 0 | 8 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Hosting/ReceivedAttachmentSmokeCheck.cs` | 10 | 6 | 4 | 6 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Hosting/ReceivedAttachmentSmokeCheck.cs` | 15 | 11 | 4 | 11 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/RecipientBookSmokeCheck.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/RemoteImageBrokerSmokeCheck.cs` | 7 | 5 | 2 | 5 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Hosting/SavedOriginalLibrarySmokeCheck.cs` | 19 | 12 | 7 | 12 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Hosting/SavedOriginalLibrarySmokeCheck.cs` | 20 | 13 | 7 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/SearchPagingSmokeCheck.cs` | 6 | 3 | 3 | 3 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/SenderIdentitySmokeCheck.cs` | 11 | 6 | 5 | 6 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/ShellSmokeCheck.cs` | 8 | 7 | 1 | 7 | Low | Low | 2/0 |
 | `src/Broiler.Mail.Windows/Hosting/SignatureSmokeCheck.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Hosting/UnifiedSavedInboxSmokeCheck.cs` | 18 | 10 | 8 | 10 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Hosting/WindowGeometry.cs` | 33 | 32 | 1 | 32 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Hosting/WindowsHostWindow.cs` | 61 | 45 | 16 | 45 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs` | 66 | 40 | 26 | 40 | Low | Critical | 18/3 |
-| `src/Broiler.Mail.Windows/Hosting/WindowsUiHost.cs` | 28 | 18 | 10 | 18 | Low | Critical | 5/4 |
+| `src/Broiler.Mail.Windows/Hosting/WindowGeometry.cs` | 29 | 28 | 1 | 28 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Hosting/WindowsHostWindow.cs` | 63 | 45 | 18 | 45 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs` | 69 | 41 | 28 | 41 | Low | Critical | 18/3 |
+| `src/Broiler.Mail.Windows/Hosting/WindowsUiHost.cs` | 29 | 18 | 11 | 18 | Low | Critical | 5/4 |
 | `src/Broiler.Mail.Windows/Measurement/AllocationSampler.cs` | 11 | 8 | 3 | 8 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Measurement/FramePhaseTimer.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Measurement/FrameRecorder.cs` | 47 | 23 | 24 | 23 | not assessed | not assessed | 0/0 |
@@ -320,17 +338,18 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Windows/Measurement/MeasurementReport.cs` | 16 | 13 | 3 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Measurement/MeasurementRun.cs` | 48 | 25 | 23 | 25 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/HtmlLinkTarget.cs` | 22 | 20 | 2 | 20 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` | 285 | 160 | 125 | 160 | Low | High | 39/20 |
+| `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` | 106 | 51 | 55 | 51 | Low | High | 21/8 |
 | `src/Broiler.Mail.Windows/Preview/HtmlResourceOutcome.cs` | 27 | 13 | 14 | 13 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/HtmlRuntime.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/InlineReaderTheme.cs` | 3 | 3 | 0 | 3 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/InlineRemoteImageSession.cs` | 16 | 7 | 9 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/PreviewZoom.cs` | 15 | 14 | 1 | 14 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Preview/RemoteImageBroker.cs` | 19 | 17 | 2 | 17 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` | 179 | 109 | 70 | 109 | Low | High | 18/12 |
 | `src/Broiler.Mail.Windows/Preview/WindowsHtmlPreviewHost.cs` | 17 | 9 | 8 | 9 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Windows/Program.cs` | 4 | 4 | 0 | 4 | Low | High | 2/2 |
-| `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` | 27 | 15 | 12 | 15 | Low | Critical | 15/14 |
-| `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` | 17 | 13 | 4 | 13 | Low | High | 6/6 |
+| `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` | 10 | 10 | 0 | 10 | Low | Critical | 10/9 |
+| `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` | 10 | 8 | 2 | 8 | Low | High | 2/2 |
 
 ## 7. Decisions Recorded
 
@@ -347,7 +366,7 @@ The units at the top of the security vocabulary, with the observation that would
 one wrong and the human line it carries. The set is read from the assessments rather than
 written out, so a unit that becomes `High` joins it at the next generation.
 
-- `Broiler.Mail.Application.MailApplication` in `src/Broiler.Mail.Application/MailApplication.cs` - Security=High, Spec=ADR-0001, `EB5768`, PENDING
+- `Broiler.Mail.Application.MailApplication` in `src/Broiler.Mail.Application/MailApplication.cs` - Security=High, Spec=ADR-0001, `3E6BDE`, PENDING
   - Falsified if: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
 - `Broiler.Mail.Application.MailApplication.InitializeAsync(CancellationToken)` in `src/Broiler.Mail.Application/MailApplication.cs` - Security=High, Spec=ADR-0001, `E3D0F2`, PENDING
   - Falsified if: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
@@ -395,7 +414,11 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: a host typed with a port, such as imap.example.com:993, yields a candidate profile without an ArgumentException
 - `Broiler.Mail.Application.ViewModels.ComposerViewModel` in `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.cs` - Security=High, Spec=ADR-0004, `57C6F9`, PENDING
   - Falsified if: a draft whose submission ended Accepted or Unknown is handed to the sender a second time
-- `Broiler.Mail.Application.ViewModels.ComposerViewModel.Start(MailMessageBody?, CompositionKind?)` in `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.cs` - Security=High, Spec=none cited, `B2A601`, PENDING
+- `Broiler.Mail.Application.ViewModels.ComposerViewModel.RequestSendConfirmation()` in `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.cs` - Security=High, Spec=none cited, `BA96BC`, PENDING
+  - Falsified if: a Send click with the attachment reminder active reaches IMailSender without Send anyway
+- `Broiler.Mail.Application.ViewModels.ComposerViewModel.SendAnywayAsync(CancellationToken)` in `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.cs` - Security=High, Spec=none cited, `781E50`, PENDING
+  - Falsified if: a Send click with the attachment reminder active reaches IMailSender without Send anyway
+- `Broiler.Mail.Application.ViewModels.ComposerViewModel.Start(MailMessageBody?, CompositionKind?)` in `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.cs` - Security=High, Spec=none cited, `1B72DE`, PENDING
   - Falsified if: a reply whose original sender address has a quoted local part containing a comma becomes two recipients when the joined To text is parsed again
 - `Broiler.Mail.Application.ViewModels.ComposerViewModel.BuildDraft()` in `src/Broiler.Mail.Application/ViewModels/ComposerViewModel.cs` - Security=High, Spec=none cited, `2C8BAB`, PENDING
   - Falsified if: a draft started under one account builds after the saved account changed its EmailAddress, keeping the old From address instead of throwing
@@ -407,9 +430,9 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
 - `Broiler.Mail.Application.Views.AccountProfileView.CreateContent()` in `src/Broiler.Mail.Application/Views/AccountProfileView.cs` - Security=High, Spec=none cited, `C21E57`, PENDING
   - Falsified if: the text of the SMTP password field reaches SavePasswordAsync without MailProtocol.Smtp, so it is stored and later sent as the IMAP password
-- `Broiler.Mail.Application.Views.ComposerView` in `src/Broiler.Mail.Application/Views/ComposerView.cs` - Security=High, Spec=none cited, `62EDC3`, PENDING
+- `Broiler.Mail.Application.Views.ComposerView` in `src/Broiler.Mail.Application/Views/ComposerView.cs` - Security=High, Spec=none cited, `4B6B5C`, PENDING
   - Falsified if: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
-- `Broiler.Mail.Application.Views.ComposerView.CreateContent()` in `src/Broiler.Mail.Application/Views/ComposerView.cs` - Security=High, Spec=none cited, `8426BC`, PENDING
+- `Broiler.Mail.Application.Views.ComposerView.CreateContent()` in `src/Broiler.Mail.Application/Views/ComposerView.cs` - Security=High, Spec=none cited, `A74C88`, PENDING
   - Falsified if: text typed in the Bcc field reaches model.Edit as its to or cc argument, so Bcc recipients appear in the sent headers
 - `Broiler.Mail.Core.Accounts.CredentialKey` in `src/Broiler.Mail.Core/Accounts/CredentialKey.cs` - Security=High, Spec=ADR-0002, `F383DF`, PENDING
   - Falsified if: keys for two accounts, two protocols, or two server settings that differ in anything but host letter case compare equal
@@ -591,7 +614,7 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: the default data directory resolves to a location shared between Windows users instead of the current user's local application data
 - `Broiler.Mail.Windows.CompositionRoot.DefaultDataDirectory` in `src/Broiler.Mail.Windows/CompositionRoot.cs` - Security=High, Spec=none cited, `3777B3`, PENDING
   - Falsified if: the returned path lies outside the current user's LocalApplicationData folder
-- `Broiler.Mail.Windows.CompositionRoot.CreateApplication(string?)` in `src/Broiler.Mail.Windows/CompositionRoot.cs` - Security=High, Spec=none cited, `F33836`, PENDING
+- `Broiler.Mail.Windows.CompositionRoot.CreateApplication(string?)` in `src/Broiler.Mail.Windows/CompositionRoot.cs` - Security=High, Spec=none cited, `A4F6BD`, PENDING
   - Falsified if: the accounts, settings or drafts store is given a file outside the data directory passed in
 - `Broiler.Mail.Windows.Hosting.WindowsMailWindow` in `src/Broiler.Mail.Windows/Hosting/WindowsMailWindow.cs` - Security=Critical, Spec=none cited, `0A6203`, PENDING
   - Falsified if: a WM_GETMINMAXINFO or WM_DPICHANGED for the render child window reaches WindowsWindowSizing.OnMessage, whose Marshal reads and writes through lParam then act on the wrong window
@@ -623,29 +646,29 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: a URL that is absent from the current document's ExternalLinks set, or arrives with userInitiated false, reaches the open-external callback
 - `Broiler.Mail.Windows.Preview.HtmlPreviewWindow.RunCore()` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `BCB653`, PENDING
   - Falsified if: a GetMessage return of -1 is passed to TranslateMessage and DispatchMessage instead of ending the loop with a Win32Exception
-- `Broiler.Mail.Windows.Preview.ScrollableHtmlView` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `7F007E`, PENDING
+- `Broiler.Mail.Windows.Preview.ScrollableHtmlView` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=none cited, `7F007E`, PENDING
   - Falsified if: a document shown through this view has an http(s) image or stylesheet it names fetched over the network instead of denied
-- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.ScrollableHtmlView(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `EF8D9F`, PENDING
+- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.ScrollableHtmlView(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool, bool)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=none cited, `EF8D9F`, PENDING
   - Falsified if: an http(s) image named in the html passed to the constructor is fetched over the network when the view renders
-- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.UpdateHtml(string, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `F2F519`, PENDING
+- `Broiler.Mail.Windows.Preview.ScrollableHtmlView.UpdateHtml(string, bool)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=none cited, `F2F519`, PENDING
   - Falsified if: an http(s) image named in the html passed to UpdateHtml is fetched over the network when the view next renders
-- `Broiler.Mail.Windows.Preview.HtmlViewElement` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `9D4E0E`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=ADR-0005, `9D4E0E`, PENDING
   - Falsified if: rendering a document whose img src is an http(s) or file: URL sends a request for it instead of the load being denied
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.CreateIsolatedContainer(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `40D1B3`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.CreateIsolatedContainer(string)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=ADR-0005, `40D1B3`, PENDING
   - Falsified if: an img whose src is not a data: URL, or a linked stylesheet, is loaded by the container instead of being blocked by the ImageLoad and StylesheetLoad handlers
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.HtmlViewElement(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `88D9BD`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.HtmlViewElement(string, Func<IBroilerRenderer?>, Action<string>, Func<double>?, Func<string, bool>?, bool)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=none cited, `88D9BD`, PENDING
   - Falsified if: an http(s) image named in the html passed to the constructor is fetched over the network when the element renders
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.UpdateHtml(string)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `9EFA01`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.UpdateHtml(string)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=none cited, `9EFA01`, PENDING
   - Falsified if: after UpdateHtml a paint or link hit-test runs against the container that UpdateHtml disposed
-- `Broiler.Mail.Windows.Preview.HtmlViewElement.OnInput(UiInputEvent)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=none cited, `6FEED3`, PENDING
+- `Broiler.Mail.Windows.Preview.HtmlViewElement.OnInput(UiInputEvent)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=none cited, `6FEED3`, PENDING
   - Falsified if: the link callback fires for an input other than a left-button release, such as a pointer-down, a right click or a key press over a link
-- `Broiler.Mail.Windows.Preview.DenyingRequestTransport` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `B984F4`, PENDING
+- `Broiler.Mail.Windows.Preview.DenyingRequestTransport` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=ADR-0005, `B984F4`, PENDING
   - Falsified if: a request the renderer sends through this transport, including one for a file: or loopback URL, is dispatched to the network or the file system
-- `Broiler.Mail.Windows.Preview.DenyingRequestTransport.Deny(HttpRequestMessage)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `5A1C67`, PENDING
+- `Broiler.Mail.Windows.Preview.DenyingRequestTransport.Deny(HttpRequestMessage)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=ADR-0005, `5A1C67`, PENDING
   - Falsified if: Deny returns a response whose status is anything other than 403 Forbidden or whose body is not empty
-- `Broiler.Mail.Windows.Preview.DenyingRequestTransport.SendAsync(HttpRequestMessage, RequestContext, CancellationToken)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `D8BAB5`, PENDING
+- `Broiler.Mail.Windows.Preview.DenyingRequestTransport.SendAsync(HttpRequestMessage, RequestContext, CancellationToken)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=ADR-0005, `D8BAB5`, PENDING
   - Falsified if: SendAsync completes with a response other than the empty 403 that Deny builds
-- `Broiler.Mail.Windows.Preview.DenyingRequestTransport.Send(HttpRequestMessage, RequestContext, CancellationToken)` in `src/Broiler.Mail.Windows/Preview/HtmlPreviewWindow.cs` - Security=High, Spec=ADR-0005, `EF07AC`, PENDING
+- `Broiler.Mail.Windows.Preview.DenyingRequestTransport.Send(HttpRequestMessage, RequestContext, CancellationToken)` in `src/Broiler.Mail.Windows/Preview/ScrollableHtmlView.cs` - Security=High, Spec=ADR-0005, `EF07AC`, PENDING
   - Falsified if: Send returns a response other than the empty 403 that Deny builds
 - `Broiler.Mail.Windows.Program` in `src/Broiler.Mail.Windows/Program.cs` - Security=High, Spec=none cited, `D26BF0`, PENDING
   - Falsified if: a --smoke-test run creates or reads files under the default data directory instead of only a fresh directory under the temp path
@@ -661,36 +684,18 @@ written out, so a unit that becomes `High` joins it at the next generation.
   - Falsified if: the value is not ERROR_NOT_FOUND (1168), so a Win32 failure such as ERROR_ACCESS_DENIED is swallowed as an absent credential by ReadAsync and DeleteAsync
 - `Broiler.Mail.Windows.Services.WindowsCredentialStore.MaximumBlobBytes` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=Critical, Spec=none cited, `FC2A69`, PENDING
   - Falsified if: a password longer than 1,280 characters passes the WriteAsync length check because the value exceeds CRED_MAX_CREDENTIAL_BLOB_SIZE (2,560 bytes)
-- `Broiler.Mail.Windows.Services.WindowsCredentialStore.ReadAsync(CredentialKey, CancellationToken)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=Critical, Spec=ADR-0002, `85421B`, PENDING
+- `Broiler.Mail.Windows.Services.WindowsCredentialStore.ReadAsync(CredentialKey, CancellationToken)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=Critical, Spec=ADR-0002, `2CA972`, PENDING
   - Falsified if: a stored credential whose BlobSize is odd or larger than 2,560 bytes is decoded with PtrToStringUni instead of raising InvalidDataException
-- `Broiler.Mail.Windows.Services.WindowsCredentialStore.WriteAsync(CredentialKey, string, CancellationToken)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=Critical, Spec=ADR-0002, `E38D58`, PENDING
+- `Broiler.Mail.Windows.Services.WindowsCredentialStore.WriteAsync(CredentialKey, string, CancellationToken)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=Critical, Spec=ADR-0002, `D32843`, PENDING
   - Falsified if: the BlobSize handed to CredWrite is larger than the byte length of the unmanaged copy of the secret, so Credential Manager reads past its end
-- `Broiler.Mail.Windows.Services.WindowsCredentialStore.DeleteAsync(CredentialKey, CancellationToken)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, Spec=ADR-0002, `3F4BA5`, PENDING
+- `Broiler.Mail.Windows.Services.WindowsCredentialStore.DeleteAsync(CredentialKey, CancellationToken)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, Spec=ADR-0002, `9FFB9A`, PENDING
   - Falsified if: a CredDelete failure other than ERROR_NOT_FOUND returns normally, so the caller treats a password that is still stored as forgotten
 - `Broiler.Mail.Windows.Services.WindowsCredentialStore.Target(CredentialKey)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, Spec=ADR-0002, `12FF9B`, PENDING
   - Falsified if: two different account and protocol pairs format to the same target name, so saving one slot's password replaces another's
-- `Broiler.Mail.Windows.Services.WindowsCredentialStore.NativeCredential` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=Critical, Spec=none cited, `FEEA36`, PENDING
-  - Falsified if: a field's order or width differs from Win32 CREDENTIALW, so BlobSize and Blob are read from the wrong offsets on x64
-- `Broiler.Mail.Windows.Services.WindowsCredentialStore.CredRead(string, uint, uint, out IntPtr)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, Spec=none cited, `6B9172`, PENDING
-  - Falsified if: the declaration omits SetLastError, so ReadAsync compares a stale Win32 error with ERROR_NOT_FOUND
-- `Broiler.Mail.Windows.Services.WindowsCredentialStore.CredWrite(ref NativeCredential, uint)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, Spec=none cited, `D111B8`, PENDING
-  - Falsified if: the credential's strings are marshalled as ANSI, so CredWriteW stores a TargetName and UserName that CredReadW never finds
-- `Broiler.Mail.Windows.Services.WindowsCredentialStore.CredDelete(string, uint, uint)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, Spec=none cited, `7C4E10`, PENDING
-  - Falsified if: the declaration omits SetLastError, so DeleteAsync compares a stale Win32 error with ERROR_NOT_FOUND and can report a failed delete as done
-- `Broiler.Mail.Windows.Services.WindowsCredentialStore.CredFree(IntPtr)` in `src/Broiler.Mail.Windows/Services/WindowsCredentialStore.cs` - Security=High, Spec=none cited, `B6E4D2`, PENDING
-  - Falsified if: the declaration binds an export other than advapi32 CredFree, so the buffer CredRead returns is released by the wrong allocator
 - `Broiler.Mail.Windows.Services.WindowsTextInput` in `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` - Security=High, Spec=none cited, `4FCA45`, PENDING
   - Falsified if: ImmSetCompositionWindow is handed a form whose layout differs from Win32 COMPOSITIONFORM, so IMM32 reads the caret position from the wrong offsets
-- `Broiler.Mail.Windows.Services.WindowsTextInput.PublishCaret(UiTextCaretInfo)` in `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` - Security=High, Spec=none cited, `3418AF`, PENDING
+- `Broiler.Mail.Windows.Services.WindowsTextInput.PublishCaret(UiTextCaretInfo)` in `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` - Security=High, Spec=none cited, `2C4E46`, PENDING
   - Falsified if: an input context from ImmGetContext is left unreleased when the scale callback or ImmSetCompositionWindow throws
-- `Broiler.Mail.Windows.Services.WindowsTextInput.CompositionForm` in `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` - Security=High, Spec=none cited, `7817E6`, PENDING
-  - Falsified if: the struct is smaller than Win32 COMPOSITIONFORM (28 bytes), so ImmSetCompositionWindow reads past the end of the caller's copy
-- `Broiler.Mail.Windows.Services.WindowsTextInput.ImmGetContext(nint)` in `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` - Security=High, Spec=none cited, `964CC6`, PENDING
-  - Falsified if: the window or context handle is declared narrower than a pointer, so a 64-bit HIMC is truncated before ImmSetCompositionWindow uses it
-- `Broiler.Mail.Windows.Services.WindowsTextInput.ImmReleaseContext(nint, nint)` in `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` - Security=High, Spec=none cited, `1742AC`, PENDING
-  - Falsified if: a parameter is declared narrower than a pointer, so the context released is not the one ImmGetContext returned
-- `Broiler.Mail.Windows.Services.WindowsTextInput.ImmSetCompositionWindow(nint, ref CompositionForm)` in `src/Broiler.Mail.Windows/Services/WindowsTextInput.cs` - Security=High, Spec=none cited, `3139A5`, PENDING
-  - Falsified if: the form is passed by value rather than by reference, so IMM32 dereferences the struct's first field as a pointer
 
 ## 10. What This Record Does Not Say
 
@@ -707,5 +712,5 @@ An assessment is a comment, so changing one moves no fingerprint anywhere, and n
 mechanical checks that it is right; the check holds its values to their vocabularies and no
 further.
 
-371 of the 371 assessed units declare `Origin=AI`. Reading a declaration is the only thing
+365 of the 365 assessed units declare `Origin=AI`. Reading a declaration is the only thing
 that makes it read.

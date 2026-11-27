@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   2
 // Annotated:        0/2
-// Exempt:           27
+// Exempt:           28
 // Human-reviewed:   0/2
 // IP risk:          not assessed
 // Security risk:    not assessed
@@ -60,4 +60,6 @@ public sealed class MimePartInfo
     public string? Charset { get; set; }
     public string? TransferEncoding { get; set; }
     public byte[] Data { get; set; } = [];
+    /// <summary>Transfer-decoded byte length, also known when the reader parse skipped the payload (Data is then empty).</summary>
+    public int DecodedLength { get; set; }
 }

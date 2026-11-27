@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   10
-// Annotated:        5/10
+// Relevant units:   11
+// Annotated:        5/11
 // Exempt:           0
-// Human-reviewed:   0/10
+// Human-reviewed:   0/11
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         5/0
 // Resource impact:  7/10 max
-// Unverified:       10
+// Unverified:       11
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -27,7 +27,7 @@ namespace Broiler.Mail.Application.Views;
 // Hairs-Human:        PENDING
 public sealed class MailKeyboardNavigation(UiSession session, MailShellView shell, MailShellViewModel model)
 {
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=C9B2A3
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=5630B5
     // Hairs-Falsified-If: a key the navigation does not handle, such as a letter typed in the composer, returns true and never reaches the focused editor
     // Hairs-Human:        PENDING
     public bool Handle(UiInputEvent input)
@@ -43,9 +43,32 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
             }
             return false;
         }
-        if (session.CapturedElement is not null) return false;
+        if (session.CapturedElement is { } captured)
+        {
+            // A reader popup (Move, More message actions) holds capture while open; Tab and Shift+Tab close it, which
+            // gives focus back to its button, and move on from there, as they would from the button.
+            if (captured.Parent is MailMenuButton { IsExpanded: true } popup &&
+                MailShortcuts.Match(input)?.Command is MailCommand.NextField or MailCommand.PreviousField)
+            {
+                bool next = MailShortcuts.Match(input)!.Command == MailCommand.NextField;
+                popup.Collapse();
+                MoveFocus(next ? 1 : -1);
+                return true;
+            }
+            return false;
+        }
         if (shell.ActiveAboutDialog is not null) return false;
-        if (shell.ActiveViewId is ("inbox" or "find-message") && shell.Inbox.HandleReaderInput(input)) return true;
+        if (shell.ActiveFileDialog is { } fileDialog)
+        {
+            // A file dialog over a form owns Enter, Escape, Backspace and the arrows through the session's modal
+            // routing; Tab only cycles inside it, so neither reaches the form underneath.
+            if (shell.PreviewFileDialogInput(input)) return true;
+            var command = MailShortcuts.Match(input)?.Command;
+            if (command is not (MailCommand.NextField or MailCommand.PreviousField)) return false;
+            MoveFocusWithin(fileDialog, command == MailCommand.NextField ? 1 : -1);
+            return true;
+        }
+        if (shell.ActiveViewId == "inbox" && shell.Inbox.HandleReaderInput(input)) return true;
         if (MailShortcuts.Match(input) is { } shortcut)
         {
             if (shortcut.Command == MailCommand.OpenMessage && shell.ActiveDialog is { } dialog)
@@ -70,6 +93,7 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
                 return true;
             case MailCommand.OpenMenu:
                 if (shell.ActiveDialog is not null) return true;
+                shell.RefreshMenuCommands();
                 shell.RememberReaderFocus();
                 session.SetFocus(shell.Menu);
                 shell.Menu.Open();
@@ -91,6 +115,18 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
                 if (shell.ActiveDialog is not null) return true;
                 _ = model.Inbox.ReceiveAsync();
                 return true;
+            // Find and search are consumed even when unavailable, so the chord never types into an editor.
+            case MailCommand.FindInMessage:
+                // Find docks in the reader; without a message in the reader it focuses the search header instead. A
+                // message whose body failed to load keeps the reader, its problem and Retry in view.
+                if (shell.ActiveDialog is not null) return true;
+                if (!shell.Inbox.ShowFindInMessage() && !shell.Inbox.ShowsMessage) shell.Inbox.ShowSearch();
+                return true;
+            case MailCommand.SearchMail:
+                // Search is a header at the top of the list, not a dialog.
+                if (shell.ActiveDialog is not null) return true;
+                shell.Inbox.ShowSearch();
+                return true;
             // Composition shortcuts are consumed even when unavailable, so the chord never reaches an editor.
             case MailCommand.NewMessage:
                 if (shell.ActiveDialog is not null && shell.ActiveViewId != "compose") return true;
@@ -109,12 +145,31 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
                 // Do not let an unhandled Enter bubble into StandardDialog.Accept().
                 if (shell.ActiveDialog is not null) return true;
                 return session.FocusedElement is StandardListView && model.Inbox.SelectedMessage is not null && shell.Inbox.OpenSelected();
+            // The .eml file commands are consumed even when unavailable, so the chord never types into an editor. Each
+            // opens a file dialog only because the person asked for one: the documented exemption to the no-modal rule.
+            case MailCommand.OpenLocalOriginal:
+                if (shell.ActiveDialog is null || shell.ActiveViewId == "originals") _ = shell.OpenLocalOriginalAsync();
+                return true;
+            case MailCommand.SaveMessageAsEml:
+                if (shell.ActiveDialog is null && shell.ActiveViewId == "inbox") _ = shell.Inbox.SaveMessageAsEml();
+                return true;
             case MailCommand.Back:
                 return shell.ActiveDialog is null && shell.Inbox.GoBackToList();
             case MailCommand.BackOrCancel:
-                // Escape first leaves a compact reader; with nothing to go back from, it cancels work.
+                // Escape closes a dialog; then, unless work runs (which it cancels), it closes the open
+                // message's find bar, then leaves a compact reader; with nothing to go back from, it cancels work.
+                // While nothing runs, a find bar with focus in the reader, and the search header with focus in it,
+                // already took Escape (HandleReaderInput, above); while work runs both leave it to cancel here, so
+                // where focus is does not change what Escape does. A bar in a hidden compact reader is not closed.
                 if (shell.ActiveViewId == "account" && model.Account.IsBusy) { model.Account.CancelConnectionTest(); return true; }
+                // In Compose, Escape first dismisses the pre-send attachment reminder, then cancels a file being read.
+                if (shell.ActiveViewId == "compose" && shell.Composer.HandleEscape()) return true;
+                // In Saved originals, Escape keeps a saved original whose removal waits for confirmation.
+                if (shell.ActiveViewId == "originals" && shell.SavedOriginals.HandleEscape()) return true;
                 if (shell.CloseDialog()) return true;
+                // A running attachment save is work too: Escape cancels it, wherever focus is, before it closes find.
+                if (shell.Inbox.CancelAttachmentSave()) return true;
+                if (!model.Inbox.IsBusy && shell.Inbox.CloseFindInMessage()) return true;
                 if (!model.Inbox.IsBusy && shell.Inbox.GoBackToList()) return true;
                 model.Inbox.Cancel();
                 model.Account.CancelConnectionTest();
@@ -148,6 +203,21 @@ public sealed class MailKeyboardNavigation(UiSession session, MailShellView shel
         else next = direction > 0 ? controls[0] : controls[^1];
         activeSession.SetFocus(next);
         Reveal(next);
+    }
+
+    /// <summary>Moves focus to the next (or previous) tab stop inside <paramref name="scope"/>, wrapping at its ends.</summary>
+    private void MoveFocusWithin(UiElement scope, int direction)
+    {
+        var activeSession = scope.Session ?? session;
+        activeSession.RenderFrame();
+        var stops = TabStops(scope);
+        if (stops.Count == 0) return;
+        var focused = activeSession.FocusedElement;
+        int current = focused is null ? -1 : stops.ToList().IndexOf(focused);
+        UiElement next = current >= 0 ? stops[(current + direction + stops.Count) % stops.Count]
+            : focused is not null && focused.IsDescendantOf(scope) ? NextTabStop(scope, focused, direction) ?? stops[0]
+            : direction > 0 ? stops[0] : stops[^1];
+        activeSession.SetFocus(next);
     }
 
     /// <summary>

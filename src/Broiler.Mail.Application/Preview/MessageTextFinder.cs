@@ -20,15 +20,15 @@ namespace Broiler.Mail.Application.Preview;
 public readonly record struct MessageTextMatch(int Start, int Length);
 public sealed record MessageTextMatches(IReadOnlyList<MessageTextMatch> Matches, bool HasMore);
 
-/// <summary>Bounded literal ordinal-ignore-case find in one decoded message preview; no query language or network.</summary>
+/// <summary>Bounded literal ordinal-ignore-case find in one decoded message text (the preview or the complete retained text); no query language or network.</summary>
 public static class MessageTextFinder
 {
     public const int MaximumMatches = 1000;
-    public const int MaximumTextLength = 1_000_000;
+    public const int MaximumTextLength = Broiler.Mail.Core.Messages.MailMessageBody.MaximumRetainedTextCharacters;
     public static MessageTextMatches Find(string text, string query)
     {
         ArgumentNullException.ThrowIfNull(text); ArgumentNullException.ThrowIfNull(query);
-        if (text.Length > MaximumTextLength) throw new ArgumentException("This text exceeds the 1,000,000-character find limit.");
+        if (text.Length > MaximumTextLength) throw new ArgumentException("This text exceeds the 1,048,576-character find limit.");
         if (query.Length is 0 or > 256 || query.Any(char.IsControl)) throw new ArgumentException("Enter 1–256 literal characters without control characters.");
         for (int i = 0; i < query.Length; i++)
             if (char.IsSurrogate(query[i]) && (!char.IsHighSurrogate(query[i]) || ++i >= query.Length || !char.IsLowSurrogate(query[i]))) throw new ArgumentException("Enter valid Unicode find text.");

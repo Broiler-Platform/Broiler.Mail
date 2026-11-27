@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   7
 // Annotated:        0/7
-// Exempt:           19
+// Exempt:           23
 // Human-reviewed:   0/7
 // IP risk:          not assessed
 // Security risk:    not assessed
@@ -25,6 +25,9 @@ public enum MailCommand
 {
     NextField, PreviousField, OpenMenu, Inbox, Account, Settings, Compose,
     Receive, NewMessage, Reply, ReplyAll, Forward, OpenMessage, Back, BackOrCancel, Outbox, SavedOriginals, UnifiedSavedInbox,
+    FindInMessage, SearchMail,
+    // Appended, so the Inbox..Compose range that MailKeyboardNavigation.Execute switches on stays intact.
+    OpenLocalOriginal, SaveMessageAsEml,
 }
 
 /// <summary>One key with an exact set of Ctrl, Shift, and Alt modifiers.</summary>
@@ -47,19 +50,27 @@ public static class MailShortcuts
         new(MailCommand.Account, '2', true, false, false, "Ctrl+2", "Account"),
         new(MailCommand.Settings, '3', true, false, false, "Ctrl+3", "Settings"),
         new(MailCommand.Compose, '4', true, false, false, "Ctrl+4", "Compose"),
-        new(MailCommand.UnifiedSavedInbox, '7', true, false, false, "Ctrl+7", "Unified saved inbox"),
-        new(MailCommand.SavedOriginals, '6', true, false, false, "Ctrl+6", "Saved originals"),
         new(MailCommand.Outbox, '5', true, false, false, "Ctrl+5", "Outbox"),
+        new(MailCommand.SavedOriginals, '6', true, false, false, "Ctrl+6", "Saved originals"),
+        new(MailCommand.UnifiedSavedInbox, '7', true, false, false, "Ctrl+7", "Unified saved inbox"),
+        new(MailCommand.FindInMessage, 'F', true, false, false, "Ctrl+F", "Find in the open message (search mail when none is open)"),
+        new(MailCommand.SearchMail, 'K', true, false, false, "Ctrl+K", "Search saved mail"),
+        new(MailCommand.SearchMail, 'E', true, false, false, "Ctrl+E", "Search saved mail (alternative)"),
         new(MailCommand.Receive, F5, false, false, false, "F5", "Receive mail"),
         new(MailCommand.NewMessage, 'N', true, false, false, "Ctrl+N", "New message"),
+        // Neither uses Ctrl+Alt, so AltGr+O and AltGr+S still type their characters.
+        new(MailCommand.OpenLocalOriginal, 'O', true, false, false, "Ctrl+O", "Open a local .eml file"),
+        new(MailCommand.SaveMessageAsEml, 'S', true, true, false, "Ctrl+Shift+S", "Save the open message as an .eml file"),
         new(MailCommand.Reply, 'R', true, false, false, "Ctrl+R", "Reply"),
         new(MailCommand.ReplyAll, 'R', true, true, false, "Ctrl+Shift+R", "Reply all"),
-        new(MailCommand.Forward, 'F', true, false, false, "Ctrl+F", "Forward"),
+        new(MailCommand.Forward, 'L', true, false, false, "Ctrl+L", "Forward"),
+        new(MailCommand.Forward, 'F', true, true, false, "Ctrl+Shift+F", "Forward (alternative)"),
         new(MailCommand.OpenMessage, Enter, false, false, false, "Enter", "Open the selected message (in the message list)"),
         new(MailCommand.Back, Left, false, false, true, "Alt+Left", "Back to the message list (narrow window)"),
-        new(MailCommand.BackOrCancel, Escape, false, false, false, "Escape", "Close the dialog, cancel a connection test, or return to the message list"),
+        new(MailCommand.BackOrCancel, Escape, false, false, false, "Escape", "Close the dialog or the find bar, clear or exit search, cancel a connection test, or return to the message list"),
     ];
 
+    /// <summary>The primary shortcut for a command; alternatives follow it in <see cref="All"/>.</summary>
     public static MailShortcut For(MailCommand command) => All.First(shortcut => shortcut.Command == command);
 
     /// <summary>

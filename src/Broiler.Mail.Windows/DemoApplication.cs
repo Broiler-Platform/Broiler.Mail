@@ -292,7 +292,7 @@ internal static class DemoApplication
             return new(messages, start == 0 ? null : new(account.Id, 1, (uint)total + 1, total, start - 1));
         }
 
-        // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=F6CA84
+        // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=2; Fingerprint=F731B9
         // Hairs-Human:        PENDING
         public async Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default)
         {
@@ -323,7 +323,7 @@ internal static class DemoApplication
                 };
                 // A table, and an address too long to wrap: zoomed in, the table reflows and the address
                 // scrolls sideways.
-                return new(message, "Hello & welcome!\n\nThis sample demonstrates the labeled text fallback for HTML-only mail.\n\nSelect Open HTML preview to view formatted HTML.",
+                return new(message, "Hello & welcome!\n\nThis sample demonstrates the labeled text fallback for HTML-only mail.\n\nChoose HTML in the reader to view formatted HTML.",
                     "<h1>Hello &amp; welcome!</h1><p>This sample demonstrates the <b>HTML reading mode</b> with isolated rendering.</p><p><img src=\"cid:demo-logo@example.test\" alt=\"Demo dot\"></p><p>Links like <a href=\"https://example.test\">example.test</a> open in your default browser.</p>" +
                     "<h2>This week</h2><table><tr><th>Day</th><th>Session</th><th>Room</th></tr><tr><td>Monday</td><td>Keyboard and screen readers</td><td>North hall</td></tr>" +
                     "<tr><td>Wednesday</td><td>Text size and zoom</td><td>South hall</td></tr></table>" +

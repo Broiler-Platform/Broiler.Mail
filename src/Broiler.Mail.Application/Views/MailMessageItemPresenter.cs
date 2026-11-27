@@ -3,20 +3,21 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   20
-// Annotated:        0/20
+// Relevant units:   25
+// Annotated:        0/25
 // Exempt:           5
-// Human-reviewed:   0/20
+// Human-reviewed:   0/25
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       20
+// Unverified:       25
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
 using System;
 using System.Globalization;
+using Broiler.Graphics.Color;
 using Broiler.Graphics.Geometry;
 using Broiler.Graphics.Text;
 using Broiler.Mail.Core.Messages;
@@ -51,22 +52,56 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
 
         if (context.Item.Tag is MailMessageSummary message)
         {
-            var displayItem = DisplayItem(context.Item.Id, message, !context.State.IsRead, context.Bounds.Width, context.Font);
+            bool unread = !context.State.IsRead;
+            var row = DisplayItem(context.Item.Id, message, unread, context.Bounds.Width, context.Font);
 
             // Every color, font and state carries over, including the selected text colors a theme gives the
             // selection; a member-by-member copy dropped them, and a selected row then drew its text in Text.
-            _twoLinePresenter.Render(context.WithItem(displayItem));
+            _twoLinePresenter.Render(context.WithItem(row.Item));
+            if (message.HasAttachments)
+                PaintAttachmentBadge(context, row, unread);
             return;
         }
 
         _twoLinePresenter.Render(context);
     }
 
+    // The paperclip sits on line 1 in the room the sender left for it: DateGap before the date, or 8 DIP
+    // before the edge when the row drew no date, and AttachmentGap after the (already shortened) sender.
+    // The line's top mirrors StandardTwoLineListItemPresenter's private TopPadding (4 / 6 / 10 DIP).
+    private static void PaintAttachmentBadge(UiListItemRenderContext context, Row row, bool unread)
+    {
+        BRect bounds = context.Bounds;
+        BFontStyle font = context.Font;
+        double width = AttachmentGlyph.Width(font);
+        double height = AttachmentGlyph.Height(font);
+        double right = bounds.Right - 8 - (row.DateAdvance > 0 ? row.DateAdvance + DateGap : 0);
+        double left = right - width;
+        if (left < bounds.Left + 10 + (unread ? 12 : 0)) return;
+        double top = bounds.Top + TopPadding(context.State.Density);
+        top += Math.Max(0, (BTextMeasurer.GetLineHeight(font) - height) / 2);
+        bool selected = context.State.IsSelected;
+        BColor color = context.IsHighContrast
+            ? (selected ? context.SelectedForeground : context.Foreground)
+            : selected ? context.SelectedSecondaryForeground : context.SecondaryForeground;
+        AttachmentGlyph.Paint(context.RenderList, new BRect(left, top, width, height), color);
+    }
+
+    private static double TopPadding(UiDensity density) => density switch
+    {
+        UiDensity.Compact => 4,
+        UiDensity.Spacious => 10,
+        _ => 6,
+    };
+
     // Every visible row is drawn on every frame, and its texts only change with the message, its read
     // state, the row's width or font, the day, or the culture. Formatting the date and measuring the
     // sender and date for each row again took a fifth of a selection's frame.
     private const int RowCacheLimit = 512;
-    private readonly Dictionary<RowKey, UiListItem> _rows = [];
+    private readonly Dictionary<RowKey, Row> _rows = [];
+
+    // The drawn item and its date's advance (0 without a date), which places the attachment badge.
+    private sealed record Row(UiListItem Item, double DateAdvance);
     private readonly Lock _rowsLock = new();
 
     private readonly record struct RowKey(MailMessageSummary Message, string Id, bool Unread, double Width, BFontStyle Font, DateTime Today, CultureInfo Culture)
@@ -77,27 +112,36 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
         public override int GetHashCode() => HashCode.Combine(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(Message), Id, Unread, Width, Font, Today);
     }
 
-    private UiListItem DisplayItem(string id, MailMessageSummary message, bool unread, double width, BFontStyle font)
+    private Row DisplayItem(string id, MailMessageSummary message, bool unread, double width, BFontStyle font)
     {
         var (today, culture) = _dates.ListContext;
         var key = new RowKey(message, id, unread, width, font, today, culture);
         lock (_rowsLock)
             if (_rows.TryGetValue(key, out var cached)) return cached;
-        string date = RowDate(_dates.ListForms(message.ReceivedAt), message.Sender, unread, width, font);
+        bool attachments = message.HasAttachments;
+        string date = RowDate(_dates.ListForms(message.ReceivedAt), message.Sender, unread, width, font, attachments);
+        double dateAdvance = string.IsNullOrEmpty(date) ? 0 : BTextMeasurer.MeasureAdvance(date, DateFont(font));
+        string sender = RowSender(message.Sender, date, unread, width, font, attachments);
+        // The two-line row only leaves the date room, so the sender is shortened here to leave the badge
+        // its own room as well; the row then draws it unchanged.
+        if (attachments)
+            sender = DefaultListItemPresenter.TruncateWithEllipsis(sender, SenderFont(unread, font),
+                Math.Max(0, SenderSpace(unread, width) - (dateAdvance > 0 ? dateAdvance + DateGap : 0) - BadgeSpace(font)));
         var item = new UiListItem(
             id,
-            RowSender(message.Sender, date, unread, width, font),
+            sender,
             (showMailbox ? "[" + message.Key.MailboxId + "] " : "") + (message.IsStarred ? "★ " : "") + message.Subject,
             date,
             message.IsRead,
             message);
+        var row = new Row(item, dateAdvance);
         lock (_rowsLock)
         {
             // Bounded: a resize or a new page starts again rather than keeping every width ever drawn.
             if (_rows.Count >= RowCacheLimit) _rows.Clear();
-            _rows[key] = item;
+            _rows[key] = row;
         }
-        return item;
+        return row;
     }
 
     public UiSemanticNode CreateSemanticNode(UiListItemSemanticContext context)
@@ -113,7 +157,8 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
                 state |= UiSemanticState.Focused;
 
             string unread = message.IsRead ? string.Empty : "Unread, ";
-            string label = (showMailbox ? $"Folder: {message.Key.MailboxId}, " : "") + $"{(message.IsStarred ? "Starred, " : "")}{unread}From: {message.Sender}, Subject: {message.Subject}, Received: {_dates.Detail(message.ReceivedAt)}";
+            string attachments = message.HasAttachments ? "Has attachments, " : string.Empty;
+            string label = (showMailbox ? $"Folder: {message.Key.MailboxId}, " : "") + $"{(message.IsStarred ? "Starred, " : "")}{unread}{attachments}From: {message.Sender}, Subject: {message.Subject}, Received: {_dates.Detail(message.ReceivedAt)}";
 
             return new UiSemanticNode(
                 UiSemanticRole.ListItem,
@@ -129,16 +174,17 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
     /// <summary>
     /// The sender as the row shows it: in full while it fits beside <paramref name="date"/>, otherwise
     /// only the display name (which the row then shortens if needed), since the name identifies the
-    /// sender and the reader shows the address.
+    /// sender and the reader shows the address. With <paramref name="attachments"/> the attachment badge
+    /// takes its room first.
     /// </summary>
-    public static string RowSender(string sender, string date, bool unread, double rowWidth, BFontStyle font)
+    public static string RowSender(string sender, string date, bool unread, double rowWidth, BFontStyle font, bool attachments = false)
     {
         ArgumentNullException.ThrowIfNull(sender);
         ArgumentNullException.ThrowIfNull(font);
         string name = SenderName(sender);
         if (name.Length == sender.Length)
             return sender;
-        double available = SenderSpace(unread, rowWidth);
+        double available = SenderSpace(unread, rowWidth) - (attachments ? BadgeSpace(font) : 0);
         if (!string.IsNullOrEmpty(date))
             available -= BTextMeasurer.MeasureAdvance(date, DateFont(font)) + DateGap;
         return BTextMeasurer.MeasureAdvance(sender, SenderFont(unread, font)) <= available ? sender : name;
@@ -148,9 +194,10 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
     /// The longest of <paramref name="forms"/> (<see cref="MessageDateFormatter.ListForms"/>) that still
     /// leaves the sender's name its first few characters, or an empty string when even the shortest
     /// would crowd the sender out. The full date stays in the row's semantic name
-    /// (<see cref="CreateSemanticNode"/>) and in the reader.
+    /// (<see cref="CreateSemanticNode"/>) and in the reader. With <paramref name="attachments"/> the
+    /// attachment badge keeps its room, so the date shortens or drops before the sender does.
     /// </summary>
-    public static string RowDate(IReadOnlyList<string> forms, string sender, bool unread, double rowWidth, BFontStyle font)
+    public static string RowDate(IReadOnlyList<string> forms, string sender, bool unread, double rowWidth, BFontStyle font, bool attachments = false)
     {
         ArgumentNullException.ThrowIfNull(forms);
         ArgumentNullException.ThrowIfNull(sender);
@@ -165,7 +212,7 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
         // three characters and an ellipsis, and at least 10 DIP. Four characters ask more, so a form chosen
         // here is always drawn, and an empty one leaves the line to the sender, as the presenter would.
         double needed = Math.Max(BTextMeasurer.MeasureAdvance(shortest, SenderFont(unread, font)), DateMinimumOffset - DateGap);
-        double space = SenderSpace(unread, rowWidth);
+        double space = SenderSpace(unread, rowWidth) - (attachments ? BadgeSpace(font) : 0);
         BFontStyle dateFont = DateFont(font);
         foreach (string form in forms)
             if (space - BTextMeasurer.MeasureAdvance(form, dateFont) - DateGap >= needed)
@@ -179,7 +226,12 @@ public sealed class MailMessageItemPresenter(MessageDateFormatter? dates = null,
     private const double DateMinimumOffset = 20;
     private const int MinimumSenderCharacters = 4;
 
+    // The attachment badge and the gap between it and the sender.
+    private const double AttachmentGap = 6;
+
     private static double SenderSpace(bool unread, double rowWidth) => rowWidth - 10 - (unread ? 12 : 0) - 8;
+
+    private static double BadgeSpace(BFontStyle font) => AttachmentGlyph.Width(font) + AttachmentGap;
 
     private static BFontStyle DateFont(BFontStyle font) => font with { Size = Math.Max(9, font.Size - 2) };
 

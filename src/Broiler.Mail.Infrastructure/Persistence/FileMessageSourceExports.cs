@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   20
-// Annotated:        0/20
+// Relevant units:   22
+// Annotated:        0/22
 // Exempt:           5
-// Human-reviewed:   0/20
+// Human-reviewed:   0/22
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       20
+// Unverified:       22
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -22,7 +22,7 @@ using Broiler.Mail.Core.Services;
 namespace Broiler.Mail.Infrastructure.Persistence;
 
 /// <summary>Bounded explicit exports, separate from the cache and never opened automatically.</summary>
-public sealed partial class FileMessageSourceExports : IMessageSourceExports, IStreamingMessageSourceExports, IVerifiedMessageSourceExports, IMessageAttachmentExports, IMessageSourceExportCatalog, IAccountSourceExportCatalog, ILocalMessageOriginals, ILocalOriginalManagement
+public sealed partial class FileMessageSourceExports : IMessageSourceExports, IStreamingMessageSourceExports, IVerifiedMessageSourceExports, IMessageAttachmentExports, IMessageSourceExportCatalog, IAccountSourceExportCatalog, ISourceExportCatalogMaintenance, ILocalMessageOriginals, ILocalOriginalManagement, ILocalOriginalStreamSource
 {
     // Bounded process-local coordination prevents sibling writers from exhausting the interprocess lock deadline.
     private static readonly SemaphoreSlim[] ExportGates = Enumerable.Range(0, 64).Select(_ => new SemaphoreSlim(1)).ToArray();
@@ -33,6 +33,7 @@ public sealed partial class FileMessageSourceExports : IMessageSourceExports, IS
     public Task<LocalOriginalExport> ExportAsync(LocalOriginalReceipt receipt, string destination, CancellationToken token = default) => LocalOriginals.ExportAsync(receipt, destination, token);
     public Task<LocalOriginalRemoval> RemoveAsync(LocalOriginalReceipt receipt, CancellationToken token = default) => LocalOriginals.RemoveAsync(receipt, token);
     public Task<LocalOriginalContent> OpenFileAsync(string path, CancellationToken token = default) => LocalOriginals.OpenFileAsync(path, token);
+    public Task<LocalOriginalContent> OpenStreamAsync(string displayName, Stream source, CancellationToken token = default) => LocalOriginals.OpenStreamAsync(displayName, source, token);
     public Task<LocalOriginalReceipt> ImportAsync(Broiler.Mail.Core.Accounts.AccountId account, LocalOriginalContent content, CancellationToken token = default) => LocalOriginals.ImportAsync(account, content, token);
     public Task<IReadOnlyList<LocalOriginalReceipt>> ListImportsAsync(Broiler.Mail.Core.Accounts.AccountId account, CancellationToken token = default) => LocalOriginals.ListImportsAsync(account, token);
     public Task<LocalOriginalContent> ReadImportAsync(LocalOriginalReceipt receipt, CancellationToken token = default) => LocalOriginals.ReadImportAsync(receipt, token);
@@ -100,13 +101,7 @@ public sealed partial class FileMessageSourceExports : IMessageSourceExports, IS
     public async Task<MailMessageSource> ReadVerifiedAsync(MessageSourceExport export, CancellationToken token = default)
     {
         ArgumentNullException.ThrowIfNull(export); token.ThrowIfCancellationRequested();
-        if (export.Key.AccountId.Value == Guid.Empty || export.Key.Uid == 0 || export.Key.UidValidity == 0 || string.IsNullOrWhiteSpace(export.Key.MailboxId) || export.Key.MailboxId.Length > 1024 || export.Key.MailboxId.Any(char.IsControl) || export.Bytes is < 1 or > IStreamingMessageSourceExports.MaximumBytes ||
-            export.Sha256 is null || export.Sha256.Length != 64 || !export.Sha256.All(Uri.IsHexDigit)) throw new ArgumentException("Invalid source export receipt.");
-        string full = Path.GetFullPath(export.Path), name = Path.GetFileName(full);
-        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
-        if (!string.Equals(Path.GetDirectoryName(full), ExportDirectory, comparison) || name.Length != 44 || !name.StartsWith("message-", StringComparison.Ordinal) ||
-            !name.EndsWith(".eml", StringComparison.Ordinal) || !Guid.TryParseExact(name.AsSpan(8,32), "N", out _))
-            throw new ArgumentException("Only this profile's generated source exports can be inspected.");
+        string full = ExportFilePath(export);
         CheckDirectory(_profile); CheckDirectory(ExportDirectory);
         if ((File.GetAttributes(full) & FileAttributes.ReparsePoint) != 0) throw new IOException("Source inspection does not follow file links.");
         await using var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.Read, 8192, FileOptions.Asynchronous);
@@ -116,6 +111,18 @@ public sealed partial class FileMessageSourceExports : IMessageSourceExports, IS
         if (stream.ReadByte() != -1 || !string.Equals(Convert.ToHexString(SHA256.HashData(bytes)), export.Sha256, StringComparison.OrdinalIgnoreCase))
             throw new InvalidDataException("The source export changed or its checksum does not match. Existing preview was cleared.");
         return new(export.Key, bytes);
+    }
+    /// <summary>The receipt's full path, after checking that it names one of this profile's generated exports.</summary>
+    private string ExportFilePath(MessageSourceExport export)
+    {
+        if (export.Key.AccountId.Value == Guid.Empty || export.Key.Uid == 0 || export.Key.UidValidity == 0 || string.IsNullOrWhiteSpace(export.Key.MailboxId) || export.Key.MailboxId.Length > 1024 || export.Key.MailboxId.Any(char.IsControl) || export.Bytes is < 1 or > IStreamingMessageSourceExports.MaximumBytes ||
+            export.Sha256 is null || export.Sha256.Length != 64 || !export.Sha256.All(Uri.IsHexDigit) || string.IsNullOrEmpty(export.Path)) throw new ArgumentException("Invalid source export receipt.");
+        string full = Path.GetFullPath(export.Path), name = Path.GetFileName(full);
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        if (!string.Equals(Path.GetDirectoryName(full), ExportDirectory, comparison) || name.Length != 44 || !name.StartsWith("message-", StringComparison.Ordinal) ||
+            !name.EndsWith(".eml", StringComparison.Ordinal) || !Guid.TryParseExact(name.AsSpan(8,32), "N", out _))
+            throw new ArgumentException("Only this profile's generated source exports can be inspected.");
+        return full;
     }
     private static void CheckDirectory(string path)
     {

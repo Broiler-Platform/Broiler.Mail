@@ -65,7 +65,7 @@ public sealed partial class ComposerViewModel
             {
                 _journal.Changed -= OnStorageChanged; _journal = new DraftJournal(_draftStore, changed); _journal.Changed += OnStorageChanged;
                 _savedDrafts = changed.SavedDrafts ?? []; var snapshot = changed.Draft;
-                _seed = snapshot?.Draft; To = snapshot?.ToText ?? ""; Cc = snapshot?.CcText ?? ""; Bcc = snapshot?.BccText ?? "";
+                _seed = snapshot?.Draft; _forwardOffer = null; To =snapshot?.ToText ?? ""; Cc = snapshot?.CcText ?? ""; Bcc = snapshot?.BccText ?? "";
                 Subject = snapshot?.Draft.Subject ?? ""; PlainText = snapshot?.Draft.PlainText ?? "";
                 SubmissionState = snapshot?.State == DraftSubmissionState.Sending ? DraftSubmissionState.Unknown : snapshot?.State ?? DraftSubmissionState.Editing;
                 SentCopy = snapshot?.SentCopy == SentCopyState.Pending ? SentCopyState.Unknown : snapshot?.SentCopy ?? SentCopyState.NotRequested;

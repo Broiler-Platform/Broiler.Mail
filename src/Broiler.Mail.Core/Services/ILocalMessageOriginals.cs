@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   15
-// Annotated:        0/15
-// Exempt:           3
-// Human-reviewed:   0/15
+// Relevant units:   22
+// Annotated:        0/22
+// Exempt:           7
+// Human-reviewed:   0/22
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       15
+// Unverified:       22
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -28,6 +28,27 @@ public interface ILocalMessageOriginals
     Task<LocalOriginalContent> ReadImportAsync(LocalOriginalReceipt receipt, CancellationToken token = default);
 }
 public sealed record LocalOriginalContent(string FileName, byte[] Bytes);
+
+/// <summary>Size limits of local .eml files: opening and viewing reach the streamed-export limit, keeping a copy in the profile does not.</summary>
+public static class LocalOriginalLimits
+{
+    /// <summary>The largest local .eml file that can be opened, decoded and shown (12 MiB).</summary>
+    public const int OpenBytes = IStreamingMessageSourceExports.MaximumBytes;
+    /// <summary>The largest file whose copy can be kept in the profile (2 MiB).</summary>
+    public const int ImportBytes = MailMessageSource.MaximumBytes;
+    /// <summary>How many copies one profile keeps.</summary>
+    public const int ImportFiles = 16;
+    /// <summary>The combined size of all kept copies (4 MiB).</summary>
+    public const int ImportTotalBytes = 4 * 1024 * 1024;
+}
+
+/// <summary>Optional: opens a local original from a picked file's stream, for files without a path on this device.</summary>
+public interface ILocalOriginalStreamSource
+{
+    /// <summary>Reads at most <see cref="LocalOriginalLimits.OpenBytes"/> bytes without trusting the stream's length.
+    /// The extension is not checked, because document providers may show names without one.</summary>
+    Task<LocalOriginalContent> OpenStreamAsync(string displayName, Stream source, CancellationToken token = default);
+}
 public sealed record LocalOriginalReceipt(Guid Id, AccountId AccountId, string FileName, int Bytes, string Sha256, DateTimeOffset ImportedAt);
 
 /// <summary>Optional local MIME reading and explicit file management, independent of server message identities.</summary>
@@ -43,6 +64,13 @@ public sealed record LocalOriginalPreview(string Subject, string Sender, string 
     public const int MaximumHtmlCharacters = 128_000;
     public string? HtmlText { get; init; }
     public bool HtmlExceedsLimit { get; init; }
+    /// <summary>The first 20 To addresses, joined; null when there are none.</summary>
+    public string? To { get; init; }
+    /// <summary>The message's Date header, when it could be read.</summary>
+    public DateTimeOffset? Date { get; init; }
+    /// <summary>Regular attachment parts of the local original, at most 32; inline cid:/Content-Location images are not listed.</summary>
+    public IReadOnlyList<Broiler.Mail.Core.Messages.MailAttachmentDescriptor> Attachments { get; init; } = [];
+    public bool IsAttachmentListIncomplete { get; init; }
 }
 public sealed record LocalOriginalExport(string Path, int Bytes, string Sha256);
 public sealed record LocalOriginalRemoval(LocalOriginalReceipt Removed, string BackupDirectory);

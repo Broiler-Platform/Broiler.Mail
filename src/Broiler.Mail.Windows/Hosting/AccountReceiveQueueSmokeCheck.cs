@@ -61,7 +61,7 @@ internal static class AccountReceiveQueueSmokeCheck
                 if (saved is null || (await cache.ReadSummariesAsync(saved.Key, 10)).Single().Key.AccountId != account.Id) throw new InvalidOperationException("Published queue mixed account cache identities.");
             }
             if (model.Composer.DraftAccountId != original.Id || model.Accounts.SelectedId != second.Id || receiver.FirstCalls != 3 || receiver.SecondCalls != 1) throw new InvalidOperationException("Published explicit account retry changed the reader/draft or performed automatic work.");
-            settings.BackupDestination = directory + "-finished-backup"; await Pump(settings.BackupAsync(), dispatcher); if (!Directory.Exists(settings.BackupDestination)) throw new InvalidOperationException("Published queue did not release maintenance after completion.");
+            settings.BackupDestination = directory + "-finished-backup"; await Pump(settings.BackupAsync(), dispatcher); if (!Directory.Exists(directory + "-finished-backup")) throw new InvalidOperationException("Published queue did not release maintenance after completion.");
         }
         finally { model.AccountReceives?.Dispose(); model.Inbox.Dispose(); model.Composer.Dispose(); model.Settings.Storage?.Dispose(); dispatcher.Drain(); }
     }

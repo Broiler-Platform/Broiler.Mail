@@ -114,7 +114,7 @@ internal sealed record DemoOptions(DemoScenario Scenario, AppTheme Theme = AppTh
         {
             string fixture = Interactive ? "Demo" : $"Demo: {Name}";
             string scale = ScalePercent is { } percent ? $", simulated {percent.ToString(CultureInfo.InvariantCulture)}% scale" : "";
-            return $"Broiler.Mail — {fixture}{scale} (no network or saved data)";
+            return $"Broiler Mail — {fixture}{scale} (no network or saved data)";
         }
     }
     internal string InitialView => Scenario switch

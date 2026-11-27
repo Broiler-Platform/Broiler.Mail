@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   28
-// Annotated:        11/28
+// Relevant units:   30
+// Annotated:        11/30
 // Exempt:           4
-// Human-reviewed:   0/28
+// Human-reviewed:   0/30
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         10/9
 // Resource impact:  7/10 max
-// Unverified:       28
+// Unverified:       30
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -351,6 +351,7 @@ public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadSta
             var requested = summaries.Where(item => (item.SequenceNumber - 1) >= start && (item.SequenceNumber - 1) <= end).ToArray();
             if (requested.Length != end - start + 1 || requested.Any(item => item.Uid == 0 || item.Subject is null && item.From is null))
                 throw InboxChanged();
+            var withAttachments = await ReadAttachmentHintsAsync(client, requested, start + 1, end + 1, cancellationToken, token).ConfigureAwait(false);
             var messages = requested.OrderByDescending(item => item.Uid).Select(item => new MailMessageSummary
             {
                 Key = new(account.Id, mailboxId, validity, item.Uid),
@@ -358,11 +359,48 @@ public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadSta
                 Subject = MessageTextDecoder.Header(item.Subject, "(No subject)"),
                 ReceivedAt = item.InternalDate ?? item.EnvelopeDate,
                 IsRead = item.IsSeen, IsStarred = item.IsFlagged,
+                HasAttachments = withAttachments.Contains(item.Uid),
             }).ToArray();
             return new MailInboxPage(messages, start == 0 ? null : new(account.Id, validity, nextUid, count, start - 1) { MailboxId = mailboxId })
             { Mailbox = new(account.Id, mailboxId, validity) };
         }, cancellationToken);
     }
+
+    /// <summary>
+    /// Best-effort list-badge hint: one BODYSTRUCTURE FETCH for the page just received. Returns the UIDs whose
+    /// structure shows an attachment by the MIME parser's rule. A rejected command, a malformed or oversized reply,
+    /// a dropped connection or the hint's own time budget all give an empty set and never fail the receive;
+    /// only the caller's own cancellation propagates.
+    /// </summary>
+    private async Task<IReadOnlySet<uint>> ReadAttachmentHintsAsync(ImapProtocolClient client, IReadOnlyCollection<ImapMessageSummaryInfo> page,
+        int first, int last, CancellationToken caller, CancellationToken deadline)
+    {
+        using var budget = CancellationTokenSource.CreateLinkedTokenSource(deadline);
+        budget.CancelAfter(_timeout > TimeSpan.Zero && _timeout / 2 < AttachmentHintTimeout ? _timeout / 2 : AttachmentHintTimeout);
+        try
+        {
+            var hints = await client.FetchAttachmentHintsAsync(first, last, budget.Token).ConfigureAwait(false);
+            var expected = new Dictionary<int, uint>();
+            foreach (var item in page) expected.TryAdd(item.SequenceNumber, item.Uid);
+            var marked = new HashSet<uint>();
+            var seen = new HashSet<int>();
+            foreach (var hint in hints)
+            {
+                // A repeated or mismatched response proves nothing about either message.
+                if (!seen.Add(hint.SequenceNumber) || !expected.TryGetValue(hint.SequenceNumber, out uint uid) || uid != hint.Uid)
+                { marked.Remove(hint.Uid); continue; }
+                if (hint.HasAttachments == true) marked.Add(uid);
+            }
+            return marked;
+        }
+        catch (Exception error) when (!caller.IsCancellationRequested && error is ImapProtocolException or ImapCommandException or
+            IOException or SocketException or OperationCanceledException or ObjectDisposedException or InvalidOperationException)
+        {
+            return new HashSet<uint>();
+        }
+    }
+
+    private static readonly TimeSpan AttachmentHintTimeout = TimeSpan.FromSeconds(10);
 
     // Hairs-AI:           Origin=AI; Spec=ADR-0003; IP=Low; Security=High; Resources=7; Fingerprint=DF6BAB
     // Hairs-Falsified-If: a message larger than 2 MiB reaches MessageTextDecoder.DecodeAsync instead of being refused with the reading-limit error
@@ -414,14 +452,17 @@ public sealed partial class ImapMailReceiver : IMailFolderReceiver, IMailReadSta
         {
             var mailbox = await client.ExamineMailboxAsync(mailboxId, cancellation).ConfigureAwait(false);
             if (mailbox.UidValidity != message.UidValidity) throw InboxChanged();
-            long? expected = verifyComplete ? await client.GetMessageSizeAsync(message.Uid, cancellation).ConfigureAwait(false) : null;
+            // The reported size refuses an oversized message before its body is requested, for the reader as well, so the
+            // server never starts a literal this client would abandon. The literal's own announced length is still checked
+            // before any of it is read, in case the size changes in between.
+            long expected = await client.GetMessageSizeAsync(message.Uid, cancellation).ConfigureAwait(false);
             if (expected > maximum) throw MessageTooLarge(maximum);
-            using var stream = new MemoryStream(expected is { } length ? (int)length : 0);
+            using var stream = new MemoryStream(verifyComplete ? (int)expected : 0);
             await client.CopyBodyAsync(message.Uid, 0, maximum + 1, stream, cancellation, (transferred, total) =>
             {
                 if (transferred > maximum || total > maximum) throw MessageTooLarge(maximum);
             }).ConfigureAwait(false);
-            if (expected is not null && stream.Length != expected) throw new MailConnectionException("Original message source was incomplete or changed size; no complete source was accepted. Retry explicitly.");
+            if (verifyComplete && stream.Length != expected) throw new MailConnectionException("Original message source was incomplete or changed size; no complete source was accepted. Retry explicitly.");
             cancellation.ThrowIfCancellationRequested(); return new MailMessageSource(message, stream.ToArray());
         }, token);
     }

@@ -92,7 +92,7 @@ public sealed class MailboxSnapshotStorageTests
         using var dir = new TestDirectory(); string path = dir.File("mail.db"); var cache = new SqliteMailCache(path); var box = Box();
         await cache.SaveSummariesAsync(box, [Row(box, 1, "saved")], DateTimeOffset.UtcNow);
         await cache.SaveBodyAsync(box, new(Key(box, 1), "saved body") { EmbeddedImages = new Dictionary<string, MailEmbeddedImage> { ["fixture"] = new("fixture", "image/png", new byte[300000]) } });
-        Execute(path, "DROP TABLE mailbox_snapshots; DROP TABLE mailbox_snapshot_uids; PRAGMA user_version=4");
+        CacheSchemaFixture.DowngradeTo(path, 4);
         var limited = new SqliteMailCache(path, new FileInfo(path).Length); Assert.Null(await limited.ReadMailboxCheckpointAsync(box.AccountId, box.MailboxId)); Assert.Single(await limited.ReadSummariesAsync(box, 10));
         await Assert.ThrowsAsync<MailMailboxSnapshotUnavailableException>(() => limited.ApplyMailboxSnapshotAsync(new(box, [], DateTimeOffset.UtcNow))); Assert.Empty(Directory.GetFiles(dir.Root, "mail.db.schema-v4-*.backup"));
         var upgraded = new SqliteMailCache(path); Assert.Null(await upgraded.ReadMailboxCheckpointAsync(box.AccountId, box.MailboxId)); string backup = Assert.Single(Directory.GetFiles(dir.Root, "mail.db.schema-v4-*.backup")); Assert.Equal("saved body", (await upgraded.ReadBodyAsync(box, 1))!.PlainText);

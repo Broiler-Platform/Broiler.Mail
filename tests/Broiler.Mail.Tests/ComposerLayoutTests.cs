@@ -53,6 +53,51 @@ public sealed class ComposerLayoutTests
         }
     }
 
+    /// <summary>
+    /// UX-03.4: a full draft of four attachments, at the smallest window and with text at 200%, still leaves the body its
+    /// minimum height, keeps every draft action in the window, and lets each Remove be reached.
+    /// </summary>
+    [Theory]
+    [InlineData(1)]
+    [InlineData(2)]
+    public void FourAttachmentsKeepTheBodyAndEveryActionReachable(double textScale)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var fixture = new Fixture(640, 480, new FakeMailFilePicker());
+            Assert.True(fixture.Composer.StartNew());
+            for (int index = 0; index < DraftAttachment.MaximumCount; index++)
+            {
+                var add = fixture.Composer.AddAttachmentAsync(new ComposerAttachmentTests.TestReadableFile($"quarterly report part {index + 1}.pdf", new byte[1000 + index], length: 1000 + index));
+                fixture.Dispatcher.DrainUntil(() => add.IsCompleted);
+            }
+            fixture.Render();
+            Assert.Equal(DraftAttachment.MaximumCount, fixture.Composer.Attachments.Count);
+
+            Assert.True(fixture.Body.Bounds.Height >= 120, $"Body is {fixture.Body.Bounds.Height} DIP tall.");
+            foreach (var text in new[] { "Send", "Check draft", "Save draft", "Discard draft" })
+            {
+                var button = fixture.Button(text);
+                Assert.True(button.Bounds.Width > 0, $"{text} is not laid out.");
+                Assert.InRange(button.Bounds.Bottom, button.Bounds.Top, 480);
+            }
+            var removes = Descendants(fixture.Surface).OfType<StandardButton>().Where(button => button.Text == "Remove").ToArray();
+            Assert.Equal(DraftAttachment.MaximumCount, removes.Length);
+            var attach = fixture.Button("Attach file…");
+            Assert.False(attach.IsEnabled);
+            foreach (var remove in removes)
+            {
+                FocusNavigation.FocusAndReveal(fixture.Session, remove);
+                fixture.Render();
+                Assert.Same(remove, fixture.Session.FocusedElement);
+                Assert.True(remove.Bounds.Width > 0 && remove.Bounds.Top >= 0 && remove.Bounds.Bottom <= 480, $"Remove is at {remove.Bounds}.");
+            }
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
     [Fact]
     public void StatusAndAutosaveUpdatesKeepTheCaretAndSelection()
     {
@@ -320,7 +365,7 @@ public sealed class ComposerLayoutTests
     private sealed class Fixture : IDisposable
     {
 
-        public Fixture(int width, int height)
+        public Fixture(int width, int height, IMailFilePicker? files = null)
         {
             Account = TestDirectory.Profile();
             Dispatcher = new TestQueueDispatcher();
@@ -328,7 +373,7 @@ public sealed class ComposerLayoutTests
             Composer.SetAccount(Account);
             Inbox = new InboxViewModel(new TestMailReceiver(), Dispatcher);
             Inbox.SetAccount(Account);
-            Surface = (FormSurface)new ComposerView(Composer, Inbox).CreateContent();
+            Surface = (FormSurface)new ComposerView(Composer, Inbox, files: files).CreateContent();
             Session = new StandardUiSessionBuilder().WithDispatcher(Dispatcher).Build(new Host(width, height));
             Session.AddRoot(Surface);
             Render();

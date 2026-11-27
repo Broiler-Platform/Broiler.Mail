@@ -149,7 +149,7 @@ public sealed class FolderNavigationTests
                 : [SqliteMailCacheTests.Summary(mailbox, 1)], older is null
                     ? new(profile.Id, 7, 4, 3, 0) { MailboxId = name } : null) { Mailbox = mailbox });
         };
-        receiver.Body = key => { requestedBodies.Add(key); return Task.FromResult(new MailMessageBody(key, key.MailboxId)); };
+        receiver.Body = key => { requestedBodies.Add(key); return Task.FromResult(new MailMessageBody(key, key.MailboxId) { Attachments = key.Uid == 2 ? [new(2, "notes.txt", "text/plain", 5)] : [] }); };
         using var model = new InboxViewModel(receiver, new ImmediateUiDispatcher(), cache);
         model.SetAccount(account); await model.CacheLoadTask; await model.RefreshFoldersAsync();
         model.SelectFolder("Archive"); await model.CacheLoadTask; await model.ReceiveAsync(); await model.LoadOlderAsync();
@@ -160,6 +160,7 @@ public sealed class FolderNavigationTests
         model.SelectFolder("INBOX"); await model.CacheLoadTask; Assert.Empty(model.Messages);
         model.SelectFolder("Archive"); await model.CacheLoadTask;
         Assert.Equal(3, model.Messages.Count); Assert.All(model.Messages, message => Assert.True(message.IsBodyCached));
+        Assert.Equal(new uint[] { 2 }, model.Messages.Where(message => message.HasAttachments).Select(message => message.Key.Uid));
     }
 
     [Fact]

@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   18
 // Annotated:        9/18
-// Exempt:           10
+// Exempt:           11
 // Human-reviewed:   0/18
 // IP risk:          Low
 // Security risk:    Critical
@@ -38,11 +38,17 @@ internal sealed class WindowsUiHost(Direct2DWindow window, Func<nint> inputHandl
     private UiSession? _session;
 
     internal WindowsHostWindow? ActiveHostWindow { get; private set; }
+
+    /// <summary>
+    /// The main window's keyboard navigation, applied in broken-out windows too, so Tab moves between
+    /// fields, Enter never accepts a form by accident, and the shell's shortcuts work there as well.
+    /// </summary>
+    internal Func<UiInputEvent, bool>? KeyboardFilter { get; set; }
     internal IReadOnlyList<WindowsHostWindow> HostWindows => _hostWindows;
 
     public IUiHostWindow CreateHostWindow(UiHostWindowRequest request)
     {
-        var hostWindow = new WindowsHostWindow(window, request);
+        var hostWindow = new WindowsHostWindow(window, request, KeyboardFilter);
         _hostWindows.Add(hostWindow);
         ActiveHostWindow = hostWindow;
         hostWindow.Closed += (_, _) =>

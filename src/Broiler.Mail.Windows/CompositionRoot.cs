@@ -17,6 +17,7 @@
 
 using Broiler.Mail.Application;
 using Broiler.Mail.Infrastructure.Mail;
+using Broiler.Mail.Infrastructure.Mime;
 using Broiler.Mail.Infrastructure.Persistence;
 using Broiler.Mail.Windows.Services;
 using System.Diagnostics;
@@ -34,7 +35,7 @@ internal static class CompositionRoot
     public static string DefaultDataDirectory => Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "Broiler.Mail");
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=F33836
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=A4F6BD
     // Hairs-Falsified-If: the accounts, settings or drafts store is given a file outside the data directory passed in
     // Hairs-Human:        PENDING
     public static MailApplication CreateApplication(string? dataDirectory = null)
@@ -48,14 +49,18 @@ internal static class CompositionRoot
             cache.RepairAsync().GetAwaiter().GetResult();
             var accounts = new JsonAccountCollectionStore(profile.DirectoryPath);
             var storage = new ProfileStorageService(profile, cache);
+            var receiver = new ImapMailReceiver(credentials, new MutationIntentJournal(profile.CachePath));
+            // One instance is the source-export store, its receipt catalog and the verified reader the attachment reader prefers.
+            var sourceExports = new FileMessageSourceExports(profile.DirectoryPath, storage);
             return new MailApplication(
                 accounts,
                 new JsonSettingsStore(profile.SettingsPath),
-                new ImapMailReceiver(credentials, new MutationIntentJournal(profile.CachePath)),
+                receiver,
                 new SmtpMailSender(credentials), credentials,
                 new JsonDraftStore(profile.DraftsPath), new ImapSentCopyWriter(credentials),
                 new SmtpConnectionTester(credentials), cache, profile,
-                storage, OpenProfile, new AccountRemovalService(accounts, storage, credentials), new JsonRecipientBook(Path.Combine(profile.DirectoryPath, "recipients.json")), new JsonOfflineFolderStore(Path.Combine(profile.DirectoryPath, "offline-folders.json")), new JsonAccountNavigationStore(Path.Combine(profile.DirectoryPath, "account-navigation.json")), new FileMessageSourceExports(profile.DirectoryPath, storage));
+                storage, OpenProfile, new AccountRemovalService(accounts, storage, credentials), new JsonRecipientBook(Path.Combine(profile.DirectoryPath, "recipients.json")), new JsonOfflineFolderStore(Path.Combine(profile.DirectoryPath, "offline-folders.json")), new JsonAccountNavigationStore(Path.Combine(profile.DirectoryPath, "account-navigation.json")), sourceExports,
+                new MessageAttachmentReader(receiver, receiver, sourceExports, sourceExports));
         }
         catch { profile.Dispose(); throw; }
     }

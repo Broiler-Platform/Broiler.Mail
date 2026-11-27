@@ -61,9 +61,8 @@ public sealed class FolderNavigationViewTests
         var theme = StandardThemeTokens.Light.WithTextScale(scale);
         StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
         Assert.True(view.OpenSelected()); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
-        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
-        session.RenderFrame();
-        var button = Descendants(root).OfType<StandardButton>().Single(control => control.Text == (starred ? "Star message" : "Mark read"));
+        // The star sits beside the subject; Mark read is in the strip's More message actions popup.
+        var button = Descendants(root).OfType<StandardButton>().Single(control => control.Text == (starred ? "Star message" : "More message actions"));
         session.SetFocus(button);
         for (var parent = button.Parent; parent is not null; parent = parent.Parent)
         {
@@ -72,10 +71,26 @@ public sealed class FolderNavigationViewTests
             if (delta > 0) { scroll.ScrollBy(0, delta); session.RenderFrame(); }
         }
         Assert.True(button.IsEnabled); Assert.InRange(button.Bounds.Bottom, 1, 481);
-        button.Click(); Assert.True(model.IsChangingMessageFlags);
-        Assert.Equal("Cancel", Assert.IsType<StandardButton>(session.FocusedElement).Text);
+        if (starred)
+        {
+            Assert.IsType<SubjectRow>(button.Parent);
+            button.Click(); Assert.True(model.IsChangingMessageFlags);
+            Assert.Equal("Cancel", Assert.IsType<StandardButton>(session.FocusedElement).Text);
+        }
+        else
+        {
+            Assert.Equal("Mark read", ReaderMenus.Items(root, "More message actions").Single(item => item.Id == "read").Text);
+            ReaderMenus.Invoke(session, root, "More message actions", "Mark read", drain: false);
+            dispatcher.Drain();
+            // The popup gave focus back to its button, which stays usable while the change runs.
+            Assert.True(model.IsChangingMessageFlags || writer.Calls == 1);
+            Assert.True(session.FocusedElement?.CanFocus);
+        }
         dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
-        Assert.True(starred ? model.SelectedMessage!.IsStarred : model.SelectedMessage!.IsRead); Assert.Equal(starred ? "Unstar message" : "Mark unread", button.Text);
+        Assert.True(starred ? model.SelectedMessage!.IsStarred : model.SelectedMessage!.IsRead);
+        if (starred) Assert.Equal("Unstar message", button.Text);
+        else Assert.Equal("Mark unread", ReaderMenus.Items(root, "More message actions").Single(item => item.Id == "read").Text);
+        Assert.Null(session.ModalElement);
         Assert.Equal("Body", model.Body!.PlainText); Assert.Equal(1, writer.Calls);
     }
 
@@ -98,9 +113,15 @@ public sealed class FolderNavigationViewTests
         Assert.True(view.OpenSelected()); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
         var picker = Descendants(root).OfType<StandardComboBox>().Single(control => control.AccessibleName == "Move destination");
         Assert.DoesNotContain(model.MoveDestinations, folder => folder.MailboxId is "INBOX" or "Container");
-        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
-        session.RenderFrame();
-        var button = Descendants(root).OfType<StandardButton>().Single(control => control.Text == (action == "move" ? "Move message" : action == "archive" ? "Archive" : "Move to trash"));
+        // Archive and Trash are in the reader's strip; Move's Choose folder… opens the folder picker inline.
+        Assert.False(picker.CanFocus);
+        if (action == "move")
+        {
+            ReaderMenus.Invoke(session, root, "Move ▾", "Choose folder…");
+            session.RenderFrame();
+            Assert.Same(picker, session.FocusedElement);
+        }
+        var button = Descendants(root).OfType<StandardButton>().Single(control => control.Text == (action == "move" ? "Move message" : action == "archive" ? "Archive" : "Trash"));
         if (action == "move") { Assert.False(button.IsEnabled); picker.SelectedIndex = model.MoveDestinations.ToList().FindIndex(folder => folder.MailboxId == "Archive"); }
         session.SetFocus(button);
         for (var parent = button.Parent; parent is not null; parent = parent.Parent)
@@ -166,8 +187,8 @@ public sealed class FolderNavigationViewTests
         var theme = StandardThemeTokens.Light.WithTextScale(scale); StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
         view.OpenSelected(); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
         StandardButton Button(string text) => Descendants(root).OfType<StandardButton>().Single(button => button.Text == text);
-        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
-        session.RenderFrame();
+        // In the verified Trash, Delete permanently… takes Trash's place in the reader's strip.
+        Assert.Equal(UiVisibility.Collapsed, Button("Trash").Visibility);
         var request = Button("Delete permanently…"); request.Click(); session.RenderFrame();
         var keep = Button("Keep message"); var confirm = Button("Confirm permanent deletion");
         Assert.Same(keep, session.FocusedElement); Assert.False(confirm.IsDefault); Assert.True(model.CanConfirmPermanentDelete); Assert.Equal(0, deleter.Calls);
@@ -197,31 +218,40 @@ public sealed class FolderNavigationViewTests
         var theme = StandardThemeTokens.Light.WithTextScale(scale);
         StandardControlPaint.SetSessionTheme(session, theme); StandardThemeController.ApplyToSubtree(root, theme); session.RenderFrame();
         StandardButton Button(string text) => Descendants(root).OfType<StandardButton>().Single(button => button.Text == text);
-        Button("Search saved mail").Click(); session.RenderFrame();
-        Button("Search filters").Click(); session.RenderFrame();
-        var input = Descendants(root).OfType<Broiler.UI.Edit.Standard.StandardEdit>().Single(control => control.AccessibleName == "Search saved sender or subject");
-        Assert.Same(input, session.FocusedElement); input.Text = "needle";
-        var field = Descendants(root).OfType<StandardComboBox>().Single(control => control.AccessibleName == "Saved search header field");
-        field.SelectedIndex = 4; Assert.Equal(Broiler.Mail.Core.Services.MailHeaderSearchField.HeadersOrBodyPreview, model.SearchField);
-        var flags = Descendants(root).OfType<StandardComboBox>().Single(control => control.AccessibleName == "Saved search filter");
-        flags.SelectedIndex = 25; Assert.Equal(false, model.SearchReadState); Assert.Equal(false, model.SearchStarState); Assert.Equal(false, model.SearchBodyCached);
+        StandardButton Named(string name) => Descendants(root).OfType<StandardButton>().Single(button => button.AccessibleName == name);
+        // The toolbar button opens the search header at the top of the list, as a click focusing it would.
+        session.SetFocus(Button("Search saved mail")); Button("Search saved mail").Click(); session.RenderFrame();
+        var filters = Button("Filters"); Assert.Equal("Search filters", filters.AccessibleName); filters.Click(); session.RenderFrame();
+        var input = Descendants(root).OfType<Broiler.UI.Edit.Standard.StandardEdit>().Single(control => control.AccessibleName == "Saved mail search text");
+        Assert.Same(input, session.FocusedElement); Assert.Equal("Search mail…", input.PlaceholderText); input.Text = "needle";
+        var field = Descendants(root).OfType<StandardComboBox>().Single(control => control.AccessibleName == "Search in");
+        field.SelectedIndex = 1; field.SelectedIndex = 0; Assert.Equal(Broiler.Mail.Core.Services.MailSearchScope.Everywhere, model.SearchScope);
+        StandardComboBox Combo(string name) => Descendants(root).OfType<StandardComboBox>().Single(control => control.AccessibleName == name);
+        Combo("Read state").SelectedIndex = 1; Combo("Starred state").SelectedIndex = 2; Combo("Offline availability").SelectedIndex = 2;
+        Assert.Equal(false, model.SearchReadState); Assert.Equal(false, model.SearchStarState); Assert.Equal(false, model.SearchBodyCached);
         var dates = Descendants(root).OfType<StandardComboBox>().Single(control => control.AccessibleName == "Saved search received date");
         dates.SelectedIndex = 4; Assert.True(model.SearchUsesCustomDates); Assert.False(model.CanSearch);
         var range = Descendants(root).OfType<Broiler.UI.Edit.Standard.StandardEdit>().Single(control => control.AccessibleName?.StartsWith("UTC date range", StringComparison.Ordinal) == true);
         range.Text = "0001-01-01..9999-12-31"; Assert.True(model.CanSearch);
-        var find = Button("Find saved headers"); session.SetFocus(find); find.Click();
+        var find = Button("Search"); session.SetFocus(find); find.Click();
         Assert.True(model.IsBusy); Assert.Equal("Cancel", Assert.IsType<StandardButton>(session.FocusedElement).Text);
         dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame(); Assert.Equal(500, model.Messages.Count);
-        flags.SelectedIndex = 17; Assert.Equal(true, model.SearchReadState); Assert.Equal(false, model.SearchStarState); Assert.Equal(true, model.SearchBodyCached);
-        var next = Button("Next saved results"); Assert.True(next.IsEnabled);
+        Combo("Read state").SelectedIndex = 2; Combo("Offline availability").SelectedIndex = 1;
+        Assert.Equal(true, model.SearchReadState); Assert.Equal(false, model.SearchStarState); Assert.Equal(true, model.SearchBodyCached);
+        var next = Named("Next saved results"); Assert.True(next.IsEnabled);
         session.SetFocus(next); next.Click(); Assert.Equal("Cancel", Assert.IsType<StandardButton>(session.FocusedElement).Text);
         dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame(); Assert.Single(model.Messages); Assert.False(next.IsEnabled);
         Assert.False(Button("Receive mail").IsEnabled); Assert.True(session.FocusedElement?.CanFocus);
         Assert.True(Descendants(root).OfType<StandardListView>().Single().Bounds.Height >= 40);
-        var previous = Button("Previous saved results"); Assert.True(previous.IsEnabled); session.SetFocus(previous); previous.Click();
+        var previous = Named("Previous saved results"); Assert.True(previous.IsEnabled); session.SetFocus(previous); previous.Click();
         Assert.Equal("Cancel", Assert.IsType<StandardButton>(session.FocusedElement).Text);
         dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame(); Assert.Equal(500, model.Messages.Count); Assert.False(previous.IsEnabled);
-        Button("Close search").Click(); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
+        // The results strip keeps the pages and the way out in view while browsing them, inside the list pane.
+        var strip = Descendants(root).OfType<Broiler.UI.Toolbar.Standard.StandardToolbar>().Single(panel => panel.AccessibleName == "Saved search results");
+        Assert.Equal(UiVisibility.Visible, strip.Visibility);
+        Assert.True(strip.IsDescendantOf(Descendants(root).OfType<StandardListView>().Single().Parent!));
+        Button("Exit search").Click(); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame();
+        Assert.Equal(UiVisibility.Collapsed, strip.Visibility);
         Assert.False(model.IsSearchActive); Assert.Same(Button("Search saved mail"), session.FocusedElement); Assert.Equal(0, receiver.Calls);
     }
 
@@ -244,11 +274,12 @@ public sealed class FolderNavigationViewTests
         view.OpenSelected(); dispatcher.DrainUntil(() => !model.IsBusy); session.RenderFrame(); var body = model.Body;
         var details = Descendants(root).OfType<Broiler.UI.RichEdit.Standard.StandardRichEdit>().Single(control => control.AccessibleName == "Sender and recipients");
         Assert.DoesNotContain("Message-ID:", details.GetPlainText());
-        Descendants(root).OfType<StandardButton>().Single(b => b.Text == "More message actions").Click();
-        session.RenderFrame();
-        var show = Descendants(root).OfType<StandardButton>().Single(button => button.Text == "Show parsed headers"); show.Click(); session.RenderFrame();
+        Assert.False(ReaderMenus.Items(root, "More message actions").Single(item => item.Id == "headers").IsChecked);
+        ReaderMenus.Invoke(session, root, "More message actions", "Show parsed headers"); session.RenderFrame();
         Assert.Contains("Message-ID: fixture@example.test", details.GetPlainText()); Assert.Same(body, model.Body); Assert.Equal(0, receiver.Calls);
-        show.Click(); Assert.DoesNotContain("Message-ID:", details.GetPlainText());
+        Assert.Equal("Parsed message headers", details.AccessibleName);
+        Assert.True(ReaderMenus.Items(root, "More message actions").Single(item => item.Id == "headers").IsChecked);
+        ReaderMenus.Invoke(session, root, "More message actions", "Show parsed headers"); Assert.DoesNotContain("Message-ID:", details.GetPlainText());
     }
 
     private static IEnumerable<UiElement> Descendants(UiElement parent)

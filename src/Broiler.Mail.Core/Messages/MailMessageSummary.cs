@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   1
 // Annotated:        1/1
-// Exempt:           7
+// Exempt:           8
 // Human-reviewed:   0/1
 // IP risk:          None
 // Security risk:    Medium
@@ -28,4 +28,6 @@ public sealed record MailMessageSummary
     public bool IsStarred { get; init; }
     public bool IsRead { get; init; }
     public bool IsBodyCached { get; init; }
+    /// <summary>True when a decoded or downloaded body (or a later structure hint) recorded at least one regular attachment; false means none or unknown.</summary>
+    public bool HasAttachments { get; init; }
 }

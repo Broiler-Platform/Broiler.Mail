@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   12
-// Annotated:        12/12
+// Relevant units:   13
+// Annotated:        12/13
 // Exempt:           3
-// Human-reviewed:   0/12
+// Human-reviewed:   0/13
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         11/8
 // Resource impact:  3/10 max
-// Unverified:       12
+// Unverified:       13
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -141,6 +141,16 @@ public static class MailComposition
         catch (FormatException) { throw new ArgumentException("Enter valid email addresses separated by commas."); }
         if (addresses.Count > MaximumRecipients) throw new ArgumentException("Use at most 100 recipients.");
         return addresses.Select(address => address.Address).Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+    }
+
+    /// <summary>One recipient as RFC 5322 mailbox text: <c>"Name" &lt;address&gt;</c>, or the bare address when there is no name.</summary>
+    public static string FormatMailbox(string address, string? name)
+    {
+        string display = new((name ?? "").Where(c => !char.IsControl(c)).ToArray());
+        display = display.Trim();
+        if (display.Length == 0) return address;
+        // A quoted-string keeps commas, semicolons and other specials from splitting the recipient list (RFC 5322 3.2.4).
+        return "\"" + display.Replace("\\", "\\\\", StringComparison.Ordinal).Replace("\"", "\\\"", StringComparison.Ordinal) + "\" <" + address + ">";
     }
 
     // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=2; Fingerprint=7298F7

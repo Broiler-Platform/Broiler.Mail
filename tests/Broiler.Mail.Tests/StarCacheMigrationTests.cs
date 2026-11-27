@@ -13,7 +13,7 @@ public sealed class StarCacheMigrationTests
         var cache = new SqliteMailCache(path); var mailbox = new MailboxKey(TestDirectory.Profile().Id, "Archive", 7);
         var summary = SqliteMailCacheTests.Summary(mailbox, 1) with { IsRead = true }; var time = DateTimeOffset.UtcNow.AddDays(-1);
         await cache.SaveSummariesAsync(mailbox, [summary], time); await cache.SaveBodyAsync(mailbox, new(summary.Key, "Preserved body"));
-        Execute(path, "DROP TABLE mailbox_snapshots; DROP TABLE mailbox_snapshot_uids; DROP TRIGGER search_insert; DROP TRIGGER search_update; DROP TRIGGER search_delete; DROP TABLE cache_search_state; ALTER TABLE messages DROP COLUMN is_starred; PRAGMA user_version=1;");
+        CacheSchemaFixture.DowngradeTo(path, 1);
         byte[] before = File.ReadAllBytes(path); SqliteMailCache.ValidateSnapshot(path); Assert.Equal(before, File.ReadAllBytes(path));
         string legacyBackup = directory.File("legacy-backup.db"); File.Copy(path, legacyBackup);
         Assert.False(Assert.Single(await cache.ReadSummariesAsync(mailbox, 1)).IsStarred);
@@ -22,7 +22,7 @@ public sealed class StarCacheMigrationTests
         SqliteMailCache.ValidateSnapshot(migrationBackup);
         Assert.Equal(1L, Scalar(migrationBackup, "PRAGMA user_version"));
         Assert.Equal(1L, Scalar(migrationBackup, "SELECT count(*) FROM messages WHERE body IS NOT NULL AND is_read=1"));
-        Assert.Equal(5L, Scalar(path, "PRAGMA user_version")); Assert.Equal(time, (await cache.GetLatestMailboxAsync(mailbox.AccountId, "Archive"))!.ReceivedAt);
+        Assert.Equal(6L, Scalar(path, "PRAGMA user_version")); Assert.Equal(time, (await cache.GetLatestMailboxAsync(mailbox.AccountId, "Archive"))!.ReceivedAt);
         Assert.Equal("Preserved body", (await cache.ReadBodyAsync(mailbox, 1))!.PlainText);
         await cache.UpdateStarStateAsync(summary.Key, true);
         var reopened = new SqliteMailCache(path); var saved = Assert.Single(await reopened.ReadSummariesAsync(mailbox, 1));
