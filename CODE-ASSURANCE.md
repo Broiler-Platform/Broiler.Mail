@@ -16,24 +16,24 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Files scanned | 265 |
 | Files not covered | 0 |
 | Files carrying an annotation | 66 |
-| Code units | 4696 |
-| Relevant | 3045 |
-| Exempt by predicate | 1651 |
-| Annotated | 365 of 3045 (12%) |
-| Human reviewed | 0 of 3045 (0%) |
-| Unverified | 3045 |
+| Code units | 4704 |
+| Relevant | 3049 |
+| Exempt by predicate | 1655 |
+| Annotated | 365 of 3049 (12%) |
+| Human reviewed | 0 of 3049 (0%) |
+| Unverified | 3049 |
 
 ## Review states
 
 | State | Count |
 |---|---:|
-| NEW | 2680 |
+| NEW | 2684 |
 | AI_ASSESSED | 0 |
 | HUMAN_PENDING | 365 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
-| EXEMPT | 1651 |
+| EXEMPT | 1655 |
 
 ## IP risk
 
@@ -44,7 +44,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Medium | 0 |
 | High | 0 |
 | Unknown | 0 |
-| *not annotated* | 2680 |
+| *not annotated* | 2684 |
 
 ## Security risk
 
@@ -55,7 +55,7 @@ and the figures below are the measurement of how far from that claim the per-uni
 | Medium | 94 |
 | High | 156 |
 | Critical | 9 |
-| *not annotated* | 2680 |
+| *not annotated* | 2684 |
 
 ## Resource impact
 
@@ -258,13 +258,13 @@ that the rule is reviewable in one place rather than in several hundred.
 
 | Case | Units |
 |---|---:|
-| TrivialPropertyOrAccessor | 431 |
+| TrivialPropertyOrAccessor | 433 |
 | ParameterAssigningConstructor | 9 |
 | TrivialExpressionBodiedMember | 136 |
 | CompilerSuppliedRecordOrEnumMember | 152 |
 | DelegatingOverrideOrOperator | 2 |
 | InsideAssemblyMarker | 0 |
-| FieldDeclaringStorage | 707 |
+| FieldDeclaringStorage | 709 |
 | EnumMemberOfADeclaredVocabulary | 214 |
 | DeclaredInSource | 0 |
 
@@ -289,7 +289,7 @@ through a `<Compile Include>` it states, is left out of the record.
 ## Change detection
 
 `hairs.manifest.json` lists **every** code unit in the 4 covered assemblies -
-4696 of them, exempt and relevant alike - with the fingerprint of its declaration.
+4704 of them, exempt and relevant alike - with the fingerprint of its declaration.
 This manifest is a change-detection record, not a review. A unit listed there is watched, not reviewed:
 the entry records what the declaration's tokens hashed to when the generator last ran, and
 nothing else. What the manifest adds is that a unit the exemption predicate treats as

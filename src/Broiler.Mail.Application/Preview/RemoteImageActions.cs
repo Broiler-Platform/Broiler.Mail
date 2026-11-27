@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   11
-// Annotated:        0/11
-// Exempt:           14
-// Human-reviewed:   0/11
+// Relevant units:   15
+// Annotated:        0/15
+// Exempt:           17
+// Human-reviewed:   0/15
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       11
+// Unverified:       15
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -47,6 +47,8 @@ public sealed class RemoteImageActions : UiElement
     private readonly StandardButton _block = new() { Text = "Block again", AccessibleName = "Block remote images again" };
     private readonly StandardButton _learnMore = new() { Text = "Learn more", AccessibleName = "Learn more about remote images" };
     private readonly ToolbarDisclosure _details;
+    // The summary's cell in the row: it wraps the sentence beside the buttons instead of moving them below.
+    private readonly WidthLimit _summaryCell;
     private bool _htmlVisible = true;
     private bool _attempted;
 
@@ -56,7 +58,8 @@ public sealed class RemoteImageActions : UiElement
         _initialStatus = images.RemoteImages.Status;
         _details = new ToolbarDisclosure(_learnMore);
         _details.Content.AddChild(new StandardLabel { Text = PrivacyDetails, UseMnemonic = false, Wrapping = UiTextWrapping.Wrap });
-        foreach (var element in new UiElement[] { _summary, _load, _cancel, _block, _learnMore }) _row.AddChild(element);
+        _summaryCell = new WidthLimit(_summary);
+        foreach (var element in new UiElement[] { _summaryCell, _load, _cancel, _block, _learnMore }) _row.AddChild(element);
         _panel.AddChild(_row); _panel.AddChild(_details); AddChild(_panel);
         _load.Clicked += async (_, _) =>
         {
@@ -138,11 +141,42 @@ public sealed class RemoteImageActions : UiElement
         AvailabilityChanged?.Invoke(this, EventArgs.Empty);
     }
 
-    protected override BSize MeasureCore(BSize availableSize) => _panel.Measure(availableSize);
+    // The summary takes the width the shown buttons leave, so the banner stays one row whatever the font's
+    // width; where that would leave it under 40 % of the row, it wraps as one item, as in a very narrow pane.
+    protected override BSize MeasureCore(BSize availableSize)
+    {
+        _summaryCell.Limit = double.PositiveInfinity;
+        if (double.IsFinite(availableSize.Width))
+        {
+            var unbounded = new BSize(double.PositiveInfinity, double.PositiveInfinity);
+            double used = 2 * _row.Padding;
+            foreach (var child in _row.Children)
+                if (child != _summaryCell && child.Visibility != UiVisibility.Collapsed) used += child.Measure(unbounded).Width + _row.Spacing;
+            double left = availableSize.Width - used;
+            if (left >= availableSize.Width * 0.4) _summaryCell.Limit = left;
+        }
+        return _panel.Measure(availableSize);
+    }
+
     protected override void ArrangeCore(BRect finalRect) => _panel.Arrange(finalRect);
     protected override void Dispose(bool disposing)
     {
         if (disposing) { _images.RemoteImagesChanged -= OnChanged; _images.CancelRemoteImages(); }
         base.Dispose(disposing);
+    }
+
+    /// <summary>Measures its content no wider than <see cref="Limit"/>.</summary>
+    private sealed class WidthLimit : UiElement
+    {
+        private readonly UiElement _content;
+
+        public WidthLimit(UiElement content) { _content = content; AddChild(content); }
+
+        public double Limit { get; set; } = double.PositiveInfinity;
+
+        protected override BSize MeasureCore(BSize availableSize) =>
+            _content.Measure(new BSize(Math.Min(availableSize.Width, Limit), availableSize.Height));
+
+        protected override void ArrangeCore(BRect finalRect) => _content.Arrange(finalRect);
     }
 }

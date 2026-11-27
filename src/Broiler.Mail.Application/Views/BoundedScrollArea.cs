@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   7
 // Annotated:        0/7
-// Exempt:           10
+// Exempt:           11
 // Human-reviewed:   0/7
 // IP risk:          not assessed
 // Security risk:    not assessed
@@ -88,6 +88,13 @@ public sealed class BoundedScrollArea : UiElement
     /// </summary>
     public bool KeepsLinesWhole { get; init; }
 
+    /// <summary>
+    /// With <see cref="MinimumRemaining"/>, the area leaves that minimum even within its share: its share is
+    /// then at most the space less the minimum, so content under the share does not take what is kept below
+    /// it. Without it, the minimum applies only once the content passes the share.
+    /// </summary>
+    public bool KeepsMinimumWithinShare { get; init; }
+
     /// <summary>The scroll view that scrolls the content once it passes the cap.</summary>
     public StandardScrollView Scroll => _scroll;
 
@@ -125,6 +132,8 @@ public sealed class BoundedScrollArea : UiElement
         PaneWidth = availableSize.Width;
         double natural = NaturalHeight = _content.Measure(new BSize(availableSize.Width, double.PositiveInfinity)).Height;
         double cap = double.IsFinite(availableSize.Height) ? availableSize.Height * MaximumFraction : double.PositiveInfinity;
+        if (KeepsMinimumWithinShare && MinimumRemaining is not null && double.IsFinite(cap))
+            cap = Math.Min(cap, Math.Max(0, availableSize.Height - MinimumRemaining()));
         double height = Math.Min(natural, cap);
         _scroll.Measure(new BSize(availableSize.Width, height));
         if (natural > cap && Rows is not null && MaximumFraction < 1)
@@ -161,7 +170,8 @@ public sealed class BoundedScrollArea : UiElement
         if (start >= cap && !(keepsLine && next == 0)) return cap;
         double end = lineHeight > 0 ? start + (Math.Floor(Math.Max(0, cap - start) / lineHeight) * lineHeight) : start;
         if (keepsLine) return Math.Max(end, start + lineHeight);
-        return end > cap / 2 ? end : cap;
+        // Ending above the first row would show none of it.
+        return end > cap / 2 && end > rows[0].Start ? end : cap;
     }
 
     protected override void ArrangeCore(BRect finalRect)

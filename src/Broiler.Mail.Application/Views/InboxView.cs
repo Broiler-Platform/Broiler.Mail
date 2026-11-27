@@ -126,7 +126,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
     public bool ShowsPaneOf(InboxProblemScope scope) => _layout is not { IsCompact: true } layout
         || (scope == InboxProblemScope.Message ? layout.ShowsReaderOnly : !layout.ShowsReaderOnly);
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=2611B8
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=7; Fingerprint=ADA6E4
     // Hairs-Falsified-If: selecting another message leaves the HTML preview window of the previous body open
     // Hairs-Human:        PENDING
     public UiElement CreateContent()
@@ -378,6 +378,7 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
             Rows = NoticeRows,
             MinimumRemaining = () => listRowsKept * list.EffectiveItemHeight,
             KeepsLinesWhole = true,
+            KeepsMinimumWithinShare = true,
         };
         keptListHeight = () => listRowsKept * list.EffectiveItemHeight;
         var listNotice = new FirstTakesRestStack();
@@ -1464,6 +1465,8 @@ public sealed class InboxView(InboxViewModel model, IInlineHtmlPreviewHost? html
         {
             // The compact reader keeps them in its header; beside the list, the header area places them as it is measured.
             if (layout.IsCompact) MoveCommands(pin: false);
+            // Back to inbox leads the header of the reader shown alone, however that mode was entered.
+            headerStack.MoveChild(backRow, layout.ShowsReaderOnly ? 0 : 3);
             back.Visibility = layout.ShowsReaderOnly ? UiVisibility.Visible : UiVisibility.Collapsed;
             backRow.Visibility = back.Visibility;
             FocusVisiblePane();

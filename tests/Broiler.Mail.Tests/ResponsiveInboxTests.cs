@@ -1722,7 +1722,6 @@ public sealed class ResponsiveInboxTests
     [InlineData(640, 520, 1.0, "plain", false, true)]
     [InlineData(640, 540, 1.0, "plain", false, true)]
     [InlineData(640, 640, 1.0, "long", false, true)]
-    [InlineData(640, 552, 1.25, "html", false, true)]
     [InlineData(640, 480, 2.0, "plain", false, false)]
     [InlineData(640, 640, 2.0, "long", false, false)]
     [InlineData(700, 480, 2.0, "plain", false, false)]
@@ -1794,6 +1793,46 @@ public sealed class ResponsiveInboxTests
                 Assert.True(shown.Bottom >= subject.Bounds.Top + BTextMeasurer.GetLineHeight(((StandardLabel)subject).Font) - 0.5, $"{where}: the subject at {subject.Bounds} is cut.");
                 Assert.True(reader.Text.Bounds.Height >= reader.Text.HeightOfLines(2) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
             }
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>
+    /// In the compact reader, the header shows Reply past its share exactly where that leaves the text six
+    /// lines, and scrolls it away one pixel shorter. The window is made from where the rows were laid out, as
+    /// how the shell's toolbar wraps, and so where the reader starts, depends on the platform's fonts. The gap
+    /// below Reply's row may take from the six lines, so it is not counted.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 552, 1.25, "html")]
+    [InlineData(640, 480, 1.0, "plain")]
+    public async Task TheCompactReaderShowsReplyExactlyWhereThatLeavesTheTextSixLines(int width, int height, double textScale, string message)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(width, height, message);
+            var header = reader.Header;
+            var reply = reader.Button("Reply");
+            var row = Assert.IsType<StandardToolbar>(reply.Parent);
+            double needed = row.Bounds.Bottom - header.Scroll.ContentBounds.Top + reader.Text.HeightOfLines(6);
+            int tall = height + (int)Math.Ceiling(needed - header.AvailableHeight);
+            reader.Resize(width, tall);
+            string where = $"At {width}x{tall}, text {textScale:P0}, the header shows {header.Scroll.ContentBounds} of {header.AvailableHeight}";
+            Assert.True(reader.Layout.ShowsReaderOnly, where);
+            // Reply's row is past the share, so the six lines, not the share, decide whether it is shown.
+            Assert.True(row.Bounds.Bottom - header.Scroll.ContentBounds.Top > (header.AvailableHeight * header.MaximumFraction) + 0.5, $"{where}: Reply's row ends at {row.Bounds.Bottom}, within the share.");
+            Assert.True(reply.Bounds.Bottom <= header.Scroll.ContentBounds.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
+            AssertEndsBetweenRows(header, where);
+            AssertLineBetweenHeaderAndText(reader, where);
+
+            reader.Resize(width, tall - 1);
+            where = $"At {width}x{tall - 1}, text {textScale:P0}, the header shows {header.Scroll.ContentBounds} of {header.AvailableHeight}";
+            Assert.False(reply.Bounds.Bottom <= header.Scroll.ContentBounds.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
+            Assert.True(header.Scroll.HasVerticalScrollbar, $"{where}: the header does not scroll.");
+            AssertEndsBetweenRows(header, where);
+            AssertLineBetweenHeaderAndText(reader, where);
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
@@ -2191,11 +2230,14 @@ public sealed class ResponsiveInboxTests
 
     /// <summary>
     /// Each row of the header is on screen whole, or scrolled below the header whole, or, for the subject,
-    /// the sender and recipients, and the date, cut between two of its lines.
+    /// the sender and recipients, and the date, cut between two of its lines. A row so near the top that
+    /// ending above it would leave less than half the share, such as Back to inbox in a very short window,
+    /// may be cut exactly at the share, as <see cref="BoundedScrollArea.Rows"/> says.
     /// </summary>
     private static void AssertEndsBetweenRows(BoundedScrollArea header, string where)
     {
         BRect shown = header.Scroll.ContentBounds;
+        double share = header.AvailableHeight * header.MaximumFraction;
         foreach (var row in HeaderRows(header))
         {
             double line = row switch
@@ -2209,6 +2251,7 @@ public sealed class ResponsiveInboxTests
             if (line > 0)
                 Assert.True(IsWhole(row.Bounds.Height / line), $"{where}: the {row.GetType().Name} at {row.Bounds} is not lines of {line}.");
             if (row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5) continue;
+            if (row.Bounds.Top - shown.Top <= (share / 2) + 0.5 && Math.Abs(shown.Height - share) < 0.5) continue;
             Assert.True(line > 0 && IsWhole((shown.Bottom - row.Bounds.Top) / line), $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
         }
 

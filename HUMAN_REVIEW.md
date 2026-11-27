@@ -5,7 +5,7 @@ GENERATED - DO NOT EDIT MANUALLY. Regenerate with
 `CODE-ASSURANCE.md`, `hairs.manifest.json` and every generated source header from the
 product tree.
 
-> **Status: PENDING.** Human-reviewed: 0 of 3045 relevant units. `dotnet tool run hairs -- assurance check --root . --release`
+> **Status: PENDING.** Human-reviewed: 0 of 3049 relevant units. `dotnet tool run hairs -- assurance check --root . --release`
 > fails while any relevant unit is without a decision bound to its current fingerprint.
 
 ## 1. How To Use This File
@@ -50,12 +50,12 @@ did, which is the narrower and the more useful of the two.
 | Metric | Value |
 |---|---:|
 | Files scanned | 265 |
-| Code units | 4696 |
-| Relevant | 3045 |
-| Exempt | 1651 |
-| Assessed | 365 of 3045 (12%) |
-| Human reviewed | 0 of 3045 (0%) |
-| Unverified | 3045 |
+| Code units | 4704 |
+| Relevant | 3049 |
+| Exempt | 1655 |
+| Assessed | 365 of 3049 (12%) |
+| Human reviewed | 0 of 3049 (0%) |
+| Unverified | 3049 |
 | Aliases naming a decision | 0 |
 
 ## 4. Review States
@@ -65,13 +65,13 @@ annotations and the current fingerprints; nothing stores them.
 
 | State | Units |
 |---|---:|
-| NEW | 2680 |
+| NEW | 2684 |
 | AI_ASSESSED | 0 |
 | HUMAN_PENDING | 365 |
 | HUMAN_APPROVED_PENDING_FINGERPRINT | 0 |
 | VERIFIED | 0 |
 | STALE | 0 |
-| EXEMPT | 1651 |
+| EXEMPT | 1655 |
 
 ## 5. Aliases In The Tree
 
@@ -102,7 +102,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Preview/OriginalSourceText.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/PlainTextMessagePreview.cs` | 2 | 2 | 0 | 2 | Low | Medium | 2/0 |
 | `src/Broiler.Mail.Application/Preview/ReaderBodyText.cs` | 8 | 8 | 0 | 8 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Preview/RemoteImageActions.cs` | 25 | 11 | 14 | 11 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Preview/RemoteImageActions.cs` | 32 | 15 | 17 | 15 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/SavedSourceExportPicker.cs` | 28 | 15 | 13 | 15 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Preview/ScrollableMessageText.cs` | 33 | 22 | 11 | 22 | Low | Medium | 3/0 |
 | `src/Broiler.Mail.Application/ViewModels/AccountProfileViewModel.cs` | 92 | 35 | 57 | 35 | Low | High | 14/9 |
@@ -135,7 +135,7 @@ relevant units in a state that blocks a release.
 | `src/Broiler.Mail.Application/Views/AppearanceController.cs` | 13 | 5 | 8 | 5 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AppearancePolicy.cs` | 2 | 2 | 0 | 2 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/AttachmentGlyph.cs` | 4 | 4 | 0 | 4 | not assessed | not assessed | 0/0 |
-| `src/Broiler.Mail.Application/Views/BoundedScrollArea.cs` | 17 | 7 | 10 | 7 | not assessed | not assessed | 0/0 |
+| `src/Broiler.Mail.Application/Views/BoundedScrollArea.cs` | 18 | 7 | 11 | 7 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ComposerAttachments.cs` | 43 | 23 | 20 | 23 | not assessed | not assessed | 0/0 |
 | `src/Broiler.Mail.Application/Views/ComposerView.cs` | 11 | 4 | 7 | 4 | Low | High | 2/2 |
 | `src/Broiler.Mail.Application/Views/ConfigurationForm.cs` | 8 | 8 | 0 | 8 | Low | Low | 2/0 |
