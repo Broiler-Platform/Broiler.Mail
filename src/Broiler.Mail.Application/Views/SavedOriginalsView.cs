@@ -65,7 +65,7 @@ public sealed class SavedOriginalsView : UiElement
     private AccountProfile? _account; private bool _active; private int _generation; private CancellationTokenSource? _operation;
     private IReadOnlyList<SavedMessageSourceExport> _rows = [];
     // The receipt whose file the last Verify checked; Save copy needs it to be the selected one.
-    private MessageSourceExport? _verified;
+    private MessageSourceExport? _checkedExport;
     private SavedMessageSourceExport? _pendingRemoval;
     public IReadOnlyList<SavedMessageSourceExport> Exports => _rows;
     public LocalOriginalsView LocalImports { get; }
@@ -112,7 +112,7 @@ public sealed class SavedOriginalsView : UiElement
     private void ClearDetails()
     {
         foreach (var child in _details.Children.ToArray()) { _details.RemoveChild(child); child.Dispose(); }
-        _identity.SetPlainText(""); _verified = null;
+        _identity.SetPlainText(""); _checkedExport = null;
     }
     private static UiComboBoxItem Item(SavedMessageSourceExport row) => new(row.Export.Path,
         $"{row.SavedAt:O} · {row.Export.Key.MailboxId} · epoch {row.Export.Key.UidValidity}/UID {row.Export.Key.Uid} · {row.Export.Bytes} bytes");
@@ -171,7 +171,7 @@ public sealed class SavedOriginalsView : UiElement
                     bool Current() => !IsDisposed && _active && generation == _generation && _account == account && Selected()?.Export == verified;
                     _identity.SetPlainText($"{account.DisplayName} <{account.EmailAddress}>\nAccount {account.Id}\nFolder {verified.Key.MailboxId}; UIDVALIDITY {verified.Key.UidValidity}; UID {verified.Key.Uid}\n{verified.Path}\n{verified.Bytes} bytes; SHA-256 {verified.Sha256}");
                     var inspection = new MessageSourceInspection(verified.Key,_reader,Current); inspection.SetExport(verified); _details.AddChild(inspection);
-                    var attachments = new MessageAttachmentActions(verified.Key,_attachments,Current); attachments.SetExport(verified); _details.AddChild(attachments); _verified = verified;
+                    var attachments = new MessageAttachmentActions(verified.Key,_attachments,Current); attachments.SetExport(verified); _details.AddChild(attachments); _checkedExport = verified;
                     _feedback.Set("Original verified locally. Show source or read attachments explicitly; nothing was downloaded or opened.",FeedbackKind.Success);
                 }
                 else { _rows = []; _picker.SetItems([]); _picker.SelectedIndex = -1; _feedback.Set(error ?? "Saved-original operation canceled. List again to retry.",FeedbackKind.Information); }
@@ -243,12 +243,12 @@ public sealed class SavedOriginalsView : UiElement
     public async Task SaveCopyAsync(SavedMessageSourceExport row)
     {
         if (IsDisposed || IsBusy || !_active || _account is not {} account || _reader is null || _pendingRemoval is not null || !CanPickSave ||
-            _verified is not {} verified || Selected() != row || row.Export != verified) return;
+            _checkedExport is not {} verified || Selected() != row || row.Export != verified) return;
         int generation = _generation;
         var pick = await Files.PickSaveFileAsync(new(MailFilePurpose.SaveMessage,"Save copy as .eml")
         { Types = [MailFileType.Email], SuggestedFileName = $"Saved original UID {row.Export.Key.Uid}.eml", AcceptText = "Save" });
         // A result that arrives after the selection or account changed is dropped; nothing was written yet.
-        if (IsDisposed || generation != _generation || !_active || _account != account || IsBusy || _pendingRemoval is not null || Selected() != row || _verified != verified) return;
+        if (IsDisposed || generation != _generation || !_active || _account != account || IsBusy || _pendingRemoval is not null || Selected() != row || _checkedExport != verified) return;
         switch (pick.Status)
         {
             case MailFilePickStatus.Picked when pick.Item is {} target: await WriteCopyAsync(row,target,account,generation); return;
@@ -300,7 +300,7 @@ public sealed class SavedOriginalsView : UiElement
         if (IsDisposed) return; bool available = _active && _account is not null && _catalog is not null && _reader is not null, idle = available && !IsBusy && _pendingRemoval is null;
         _list.IsEnabled = idle; _picker.IsEnabled = idle && _rows.Count > 0; _use.IsEnabled = idle && Selected() is not null; _cancel.IsEnabled = IsBusy;
         _remove.IsEnabled = idle && _maintenance is not null && Selected() is not null;
-        _saveCopy.IsEnabled = idle && CanPickSave && _verified is {} verified && Selected()?.Export == verified;
+        _saveCopy.IsEnabled = idle && CanPickSave && _checkedExport is {} verified && Selected()?.Export == verified;
         _confirmation.Visibility = _pendingRemoval is null ? UiVisibility.Collapsed : UiVisibility.Visible;
         _keep.IsEnabled = _delete.IsEnabled = available && !IsBusy && _pendingRemoval is not null;
     }

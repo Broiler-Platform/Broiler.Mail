@@ -30,7 +30,7 @@ public sealed class MessageAttachmentReader(IStreamingMailSourceReceiver? stream
     IMessageSourceExportCatalog? catalog = null, IVerifiedMessageSourceExports? verified = null) : IMessageAttachmentReader
 {
     public const int SliceBytes = 81_920;
-    private readonly IVerifiedMessageSourceExports? _verified = verified ?? catalog as IVerifiedMessageSourceExports;
+    private readonly IVerifiedMessageSourceExports? _receiptReader = verified ?? catalog as IVerifiedMessageSourceExports;
 
     public async Task<IMailAttachmentSource> OpenAsync(AccountProfile account, MailMessageKey key, Action<int, int>? progress = null, CancellationToken token = default)
     {
@@ -46,7 +46,7 @@ public sealed class MessageAttachmentReader(IStreamingMailSourceReceiver? stream
 
     private async Task<(MailMessageSource Source, bool Saved)> ReadSourceAsync(AccountProfile account, MailMessageKey key, Action<int, int>? progress, CancellationToken token)
     {
-        if (catalog is not null && _verified is not null)
+        if (catalog is not null && _receiptReader is not null)
         {
             IReadOnlyList<SavedMessageSourceExport> receipts;
             try { receipts = await catalog.ListSavedExportsAsync(key, token).ConfigureAwait(false); }
@@ -56,7 +56,7 @@ public sealed class MessageAttachmentReader(IStreamingMailSourceReceiver? stream
                 if (receipt.Export.Key != key) continue;
                 try
                 {
-                    var original = await _verified.ReadVerifiedAsync(receipt.Export, token).ConfigureAwait(false);
+                    var original = await _receiptReader.ReadVerifiedAsync(receipt.Export, token).ConfigureAwait(false);
                     if (original.Key == key && original.Bytes is { Length: > 0 and <= IStreamingMessageSourceExports.MaximumBytes }) return (original, true);
                 }
                 // A changed, missing or unreadable receipt falls through to the next one and then to the server.
