@@ -39,11 +39,11 @@ internal static class SearchPagingSmokeCheck
         await cache.SaveBodyAsync(mailbox, new(rows[0].Key, "Older saved paging body") { Composition = new() { MessageId = "paging@example.test" } });
         using var model = new InboxViewModel(new NoNetworkReceiver(), new ImmediateUiDispatcher(), new SqliteMailCache(path));
         model.SetAccount(account with { IsEnabled = false }); await model.CacheLoadTask;
-        model.SetSearch("Paging", true, true); model.SetSearchField(MailHeaderSearchField.Subject); model.SetSearchReceivedWithinDays(7);
+        model.SetSearch("Paging", true, true); model.SetSearchScope(MailSearchScope.SenderOrSubject); model.SetSearchReceivedWithinDays(7);
         await model.SearchSavedHeadersAsync();
         if (model.Messages.Count != 500 || !model.CanLoadNextSearchPage || model.SearchPageNumber != 1)
             throw new InvalidOperationException("Published saved-search first page failed.");
-        model.SetSearchField(MailHeaderSearchField.Sender); model.SetSearch("different edited query"); model.SetSearchReceivedWithinDays(null);
+        model.SetSearchScope(MailSearchScope.MessageBody); model.SetSearch("different edited query"); model.SetSearchReceivedWithinDays(null);
         await model.LoadNextSearchPageAsync();
         if (model.Messages.Single().Key != rows[0].Key || model.CanLoadNextSearchPage || model.SearchPageNumber != 2)
             throw new InvalidOperationException("Published saved-search continuation failed.");
@@ -58,19 +58,20 @@ internal static class SearchPagingSmokeCheck
         await model.LoadNextSearchPageAsync();
         if (model.SearchPageNumber != 2 || model.Messages.Single().Key != rows[0].Key)
             throw new InvalidOperationException("Published next page after previous failed.");
-        model.SetSearch("Synthetic sender"); await model.SearchSavedHeadersAsync();
-        if (model.Messages.Count != 500) throw new InvalidOperationException("Published sender-only search failed.");
-        model.SetSearchField(MailHeaderSearchField.Subject); await model.SearchSavedHeadersAsync();
-        if (model.Messages.Count != 0) throw new InvalidOperationException("Published subject-only search included sender matches.");
-        model.SetSearch("", true, true); await model.SearchSavedHeadersAsync();
+        model.SetSearch("Synthetic sender"); model.SetSearchScope(MailSearchScope.SenderOrSubject); await model.SearchSavedHeadersAsync();
+        if (model.Messages.Count != 500) throw new InvalidOperationException("Published sender-or-subject search failed.");
+        model.SetSearchScope(MailSearchScope.MessageBody); await model.SearchSavedHeadersAsync();
+        if (model.Messages.Count != 0) throw new InvalidOperationException("Published message-body search included sender matches.");
+        model.SetSearch("", true, true); model.SetSearchScope(MailSearchScope.SenderOrSubject); await model.SearchSavedHeadersAsync();
         if (model.Messages.Count != 500) throw new InvalidOperationException("Published filter-only search failed.");
-        model.SetSearch("Older saved"); model.SetSearchField(MailHeaderSearchField.BodyPreview);
+        model.SetSearch("Older saved"); model.SetSearchScope(MailSearchScope.MessageBody);
         await model.SearchSavedHeadersAsync();
-        if (model.Messages.Single().Key != rows[0].Key) throw new InvalidOperationException("Published body-preview search failed.");
+        if (model.Messages.Single().Key != rows[0].Key || model.SearchEngineUsed != MailSearchEngine.Literal || model.SearchCoverageNote?.Contains("headers only") != true)
+            throw new InvalidOperationException("Published message-body search without an index failed.");
         await model.SelectAsync(rows[0].Key);
         if (model.Body?.PlainText != "Older saved paging body" || !model.IsBodyFromCache)
             throw new InvalidOperationException("Published body-preview search could not open its saved match.");
-        model.SetSearch("Paging fixture"); model.SetSearchField(MailHeaderSearchField.HeadersOrBodyPreview);
+        model.SetSearch("Paging fixture"); model.SetSearchScope(MailSearchScope.Everywhere);
         await model.SearchSavedHeadersAsync();
         if (model.Messages.Count != 500) throw new InvalidOperationException("Published combined header/body search failed.");
         model.SetSearchCustomDateRange("0001-01-01..9999-12-31");
@@ -80,29 +81,29 @@ internal static class SearchPagingSmokeCheck
         if (model.CanSearch || model.SearchDateError is null || model.Messages.Count != 500)
             throw new InvalidOperationException("Published invalid UTC dates changed search results.");
         await cache.UpdateReadStateAsync(rows[0].Key, true); await cache.UpdateStarStateAsync(rows[0].Key, false);
-        model.SetSearchReceivedWithinDays(null); model.SetSearchText(""); model.SetSearchField(MailHeaderSearchField.SenderOrSubject);
+        model.SetSearchReceivedWithinDays(null); model.SetSearchText(""); model.SetSearchScope(MailSearchScope.Everywhere);
         model.SetSearchFilters(true, false, true); await model.SearchSavedHeadersAsync();
         if (model.Messages.Single().Key != rows[0].Key) throw new InvalidOperationException("Published read/unstarred/downloaded filters failed.");
         model.SetSearchFilters(true, false, false); await model.SearchSavedHeadersAsync();
         if (model.Messages.Count != 0) throw new InvalidOperationException("Published missing-body filter ignored saved body.");
         await cache.RebuildSearchIndexAsync();
         model.SetSearchFilters(null, null, null); model.SetSearch("Paging fixture");
-        model.SetSearchField(MailHeaderSearchField.IndexedSubject); await model.SearchSavedHeadersAsync();
-        if (model.Messages.Count != 500 || !model.CanLoadNextSearchPage)
+        await model.SearchSavedHeadersAsync();
+        if (model.Messages.Count != 500 || !model.CanLoadNextSearchPage || model.SearchEngineUsed != MailSearchEngine.Indexed)
             throw new InvalidOperationException("Published FTS5 indexed first page failed.");
         await model.LoadNextSearchPageAsync();
-        if (model.Messages.Single().Key != rows[0].Key)
+        if (model.Messages.Single().Key != rows[0].Key || model.SearchEngineUsed != MailSearchEngine.Indexed)
             throw new InvalidOperationException("Published FTS5 indexed continuation failed.");
-        model.SetSearch("Older saved"); model.SetSearchField(MailHeaderSearchField.IndexedBodyPreview);
+        model.SetSearch("Older saved"); model.SetSearchScope(MailSearchScope.MessageBody);
         await model.SearchSavedHeadersAsync();
-        if (model.Messages.Single().Key != rows[0].Key)
+        if (model.Messages.Single().Key != rows[0].Key || model.SearchEngineUsed != MailSearchEngine.Indexed)
             throw new InvalidOperationException("Published FTS5 saved-preview search failed.");
         await cache.SaveBodyAsync(mailbox, new(rows[0].Key, "Updated indexed preview"));
         model.SetSearch("Updated indexed"); await model.SearchSavedHeadersAsync();
         if (model.Messages.Single().Key != rows[0].Key || !(await cache.GetSearchIndexInfoAsync()).Ready)
             throw new InvalidOperationException("Published transactional index maintenance failed.");
         await cache.SaveBodyAsync(mailbox, new(rows[1].Key, "Bounded retained-body preview") { RetainedBodyText = new string('x', 34000) + " full retained tail phrase" });
-        model.SetSearch("full retained tail phrase"); model.SetSearchSenderText("SYNTHETIC sender"); model.SetSearchField(MailHeaderSearchField.IndexedRetainedBody); await model.SearchSavedHeadersAsync();
+        model.SetSearch("full retained tail phrase"); model.SetSearchSenderText("SYNTHETIC sender"); await model.SearchSavedHeadersAsync();
         if (model.Messages.Single().Key != rows[1].Key || !model.SearchNotice!.Contains("beyond the preview") || (await cache.GetSearchIndexInfoAsync()).RetainedBodyDocuments != 1)
             throw new InvalidOperationException("Published retained-body search/coverage failed.");
         await model.SelectAsync(rows[1].Key);
@@ -110,11 +111,14 @@ internal static class SearchPagingSmokeCheck
         model.SetSearchSenderText("unmatched sender"); await model.SearchSavedHeadersAsync();
         if (model.Messages.Count != 0) throw new InvalidOperationException("Published full-body phrase ignored sender filter.");
         model.SetSearchSenderText("SYNTHETIC sender");
-        model.SetSearchField(MailHeaderSearchField.IndexedHeadersOrBodyPreview); await model.SearchSavedHeadersAsync();
-        if (model.Messages.Count != 0) throw new InvalidOperationException("Published preview search included retained-only text.");
+        var previewOnly = await cache.SearchHeadersAsync(new(account.Id, "full retained tail phrase") { Field = MailHeaderSearchField.IndexedHeadersOrBodyPreview, MailboxId = "INBOX" });
+        if (previewOnly.Messages.Count != 0) throw new InvalidOperationException("Published preview search included retained-only text.");
         await cache.DisableSearchIndexAsync();
         if ((await cache.GetSearchIndexInfoAsync()).Ready || (await cache.ReadBodyAsync(mailbox, rows[0].Key.Uid))?.PlainText != "Updated indexed preview")
             throw new InvalidOperationException("Published derived-index removal changed saved mail.");
+        model.SetSearchScope(MailSearchScope.Everywhere); await model.SearchSavedHeadersAsync();
+        if (model.Messages.Single().Key != rows[1].Key || model.SearchEngineUsed != MailSearchEngine.Literal || model.ListProblem is not null)
+            throw new InvalidOperationException("Published search without an index did not scan retained text directly.");
         await model.ClearSearchAsync();
         if (model.IsSearchActive || model.SearchPageNumber != 0)
             throw new InvalidOperationException("Published saved-search continuation exit failed.");

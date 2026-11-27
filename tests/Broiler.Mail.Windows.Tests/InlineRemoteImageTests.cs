@@ -158,6 +158,66 @@ public sealed class InlineRemoteImageTests
         Assert.Equal(2, surface.RemoteImages.Loaded); Assert.False(surface.RemoteImages.CanLoad);
     }
 
+    [Fact]
+    public async Task InboxBannerDrivesTheRealSessionWithoutADialog()
+    {
+        using var application = DemoApplication.Create(new(DemoScenario.LongHtml, Interactive: false));
+        await application.InitializeAsync();
+        var model = application.CreateViewModel();
+        int calls = 0;
+        using var inner = new WindowsHtmlPreviewHost { CreateImageBroker = () => new(new Handler((request, _) =>
+        { Interlocked.Increment(ref calls); return Task.FromResult(Response(request)); })) };
+        using var htmlHost = new ImageMessageHost(inner);
+        using var shell = new Broiler.Mail.Application.Views.MailShellView(model, htmlHost);
+        var queue = new Queue();
+        using var session = new StandardUiSessionBuilder().WithDispatcher(queue).Build(new WideHost()); shell.Attach(session);
+        var keyboard = shell.CreateKeyboardNavigation(session);
+        await model.Inbox.ReceiveAsync(); await model.Inbox.SelectAsync(model.Inbox.Messages.Single(message => message.Key.Uid == 54).Key);
+        queue.Drain(); session.RenderFrame();
+        var view = Assert.IsType<ScrollableHtmlView>(htmlHost.Surface);
+        var inbox = shell.GetContent("inbox");
+        var banner = Descendants(inbox).OfType<Broiler.Mail.Application.Preview.RemoteImageActions>().Single();
+        Broiler.UI.Button.Standard.StandardButton Button(string text) => Descendants(banner).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == text);
+        string Summary() => Descendants(banner).OfType<Broiler.UI.Label.Standard.StandardLabel>().First().Text;
+        Assert.Equal(UiVisibility.Visible, banner.Visibility); Assert.Equal(0, calls);
+        Assert.Equal("Remote images (2) are blocked to protect your privacy.", Summary());
+        Assert.True(view.Bounds.Top >= banner.Bounds.Bottom - 1, $"{view.Bounds} overlaps the banner {banner.Bounds}.");
+        // Zoom keys reach the HTML reader while focus is on the banner, as from the reader itself.
+        var load = Button("Load images"); session.SetFocus(load);
+        Assert.True(keyboard.Handle(Key(0xBB, Broiler.Input.Keyboard.KeyboardModifierState.Control))); Assert.Equal(1.1, view.Zoom);
+        load.Click();
+        for (int i = 0; i < 250 && view.RemoteImages.Loaded < 2; i++) { queue.Drain(); if (view.RemoteImages.Loaded < 2) await Task.Delay(20); }
+        session.RenderFrame();
+        Assert.Equal(2, view.RemoteImages.Loaded); Assert.Equal(2, calls);
+        Assert.Null(shell.ActiveDialog); Assert.Equal("inbox", shell.ActiveViewId);
+        var block = Button("Block again");
+        Assert.Equal(UiVisibility.Visible, block.Visibility); Assert.Same(block, session.FocusedElement);
+        block.Click(); queue.Drain(); session.RenderFrame();
+        Assert.Contains("cannot be undone", Summary()); Assert.Equal(0, view.RemoteImages.Loaded); Assert.Equal(2, calls);
+        Assert.Same(load, session.FocusedElement); Assert.Equal("Load images", load.Text);
+        Assert.Null(shell.ActiveDialog); Assert.Equal("inbox", shell.ActiveViewId);
+    }
+
+    private static UiInputEvent Key(int code, Broiler.Input.Keyboard.KeyboardModifierState modifiers) => UiInputEvent.FromKeyboardKey(new Broiler.Input.Keyboard.KeyboardKeyEvent(
+        new Broiler.Input.InputEventHeader(Broiler.Input.InputDeviceId.FromOpaqueValue("remote-image-banner"), new Broiler.Input.InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1),
+        Broiler.Input.Keyboard.KeyboardKey.FromName("VirtualKey:" + code), Broiler.Input.Keyboard.KeyboardKeyTransition.Down, modifiers, code, 0, 0, false, false,
+        Source: Broiler.Input.InputEventSource.Synthetic));
+    private static IEnumerable<UiElement> Descendants(UiElement root)
+    { foreach (var child in root.Children) { yield return child; foreach (var nested in Descendants(child)) yield return nested; } }
+    /// <summary>Shows every message as the two-remote-image fixture, through the real Windows preview host.</summary>
+    private sealed class ImageMessageHost(WindowsHtmlPreviewHost inner) : Broiler.Mail.Application.Preview.IInlineHtmlPreviewHost, IDisposable
+    {
+        public UiElement? Surface;
+        public UiElement CreateInlineContent(MailMessageBody message) => Surface = inner.CreateInlineContent(Message() with { Key = message.Key });
+        public void Dispose() { }
+    }
+    private sealed class WideHost : IUiHost
+    {
+        public Broiler.Graphics.Geometry.BSize ViewportSize => new(1200, 800); public double Scale => 1;
+        public Broiler.Graphics.RenderList.BRenderList CreateRenderList(int capacity = 0) => new(capacity);
+        public void Invalidate(UiInvalidation invalidation) { } public void Present(Broiler.Graphics.RenderList.BRenderList list) { }
+    }
+
     private static HttpResponseMessage Response(HttpRequestMessage request, HttpStatusCode status = HttpStatusCode.OK)
     {
         var response = new HttpResponseMessage(status) { RequestMessage = request, Content = new ByteArrayContent(Convert.FromBase64String(RemoteImageBrokerSmokeCheck.Pixel)) };

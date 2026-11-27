@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   13
-// Annotated:        7/13
-// Exempt:           4
-// Human-reviewed:   0/13
+// Relevant units:   8
+// Annotated:        3/8
+// Exempt:           2
+// Human-reviewed:   0/8
 // IP risk:          Low
 // Security risk:    High
-// Criteria:         6/6
+// Criteria:         2/2
 // Resource impact:  0/10 max
-// Unverified:       13
+// Unverified:       8
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -40,7 +40,7 @@ internal sealed class WindowsTextInput(Func<nint> window, Func<double> scale) : 
     private UiElement? _imeOffFor;
     private nint _imeOffIn;
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=3418AF
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=0; Fingerprint=2C4E46
     // Hairs-Falsified-If: an input context from ImmGetContext is left unreleased when the scale callback or ImmSetCompositionWindow throws
     // Hairs-Human:        PENDING
     public void PublishCaret(UiTextCaretInfo caret)

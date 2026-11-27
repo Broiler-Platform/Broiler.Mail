@@ -16,16 +16,19 @@ public sealed class DownloadPolicyTests
         var receiver = new TestMailReceiver
         {
             Inbox = (_, _) => Task.FromResult(new MailInboxPage([SqliteMailCacheTests.Summary(mailbox, 1)], null) { Mailbox = mailbox }),
-            Body = (key, _) => { bodyCalls++; return Task.FromResult(new MailMessageBody(key, "Ephemeral body")); },
+            Body = (key, _) => { bodyCalls++; return Task.FromResult(new MailMessageBody(key, "Ephemeral body") { Attachments = [new(2, "plan.pdf", "application/pdf", 4)] }); },
         };
         using var model = new InboxViewModel(receiver, new ImmediateUiDispatcher(), cache, OfflineDownloadPolicy.HeadersOnly);
         model.SetAccount(account); await model.CacheLoadTask; await model.ReceiveAsync(); await model.SelectAsync(SqliteMailCacheTests.Key(mailbox, 1));
         Assert.Equal("Ephemeral body", model.Body!.PlainText); Assert.False(model.SelectedMessage!.IsBodyCached);
+        // Reading under headers-only still marks the row, which the saved header only learns from the explicit download.
+        Assert.True(model.SelectedMessage.HasAttachments); Assert.True(model.Messages[0].HasAttachments);
         Assert.Null(await cache.ReadBodyAsync(mailbox, 1)); Assert.Contains("not saved", model.Status);
         receiver.Body = (_, _) => throw new MailConnectionException("Now offline");
         await model.DownloadLoadedBodiesAsync();
         Assert.Equal(1, bodyCalls); Assert.Equal("Ephemeral body", (await cache.ReadBodyAsync(mailbox, 1))!.PlainText);
         Assert.True(model.SelectedMessage!.IsBodyCached); Assert.Equal(1, model.DownloadCompleted);
+        Assert.True(model.SelectedMessage.HasAttachments); Assert.True((await cache.ReadSummariesAsync(mailbox, 10))[0].HasAttachments);
     }
 
     [Fact]

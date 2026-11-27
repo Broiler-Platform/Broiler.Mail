@@ -47,9 +47,9 @@ public sealed class NewMailFixtureTests
     [Fact]
     public void The_Window_Title_Names_A_Simulated_Scale()
     {
-        Assert.Equal("Broiler.Mail — Demo: new-mail (no network or saved data)", new DemoOptions(DemoScenario.NewMail).WindowTitle);
-        Assert.Equal("Broiler.Mail — Demo (no network or saved data)", new DemoOptions(DemoScenario.Inbox, Interactive: true).WindowTitle);
-        Assert.Equal("Broiler.Mail — Demo: inbox, simulated 200% scale (no network or saved data)", new DemoOptions(DemoScenario.Inbox, ScalePercent: 200).WindowTitle);
+        Assert.Equal("Broiler Mail — Demo: new-mail (no network or saved data)", new DemoOptions(DemoScenario.NewMail).WindowTitle);
+        Assert.Equal("Broiler Mail — Demo (no network or saved data)", new DemoOptions(DemoScenario.Inbox, Interactive: true).WindowTitle);
+        Assert.Equal("Broiler Mail — Demo: inbox, simulated 200% scale (no network or saved data)", new DemoOptions(DemoScenario.Inbox, ScalePercent: 200).WindowTitle);
     }
 
     [Fact]

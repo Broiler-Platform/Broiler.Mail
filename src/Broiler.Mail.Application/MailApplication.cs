@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   9
 // Annotated:        3/9
-// Exempt:           17
+// Exempt:           18
 // Human-reviewed:   0/9
 // IP risk:          Low
 // Security risk:    High
@@ -30,13 +30,14 @@ using System.Text;
 namespace Broiler.Mail.Application;
 
 /// <summary>Application composition without native platform or protocol-library dependencies.</summary>
-// Hairs-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=EB5768
+// Hairs-AI:           Origin=AI; Spec=ADR-0001; IP=Low; Security=High; Resources=4; Fingerprint=3E6BDE
 // Hairs-Falsified-If: an unreadable drafts.json leaves DraftLoadError null, so the composer autosaves over the file
 // Hairs-Human:        PENDING
 public sealed class MailApplication(
     IAccountStore accounts, ISettingsStore settings, IMailReceiver receiver, IMailSender sender, ICredentialStore credentials, IDraftStore? drafts = null, ISentCopyWriter? sentCopies = null,
     IOutgoingConnectionTester? outgoingTester = null, IMailCache? cache = null, IDisposable? profileLifetime = null,
-    IProfileStorage? storage = null, Action<string>? openProfile = null, IAccountRemovalService? accountRemoval = null, IRecipientBook? recipientBook = null, IOfflineFolderStore? offlineFolders = null, IAccountNavigationStore? navigation = null, IMessageSourceExports? sourceExports = null) : IDisposable
+    IProfileStorage? storage = null, Action<string>? openProfile = null, IAccountRemovalService? accountRemoval = null, IRecipientBook? recipientBook = null, IOfflineFolderStore? offlineFolders = null, IAccountNavigationStore? navigation = null, IMessageSourceExports? sourceExports = null,
+    IMessageAttachmentReader? attachmentReader = null) : IDisposable
 {
     private readonly List<AccountReceiveQueueViewModel> _receiveQueues = [];
     public IAccountStore Accounts { get; } = accounts is CoordinatedAccountCollectionStore coordinated ? coordinated : accounts is IAccountCollectionStore collection ? new CoordinatedAccountCollectionStore(collection) : accounts ?? throw new ArgumentNullException(nameof(accounts));
@@ -49,6 +50,8 @@ public sealed class MailApplication(
     /// <summary>The non-sending SMTP sign-in test; without it the Account tab offers no SMTP test.</summary>
     public IOutgoingConnectionTester? OutgoingTester { get; } = outgoingTester;
     public IMailCache? Cache { get; } = cache;
+    /// <summary>Reads attachments for interactive saves and forwards; null leaves both unavailable.</summary>
+    public IMessageAttachmentReader? AttachmentReader { get; } = attachmentReader;
     public DraftStoreState LoadedDraft { get; private set; } = new(0, null);
     public string? DraftLoadError { get; private set; }
 
@@ -118,8 +121,8 @@ public sealed class MailApplication(
             new AccountProfileViewModel(Accounts is CoordinatedAccountCollectionStore collection ? new SelectedAccountEditorStore(collection) : Accounts, Credentials, Receiver, dispatcher, LoadedAccount, AccountLoadError, OutgoingTester),
             new SettingsViewModel(Settings, dispatcher, LoadedSettings, SettingsLoadError,
                 storage is null ? null : new ProfileStorageViewModel(storage, dispatcher, openProfile)),
-            new InboxViewModel(Receiver, dispatcher, Cache, storage?.Policy.Downloads ?? OfflineDownloadPolicy.OnDemand, offlineFolders, navigation, sourceExports),
-            new ComposerViewModel(Drafts, LoadedDraft, dispatcher, Sender, DraftLoadError, SentCopies, recipientBook));
+            new InboxViewModel(Receiver, dispatcher, Cache, storage?.Policy.Downloads ?? OfflineDownloadPolicy.OnDemand, offlineFolders, navigation, sourceExports) { AttachmentReader = AttachmentReader },
+            new ComposerViewModel(Drafts, LoadedDraft, dispatcher, Sender, DraftLoadError, SentCopies, recipientBook) { AttachmentReader = AttachmentReader });
         if (Accounts is CoordinatedAccountCollectionStore accountsCollection)
         {
             model.ConfigureAccounts(accountsCollection, LoadedAccountCollection, dispatcher, AccountLoadError, accountRemoval, storage as IAccountDownloadedMailStorage);

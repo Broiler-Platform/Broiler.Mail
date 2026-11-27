@@ -87,9 +87,9 @@ public sealed class RecipientBookTests
         Assert.True(model.InsertRecipient(field, selected)); Assert.False(model.InsertRecipient(field, selected)); Assert.True(await model.SaveAsync());
         var saved = (await drafts.LoadAsync()).Draft!; Assert.Equal(id, saved.Draft.Id); Assert.Equal(from, saved.Draft.FromAddress); Assert.Equal("parent@example.test", saved.Draft.InReplyTo);
         Assert.Equal("Subject", saved.Draft.Subject); Assert.Equal("Body", saved.Draft.PlainText);
-        Assert.Equal(field == "To" ? "first@example.test, saved@example.test" : "first@example.test", saved.ToText);
-        Assert.Equal(field == "Cc" ? "copy@example.test, saved@example.test" : "copy@example.test", saved.CcText);
-        Assert.Equal(field == "Bcc" ? "private@example.test, saved@example.test" : "private@example.test", saved.BccText);
+        Assert.Equal(field == "To" ? "first@example.test, \"Saved\" <saved@example.test>" : "first@example.test", saved.ToText);
+        Assert.Equal(field == "Cc" ? "copy@example.test, \"Saved\" <saved@example.test>" : "copy@example.test", saved.CcText);
+        Assert.Equal(field == "Bcc" ? "private@example.test, \"Saved\" <saved@example.test>" : "private@example.test", saved.BccText);
     }
 
     [Fact]

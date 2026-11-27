@@ -111,6 +111,46 @@ public sealed class SqliteMailCacheTests
         await Assert.ThrowsAsync<InvalidDataException>(() => cache.ReadBodyAsync(mailbox, 1));
     }
 
+    [Fact]
+    public async Task AttachmentInventoryIsNotStoredBelowSchemaSixAndInvalidInventoriesAreRefused()
+    {
+        using var directory = new TestDirectory();
+        string path = directory.File("mail.db");
+        var mailbox = new MailboxKey(AccountId.New(), "INBOX", 7);
+        await new SqliteMailCache(path).SaveSummariesAsync(mailbox, [Summary(mailbox, 1)], DateTimeOffset.UtcNow);
+        // A v5 cache whose quota leaves no room to migrate stays at v5 and keeps saving bodies without the inventory.
+        CacheSchemaFixture.DowngradeTo(path, 5);
+        long quota = CacheSchemaFixture.FillSoMigrationDefers(path);
+        var cache = new SqliteMailCache(path, quota);
+        var body = new MailMessageBody(Key(mailbox, 1), "body")
+        { Attachments = [new(2, "report.pdf", "application/pdf", 1234)], IsAttachmentListIncomplete = true };
+        await cache.SaveBodyAsync(mailbox, body);
+        var loaded = await new SqliteMailCache(path, quota).ReadBodyAsync(mailbox, 1);
+        Assert.Equal("body", loaded!.PlainText);
+        Assert.Null(loaded.Attachments);
+        Assert.False(loaded.IsAttachmentListIncomplete);
+        Assert.Equal(5L, CacheSchemaFixture.Scalar(path, "PRAGMA user_version"));
+        Assert.False(Assert.Single(await cache.ReadSummariesAsync(mailbox, 1)).HasAttachments);
+
+        MailAttachmentDescriptor[][] invalid =
+        [
+            Enumerable.Range(1, 33).Select(index => new MailAttachmentDescriptor(index, $"{index}.bin", "application/octet-stream", 1)).ToArray(),
+            [null!],
+            [new(0, "a.bin", "application/octet-stream", 1)],
+            [new(257, "a.bin", "application/octet-stream", 1)],
+            [new(2, "", "application/octet-stream", 1)],
+            [new(2, new string('a', 121), "application/octet-stream", 1)],
+            [new(2, "a\u0001.bin", "application/octet-stream", 1)],
+            [new(2, "a.bin", null!, 1)],
+            [new(2, "a.bin", new string('a', 128), 1)],
+            [new(2, "a.bin", "application/octet-stream", -1)],
+            [new(2, "a.bin", "application/octet-stream", 12 * 1024 * 1024 + 1)],
+        ];
+        foreach (var attachments in invalid)
+            await Assert.ThrowsAsync<InvalidDataException>(() => cache.SaveBodyAsync(mailbox, body with { Attachments = attachments }));
+        Assert.Equal("body", (await cache.ReadBodyAsync(mailbox, 1))!.PlainText);
+    }
+
     public static MailMessageSummary Summary(MailboxKey mailbox, uint uid) => new()
     { Key = Key(mailbox, uid), Sender = "Sender", Subject = $"Message {uid}", ReceivedAt = DateTimeOffset.UtcNow };
     public static MailMessageKey Key(MailboxKey mailbox, uint uid) => new(mailbox.AccountId, mailbox.MailboxId, mailbox.UidValidity, uid);

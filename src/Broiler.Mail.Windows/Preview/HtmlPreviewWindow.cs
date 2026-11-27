@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   160
-// Annotated:        48/160
-// Exempt:           125
-// Human-reviewed:   0/160
+// Relevant units:   51
+// Annotated:        28/51
+// Exempt:           55
+// Human-reviewed:   0/51
 // IP risk:          Low
 // Security risk:    High
-// Criteria:         39/20
+// Criteria:         21/8
 // Resource impact:  8/10 max
-// Unverified:       160
+// Unverified:       51
 //
 // GENERATED - DO NOT EDIT MANUALLY
 

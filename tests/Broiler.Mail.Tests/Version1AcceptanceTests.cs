@@ -165,7 +165,10 @@ public sealed class Version1AcceptanceTests
         Assert.False(scroll.HasHorizontalScrollbar);
         Assert.True(keyboard.Handle(Key(0x33, control: true)));
         Assert.Equal("settings", shell.ActiveViewId);
-        Assert.Same(shell.NavigationFocus, session.FocusedElement);
+        // A dialog opens in its form (Settings: the theme), not on the Close button below it.
+        var settingsFirst = MailKeyboardNavigation.TabStops(shell.ActiveContent!).First(stop => stop is not Broiler.UI.ScrollView.UiScrollView);
+        Assert.Same(settingsFirst, session.FocusedElement);
+        Assert.IsType<Broiler.UI.ComboBox.Standard.StandardComboBox>(session.FocusedElement);
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
     }
 

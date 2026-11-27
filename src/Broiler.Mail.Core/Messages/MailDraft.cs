@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   6
-// Annotated:        1/6
+// Relevant units:   10
+// Annotated:        1/10
 // Exempt:           13
-// Human-reviewed:   0/6
+// Human-reviewed:   0/10
 // IP risk:          None
 // Security risk:    Medium
 // Criteria:         1/0
 // Resource impact:  1/10 max
-// Unverified:       6
+// Unverified:       10
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -49,6 +49,49 @@ public sealed record DraftAttachment(string FileName, ReadOnlyMemory<byte> Conte
     public const int MaximumCount = 4;
     public const int MaximumBytes = 8 * 1024 * 1024;
     public const int MaximumProfileBytes = 16 * 1024 * 1024;
+    /// <summary>The longest file name a draft keeps, in characters; <see cref="MaximumFileNameBytes"/> also applies.</summary>
+    public const int MaximumFileNameLength = 120;
+    /// <summary>The longest file name a draft keeps, in UTF-8 bytes.</summary>
+    public const int MaximumFileNameBytes = 240;
+    /// <summary>The name used when nothing of the original name can be kept.</summary>
+    public const string FallbackFileName = "attachment.bin";
+
+    /// <summary>
+    /// Turns a picked or typed file name into one <see cref="Validate"/> accepts: the last path segment, with control
+    /// characters, '/', '\', ':' and each surrogate pair (such as an emoji) replaced by '_', trailing dots and spaces
+    /// removed, and at most <see cref="MaximumFileNameLength"/> characters and <see cref="MaximumFileNameBytes"/> UTF-8
+    /// bytes, keeping a short extension. A name with nothing left becomes <see cref="FallbackFileName"/>.
+    /// </summary>
+    public static string SafeName(string? name)
+    {
+        if (string.IsNullOrEmpty(name)) return FallbackFileName;
+        int separator = name.LastIndexOfAny(['/', '\\']);
+        string segment = separator >= 0 ? name[(separator + 1)..] : name;
+        var safe = new System.Text.StringBuilder(segment.Length);
+        for (int index = 0; index < segment.Length; index++)
+        {
+            char c = segment[index];
+            if (char.IsHighSurrogate(c) && index + 1 < segment.Length && char.IsLowSurrogate(segment[index + 1])) index++;
+            safe.Append(char.IsControl(c) || char.IsSurrogate(c) || c is '/' or '\\' or ':' ? '_' : c);
+        }
+        string result = safe.ToString().TrimEnd('.', ' ');
+        if (!Fits(result))
+        {
+            // Keep a short extension so the shortened file still opens with the right program.
+            int dot = result.LastIndexOf('.');
+            string extension = dot > 0 && result.Length - dot <= 16 ? result[dot..] : "";
+            string stem = result[..(result.Length - extension.Length)];
+            while (stem.Length > 0 && !Fits(stem + extension)) stem = stem[..^1];
+            stem = stem.TrimEnd('.', ' ');
+            result = stem.Length > 0 ? stem + extension : extension.TrimStart('.');
+            while (result.Length > 0 && !Fits(result)) result = result[..^1];
+            result = result.TrimEnd('.', ' ');
+        }
+        return result is "" or "." or ".." ? FallbackFileName : result;
+
+        static bool Fits(string value) => value.Length <= MaximumFileNameLength &&
+            System.Text.Encoding.UTF8.GetByteCount(value) <= MaximumFileNameBytes;
+    }
 
     public static void Validate(IReadOnlyList<DraftAttachment>? attachments)
     {

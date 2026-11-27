@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   15
-// Annotated:        5/15
-// Exempt:           9
-// Human-reviewed:   0/15
+// Relevant units:   22
+// Annotated:        5/22
+// Exempt:           11
+// Human-reviewed:   0/22
 // IP risk:          Low
 // Security risk:    Medium
 // Criteria:         3/0
 // Resource impact:  4/10 max
-// Unverified:       15
+// Unverified:       22
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -56,14 +56,19 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
     };
     // Above and below the text, inside the scroll view.
     private const double VerticalMargin = 8;
+    private const double FooterGap = 8;
+    private readonly TextAndFooter _content = new();
+    private UiElement? _footer;
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=A1E604
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Low; Resources=1; Fingerprint=822322
     // Hairs-Human:        PENDING
     public ScrollableMessageText()
     {
         // Margins and a bounded line length come from the column; the scroll view still spans the pane.
         // Its scroll bar takes the right margin, so the text is wrapped once per width, not again beside the bar.
-        _scroll.AddChild(new ReadingColumn(_editor, VerticalMargin) { PaneWidth = () => _paneWidth });
+        // The optional footer below the text scrolls with it; without one the column holds only the editor.
+        _content.AddChild(_editor);
+        _scroll.AddChild(new ReadingColumn(_content, VerticalMargin) { PaneWidth = () => _paneWidth });
         AddChild(_scroll);
         // Only the reader moves the place; the scroll view also clamps its offset while it lays out,
         // and a hidden view's extent and viewport come from a layout at no size at all.
@@ -74,6 +79,31 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
     }
 
     public StandardRichEdit Editor => _editor;
+
+    /// <summary>
+    /// An element shown below the text, inside the scrolled content, such as a command that extends the text.
+    /// The view owns neither its state nor its disposal; null (the default) shows the text alone.
+    /// </summary>
+    public UiElement? Footer
+    {
+        get => _footer;
+        set
+        {
+            if (ReferenceEquals(_footer, value)) return;
+            if (_footer is not null) _content.RemoveChild(_footer);
+            _footer = value;
+            if (value is not null) _content.AddChild(value);
+            Invalidate(UiInvalidationKind.Measure | UiInvalidationKind.Render);
+        }
+    }
+
+    /// <summary>Put the caret, with nothing selected, at a UTF-16 offset of the displayed text and reveal its line.</summary>
+    public bool RevealOffset(int offset)
+    {
+        if (offset < 0 || offset > Text.Length) return false;
+        _editor.SetEditorSelection(offset, offset); _findReveal = (offset, offset); _zoomFraction = null;
+        Invalidate(UiInvalidationKind.Measure | UiInvalidationKind.Render); return true;
+    }
     private (int Start, int End)? _findReveal;
     /// <summary>Select and reveal a valid UTF-16 range in the displayed text without rewriting the message.</summary>
     public bool SelectFindMatch(int start, int length)
@@ -204,5 +234,32 @@ public sealed class ScrollableMessageText : UiElement, IReaderViewport
             _readFraction = ReadFraction();
         }
         finally { _inLayout = false; }
+    }
+
+    // The editor takes the whole content box, as it does without a footer; a visible footer sits below the
+    // text with a gap, and the editor keeps the rest.
+    private sealed class TextAndFooter : UiElement
+    {
+        private UiElement? Footer => Children.Count > 1 && Children[1].Visibility != UiVisibility.Collapsed ? Children[1] : null;
+        protected override BSize MeasureCore(BSize availableSize)
+        {
+            var text = Children[0].Measure(availableSize);
+            if (Footer is not { } footer) return text;
+            var below = footer.Measure(new BSize(availableSize.Width, double.PositiveInfinity));
+            return new BSize(Math.Max(text.Width, below.Width), text.Height + FooterGap + below.Height);
+        }
+        protected override void ArrangeCore(BRect finalRect)
+        {
+            if (Footer is not { } footer)
+            {
+                Children[0].Arrange(finalRect);
+                if (Children.Count > 1) Children[1].Arrange(BRect.Empty);
+                return;
+            }
+            double footerHeight = footer.DesiredSize.Height;
+            double textHeight = Math.Max(Children[0].DesiredSize.Height, finalRect.Height - footerHeight - FooterGap);
+            Children[0].Arrange(new BRect(finalRect.X, finalRect.Y, finalRect.Width, textHeight));
+            footer.Arrange(new BRect(finalRect.X, finalRect.Y + textHeight + FooterGap, finalRect.Width, footerHeight));
+        }
     }
 }

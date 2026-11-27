@@ -174,15 +174,21 @@ public sealed class MailTransportConnection : IAsyncDisposable, IDisposable
         await _stream.FlushAsync(cancellationToken).ConfigureAwait(false);
     }
 
+    // Disposal is best effort: an operation that abandons a read partway (an oversized literal, a deadline) disposes
+    // the connection while unwinding, and a failure to close must not replace the error that caused it.
     public async ValueTask DisposeAsync()
     {
-        if (_stream is not null)
+        try
         {
-            await _stream.DisposeAsync().ConfigureAwait(false);
-            _stream = null;
+            if (_stream is not null) await _stream.DisposeAsync().ConfigureAwait(false);
         }
-        _tcpClient?.Dispose();
-        _tcpClient = null;
+        catch (Exception error) when (error is IOException or SocketException or ObjectDisposedException or AuthenticationException) { }
+        finally
+        {
+            _stream = null;
+            _tcpClient?.Dispose();
+            _tcpClient = null;
+        }
     }
 
     public void Dispose()

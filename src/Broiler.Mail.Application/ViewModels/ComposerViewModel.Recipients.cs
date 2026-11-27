@@ -34,7 +34,8 @@ public sealed partial class ComposerViewModel
             var parsed = MailComposition.ParseRecipients(current);
             if (parsed.Contains(recipient.Address, StringComparer.OrdinalIgnoreCase)) { Status = "That address is already in the selected field."; Notify(); return false; }
             if (parsed.Count >= 100) throw new ArgumentException("Use at most 100 recipients.");
-            string updated = current.Trim().Length == 0 ? recipient.Address : current.TrimEnd() + ", " + recipient.Address;
+            string mailbox = MailComposition.FormatMailbox(recipient.Address, recipient.Name);
+            string updated = current.Trim().Length == 0 ? mailbox : current.TrimEnd() + ", " + mailbox;
             _ = MailComposition.ParseRecipients(updated);
             Edit(field == "To" ? updated : To, field == "Cc" ? updated : Cc, field == "Bcc" ? updated : Bcc, Subject, PlainText);
             return true;

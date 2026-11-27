@@ -3,18 +3,19 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   13
-// Annotated:        0/13
+// Relevant units:   14
+// Annotated:        0/14
 // Exempt:           0
-// Human-reviewed:   0/13
+// Human-reviewed:   0/14
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       13
+// Unverified:       14
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
+using System.Security.Cryptography;
 using Broiler.Mail.Core.Accounts;
 using Broiler.Mail.Core.Messages;
 using Broiler.Mail.Core.Services;
@@ -68,6 +69,34 @@ public sealed partial class FileMessageSourceExports
         var state = await Catalog.ReadAsync(token).ConfigureAwait(false);
         return Array.AsReadOnly(state.Entries.Where(row => row.Key.AccountId == account).OrderByDescending(row => row.SavedAt).ThenBy(row => row.FileName, StringComparer.Ordinal)
             .Select(row => new SavedMessageSourceExport(new(row.Key, Path.Combine(ExportDirectory, row.FileName), row.Bytes, row.Sha256), row.SavedAt)).ToArray());
+    }
+    public async Task<RemovedMessageSourceExport> RemoveExportAsync(SavedMessageSourceExport saved, CancellationToken token = default)
+    {
+        ArgumentNullException.ThrowIfNull(saved); ArgumentNullException.ThrowIfNull(saved.Export);
+        string full = ExportFilePath(saved.Export), name = Path.GetFileName(full); var export = saved.Export;
+        token.ThrowIfCancellationRequested(); CheckDirectory(_profile);
+        await using var lease = await LockAsync(token).ConfigureAwait(false); CheckCatalogFile();
+        var state = await Catalog.ReadAsync(token).ConfigureAwait(false);
+        bool Matches(SourceExportCatalogEntry row) => row.Key == export.Key && string.Equals(row.FileName, name, StringComparison.Ordinal) && row.Bytes == export.Bytes &&
+            string.Equals(row.Sha256, export.Sha256, StringComparison.OrdinalIgnoreCase) && row.SavedAt == saved.SavedAt;
+        if (!state.Entries.Any(Matches)) throw new InvalidDataException("This saved original changed or was already removed. List again; nothing was deleted.");
+        bool missing = ExportFileIsMissing(name);
+        if (!missing)
+        {
+            CheckDirectory(ExportDirectory);
+            if ((File.GetAttributes(full) & FileAttributes.ReparsePoint) != 0) throw new IOException("Saved originals are never removed through file links. Nothing was deleted.");
+            // No other writer can change the file while it is checked against its receipt.
+            await using (var stream = new FileStream(full, FileMode.Open, FileAccess.Read, FileShare.None, 8192, FileOptions.Asynchronous))
+            {
+                if (stream.Length != export.Bytes || !string.Equals(Convert.ToHexString(await SHA256.HashDataAsync(stream, token).ConfigureAwait(false)), export.Sha256, StringComparison.OrdinalIgnoreCase))
+                    throw new InvalidDataException("The saved file no longer matches its receipt. Nothing was deleted.");
+                token.ThrowIfCancellationRequested();
+            }
+            File.Delete(full);
+        }
+        // The file is gone before its receipt; the receipt update is no longer cancellable.
+        await Catalog.UpdateAsync(current => new(current.Entries.Where(row => !Matches(row)).ToArray()), CancellationToken.None).ConfigureAwait(false);
+        return new(saved, missing);
     }
     private static void ValidateCatalogKey(MailMessageKey key)
     {

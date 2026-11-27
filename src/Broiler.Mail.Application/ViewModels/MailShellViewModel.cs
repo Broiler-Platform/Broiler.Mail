@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   4
-// Annotated:        3/4
-// Exempt:           9
-// Human-reviewed:   0/4
+// Relevant units:   11
+// Annotated:        3/11
+// Exempt:           8
+// Human-reviewed:   0/11
 // IP risk:          Low
 // Security risk:    Low
 // Criteria:         2/0
 // Resource impact:  3/10 max
-// Unverified:       4
+// Unverified:       11
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -54,7 +54,39 @@ public sealed class MailShellViewModel
         Inbox.SetAccount(account.Profile);
         Account.Changed += (_, _) => { Inbox.SetAccount(Account.Profile); Composer.SetAccount(Account.Profile); };
     }
-    public string Title => "Broiler Mail";
+    public const string ApplicationName = "Broiler Mail";
+    public string Title => ApplicationName;
+
+    /// <summary>
+    /// The main window's caption: the folder and the account, then the application, such as
+    /// "Inbox (3 unread loaded) — alex@example.com — Broiler Mail". The model holds no server-side folder
+    /// unread count, so the count is only of the loaded rows and says so. During a search the list holds
+    /// results, not the folder, so the caption names the search and gives no count.
+    /// </summary>
+    public string WindowTitle => Inbox.IsSearchActive
+        ? FormatSearchWindowTitle(Inbox.IsAccountSearchActive ? null : Inbox.SelectedMailboxId, Account.Profile?.EmailAddress)
+        : FormatWindowTitle(Inbox.SelectedMailboxId, Inbox.Messages.Count(message => !message.IsRead), Account.Profile?.EmailAddress);
+
+    /// <summary>The caption for a folder's own list: <paramref name="loadedUnread"/> counts loaded rows only.</summary>
+    public static string FormatWindowTitle(string mailboxId, int loadedUnread, string? account)
+    {
+        string folder = FolderCaption(mailboxId);
+        if (loadedUnread > 0) folder += $" ({loadedUnread} unread loaded)";
+        return CaptionWithAccount(folder, account);
+    }
+
+    /// <summary>The caption while search results are shown; a null <paramref name="mailboxId"/> is an all-folder search.</summary>
+    public static string FormatSearchWindowTitle(string? mailboxId, string? account) =>
+        CaptionWithAccount(mailboxId is null ? "Search in all folders" : $"Search in {FolderCaption(mailboxId)}", account);
+
+    private static string FolderCaption(string mailboxId)
+    {
+        string folder = mailboxId.Equals("INBOX", StringComparison.OrdinalIgnoreCase) ? "Inbox" : mailboxId;
+        return new string(folder.Where(c => !char.IsControl(c)).Take(120).ToArray());
+    }
+
+    private static string CaptionWithAccount(string folder, string? account) =>
+        string.IsNullOrWhiteSpace(account) ? $"{folder} — {ApplicationName}" : $"{folder} — {account} — {ApplicationName}";
     // Hairs-AI:           Origin=AI; IP=None; Security=Low; Resources=0; Fingerprint=6B5558
     // Hairs-Human:        PENDING
     public AccountProfile? CurrentAccount => Account.Profile;

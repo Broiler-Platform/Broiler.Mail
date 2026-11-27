@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   36
-// Annotated:        0/36
-// Exempt:           9
-// Human-reviewed:   0/36
+// Relevant units:   40
+// Annotated:        0/40
+// Exempt:           10
+// Human-reviewed:   0/40
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       36
+// Unverified:       40
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -26,7 +26,7 @@ using Microsoft.Data.Sqlite;
 namespace Broiler.Mail.Infrastructure.Persistence;
 
 /// <summary>Versioned, bounded local mail cache. Never owns credentials, drafts or server mutations.</summary>
-public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMailReadStateCache, IMailStarStateCache, IMailMoveCache, IMailDeleteCache, IMailLocalSearch, IMailCacheRecovery, IMailSearchIndex, IMailMailboxSnapshotCache
+public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMailReadStateCache, IMailStarStateCache, IMailMoveCache, IMailDeleteCache, IMailLocalSearch, IMailCacheRecovery, IMailSearchIndex, IMailMailboxSnapshotCache, IMailAttachmentStateCache
 {
     public const long DefaultMaximumBytes = 256L * 1024 * 1024;
     public const int MaximumBodyBytes = 8 * 1024 * 1024;
@@ -123,6 +123,9 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
         finally { _repairGate.Release(); }
     }
     private long _maximumBytes;
+    // The schema version Open last left the database at; every operation reopens under _gate, so it matches its connection.
+    private int _schemaVersion;
+    private bool HasAttachmentColumn => _schemaVersion >= 6;
     private readonly SemaphoreSlim _gate = new(1);
 
     public SqliteMailCache(string path, long maximumBytes = DefaultMaximumBytes)
@@ -142,6 +145,9 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
             (string.IsNullOrWhiteSpace(query.Text) && query.SenderContains is null && query.IsRead is null && query.IsStarred is null && query.IsBodyCached is null && query.ReceivedFrom is null && query.ReceivedBefore is null) ||
             query.SenderContains is {} senderFilter && (string.IsNullOrWhiteSpace(senderFilter) || senderFilter.Length > 256 || senderFilter.Any(char.IsControl)))
             throw new ArgumentException("Choose bounded search text or at least one sender/flag/date filter and a supported search field.", nameof(query));
+        if (query.Scope is { } requestedScope && (!Enum.IsDefined(requestedScope) || query.Field != default) || query.Engine is { } requestedEngine &&
+            (!Enum.IsDefined(requestedEngine) || query.Scope is null || query.Scope == MailSearchScope.SenderOrSubject && requestedEngine == MailSearchEngine.Indexed))
+            throw new ArgumentException("A search scope replaces the field, and an engine applies only to a scope that searches message text.", nameof(query));
         if (query.MailboxId is { } name) _ = new MailboxKey(query.AccountId, name, 1);
         if (query.ReceivedFrom is { } start && query.ReceivedBefore is { } end && start >= end)
             throw new ArgumentException("The received-date interval must have a positive duration.", nameof(query));
@@ -153,13 +159,21 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
             if (cursor.Uid == 0 || cursor.AccountId != query.AccountId || query.MailboxId is {} explicitFolder && explicitFolder != cursor.MailboxId || query.MailboxId is null && query.AccountMailboxSnapshot is null)
                 throw new ArgumentException("Search continuation must belong to the explicit account and mailbox.", nameof(query));
         }
+        if (query.BeforeReceivedAt is not null && (query.BeforeMessage is null || query.MailboxId is not null))
+            throw new ArgumentException("Search continuation date belongs only to an all-folder continuation.", nameof(query));
         if (query.MaximumCount is < 1 or > 500) throw new ArgumentOutOfRangeException(nameof(query));
         return RunAsync(connection =>
         {
             string? accountSnapshot = query.MailboxId is null ? AccountMailboxSnapshot(connection, query.AccountId, cancellationToken) : null;
             if (query.AccountMailboxSnapshot is {} expected && !string.Equals(expected,accountSnapshot,StringComparison.OrdinalIgnoreCase))
-                throw new MailSearchScopeChangedException("Saved account folders or UIDVALIDITY changed. Start a new search with Find saved headers.");
-            bool indexed = (int)query.Field >= 5;
+                throw new MailSearchScopeChangedException("Saved account folders or UIDVALIDITY changed. Start a new search with Search, or use Refresh results.");
+            bool blank = string.IsNullOrWhiteSpace(query.Text), scoped = query.Scope is not null;
+            bool headers = query.Scope is MailSearchScope.Everywhere or MailSearchScope.SenderOrSubject;
+            bool bodies = query.Scope is MailSearchScope.Everywhere or MailSearchScope.MessageBody;
+            // The engine is chosen on the connection that attached (or failed to attach) the index, so nothing can change between check and search.
+            bool indexed = scoped
+                ? bodies && !blank && (query.Engine == MailSearchEngine.Indexed || query.Engine is null && HasSearchIndex(connection))
+                : (int)query.Field >= 5;
             if (indexed && !HasSearchIndex(connection)) throw new MailSearchIndexUnavailableException(_indexIssue);
             if (query.BeforeMessage is { } continuation)
             {
@@ -168,6 +182,17 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
                 head.Parameters.AddWithValue("$a", query.AccountId.ToString()); head.Parameters.AddWithValue("$m", continuation.MailboxId);
                 if (head.ExecuteScalar() is not long epoch || epoch != continuation.UidValidity)
                     throw new InvalidDataException("The saved mailbox epoch changed. Start a new search.");
+                if (query.MailboxId is null)
+                {
+                    // The all-folder keyset continues after the cursor's date. While its row is still saved, that date must
+                    // be the one the previous page returned; a row deleted or moved since is passed over by its date alone.
+                    using var dated = connection.CreateCommand();
+                    dated.CommandText = "SELECT COALESCE(received,'') FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid=$uid";
+                    dated.Parameters.AddWithValue("$a", query.AccountId.ToString()); dated.Parameters.AddWithValue("$m", continuation.MailboxId);
+                    dated.Parameters.AddWithValue("$e", (long)continuation.UidValidity); dated.Parameters.AddWithValue("$uid", (long)continuation.Uid);
+                    if (dated.ExecuteScalar() is string saved && !string.Equals(saved, query.BeforeReceivedAt is { } cursorDate ? FormatDate(cursorDate) : "", StringComparison.Ordinal))
+                        throw new ArgumentException("Search continuation date does not match the saved message.", nameof(query));
+                }
             }
             // Managed comparison gives consistent Unicode semantics without SQLite extensions, dynamic code or SQL wildcards.
             connection.CreateFunction<string, string, bool>("mail_contains", (value, text) =>
@@ -187,28 +212,48 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
                     throw new InvalidDataException("Search body identity is invalid.");
                 ValidateBody(body);
                 cancellationToken.ThrowIfCancellationRequested();
-                return body.PlainText.Contains(query.Text, StringComparison.OrdinalIgnoreCase);
+                // Scopes also scan the complete retained text; the legacy BodyPreview fields keep preview-only matching.
+                return body.PlainText.Contains(query.Text, StringComparison.OrdinalIgnoreCase) ||
+                    scoped && body.RetainedBodyText?.Contains(query.Text, StringComparison.OrdinalIgnoreCase) == true;
             }, isDeterministic: true);
             using var command = connection.CreateCommand();
-            string matchCondition = indexed
+            // The submitted scope and filters; the header-only probe below applies exactly these, so it sees what the search saw.
+            const string filters = """
+                m.account=$account AND ($mailbox IS NULL OR m.mailbox=$mailbox)
+                  AND CASE WHEN $senderFilter IS NULL THEN 1 ELSE mail_contains(m.sender,$senderFilter) END
+                  AND ($read IS NULL OR m.is_read=$read) AND ($star IS NULL OR m.is_starred=$star)
+                  AND ($cached IS NULL OR (m.body IS NOT NULL)=$cached)
+                  AND ($from IS NULL OR m.received >= $from) AND ($before IS NULL OR m.received < $before)
+                """;
+            const string literalBody = "(m.body IS NOT NULL AND CASE WHEN length(m.body)>$maximumBody THEN mail_bad_body() ELSE mail_body_matches(m.body,m.mailbox,m.epoch,m.uid) END)";
+            // Header-first ordering lets SQLite skip body work for rows that already match on sender or subject.
+            string matchCondition = scoped
+                ? "$empty=1" + (headers ? " OR mail_contains(m.sender,$text) OR mail_contains(m.subject,$text)" : "") +
+                  (bodies ? indexed ? " OR EXISTS(SELECT 1 FROM search.docs WHERE docs MATCH $match AND account=m.account AND mailbox=m.mailbox AND epoch=m.epoch AND uid=m.uid)" : " OR " + literalBody : "")
+                : indexed
                 ? "$empty=1 OR EXISTS(SELECT 1 FROM search.docs WHERE docs MATCH $match AND account=m.account AND mailbox=m.mailbox AND epoch=m.epoch AND uid=m.uid)"
                 : "$empty=1 OR ($field IN (0,1,4) AND mail_contains(m.sender,$text)) OR ($field IN (0,2,4) AND mail_contains(m.subject,$text)) OR ($field IN (3,4) AND CASE WHEN length(m.body)>$maximumBody THEN mail_bad_body() ELSE mail_body_matches(m.body,m.mailbox,m.epoch,m.uid) END)";
             string coverageCondition = query.Field == MailHeaderSearchField.IndexedRetainedBody
                 ? "EXISTS(SELECT 1 FROM search.docs WHERE account=m.account AND mailbox=m.mailbox AND epoch=m.epoch AND uid=m.uid AND retained IS NOT NULL)" : "1";
+            string bodyRequired = scoped ? query.Scope == MailSearchScope.MessageBody ? "m.body IS NOT NULL" : "1" : "$field<>3 OR m.body IS NOT NULL";
+            // All folders list newest first: dates are fixed-width UTC "O" text, so text order is time order, and '' puts unknown
+            // dates last. Equal dates list folders ascending, then UIDs descending; (mailbox, uid) is unique within current epochs.
+            bool allFolders = query.MailboxId is null;
+            string cursorCondition = allFolders
+                ? "$cursorMailbox IS NULL OR COALESCE(m.received,'') < $cursorReceived OR (COALESCE(m.received,'') = $cursorReceived AND (m.mailbox COLLATE BINARY > $cursorMailbox OR (m.mailbox=$cursorMailbox AND m.uid<$uid)))"
+                : "$cursorMailbox IS NULL OR m.mailbox COLLATE BINARY < $cursorMailbox OR (m.mailbox=$cursorMailbox AND m.uid<$uid)";
+            string order = allFolders ? "COALESCE(m.received,'') DESC,m.mailbox COLLATE BINARY ASC,m.uid DESC" : "m.mailbox COLLATE BINARY DESC,m.uid DESC";
+            string attachmentColumn = HasAttachmentColumn ? "coalesce(m.has_attachments,0)" : "0";
             command.CommandText = $$"""
-                SELECT m.mailbox,m.epoch,m.uid,m.sender,m.subject,m.received,m.is_read,m.is_starred,m.body IS NOT NULL
+                SELECT m.mailbox,m.epoch,m.uid,m.sender,m.subject,m.received,m.is_read,m.is_starred,m.body IS NOT NULL,{{attachmentColumn}}
                 FROM messages m JOIN mailbox_heads h ON h.account=m.account AND h.mailbox=m.mailbox AND h.epoch=m.epoch
-                WHERE m.account=$account AND ($mailbox IS NULL OR m.mailbox=$mailbox)
-                  AND CASE WHEN $senderFilter IS NULL THEN 1 ELSE mail_contains(m.sender,$senderFilter) END
-                  AND ($read IS NULL OR m.is_read=$read) AND ($star IS NULL OR m.is_starred=$star)
-                  AND ($cached IS NULL OR (m.body IS NOT NULL)=$cached)
+                WHERE {{filters}}
                   AND ($epoch IS NULL OR m.epoch=$epoch)
-                  AND ($cursorMailbox IS NULL OR m.mailbox COLLATE BINARY < $cursorMailbox OR (m.mailbox=$cursorMailbox AND m.uid<$uid))
-                  AND ($from IS NULL OR m.received >= $from) AND ($before IS NULL OR m.received < $before)
-                  AND ($field<>3 OR m.body IS NOT NULL)
+                  AND ({{cursorCondition}})
+                  AND ({{bodyRequired}})
                   AND ({{coverageCondition}})
                   AND ({{matchCondition}})
-                ORDER BY m.mailbox COLLATE BINARY DESC,m.uid DESC LIMIT $limit
+                ORDER BY {{order}} LIMIT $limit
                 """;
             command.Parameters.AddWithValue("$account", query.AccountId.ToString());
             command.Parameters.AddWithValue("$mailbox", (object?)query.MailboxId ?? DBNull.Value);
@@ -221,10 +266,13 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
             command.Parameters.AddWithValue("$epoch", query.MailboxId is not null && query.BeforeMessage is { } prior ? (long)prior.UidValidity : DBNull.Value);
             command.Parameters.AddWithValue("$uid", query.BeforeMessage is { } preceding ? preceding.Uid : (long)uint.MaxValue + 1);
             command.Parameters.AddWithValue("$cursorMailbox", (object?)query.BeforeMessage?.MailboxId ?? DBNull.Value);
+            if (allFolders) command.Parameters.AddWithValue("$cursorReceived", query.BeforeReceivedAt is { } cursorReceived ? FormatDate(cursorReceived) : "");
             command.Parameters.AddWithValue("$maximumBody", MaximumBodyBytes);
             command.Parameters.AddWithValue("$empty", string.IsNullOrWhiteSpace(query.Text));
-            command.Parameters.AddWithValue("$field", (int)query.Field % 5);
-            if (indexed)
+            command.Parameters.AddWithValue("$field", scoped ? 0 : (int)query.Field % 5);
+            if (indexed && scoped)
+                command.Parameters.AddWithValue("$match", "{preview retained} : \"" + query.Text.Trim().Replace("\"", "\"\"", StringComparison.Ordinal) + "\"");
+            else if (indexed)
             {
                 string column = query.Field switch
                 {
@@ -238,23 +286,39 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
             }
             command.Parameters.AddWithValue("$text", query.Text);
             command.Parameters.AddWithValue("$limit", query.MaximumCount + 1);
+            var engine = indexed ? MailSearchEngine.Indexed : MailSearchEngine.Literal;
+            bool headerOnly = false; string? indexIssue = null;
+            if (scoped && bodies && !blank)
+            {
+                // Headers-only mail the submitted filters left in scope (the whole search, not just this page).
+                using var exists = connection.CreateCommand();
+                exists.CommandText = $"SELECT EXISTS(SELECT 1 FROM messages m JOIN mailbox_heads h ON h.account=m.account AND h.mailbox=m.mailbox AND h.epoch=m.epoch WHERE {filters} AND m.body IS NULL)";
+                foreach (string name in (string[])["$account", "$mailbox", "$senderFilter", "$read", "$star", "$cached", "$from", "$before"])
+                    exists.Parameters.AddWithValue(name, command.Parameters[name].Value);
+                headerOnly = exists.ExecuteScalar() is long found && found != 0;
+                // A direct scan while the index is enabled says why, so the note never calls an enabled index "off".
+                if (!indexed && File.Exists(IndexPath))
+                    indexIssue = HasSearchIndex(connection)
+                        ? "This search started before the search index was ready, so its pages keep scanning directly. Search again to use the index."
+                        : _indexIssue;
+            }
             using var registration = cancellationToken.Register(command.Cancel);
             using var reader = command.ExecuteReader();
             var matches = new List<MailMessageSummary>();
             while (reader.Read())
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                if (matches.Count == query.MaximumCount) return new MailHeaderSearchResult(matches.AsReadOnly(), true) { AccountMailboxSnapshot = accountSnapshot };
+                if (matches.Count == query.MaximumCount) return new MailHeaderSearchResult(matches.AsReadOnly(), true) { AccountMailboxSnapshot = accountSnapshot, Engine = engine, HasHeaderOnlyMessages = headerOnly, SearchIndexIssue = indexIssue };
                 matches.Add(new()
                 {
                     Key = new(query.AccountId, reader.GetString(0), checked((uint)reader.GetInt64(1)), checked((uint)reader.GetInt64(2))),
                     Sender = reader.GetString(3), Subject = reader.GetString(4),
                     ReceivedAt = reader.IsDBNull(5) ? null : ParseDate(reader.GetString(5)),
-                    IsRead = reader.GetBoolean(6), IsStarred = reader.GetBoolean(7), IsBodyCached = reader.GetBoolean(8),
+                    IsRead = reader.GetBoolean(6), IsStarred = reader.GetBoolean(7), IsBodyCached = reader.GetBoolean(8), HasAttachments = reader.GetBoolean(9),
                 });
             }
             cancellationToken.ThrowIfCancellationRequested();
-            return new MailHeaderSearchResult(matches.AsReadOnly(), false) { AccountMailboxSnapshot = accountSnapshot };
+            return new MailHeaderSearchResult(matches.AsReadOnly(), false) { AccountMailboxSnapshot = accountSnapshot, Engine = engine, HasHeaderOnlyMessages = headerOnly, SearchIndexIssue = indexIssue };
         }, cancellationToken);
     }
 
@@ -321,7 +385,10 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
             // A different known destination epoch needs a fresh receive, not an assumed epoch ordering.
             write.CommandText = "SELECT count(*) FROM mailbox_heads WHERE account=$a AND mailbox=$dm AND epoch<>$de";
             if ((long)write.ExecuteScalar()! != 0) throw new InvalidDataException("Receive the destination mailbox before reconciling its changed epoch.");
-            write.CommandText = "INSERT INTO messages(account,mailbox,epoch,uid,sender,subject,received,is_read,is_starred,body) SELECT account,$dm,$de,$duid,sender,subject,received,is_read,is_starred,$body FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid=$uid ON CONFLICT(account,mailbox,epoch,uid) DO UPDATE SET body=COALESCE(messages.body,excluded.body)";
+            // The attachment mark travels with the message; a destination row that already knows its own mark keeps it.
+            write.CommandText = HasAttachmentColumn
+                ? "INSERT INTO messages(account,mailbox,epoch,uid,sender,subject,received,is_read,is_starred,body,has_attachments) SELECT account,$dm,$de,$duid,sender,subject,received,is_read,is_starred,$body,has_attachments FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid=$uid ON CONFLICT(account,mailbox,epoch,uid) DO UPDATE SET body=COALESCE(messages.body,excluded.body),has_attachments=COALESCE(messages.has_attachments,excluded.has_attachments)"
+                : "INSERT INTO messages(account,mailbox,epoch,uid,sender,subject,received,is_read,is_starred,body) SELECT account,$dm,$de,$duid,sender,subject,received,is_read,is_starred,$body FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid=$uid ON CONFLICT(account,mailbox,epoch,uid) DO UPDATE SET body=COALESCE(messages.body,excluded.body)";
             write.ExecuteNonQuery();
             // Require destination availability before removing any source data. Repeating this local operation is safe.
             write.CommandText = "SELECT count(*) FROM messages WHERE account=$a AND mailbox=$dm AND epoch=$de AND uid=$duid";
@@ -420,7 +487,7 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
         return RunAsync<IReadOnlyList<MailMessageSummary>>(connection =>
         {
             using var command = Scoped(connection, mailbox);
-            command.CommandText = "SELECT uid,sender,subject,received,is_read,body IS NOT NULL,is_starred FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid<$before ORDER BY uid DESC LIMIT $limit";
+            command.CommandText = "SELECT uid,sender,subject,received,is_read,body IS NOT NULL,is_starred," + (HasAttachmentColumn ? "coalesce(has_attachments,0)" : "0") + " FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid<$before ORDER BY uid DESC LIMIT $limit";
             command.Parameters.AddWithValue("$before", afterUid is null ? (long)uint.MaxValue + 1 : afterUid.Value);
             command.Parameters.AddWithValue("$limit", maximumCount);
             using var reader = command.ExecuteReader();
@@ -430,8 +497,94 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
                 Key = new(mailbox.AccountId, mailbox.MailboxId, mailbox.UidValidity, checked((uint)reader.GetInt64(0))),
                 Sender = reader.GetString(1), Subject = reader.GetString(2),
                 ReceivedAt = reader.IsDBNull(3) ? null : ParseDate(reader.GetString(3)), IsRead = reader.GetBoolean(4), IsBodyCached = reader.GetBoolean(5), IsStarred = reader.GetBoolean(6),
+                HasAttachments = reader.GetBoolean(7),
             });
             return messages;
+        }, cancellationToken);
+    }
+
+    public Task<IReadOnlyCollection<uint>> ReadUidsWithAttachmentsAsync(MailboxKey mailbox, IReadOnlyCollection<uint> uids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox); ArgumentNullException.ThrowIfNull(uids);
+        if (uids.Count > IMailAttachmentStateCache.MaximumRequestedUids) throw new ArgumentOutOfRangeException(nameof(uids), "Request at most 501 UIDs at a time.");
+        var requested = new HashSet<uint>(uids);
+        if (requested.Contains(0)) throw new ArgumentException("A message UID is required.", nameof(uids));
+        if (requested.Count == 0) return Task.FromResult<IReadOnlyCollection<uint>>(Array.Empty<uint>());
+        return RunAsync<IReadOnlyCollection<uint>>(connection =>
+        {
+            if (!HasAttachmentColumn) return Array.Empty<uint>();
+            using var command = Scoped(connection, mailbox);
+            // One primary-key range scan for the requested page; the result is then narrowed to exactly the requested UIDs.
+            command.CommandText = "SELECT uid FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid BETWEEN $low AND $high AND has_attachments=1";
+            command.Parameters.AddWithValue("$low", (long)requested.Min()); command.Parameters.AddWithValue("$high", (long)requested.Max());
+            using var registration = cancellationToken.Register(command.Cancel);
+            using var reader = command.ExecuteReader();
+            var marked = new List<uint>();
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                uint uid = checked((uint)reader.GetInt64(0));
+                if (requested.Contains(uid)) marked.Add(uid);
+            }
+            return marked.AsReadOnly();
+        }, cancellationToken);
+    }
+
+    public Task<IReadOnlyDictionary<uint, bool>> ReadAttachmentMarksAsync(MailboxKey mailbox, IReadOnlyCollection<uint> uids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox); ArgumentNullException.ThrowIfNull(uids);
+        if (uids.Count > IMailAttachmentStateCache.MaximumRequestedUids) throw new ArgumentOutOfRangeException(nameof(uids), "Request at most 501 UIDs at a time.");
+        var requested = new HashSet<uint>(uids);
+        if (requested.Contains(0)) throw new ArgumentException("A message UID is required.", nameof(uids));
+        IReadOnlyDictionary<uint, bool> none = new Dictionary<uint, bool>();
+        if (requested.Count == 0) return Task.FromResult(none);
+        return RunAsync(connection =>
+        {
+            if (!HasAttachmentColumn) return none;
+            using var command = Scoped(connection, mailbox);
+            command.CommandText = "SELECT uid,has_attachments FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid BETWEEN $low AND $high AND has_attachments IS NOT NULL";
+            command.Parameters.AddWithValue("$low", (long)requested.Min()); command.Parameters.AddWithValue("$high", (long)requested.Max());
+            using var registration = cancellationToken.Register(command.Cancel);
+            using var reader = command.ExecuteReader();
+            var marks = new Dictionary<uint, bool>();
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                uint uid = checked((uint)reader.GetInt64(0));
+                if (requested.Contains(uid)) marks[uid] = reader.GetInt64(1) == 1;
+            }
+            return (IReadOnlyDictionary<uint, bool>)marks;
+        }, cancellationToken);
+    }
+
+    public Task<IReadOnlyDictionary<uint, MailSavedRowState>> ReadSavedRowStatesAsync(MailboxKey mailbox, IReadOnlyCollection<uint> uids,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(mailbox); ArgumentNullException.ThrowIfNull(uids);
+        if (uids.Count > IMailAttachmentStateCache.MaximumRequestedUids) throw new ArgumentOutOfRangeException(nameof(uids), "Request at most 501 UIDs at a time.");
+        var requested = new HashSet<uint>(uids);
+        if (requested.Contains(0)) throw new ArgumentException("A message UID is required.", nameof(uids));
+        IReadOnlyDictionary<uint, MailSavedRowState> none = new Dictionary<uint, MailSavedRowState>();
+        if (requested.Count == 0) return Task.FromResult(none);
+        return RunAsync(connection =>
+        {
+            using var command = Scoped(connection, mailbox);
+            // One primary-key range scan reads both states; a cache format without the mark reports it as unrecorded.
+            command.CommandText = "SELECT uid," + (HasAttachmentColumn ? "has_attachments" : "NULL") + ",body IS NOT NULL FROM messages WHERE account=$a AND mailbox=$m AND epoch=$e AND uid BETWEEN $low AND $high";
+            command.Parameters.AddWithValue("$low", (long)requested.Min()); command.Parameters.AddWithValue("$high", (long)requested.Max());
+            using var registration = cancellationToken.Register(command.Cancel);
+            using var reader = command.ExecuteReader();
+            var states = new Dictionary<uint, MailSavedRowState>();
+            while (reader.Read())
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                uint uid = checked((uint)reader.GetInt64(0));
+                if (requested.Contains(uid))
+                    states[uid] = new(reader.IsDBNull(1) ? null : reader.GetInt64(1) == 1, reader.GetBoolean(2));
+            }
+            return (IReadOnlyDictionary<uint, MailSavedRowState>)states;
         }, cancellationToken);
     }
 
@@ -488,13 +641,22 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
         ValidateBody(body);
         return RunAsync(connection =>
         {
-            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(body, CacheJsonContext.Default.MailMessageBody);
-            if (body.RetainedBodyText is not null && Scalar(connection, "PRAGMA user_version") < 4)
+            long version = Scalar(connection, "PRAGMA user_version");
+            // Below schema v6 the attachment inventory is not stored, so builds that disallow unknown members can still read the body.
+            bool marks = version >= 6 && HasAttachmentColumn;
+            var stored = marks ? body : body with { Attachments = null, IsAttachmentListIncomplete = false };
+            byte[] bytes = JsonSerializer.SerializeToUtf8Bytes(stored, CacheJsonContext.Default.MailMessageBody);
+            if (body.RetainedBodyText is not null && version < 4)
                 throw new InvalidOperationException("Increase the cache quota so its format can be upgraded before retaining complete body text. No saved body was replaced.");
             if (bytes.Length > MaximumBodyBytes) throw new InvalidDataException("Message body exceeds the local cache limit.");
             using var transaction = connection.BeginTransaction();
             using var command = Scoped(connection, mailbox); command.Transaction = transaction;
-            command.CommandText = "UPDATE messages SET body=$body WHERE account=$a AND mailbox=$m AND epoch=$e AND uid=$uid";
+            // A body without a list (decoded before inventories existed) leaves an earlier mark alone instead of clearing it.
+            command.CommandText = marks
+                ? "UPDATE messages SET body=$body,has_attachments=CASE WHEN $att IS NULL THEN has_attachments ELSE $att END WHERE account=$a AND mailbox=$m AND epoch=$e AND uid=$uid"
+                : "UPDATE messages SET body=$body WHERE account=$a AND mailbox=$m AND epoch=$e AND uid=$uid";
+            // An incomplete structure with nothing listed is unknown, not "no attachments": the mark is left as it was.
+            if (marks) command.Parameters.AddWithValue("$att", body.Attachments is { } list && (list.Count > 0 || !body.IsAttachmentListIncomplete) ? (object)(list.Count > 0) : DBNull.Value);
             command.Parameters.AddWithValue("$uid", (long)body.Key.Uid); command.Parameters.AddWithValue("$body", bytes);
             if (command.ExecuteNonQuery() != 1) throw new InvalidDataException("Save the message header before its body.");
             SyncSearchDocument(connection, transaction, body.Key, cancellationToken);
@@ -551,7 +713,7 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
             { DataSource = path, Mode = SqliteOpenMode.ReadOnly, Pooling = false, DefaultTimeout = 2 }.ToString());
             connection.Open();
             long version = Scalar(connection, "PRAGMA user_version");
-            if (version is not (1 or 2 or 3 or 4 or 5) || Scalar(connection, "PRAGMA application_id") != ApplicationId)
+            if (version is not (1 or 2 or 3 or 4 or 5 or 6) || Scalar(connection, "PRAGMA application_id") != ApplicationId)
                 throw new InvalidDataException("The backup cache has an unsupported schema/application identity.");
             using var command = connection.CreateCommand(); command.CommandText = "PRAGMA quick_check";
             if ((string?)command.ExecuteScalar() != "ok") throw new InvalidDataException("The backup cache failed its integrity check.");
@@ -568,6 +730,10 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
                 command.CommandText = "SELECT account,mailbox,epoch,observed,uid_count,uid_hash FROM mailbox_snapshots LIMIT 0"; using (command.ExecuteReader()) { }
                 command.CommandText = "SELECT account,mailbox,epoch,uid FROM mailbox_snapshot_uids LIMIT 0"; using (command.ExecuteReader()) { }
             }
+            if (version >= 6)
+            {
+                command.CommandText = "SELECT has_attachments FROM messages LIMIT 0"; using (command.ExecuteReader()) { }
+            }
             command.CommandText = "SELECT account,mailbox,epoch,received FROM mailbox_heads LIMIT 0";
             using (command.ExecuteReader()) { }
         }
@@ -583,7 +749,7 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
             connection.Open();
             long version = Scalar(connection, "PRAGMA user_version");
             long application = Scalar(connection, "PRAGMA application_id");
-            if (version is < 0 or > 5 || (application != 0 && application != ApplicationId) || (version > 0 && application != ApplicationId))
+            if (version is < 0 or > 6 || (application != 0 && application != ApplicationId) || (version > 0 && application != ApplicationId))
                 throw new InvalidDataException("The mail cache uses an unsupported schema/application. It has not been reset.");
             if (version == 0)
             {
@@ -591,8 +757,8 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
                     throw new InvalidDataException("Unrecognized cache database; no tables were changed.");
                 using var transaction = connection.BeginTransaction();
                 using var command = connection.CreateCommand(); command.Transaction = transaction;
-                command.CommandText = $"CREATE TABLE mailbox_heads(account TEXT NOT NULL,mailbox TEXT NOT NULL,epoch INTEGER NOT NULL,received TEXT NOT NULL,PRIMARY KEY(account,mailbox)); CREATE TABLE messages(account TEXT NOT NULL,mailbox TEXT NOT NULL,epoch INTEGER NOT NULL,uid INTEGER NOT NULL,sender TEXT NOT NULL,subject TEXT NOT NULL,received TEXT,is_read INTEGER NOT NULL,is_starred INTEGER NOT NULL DEFAULT 0 CHECK(is_starred IN (0,1)),body BLOB,PRIMARY KEY(account,mailbox,epoch,uid)); PRAGMA application_id={ApplicationId}; PRAGMA user_version=5;" + RevisionSchema + SnapshotSchema;
-                command.ExecuteNonQuery(); transaction.Commit();
+                command.CommandText = $"CREATE TABLE mailbox_heads(account TEXT NOT NULL,mailbox TEXT NOT NULL,epoch INTEGER NOT NULL,received TEXT NOT NULL,PRIMARY KEY(account,mailbox)); CREATE TABLE messages(account TEXT NOT NULL,mailbox TEXT NOT NULL,epoch INTEGER NOT NULL,uid INTEGER NOT NULL,sender TEXT NOT NULL,subject TEXT NOT NULL,received TEXT,is_read INTEGER NOT NULL,is_starred INTEGER NOT NULL DEFAULT 0 CHECK(is_starred IN (0,1)),body BLOB,has_attachments INTEGER CHECK(has_attachments IN (0,1)),PRIMARY KEY(account,mailbox,epoch,uid)); PRAGMA application_id={ApplicationId}; PRAGMA user_version=6;" + RevisionSchema + SnapshotSchema;
+                command.ExecuteNonQuery(); transaction.Commit(); version = 6;
             }
             if (version == 1)
             {
@@ -636,8 +802,18 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
             {
                 BackupBeforeStarMigration(connection, 4);
                 using var upgrade = connection.BeginTransaction(); using var migration = connection.CreateCommand(); migration.Transaction = upgrade;
-                migration.CommandText = SnapshotSchema + " PRAGMA user_version=5;"; migration.ExecuteNonQuery(); upgrade.Commit();
+                migration.CommandText = SnapshotSchema + " PRAGMA user_version=5;"; migration.ExecuteNonQuery(); upgrade.Commit(); version = 5;
             }
+            if (version == 5 && Scalar(connection, "PRAGMA page_count") + 4 <= _maximumBytes / Scalar(connection, "PRAGMA page_size"))
+            {
+                // Format v6 adds the nullable attachment mark and lets body JSON carry the attachment list. Older builds refuse a
+                // v6 cache; the verified v5 backup taken here is the rollback. Existing rows stay unknown (NULL): there is no backfill.
+                BackupBeforeStarMigration(connection, 5);
+                using var upgrade = connection.BeginTransaction(); using var migration = connection.CreateCommand(); migration.Transaction = upgrade;
+                migration.CommandText = "ALTER TABLE messages ADD COLUMN has_attachments INTEGER CHECK(has_attachments IN (0,1)); PRAGMA user_version=6;";
+                migration.ExecuteNonQuery(); upgrade.Commit(); version = 6;
+            }
+            _schemaVersion = (int)version;
             if (attachIndex) AttachSearchIndex(connection);
             return connection;
         }
@@ -678,6 +854,14 @@ public sealed partial class SqliteMailCache : IMailCache, IMailFolderCache, IMai
                 headers.Sum(values => values!.Sum(value => (long)value.Length)) > 256 * 1024)
                 throw new InvalidDataException("Cached reply headers exceed supported bounds.");
         }
+        if (body.Attachments is { } attachments &&
+            (attachments.Count > MailAttachmentDescriptor.MaximumCount || attachments.Any(attachment => attachment is null ||
+                attachment.PartNumber is < 1 or > 256 ||
+                string.IsNullOrEmpty(attachment.FileName) || attachment.FileName.Length > MailAttachmentDescriptor.MaximumFileNameLength ||
+                attachment.FileName.Any(char.IsControl) ||
+                attachment.MediaType is null || attachment.MediaType.Length > 127 ||
+                attachment.DecodedBytes is < 0 or > IStreamingMessageSourceExports.MaximumBytes)))
+            throw new InvalidDataException("Cached attachment list exceeds supported bounds.");
     }
 
     private static SqliteCommand Scoped(SqliteConnection connection, MailboxKey mailbox)

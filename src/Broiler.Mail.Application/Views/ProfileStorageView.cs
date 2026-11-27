@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   2
 // Annotated:        0/2
-// Exempt:           0
+// Exempt:           1
 // Human-reviewed:   0/2
 // IP risk:          not assessed
 // Security risk:    not assessed
@@ -20,6 +20,8 @@ using Broiler.UI;
 using Broiler.UI.Button.Standard;
 using Broiler.UI.Forms.Standard;
 using Broiler.UI.Forms;
+using Broiler.UI.Edit.Standard;
+using Broiler.UI.Label;
 using Broiler.UI.Label.Standard;
 using Broiler.UI.Panel.Standard;
 using Broiler.Mail.Core.Services;
@@ -29,8 +31,11 @@ using Broiler.UI.ComboBox.Standard;
 
 namespace Broiler.Mail.Application.Views;
 
-public sealed class ProfileStorageView(ProfileStorageViewModel model)
+public sealed class ProfileStorageView(ProfileStorageViewModel model, IMailFilePicker? files = null)
 {
+    /// <summary>Chooses files for this view; an unavailable picker when none was given, so views keep their typed paths.</summary>
+    internal IMailFilePicker Files { get; } = files ?? UnavailableMailFilePicker.NotOnThisDeviceYet;
+
     public UiElement CreateContent()
     {
         var panel = new StandardPanel { Spacing = 12 };
@@ -67,9 +72,28 @@ public sealed class ProfileStorageView(ProfileStorageViewModel model)
         var rebuildIndex = new StandardButton { Text = "Rebuild saved-text search index" }; indexSection.AddChild(rebuildIndex);
         var disableIndex = new StandardButton { Text = "Disable search index (keep mail)" }; indexSection.AddChild(disableIndex);
         if (model.SupportsSearchIndex) panel.AddChild(indexSection);
-        var backup = ConfigurationForm.AddSection(panel, "Backup and recovery", "Choose a new folder for each backup. Cleanup also creates a verified recovery backup here first. Existing folders are never overwritten.");
-        var destination = ConfigurationForm.AddField(backup, "New backup folder", model.BackupDestination); destination.MaxLength = 32767;
-        var newFolder = new StandardButton { Text = "Use a new default backup folder" }; backup.AddChild(newFolder);
+        // A device whose picker cannot choose folders yet keeps the typed path fields, so it loses no function.
+        bool picking = Files.Capabilities.HasFlag(MailFilePickerCapabilities.PickDirectory);
+        string unavailable = Files is UnavailableMailFilePicker none ? none.Reason : "Choosing folders is not available on this device yet.";
+        var backup = ConfigurationForm.AddSection(panel, "Backup and recovery", picking
+            ? "Each backup goes into a new folder in the backup location. Cleanup also creates a verified recovery backup there first. Existing folders are never overwritten."
+            : "Choose a new folder for each backup. Cleanup also creates a verified recovery backup here first. Existing folders are never overwritten.");
+        StandardLabel PathText(string name) => new() { UseMnemonic = false, Wrapping = UiTextWrapping.Wrap, AccessibleName = name };
+        // A label's own accessible name replaces its text for assistive technology, so the name carries the path too.
+        static void ShowPath(StandardLabel label, string name, string path) { label.Text = path; label.AccessibleName = name + ": " + path; }
+        StandardButton PickButton(StandardPanel section, string text)
+        {
+            var button = new StandardButton { Text = text, IsEnabled = picking };
+            if (!picking) button.ToolTipText = unavailable;
+            section.AddChild(button); return button;
+        }
+        var location = PathText("Backup location");
+        StandardEdit? destination = null;
+        if (picking) ConfigurationForm.AddLabeledControl(backup, "Backup location", location);
+        else { destination = ConfigurationForm.AddField(backup, "New backup folder", model.BackupDestination); destination.MaxLength = 32767; }
+        var changeLocation = PickButton(backup, "Change backup location…");
+        // Typed mode keeps its generator: one click writes a new unique folder in the profile's backups folder.
+        var defaultLocation = new StandardButton { Text = picking ? "Use default location" : "Use a new default backup folder" }; backup.AddChild(defaultLocation);
         var save = new StandardButton { Text = "Create verified backup" }; backup.AddChild(save);
         var clear = new StandardButton { Text = "Clear downloaded mail…" }; backup.AddChild(clear);
         var confirmation = new StandardPanel { Spacing = 8 };
@@ -79,8 +103,15 @@ public sealed class ProfileStorageView(ProfileStorageViewModel model)
         confirmation.AddChild(confirm); confirmation.AddChild(keep); backup.AddChild(confirmation);
         var restore = new FormSection("Restore as a separate profile", "The open profile is never replaced.", collapsible: true, expanded: false);
         panel.AddChild(restore);
-        var source = ConfigurationForm.AddField(restore.Content, "Backup folder", model.RestoreSource); source.MaxLength = 32767;
-        var restored = ConfigurationForm.AddField(restore.Content, "New profile folder", model.RestoreDestination); restored.MaxLength = 32767;
+        var sourceText = PathText("Backup to restore"); var restoredText = PathText("Restored profile folder");
+        StandardEdit? source = null, restored = null;
+        if (picking) ConfigurationForm.AddLabeledControl(restore.Content, "Backup to restore", sourceText);
+        else { source = ConfigurationForm.AddField(restore.Content, "Backup folder", model.RestoreSource); source.MaxLength = 32767; }
+        var chooseSource = PickButton(restore.Content, "Choose backup folder…");
+        if (picking) ConfigurationForm.AddLabeledControl(restore.Content, "Restored profile folder", restoredText);
+        else { restored = ConfigurationForm.AddField(restore.Content, "New profile folder", model.RestoreDestination); restored.MaxLength = 32767; }
+        var changeRestoreLocation = PickButton(restore.Content, "Change restore location…");
+        string shownDestination = model.BackupDestination, shownRestored = model.RestoreDestination;
         var restoreButton = new StandardButton { Text = "Restore backup" }; restore.Content.AddChild(restoreButton);
         var open = new StandardButton { Text = "Open restored profile" }; restore.Content.AddChild(open);
         var cancel = new StandardButton { Text = "Cancel storage operation" }; panel.AddChild(cancel);
@@ -97,7 +128,19 @@ public sealed class ProfileStorageView(ProfileStorageViewModel model)
             if (panel.IsDisposed) return;
             var oldFocus = panel.Session?.FocusedElement;
             usage.Text = model.Usage;
-            refresh.IsEnabled = save.IsEnabled = clear.IsEnabled = restoreButton.IsEnabled = destination.IsEnabled = source.IsEnabled = restored.IsEnabled = newFolder.IsEnabled = !model.IsBusy;
+            refresh.IsEnabled = save.IsEnabled = clear.IsEnabled = defaultLocation.IsEnabled = !model.IsBusy;
+            changeLocation.IsEnabled = chooseSource.IsEnabled = changeRestoreLocation.IsEnabled = picking && !model.IsBusy;
+            defaultLocation.Visibility = picking && model.IsDefaultBackupLocation ? UiVisibility.Collapsed : UiVisibility.Visible;
+            ShowPath(location, "Backup location", model.BackupLocation);
+            ShowPath(sourceText, "Backup to restore", model.RestoreSource.Length > 0 ? model.RestoreSource : "No backup chosen yet. Create a backup, or choose a backup folder.");
+            ShowPath(restoredText, "Restored profile folder", model.RestoreDestination);
+            restoreButton.IsEnabled = !model.IsBusy && (picking ? model.RestoreSource.Length > 0 : true);
+            foreach (var field in new[] { destination, source, restored }) if (field is not null) field.IsEnabled = !model.IsBusy;
+            // A completed backup or restore generates the next new folder; show it unless the field was edited since.
+            if (!model.IsBusy && destination is not null && model.BackupDestination != shownDestination)
+            { if (destination.Text == shownDestination) destination.Text = model.BackupDestination; shownDestination = model.BackupDestination; }
+            if (!model.IsBusy && restored is not null && model.RestoreDestination != shownRestored)
+            { if (restored.Text == shownRestored) restored.Text = model.RestoreDestination; shownRestored = model.RestoreDestination; }
             updatingActions = true;
             if (!ReferenceEquals(shownActions, model.UncertainActions))
             { shownActions = model.UncertainActions; actionChoice.SetItems(shownActions.Select(action => new UiComboBoxItem(action.Id.ToString(), action.Description))); }
@@ -118,8 +161,8 @@ public sealed class ProfileStorageView(ProfileStorageViewModel model)
             if (model.IsBusy && (oldFocus == confirmDismissal || oldFocus == review)) FocusVisible(cancel);
             else if (!model.IsBusy && oldFocus == cancel) FocusVisible(review);
             // A completed backup becomes the restore source, without rewriting a field while typing.
-            if (!model.IsBusy && source.Text.Length == 0 && model.RestoreSource.Length > 0) source.Text = model.RestoreSource;
-            feedback.Set(model.Status, model.IsError ? FeedbackKind.Error : model.IsBusy ? FeedbackKind.Progress : FeedbackKind.Information);
+            if (!model.IsBusy && source is not null && source.Text.Length == 0 && model.RestoreSource.Length > 0) source.Text = model.RestoreSource;
+            feedback.Set(model.Status, model.IsError ? FeedbackKind.Error : model.IsWarning ? FeedbackKind.Warning : model.IsBusy ? FeedbackKind.Progress : FeedbackKind.Information);
             if (panel.Session?.FocusedElement is { } focused && focused.IsDescendantOf(panel))
             {
                 if (model.IsBusy && !focused.CanFocus) FocusVisible(cancel);
@@ -138,12 +181,52 @@ public sealed class ProfileStorageView(ProfileStorageViewModel model)
         confirmDismissal.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { await model.DismissUncertainActionAsync(); if (!panel.IsDisposed) FocusVisible(review); });
         refresh.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await model.RefreshAsync());
         apply.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { model.SelectedDownloadPolicy = (OfflineDownloadPolicy)downloads.SelectedIndex; model.QuotaMiB = quota.Text; await model.SavePolicyAsync(); });
-        save.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { model.BackupDestination = destination.Text; await model.BackupAsync(); });
-        newFolder.Clicked += (_, _) => destination.Text = model.BackupDestination = Path.Combine(model.ProfileDirectory, "backups", "profile-" + Guid.NewGuid().ToString("N"));
+        void TakeTypedBackupDestination() { if (destination is not null) shownDestination = model.BackupDestination = destination.Text; }
+        // A user-initiated folder dialog is the documented exemption to the no-modal-while-reading rule.
+        async Task PickFolderAsync(StandardButton trigger, MailFilePurpose purpose, string title, string accept, string initial, Func<string, bool> use)
+        {
+            if (model.IsBusy || panel.IsDisposed) return;
+            var pick = await Files.PickDirectoryAsync(new MailFileRequest(purpose, title) { AcceptText = accept, InitialDirectory = initial });
+            if (panel.IsDisposed) return;
+            switch (pick.Status)
+            {
+                case MailFilePickStatus.Picked when pick.Item?.LocalPath is { Length: > 0 } path: use(path); break;
+                case MailFilePickStatus.Picked: model.Warn("That folder cannot be used here because it has no path on this device. Nothing was changed."); break;
+                case MailFilePickStatus.Rejected or MailFilePickStatus.Unavailable:
+                    model.Warn((pick.Message ?? "That folder cannot be used.") + " Nothing was changed."); break;
+            }
+            if (panel.Session?.FocusedElement is not { } focused || !focused.IsDescendantOf(panel) || !focused.CanFocus) FocusVisible(trigger);
+        }
+        static string Existing(string path)
+        {
+            for (string? folder = path; !string.IsNullOrEmpty(folder); folder = Path.GetDirectoryName(folder))
+                if (Directory.Exists(folder)) return folder;
+            return path;
+        }
+        changeLocation.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await PickFolderAsync(changeLocation,
+            MailFilePurpose.BackupLocation, "Choose backup location", "Use this folder", Existing(model.BackupLocation), model.SetBackupLocation));
+        defaultLocation.Clicked += (_, _) =>
+        {
+            model.UseDefaultBackupLocation();
+            // The user asked for a new folder, so it replaces whatever the field holds, edited or not.
+            if (destination is not null) { if (!model.IsBusy) destination.Text = shownDestination = model.BackupDestination; }
+            else FocusVisible(changeLocation);
+        };
+        chooseSource.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await PickFolderAsync(chooseSource,
+            MailFilePurpose.RestoreBackup, "Choose backup to restore", "Use this backup",
+            Existing(model.RestoreSource.Length > 0 ? model.RestoreSource : model.BackupLocation), model.SetRestoreSource));
+        changeRestoreLocation.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => await PickFolderAsync(changeRestoreLocation,
+            MailFilePurpose.RestoreLocation, "Choose where to restore", "Use this folder", Existing(model.RestoreLocation), model.SetRestoreLocation));
+        save.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { TakeTypedBackupDestination(); await model.BackupAsync(); });
         clear.Clicked += (_, _) => model.RequestClear();
         keep.Clicked += (_, _) => model.CancelClear();
-        confirm.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { model.BackupDestination = destination.Text; await model.ClearAsync(); });
-        restoreButton.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { model.RestoreSource = source.Text; model.RestoreDestination = restored.Text; await model.RestoreAsync(); });
+        confirm.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) => { TakeTypedBackupDestination(); await model.ClearAsync(); });
+        restoreButton.Clicked += UiAsync.Handler<UiButtonClickEventArgs>(async (_, _) =>
+        {
+            if (source is not null) model.RestoreSource = source.Text;
+            if (restored is not null) shownRestored = model.RestoreDestination = restored.Text;
+            await model.RestoreAsync();
+        });
         open.Clicked += (_, _) => model.OpenRestored(); cancel.Clicked += (_, _) => model.Cancel();
         Refresh(); return panel;
     }

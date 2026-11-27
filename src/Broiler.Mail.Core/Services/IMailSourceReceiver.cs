@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   19
-// Annotated:        0/19
+// Relevant units:   22
+// Annotated:        0/22
 // Exempt:           1
-// Human-reviewed:   0/19
+// Human-reviewed:   0/22
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       19
+// Unverified:       22
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -67,3 +67,15 @@ public interface IAccountSourceExportCatalog
 {
     Task<IReadOnlyList<SavedMessageSourceExport>> ListAccountExportsAsync(AccountId account, CancellationToken token = default);
 }
+
+/// <summary>
+/// Explicit removal of one cataloged saved original. The file is verified against its receipt and deleted first; only
+/// then is the receipt removed, so a failure never leaves an uncataloged file counted against the quota silently.
+/// </summary>
+public interface ISourceExportCatalogMaintenance
+{
+    Task<RemovedMessageSourceExport> RemoveExportAsync(SavedMessageSourceExport saved, CancellationToken token = default);
+}
+/// <param name="Removed">The receipt that was removed.</param>
+/// <param name="FileWasMissing">The file was already gone, so only the receipt was removed.</param>
+public sealed record RemovedMessageSourceExport(SavedMessageSourceExport Removed, bool FileWasMissing);

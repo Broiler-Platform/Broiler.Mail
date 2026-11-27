@@ -2,6 +2,12 @@
 
 Updated: 2026-11-04. Saved-mail search includes downloaded body previews. Optional indexed phrase modes are now available; complete-body indexing remains open.
 
+Updated: 2026-11-26 (UX-M1). Search is now an inline header at the top of the message list, not a dialog, and
+its controls were renamed: **Find saved headers** is now **Search**, **Close search** is now **Exit search**, and
+the 12 field modes and the combined flag filter were replaced by three scopes and separate Read, Starred and
+Offline filters. All-folder results are sorted by received date. The sections below keep their original
+increment history; names in them follow the current controls. See [Reader controls](#reader-controls).
+
 `IMailLocalSearch` is implemented by `SqliteMailCache`. It searches saved sender/subject headers and optionally downloaded plain-text
 body previews without network access, using an explicit nonempty account ID and
 optional exact mailbox, read-state, star-state and received-date filters. Matching is literal
@@ -10,9 +16,10 @@ have no special meaning. These literal modes need no derived index. The later [i
 
 Only rows matching the current `mailbox_heads` epoch are eligible. Old
 UIDVALIDITY rows and other accounts are excluded. Results preserve full message
-identity, flags and cached-body availability. Ordering is mailbox name descending
-(SQLite BINARY), then UID descending within the mailbox. This is deterministic
-header browsing order, not relevance or cross-folder date ordering.
+identity, flags and cached-body availability. Within one folder, ordering is UID
+descending. Across all saved folders it is newest received date first (unknown dates
+last), then mailbox name ascending (SQLite BINARY), then UID descending. This is
+deterministic browsing order, not relevance.
 
 Queries accept up to 256 characters without controls (blank text requires a flag or
 date/body-availability filter) and return at most
@@ -39,18 +46,30 @@ The storage-foundation increment passed 947 shared tests. See its [validation ev
 
 ## Reader controls
 
-The inbox toolbar offers **Search saved mail** when the cache supports local search.
-The search row accepts literal text, a Sender or subject / Sender only / Subject
-only / Saved body preview / Headers or saved body selector, and an All / Unread /
-Starred / Unread and starred filter. **Find saved headers** defaults to the selected folder of the current account. An explicit scope selector now offers all saved folders in that account, with a maximum of 500 results per page. The coverage notice names
-the submitted query and folder and offers Next saved results when additional matches exist.
-Editing the text alone does not change results; press Find again to submit it.
+The inbox toolbar offers **Search saved mail** when the cache supports local search; so do
+`Ctrl+K`, `Ctrl+E`, `Ctrl+F` without an open message, and **File → Mailbox and message → Search
+saved mail**. Each opens the search header at the top of the message list and focuses its query
+(placeholder *Search mail…*, accessible name *Saved mail search text*); nothing opens a dialog.
+
+The header's first row holds the query, the folder scope (**Current folder**, the default, or
+**All saved folders for this account**), **Search** (or `Enter` in the query), **Filters**,
+**Details** and **×** (**Clear search**). **Filters** shows a row with the Sender field, **Search in**
+(*Everywhere (headers & body)*, the default; *Sender or subject*; *Message body*), **Read state**,
+**Starred state**, **Offline availability** and the received date. **Details** shows the submitted
+query and its coverage. At most 500 results are shown per page.
+
+While a search is active, a results strip below the header shows a short summary
+(*Page N · K matches*, with *in all folders* and *· more* when they apply; its tooltip says why
+receiving is paused), **←** (*Previous saved results*), **→** (*Next saved results*), **Refresh
+results** after the saved folders change, and **Exit search**. Editing the text alone does not
+change results; press Search again to submit it. `Escape` in the header clears the query, then
+exits search; Android Back does the same.
 
 Search works for disabled accounts too, without enabling network access. Results
 open saved bodies only. An uncached body explains that it must be downloaded after
 leaving search; opening it never silently contacts the server. While results are
 active, receive, ordinary mailbox paging, bulk download, server mutations, undo and local mutation
-cleanup retries are unavailable. **Close search** reloads the folder's normal cached
+cleanup retries are unavailable. **Exit search** reloads the folder's normal cached
 headers without receiving from the server. Account/folder changes reset result mode;
 account changes also reset query/filter inputs. Query state is session-only.
 
@@ -59,7 +78,7 @@ cancelled searches and results from an earlier account cannot replace current ma
 Retry after a search failure/cancellation searches saved headers again. Empty
 results say no headers matched and do not claim the server mailbox is empty.
 
-Search controls replace normal toolbar actions while expanded, retaining Cancel.
+The search header sits above the list and the normal toolbar stays in view, retaining Cancel.
 Regression checks at 640×480 and 100%/200% text verify input focus, transfer to Cancel
 while searching, usable completion/close focus and remaining list space. Broader
 native screen-reader and keyboard acceptance remains pending.
@@ -73,13 +92,13 @@ Windows x64 publish variants passed. See [reader-search validation](evidence/m4-
 
 ## Received-date filtering
 
-The reader now adds **All received dates**, **Last 7 days (UTC)**,
-**Last 30 days (UTC)** and **Last 365 days (UTC)**. A date or flag filter may
+The reader now adds **Any date**, **Last 7 days**, **Last 30 days** and
+**Last year** (365 days), all in UTC. A date or flag filter may
 now be submitted without a keyword. Each submitted search captures the current UTC instant
 and searches `[now - selected days, now)`. These are rolling elapsed-day windows,
 not local calendar dates. Future-dated and unknown-date headers are excluded from
-a dated search; **All received dates** includes them. The result notice shows the
-submitted UTC bounds. Editing the date selector requires another Find submission.
+a dated search; **Any date** includes them. The result notice shows the
+submitted UTC bounds. Editing the date selector requires another Search submission.
 Date choice resets on account changes, alongside text and flag filters.
 
 The storage contract also accepts optional independent `ReceivedFrom` (inclusive)
@@ -101,8 +120,8 @@ publish variants, including NativeAOT. See [date-filter validation](evidence/m4-
 
 **Next saved results** replaces the current result page with up to 500 more matching
 headers from the same folder. It clears the selected message/body and keeps at most
-500 rows in memory. **Find saved headers** starts over on the first page using the
-current controls; Close search returns to ordinary cached-folder navigation.
+500 rows in memory. **Search** starts over on the first page using the
+current controls; **Exit search** returns to ordinary cached-folder navigation.
 Previous saved results now reloads earlier submitted pages from a bounded session
 history (128 queries, no retained result rows). The notice names the page and result
 count. See [previous-page behavior](m4-three-everyday-items.md).
@@ -110,8 +129,9 @@ count. See [previous-page behavior](m4-three-everyday-items.md).
 Continuation uses an exclusive full message key `(AccountId, MailboxId, UIDVALIDITY,
 UID)` rather than an offset or sequence number. The storage API requires an exact
 mailbox filter for continuation and rejects zero UIDs, foreign account/folder keys,
-and a missing or changed current mailbox epoch. Cross-folder first-page search is
-still supported by the storage API, but cross-folder continuation is not exposed.
+and a missing or changed current mailbox epoch. Cross-folder continuation was added
+later in [account search](m4-account-search.md); since UX-M1 it also passes the cursor
+row's received date (`BeforeReceivedAt`), because those pages are ordered by date.
 
 The model retains the submitted text, flag filters and captured UTC date bounds for
 Next and Retry. Editing controls does not silently alter a later page or recalculate
@@ -119,7 +139,7 @@ a rolling date window. Retry after a page failure/cancellation repeats that page
 even if the editable text has since been cleared. Account/folder changes and storage
 maintenance keep the existing cancellation and stale-result guards. Continuations
 are session-only and results are not a database snapshot: saved mail may change
-between pages. Restart Find if the mailbox epoch changes.
+between pages. Start a new search with Search if the mailbox epoch changes.
 
 Three added shared cases verify complete, nonoverlapping descending-UID pages after
 reopening storage; rejected foreign/unscoped/changed-epoch continuations; and a
@@ -131,6 +151,10 @@ Validation passed: 960 shared tests, 79 focused Windows checks and both Windows 
 publish variants, including NativeAOT. See [paging validation](evidence/m4-search-pages-win-x64/README.md).
 
 ## Header fields and filter-only searches
+
+*Since UX-M1 the field selector is replaced by the **Search in** scopes and the separate
+Sender field; subject-only matching is no longer offered. The paragraphs below describe the
+increment that introduced it.*
 
 The field selector restricts literal matching to the saved **Sender**, **Subject**,
 or either field. Sender matching uses the existing displayed sender string, not an
@@ -157,6 +181,10 @@ query on a disabled account. Validation passed: 965 shared tests, 79 focused Win
 checks and both Windows x64 publish variants, including NativeAOT. See [field/filter validation](evidence/m4-search-fields-win-x64/README.md).
 
 ## Downloaded body-preview search
+
+*Since UX-M1 these modes are the **Message body** and **Everywhere (headers & body)** scopes,
+which also search complete retained text; see [retained-body search](m4-retained-body-search.md)
+and the `UX-06.1` notes in the [UI/UX roadmap](ui-ux-roadmap.md).*
 
 **Saved body preview** matches only the cached `PlainText` preview. **Headers or
 saved body** matches sender, subject or that preview. This includes text extracted
@@ -197,9 +225,9 @@ inclusive at UTC midnight; the second date is exclusive at UTC midnight. Thus
 At least one date is required. These are UTC calendar boundaries, not local dates.
 
 The editor validates exact ISO dates, leap days, ordering, supported range and a
-bounded control-free input. Invalid/equal/reversed intervals disable Find and show
+bounded control-free input. Invalid/equal/reversed intervals disable Search and show
 format guidance, leaving existing results intact. A valid custom interval counts
-as a filter, so it can be submitted without a keyword. Choosing All dates or a
+as a filter, so it can be submitted without a keyword. Choosing Any date or a
 rolling preset disables custom mode; switching accounts clears its state.
 The submitted bounds and coverage notice remain fixed across Next and Retry even
 when the editable range changes. Storage continues using its existing date-bound

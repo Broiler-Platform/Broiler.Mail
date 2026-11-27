@@ -55,3 +55,35 @@ internal sealed class TestOutgoingTester : IOutgoingConnectionTester
         return Test(cancellationToken);
     }
 }
+
+/// <summary>Original-source receivers driven by delegates, counting each call; a null delegate refuses the call.</summary>
+internal sealed class TestSourceReceiver : IMailSourceReceiver, IStreamingMailSourceReceiver
+{
+    public int SourceCalls { get; private set; }
+    public int CopySourceCalls { get; private set; }
+    public Func<MailMessageKey, CancellationToken, Task<MailMessageSource>>? Source { get; set; }
+    public Func<MailMessageKey, Stream, int, Action<int, int>?, CancellationToken, Task<int>>? CopySource { get; set; }
+    public Task<MailMessageSource> GetSourceAsync(AccountProfile account, MailMessageKey message, CancellationToken token = default)
+    {
+        SourceCalls++;
+        return (Source ?? throw new InvalidOperationException("No buffered source in this test."))(message, token);
+    }
+    public Task<int> CopySourceAsync(AccountProfile account, MailMessageKey message, Stream destination, int maximumBytes,
+        Action<int, int>? progress = null, CancellationToken token = default)
+    {
+        CopySourceCalls++;
+        return (CopySource ?? throw new InvalidOperationException("No streamed source in this test."))(message, destination, maximumBytes, progress, token);
+    }
+    /// <summary>A receiver whose both paths return <paramref name="bytes"/>.</summary>
+    public static TestSourceReceiver Returning(byte[] bytes) => new()
+    {
+        Source = (key, _) => Task.FromResult(new MailMessageSource(key, bytes)),
+        CopySource = async (_, destination, maximum, progress, token) =>
+        {
+            if (bytes.Length > maximum) throw new IOException("Too large.");
+            await destination.WriteAsync(bytes, token);
+            progress?.Invoke(bytes.Length, bytes.Length);
+            return bytes.Length;
+        },
+    };
+}

@@ -30,4 +30,12 @@ public sealed class MessageTextFinderTests
         Assert.Throws<ArgumentException>(() => MessageTextFinder.Find(new string('a', MessageTextFinder.MaximumTextLength + 1), "a"));
         Assert.IsAssignableFrom<System.Collections.IList>(result.Matches); Assert.True(((System.Collections.IList)result.Matches).IsReadOnly);
     }
+    [Fact]
+    public void TheLimitCoversCompleteRetainedBodyText()
+    {
+        Assert.Equal(Broiler.Mail.Core.Messages.MailMessageBody.MaximumRetainedTextCharacters, MessageTextFinder.MaximumTextLength);
+        var text = new string('a', MessageTextFinder.MaximumTextLength - 4) + "End!";
+        var result = MessageTextFinder.Find(text, "end!"); Assert.Equal(new MessageTextMatch(MessageTextFinder.MaximumTextLength - 4, 4), Assert.Single(result.Matches));
+        var error = Assert.Throws<ArgumentException>(() => MessageTextFinder.Find(text + "a", "a")); Assert.Contains("1,048,576", error.Message);
+    }
 }

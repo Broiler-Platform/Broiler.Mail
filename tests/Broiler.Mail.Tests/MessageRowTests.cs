@@ -270,6 +270,161 @@ public sealed class MessageRowTests
         Assert.Equal(palette.Accent, dots[1].Color);
     }
 
+    [Theory]
+    [InlineData(false, "Unread, Has attachments, From: Broiler team <hello@example.test>, Subject: Welcome, Received: ")]
+    [InlineData(true, "Starred, Unread, Has attachments, From: Broiler team <hello@example.test>, Subject: Welcome, Received: ")]
+    public void TheAccessibleNameSaysHasAttachmentsBeforeTheSender(bool starred, string expected)
+    {
+        MailMessageSummary message = Message("Broiler team <hello@example.test>", read: false) with { HasAttachments = true, IsStarred = starred };
+        UiSemanticNode node = new MailMessageItemPresenter(Dates).CreateSemanticNode(new UiListItemSemanticContext
+        {
+            Item = Item(message), Index = 0, Bounds = new BRect(0, 0, 280, 52),
+            State = new UiListItemState(IsSelected: false, IsFocused: false, IsRead: false, Index: 0),
+        });
+        Assert.Equal(expected + Dates.Detail(message.ReceivedAt), node.Name);
+        // Without the mark the name says nothing about attachments.
+        UiSemanticNode plain = new MailMessageItemPresenter(Dates).CreateSemanticNode(new UiListItemSemanticContext
+        {
+            Item = Item(message with { HasAttachments = false }), Index = 0, Bounds = new BRect(0, 0, 280, 52),
+            State = new UiListItemState(IsSelected: false, IsFocused: false, IsRead: false, Index: 0),
+        });
+        Assert.DoesNotContain("attachments", plain.Name, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void AnAttachmentBadgeIsDrawnBetweenTheSenderAndTheDate()
+    {
+        var list = new BRenderList();
+        Render(list, Message("Broiler team <hello@example.test>", read: false) with { HasAttachments = true }, 600, BFontStyle.Default);
+
+        // The texts keep their order (date, sender, subject); the badge is drawn after them.
+        var texts = list.Commands.OfType<BRenderCommand.DrawText>().ToArray();
+        Assert.Equal(["Sep 27", "Broiler team <hello@example.test>", "Welcome"], texts.Select(text => text.Text.Text));
+        var badge = Badge(list);
+        Assert.Equal(2, list.Commands.OfType<BRenderCommand.StrokeRoundedRect>().Count());
+        var commands = list.Commands.ToList();
+        Assert.True(commands.FindIndex(command => command is BRenderCommand.StrokeRoundedRect) > commands.IndexOf(texts[2]));
+        double senderRight = texts[1].Origin.X + BTextMeasurer.MeasureAdvance(texts[1].Text.Text, texts[1].Text.Font);
+        Assert.True(badge.Left >= senderRight + 6 - 0.5, $"The badge starts at {badge.Left}, the sender ends at {senderRight}.");
+        Assert.True(badge.Right <= texts[0].Origin.X - 10 + 0.5, $"The badge ends at {badge.Right}, the date starts at {texts[0].Origin.X}.");
+        // On line 1, inside the sender's line.
+        Assert.True(badge.Top >= texts[1].Origin.Y && badge.Bottom <= texts[1].Origin.Y + BTextMeasurer.GetLineHeight(BFontStyle.Default) + 0.5);
+    }
+
+    public static TheoryData<double, double, bool> BadgeRows()
+    {
+        var data = new TheoryData<double, double, bool>();
+        foreach (double width in new[] { 160, 220, 280, 320, 480 })
+            foreach (double scale in new[] { 1, 2 })
+                foreach (bool unread in new[] { false, true })
+                    data.Add(width, scale, unread);
+        return data;
+    }
+
+    [Theory]
+    [MemberData(nameof(BadgeRows))]
+    public void TheBadgeNeverOverlapsTheSenderOrDate(double width, double scale, bool unread)
+    {
+        BFontStyle font = BFontStyle.Default with { Size = BFontStyle.Default.Size * scale };
+        var message = Message("A very long display name that keeps going <long@example.test>", read: !unread) with { HasAttachments = true };
+        var list = new BRenderList();
+        Render(list, message, width, font);
+
+        var line1 = list.Commands.OfType<BRenderCommand.DrawText>().Where(text => text.Text.Font.Size != SubjectSize(font)).ToArray();
+        var date = line1.SingleOrDefault(text => text.Text.Font.Size < font.Size);
+        var sender = Assert.Single(line1, text => text.Text.Font.Size == font.Size);
+        var badge = Badge(list);
+        double senderRight = sender.Origin.X + BTextMeasurer.MeasureAdvance(sender.Text.Text, sender.Text.Font);
+        Assert.StartsWith("A", sender.Text.Text, StringComparison.Ordinal);
+        Assert.True(badge.Left >= senderRight + 6 - 0.5, $"The badge starts at {badge.Left}, the sender ends at {senderRight}.");
+        Assert.True(badge.Left >= 10 + (unread ? 12 : 0), "The badge stays after the unread dot.");
+        if (date is not null)
+            Assert.True(badge.Right <= date.Origin.X - 10 + 0.5, $"The badge ends at {badge.Right}, the date starts at {date.Origin.X}.");
+        else
+            Assert.True(badge.Right <= width - 8 + 0.5, $"The badge ends at {badge.Right} in a {width} DIP row.");
+        // The date only takes a form that still leaves the badge and the sender's first characters room.
+        if (date is not null)
+        {
+            double dateRight = date.Origin.X + BTextMeasurer.MeasureAdvance(date.Text.Text, date.Text.Font);
+            Assert.True(dateRight <= width - 8 + 0.5);
+        }
+    }
+
+    [Fact]
+    public void ASelectedRowDrawsTheBadgeInTheSelectionSecondaryColor()
+    {
+        var secondary = BColor.FromArgb(0xFF, 0x60, 0x60, 0x60);
+        var selectedSecondary = BColor.FromArgb(0xFF, 0x10, 0x20, 0x30);
+        var message = Message("Broiler team <hello@example.test>", read: true) with { HasAttachments = true };
+        var unselected = new BRenderList();
+        new MailMessageItemPresenter(Dates).Render(BadgeContext(unselected, message, selected: false, highContrast: false, secondary, selectedSecondary));
+        Assert.All(unselected.Commands.OfType<BRenderCommand.StrokeRoundedRect>(), stroke => Assert.Equal(secondary, stroke.Color));
+        var selected = new BRenderList();
+        new MailMessageItemPresenter(Dates).Render(BadgeContext(selected, message, selected: true, highContrast: false, secondary, selectedSecondary));
+        var strokes = selected.Commands.OfType<BRenderCommand.StrokeRoundedRect>().ToArray();
+        Assert.Equal(2, strokes.Length);
+        Assert.All(strokes, stroke => Assert.Equal(selectedSecondary, stroke.Color));
+    }
+
+    [Fact]
+    public void HighContrastDrawsTheBadgeInTheTextColor()
+    {
+        var message = Message("Broiler team <hello@example.test>", read: true) with { HasAttachments = true };
+        var list = new BRenderList();
+        new MailMessageItemPresenter(Dates).Render(BadgeContext(list, message, selected: false, highContrast: true,
+            BColor.FromArgb(0xFF, 0x60, 0x60, 0x60), BColor.FromArgb(0xFF, 0x10, 0x20, 0x30)));
+        var sender = Assert.Single(list.Commands.OfType<BRenderCommand.DrawText>(), text => text.Text.Text == "Broiler team <hello@example.test>");
+        var strokes = list.Commands.OfType<BRenderCommand.StrokeRoundedRect>().ToArray();
+        Assert.Equal(2, strokes.Length);
+        Assert.All(strokes, stroke => Assert.Equal(sender.Text.Color, stroke.Color));
+    }
+
+    [Fact]
+    public void RowsWithoutAttachmentsDrawNoBadge()
+    {
+        var list = new BRenderList();
+        Render(list, Message("Broiler team <hello@example.test>", read: false), 600, BFontStyle.Default);
+        Assert.Empty(list.Commands.OfType<BRenderCommand.StrokeRoundedRect>());
+    }
+
+    [Fact]
+    public void TogglingTheAttachmentMarkGivesANewRow()
+    {
+        var presenter = new MailMessageItemPresenter(Dates);
+        var message = Message("Broiler team <hello@example.test>", read: true);
+        int Strokes(MailMessageSummary row)
+        {
+            var list = new BRenderList();
+            presenter.Render(Context(list, row, 600, BFontStyle.Default, true));
+            return list.Commands.OfType<BRenderCommand.StrokeRoundedRect>().Count();
+        }
+        Assert.Equal(0, Strokes(message));
+        var marked = message with { HasAttachments = true };
+        Assert.Equal(2, Strokes(marked));
+        Assert.Equal(0, Strokes(marked with { HasAttachments = false }));
+        Assert.Equal(2, Strokes(marked));
+    }
+
+    // The outer outline of the paperclip, the first of its two strokes.
+    private static BRect Badge(BRenderList list) => list.Commands.OfType<BRenderCommand.StrokeRoundedRect>().First().Rect;
+
+    private static UiListItemRenderContext BadgeContext(BRenderList list, MailMessageSummary message, bool selected, bool highContrast, BColor secondary, BColor selectedSecondary) => new()
+    {
+        RenderList = list,
+        Bounds = new BRect(0, 0, 600, 120),
+        Item = Item(message),
+        State = new UiListItemState(IsSelected: selected, IsFocused: false, IsRead: message.IsRead, Index: 0),
+        Font = BFontStyle.Default,
+        Foreground = BColor.Black,
+        SecondaryForeground = secondary,
+        SelectedSecondaryForeground = selectedSecondary,
+        Background = BColor.White,
+        SelectedBackground = BColor.White,
+        FocusRing = BColor.Black,
+        Accent = BColor.Black,
+        IsHighContrast = highContrast,
+    };
+
     private static double SubjectSize(BFontStyle font) => Math.Max(10, font.Size - 1);
 
     private sealed class Host : IUiHost

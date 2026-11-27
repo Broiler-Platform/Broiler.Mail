@@ -21,6 +21,7 @@
     <PackageReference Include="Broiler.Hosting.Windows" />
     <PackageReference Include="Broiler.Net" />
     <PackageReference Include="Broiler.UI.Menu.Standard" />
+    <PackageReference Include="Broiler.UI.Tooltip.Standard" />
     <PackageReference Include="Broiler.Graphics.Windows" />
     <PackageReference Include="Broiler.Native.Windows" />
   </ItemGroup>

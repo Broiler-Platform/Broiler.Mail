@@ -111,7 +111,7 @@ public sealed class BreakOutDialogTests
     }
 
     [Fact]
-    public async Task BrokenOutMessageActionsReopensAfterBodyReplacement()
+    public async Task BrokenOutMailboxOptionsReopensAfterBodyReplacement()
     {
         using var directory = new TestDirectory();
         var account = TestDirectory.Profile();
@@ -143,7 +143,10 @@ public sealed class BreakOutDialogTests
         await model.Inbox.SelectAsync(key1);
         dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
 
-        Assert.True(shell.ShowView("message-actions"));
+        // The message's own commands, its .eml export among them, are in the reader and open no dialog; the
+        // inbox's remaining dialog breaks out before and after the reader replaces that export with the body.
+        Assert.False(shell.ShowView("message-actions"));
+        Assert.True(shell.ShowView("mailbox-options"));
         Assert.NotNull(shell.ActiveDialog);
         Assert.True(shell.ActiveDialog.IsBrokenOut);
         Assert.True(shell.CloseDialog());
@@ -152,7 +155,8 @@ public sealed class BreakOutDialogTests
         await model.Inbox.SelectAsync(key2);
         dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
 
-        Assert.True(shell.ShowView("message-actions"));
+        Assert.False(shell.ShowView("message-actions"));
+        Assert.True(shell.ShowView("mailbox-options"));
         Assert.NotNull(shell.ActiveDialog);
         Assert.True(shell.ActiveDialog.IsBrokenOut);
         Assert.True(shell.CloseDialog());

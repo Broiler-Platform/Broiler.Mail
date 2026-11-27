@@ -49,7 +49,15 @@ internal sealed class LocalImapServer : IAsyncDisposable
     public Action<int, int>? BeforeSnapshotHeaderFetch { get; set; }
     public bool OmitSnapshotFlags { get; set; }
     public string? HeaderResponseOverride { get; set; }
+    public bool RejectBodyStructure { get; set; }
+    public bool DisconnectOnBodyStructure { get; set; }
+    public bool StallOnBodyStructure { get; set; }
+    public string? BodyStructureResponseOverride { get; set; }
+    public int BodyStructureFetchCount { get; private set; }
+    public const string PlainBodyStructure = "(\"TEXT\" \"PLAIN\" (\"CHARSET\" \"utf-8\") NIL NIL \"BASE64\" 24 1 NIL NIL NIL NIL)";
     public long? SourceReportedSize { get; set; }
+    /// <summary>Answers RFC822.SIZE as some real servers do: FLAGS added among the items, after an unsolicited FETCH for another message.</summary>
+    public bool SizeResponseFlagsAndOtherMessage { get; set; }
     public byte[]? SourceOctets { get; set; }
     public uint? BodyResponseUid { get; set; }
     public int BodyResponseOffset { get; set; }
@@ -112,7 +120,10 @@ internal sealed class LocalImapServer : IAsyncDisposable
             while (!_lifetime.IsCancellationRequested)
             {
                 using var client = await _listener.AcceptTcpClientAsync(_lifetime.Token);
-                await RunClientAsync(client);
+                // A client that hangs up partway, as one refusing an oversized literal does, ends only its own
+                // connection: the next one is still served, as by a real server.
+                try { await RunClientAsync(client); }
+                catch (IOException) when (!_lifetime.IsCancellationRequested) { }
             }
         }
         catch (Exception error) when (error is OperationCanceledException or SocketException or ObjectDisposedException) { }
@@ -201,7 +212,7 @@ internal sealed class LocalImapServer : IAsyncDisposable
                             var literal = Regex.Match(line, @"\{(\d+)\}$");
                             if (!literal.Success) throw new InvalidOperationException("Expected synchronizing APPEND literal.");
                             int size = int.Parse(literal.Groups[1].Value);
-                            if (size > 2 * 1024 * 1024) throw new InvalidOperationException("Fixture literal too large.");
+                            if (size > 12 * 1024 * 1024) throw new InvalidOperationException("Fixture literal too large.");
                             await writer.WriteLineAsync("+ Send literal");
                             var buffer = new char[size];
                             int offset = 0;
@@ -305,6 +316,7 @@ internal sealed class LocalImapServer : IAsyncDisposable
                                 await writer.WriteLineAsync($"{tag} OK Flags"); break;
                             }
                             if (DisconnectOnFetch) return;
+                            if (DisconnectOnBodyStructure && line.EndsWith("(UID BODYSTRUCTURE)", StringComparison.Ordinal)) { BodyStructureFetchCount++; return; }
                             if (StallOnFetch) { await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token); return; }
                             if (MalformedFetch) { await writer.WriteLineAsync("* NOT-AN-IMAP-RESPONSE"); return; }
                             await FetchAsync(writer, tag, line, command == "UID");
@@ -332,7 +344,11 @@ internal sealed class LocalImapServer : IAsyncDisposable
             if (sizeRequest.Success)
             {
                 uint sizeUid = uint.Parse(sizeRequest.Groups[1].Value); int indexForSize = Messages.FindIndex(row => row.Uid == sizeUid);
-                if (indexForSize >= 0) await writer.WriteLineAsync($"* {indexForSize + 1} FETCH (UID {sizeUid} RFC822.SIZE {SourceReportedSize ?? SourceOctets?.Length ?? Encoding.ASCII.GetByteCount(Messages[indexForSize].Raw)})");
+                if (indexForSize >= 0 && SizeResponseFlagsAndOtherMessage) await writer.WriteLineAsync($"* {Messages.Count + 1} FETCH (UID {sizeUid + 1000} FLAGS (\\Seen))");
+                long reportedSize = indexForSize < 0 ? 0 : SourceReportedSize ?? SourceOctets?.Length ?? Encoding.ASCII.GetByteCount(Messages[indexForSize].Raw);
+                if (indexForSize >= 0) await writer.WriteLineAsync(SizeResponseFlagsAndOtherMessage
+                    ? $"* {indexForSize + 1} FETCH (RFC822.SIZE {reportedSize} FLAGS (\\Seen \\Answered) UID {sizeUid})"
+                    : $"* {indexForSize + 1} FETCH (UID {sizeUid} RFC822.SIZE {reportedSize})");
                 await writer.WriteLineAsync($"{tag} OK Size"); return;
             }
             var match = Regex.Match(line, @"UID FETCH (\d+) .*BODY\.PEEK\[\]<0\.(\d+)>");
@@ -355,6 +371,17 @@ internal sealed class LocalImapServer : IAsyncDisposable
                 await WriteBody(); if (DuplicateBodyLiteral) await WriteBody();
             }
         }
+        else if (line.EndsWith("(UID BODYSTRUCTURE)", StringComparison.Ordinal))
+        {
+            BodyStructureFetchCount++;
+            if (StallOnBodyStructure) { await Task.Delay(Timeout.InfiniteTimeSpan, _lifetime.Token); return; }
+            if (RejectBodyStructure) { await writer.WriteLineAsync($"{tag} BAD BODYSTRUCTURE not supported"); return; }
+            if (BodyStructureResponseOverride is {} structures) { await writer.WriteLineAsync(structures + $"\r\n{tag} OK Fetch"); return; }
+            var range = Regex.Match(line, @"FETCH (\d+):(\d+) ");
+            if (!range.Success) throw new InvalidOperationException("Expected a bounded sequence range.");
+            for (int sequence = int.Parse(range.Groups[1].Value); sequence <= int.Parse(range.Groups[2].Value); sequence++)
+                await writer.WriteLineAsync($"* {sequence} FETCH (UID {Messages[sequence - 1].Uid} BODYSTRUCTURE {Messages[sequence - 1].BodyStructure ?? PlainBodyStructure})");
+        }
         else
         {
             if (HeaderResponseOverride is {} response) { await writer.WriteLineAsync(response + $"\r\n{tag} OK Fetch"); return; }
@@ -375,7 +402,7 @@ internal sealed class LocalImapServer : IAsyncDisposable
         await writer.WriteLineAsync($"{tag} OK Fetch");
     }
 
-    internal sealed record FixtureMessage(uint Uid, string Raw, bool IsRead = false, bool IsStarred = false, bool IsDeleted = false);
+    internal sealed record FixtureMessage(uint Uid, string Raw, bool IsRead = false, bool IsStarred = false, bool IsDeleted = false, string? BodyStructure = null);
 
     private async Task<SslStream> UpgradeAsync(Stream stream)
     {

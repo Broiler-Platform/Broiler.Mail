@@ -47,7 +47,7 @@ public sealed class MessageAttachmentActions:UiElement
     public MessageAttachmentActions(MailMessageKey key,IMessageAttachmentExports? exports,Func<bool> current)
     {
         _key=key;_exports=exports;_current=current;AddChild(_layout);Visibility=UiVisibility.Collapsed;AccessibleName="Received attachment export controls";
-        ConfigurationForm.AddText(_layout,"Save up to 32 supported attachments from a verified original of up to 12 MiB. Files use unique safe names in attachment-exports and stay outside profile backups. Inline resources may be omitted.");
+        ConfigurationForm.AddText(_layout,"To save an attachment anywhere you choose, use Save as… in the attachment list above the message. This section saves into the profile's attachment-exports folder (up to 64 files): up to 32 supported attachments from a verified original of up to 12 MiB, under unique safe names that stay outside profile backups. Inline resources may be omitted.");
         var actions=new StandardToolbar{Overflow=UiToolbarOverflow.Wrap,Padding=4,Spacing=6};actions.AddChild(_list);actions.AddChild(_save);actions.AddChild(_cancel);
         _layout.AddChild(actions);_layout.AddChild(_picker);_layout.AddChild(_feedback);_layout.AddChild(_path);
         _list.Clicked+=async(_,_)=>await ListAsync();_save.Clicked+=async(_,_)=>{if(Selected() is {} selected)await SaveAsync(selected);};_cancel.Clicked+=(_,_)=>Cancel();_picker.SelectionChanged+=(_,_)=>UpdateControls();UpdateControls();

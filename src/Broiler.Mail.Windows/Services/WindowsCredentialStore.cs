@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   15
-// Annotated:        15/15
-// Exempt:           12
-// Human-reviewed:   0/15
+// Relevant units:   10
+// Annotated:        10/10
+// Exempt:           0
+// Human-reviewed:   0/10
 // IP risk:          Low
 // Security risk:    Critical
-// Criteria:         15/14
+// Criteria:         10/9
 // Resource impact:  2/10 max
-// Unverified:       15
+// Unverified:       10
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -45,7 +45,7 @@ public sealed class WindowsCredentialStore : ICredentialStore
     // Hairs-Human:        PENDING
     private const int MaximumBlobBytes = 2560;
 
-    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=Critical; Resources=2; Fingerprint=85421B
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=Critical; Resources=2; Fingerprint=2CA972
     // Hairs-Falsified-If: a stored credential whose BlobSize is odd or larger than 2,560 bytes is decoded with PtrToStringUni instead of raising InvalidDataException
     // Hairs-Human:        PENDING
     public Task<string?> ReadAsync(CredentialKey key, CancellationToken cancellationToken = default)
@@ -78,7 +78,7 @@ public sealed class WindowsCredentialStore : ICredentialStore
         }, cancellationToken);
     }
 
-    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=Critical; Resources=2; Fingerprint=E38D58
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=Critical; Resources=2; Fingerprint=D32843
     // Hairs-Falsified-If: the BlobSize handed to CredWrite is larger than the byte length of the unmanaged copy of the secret, so Credential Manager reads past its end
     // Hairs-Human:        PENDING
     public Task WriteAsync(CredentialKey key, string secret, CancellationToken cancellationToken = default)
@@ -104,7 +104,7 @@ public sealed class WindowsCredentialStore : ICredentialStore
         }, cancellationToken);
     }
 
-    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=1; Fingerprint=3F4BA5
+    // Hairs-AI:           Origin=AI; Spec=ADR-0002; IP=Low; Security=High; Resources=1; Fingerprint=9FFB9A
     // Hairs-Falsified-If: a CredDelete failure other than ERROR_NOT_FOUND returns normally, so the caller treats a password that is still stored as forgotten
     // Hairs-Human:        PENDING
     public Task DeleteAsync(CredentialKey key, CancellationToken cancellationToken = default)

@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   43
-// Annotated:        29/43
-// Exempt:           30
-// Human-reviewed:   0/43
+// Relevant units:   47
+// Annotated:        31/47
+// Exempt:           33
+// Human-reviewed:   0/47
 // IP risk:          Low
 // Security risk:    High
-// Criteria:         25/5
+// Criteria:         27/7
 // Resource impact:  7/10 max
-// Unverified:       43
+// Unverified:       47
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -51,6 +51,8 @@ public sealed partial class ComposerViewModel : IDisposable
     private bool _closing;
     private bool _profileStorageBusy;
     public void SetProfileStorageBusy(bool busy) { if (_profileStorageBusy == busy) return; _profileStorageBusy = busy; Notify(); }
+    /// <summary>Reads an original message's attachments for a forward; null when this host offers none.</summary>
+    public IMessageAttachmentReader? AttachmentReader { get; init; }
     // Hairs-AI:           Origin=AI; Spec=ADR-0004; IP=Low; Security=Medium; Resources=4; Fingerprint=A9C4DE
     // Hairs-Falsified-If: a draft saved in the Sending state reopens as Editing and can be sent again
     // Hairs-Human:        PENDING
@@ -163,7 +165,51 @@ public sealed partial class ComposerViewModel : IDisposable
     public string Subject { get; private set; } = "";
     public string PlainText { get; private set; } = "";
     public string? AttachmentReminderText => CanEdit && Attachments.Count == 0 && AttachmentReminder.IsMentioned(Subject, PlainText)
-        ? "This draft mentions an attachment. It will send plain text only unless you add a file under Attachments." : null;
+        ? "This draft mentions an attachment but has no file attached; it will send plain text only." : null;
+
+    // The pre-send attachment reminder: a Send click that would go out without the file it mentions asks first, inline.
+    // "Send anyway" acknowledges the reminder for this draft until its subject or text changes again.
+    private Guid? _reminderAcknowledged;
+    private Guid? _sendConfirmationPending;
+
+    /// <summary>Whether the inline "mentions an attachment" confirmation is waiting for Attach file… or Send anyway.</summary>
+    public bool ShowsSendConfirmation => _sendConfirmationPending is { } pending && pending == DraftId && AttachmentReminderText is not null && CanSend;
+
+    /// <summary>
+    /// Called by Send before sending. Returns true, and shows the confirmation, when the draft mentions an attachment,
+    /// has none, and the reminder was not acknowledged for this draft; the caller must then not send.
+    /// </summary>
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=BA96BC
+    // Hairs-Falsified-If: a Send click with the attachment reminder active reaches IMailSender without Send anyway
+    // Hairs-Human:        PENDING
+    public bool RequestSendConfirmation()
+    {
+        // A pending forward offer already says what the original carries; it does not ask again before sending.
+        if (!CanSend || AttachmentReminderText is null || ForwardAttachments is not null ||
+            (_reminderAcknowledged is { } acknowledged && acknowledged == DraftId)) return false;
+        if (_sendConfirmationPending != DraftId) { _sendConfirmationPending = DraftId; Notify(); }
+        return true;
+    }
+
+    /// <summary>Hides the confirmation without sending; the next Send asks again.</summary>
+    public void DismissSendConfirmation()
+    {
+        if (_sendConfirmationPending is null) return;
+        _sendConfirmationPending = null;
+        Notify();
+    }
+
+    /// <summary>Acknowledges the reminder for this draft and sends it as it is, through the unchanged <see cref="SendAsync"/>.</summary>
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=1; Fingerprint=781E50
+    // Hairs-Falsified-If: a Send click with the attachment reminder active reaches IMailSender without Send anyway
+    // Hairs-Human:        PENDING
+    public Task SendAnywayAsync(CancellationToken cancellationToken = default)
+    {
+        if (!CanSend) return Task.CompletedTask;
+        _reminderAcknowledged = DraftId;
+        _sendConfirmationPending = null;
+        return SendAsync(cancellationToken);
+    }
     private string _status = "Save an account, then start a new message or read a message to reply.";
     public FeedbackKind StatusKind { get; private set; }
     public string Status
@@ -213,7 +259,7 @@ public sealed partial class ComposerViewModel : IDisposable
     public bool StartNew() => Start(null, null);
     public bool StartFromMessage(MailMessageBody body, CompositionKind kind) => Start(body, kind);
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=B2A601
+    // Hairs-AI:           Origin=AI; IP=Low; Security=High; Resources=4; Fingerprint=1B72DE
     // Hairs-Falsified-If: a reply whose original sender address has a quoted local part containing a comma becomes two recipients when the joined To text is parsed again
     // Hairs-Human:        PENDING
     private bool Start(MailMessageBody? body, CompositionKind? kind)
@@ -251,18 +297,25 @@ public sealed partial class ComposerViewModel : IDisposable
         SubmissionState = DraftSubmissionState.Editing;
         SentCopy = SentCopyState.NotRequested;
         SentCopyFolder = null;
+        // Only a forward offers the original's files, and only on request: none is included by default.
+        _forwardOffer = kind == CompositionKind.Forward && body?.Attachments?.Where(part => !part.IsContainer).ToArray() is { Length: > 0 } parts
+            ? new ForwardAttachmentOffer(_seed.Id, body.Key, Array.AsReadOnly(parts)) { AccountName = _account.EmailAddress }
+            : null;
         Status = "Draft started. Changes are saved automatically.";
         Persist();
         Notify();
         return true;
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=3B9524
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=22ACD2
     // Hairs-Falsified-If: an Edit on an Accepted or Unknown draft resets the submission state to Editing so the message can be sent again
     // Hairs-Human:        PENDING
     public void Edit(string to, string cc, string bcc, string subject, string body)
     {
         if (!CanEdit) return;
+        // A changed subject or text may mention an attachment anew, so the reminder asks again on the next Send.
+        if (!string.Equals(Subject, subject, StringComparison.Ordinal) || !string.Equals(PlainText, body, StringComparison.Ordinal))
+        { _reminderAcknowledged = null; _sendConfirmationPending = null; }
         To = to; Cc = cc; Bcc = bcc; Subject = subject; PlainText = body;
         SubmissionState = DraftSubmissionState.Editing;
         // Clear an earlier result such as a draft check; routine edits need no announcement.
@@ -362,7 +415,7 @@ public sealed partial class ComposerViewModel : IDisposable
         return saved;
     }
 
-    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=60DA3B
+    // Hairs-AI:           Origin=AI; IP=Low; Security=Medium; Resources=4; Fingerprint=7FA212
     // Hairs-Falsified-If: a discard whose tombstone write fails still clears the composer fields and loses the draft text
     // Hairs-Human:        PENDING
     public async Task<bool> DiscardAsync()
@@ -378,6 +431,7 @@ public sealed partial class ComposerViewModel : IDisposable
             if (saved)
             {
                 _seed = null;
+                _forwardOffer = null;
                 To = Cc = Bcc = Subject = PlainText = "";
                 SubmissionState = DraftSubmissionState.Editing;
                 SentCopy = SentCopyState.NotRequested;

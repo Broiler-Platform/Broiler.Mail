@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   33
-// Annotated:        0/33
-// Exempt:           23
-// Human-reviewed:   0/33
+// Relevant units:   49
+// Annotated:        0/49
+// Exempt:           26
+// Human-reviewed:   0/49
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       33
+// Unverified:       49
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -34,9 +34,95 @@ public sealed class ProfileStorageViewModel(IProfileStorage storage, IUiDispatch
     public Func<bool>? CanStartOperation { get; set; }
     public Func<Task<bool>>? SaveDraftBeforeSnapshot { get; set; }
     public string ProfileDirectory => storage.ProfileDirectory;
-    public string BackupDestination { get; set; } = Path.Combine(storage.ProfileDirectory, "backups", "profile-" + Guid.NewGuid().ToString("N"));
+    /// <summary>The message shown when a chosen folder holds no backup manifest.</summary>
+    public const string NotABackupMessage = "That folder is not a Broiler Mail backup. Choose a folder created by Create verified backup.";
+    /// <summary>The folder new backups are created in; the profile's own backups folder unless one was chosen.</summary>
+    public string BackupLocation { get; private set; } = DefaultBackupLocation(storage.ProfileDirectory);
+    public bool IsDefaultBackupLocation => SamePath(BackupLocation, DefaultBackupLocation(storage.ProfileDirectory));
+    /// <summary>The new folder the next backup or cleanup backup is written to. Generated inside <see cref="BackupLocation"/>
+    /// and generated again after every successful backup, so a second backup never meets the first one's folder.</summary>
+    public string BackupDestination { get; set; } = NewBackupDestination(DefaultBackupLocation(storage.ProfileDirectory));
     public string RestoreSource { get; set; } = "";
-    public string RestoreDestination { get; set; } = Path.Combine(Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(storage.ProfileDirectory)) ?? storage.ProfileDirectory, "Mail-restored-" + Guid.NewGuid().ToString("N"));
+    /// <summary>The folder a restored profile is created in; the current profile's parent unless one was chosen.</summary>
+    public string RestoreLocation { get; private set; } = DefaultRestoreLocation(storage.ProfileDirectory);
+    public string RestoreDestination { get; set; } = NewRestoreDestination(DefaultRestoreLocation(storage.ProfileDirectory));
+    /// <summary>True while <see cref="Status"/> is a warning, such as a picked folder this device cannot use.</summary>
+    public bool IsWarning { get; private set; }
+
+    /// <summary>Creates new backups in <paramref name="parent"/>. Refuses a path that is not fully qualified.</summary>
+    public bool SetBackupLocation(string parent)
+    {
+        if (_disposed || IsBusy) return false;
+        if (!TryFullPath(parent, out string location)) return Refuse("Choose a folder on this device for new backups. The backup location was not changed.");
+        BackupLocation = location; BackupDestination = NewBackupDestination(location);
+        return Inform($"New backups will be created in {location}.");
+    }
+
+    /// <summary>Creates new backups in the profile's own backups folder again.</summary>
+    public void UseDefaultBackupLocation()
+    {
+        if (_disposed || IsBusy) return;
+        BackupLocation = DefaultBackupLocation(storage.ProfileDirectory); BackupDestination = NewBackupDestination(BackupLocation);
+        Inform($"New backups will be created in the profile's backups folder, {BackupLocation}.");
+    }
+
+    /// <summary>Creates restored profiles in <paramref name="parent"/>. Refuses a path that is not fully qualified.</summary>
+    public bool SetRestoreLocation(string parent)
+    {
+        if (_disposed || IsBusy) return false;
+        if (!TryFullPath(parent, out string location)) return Refuse("Choose a folder on this device for the restored profile. The restore location was not changed.");
+        RestoreLocation = location; RestoreDestination = NewRestoreDestination(location);
+        return Inform($"The backup will be restored into a new folder in {location}.");
+    }
+
+    /// <summary>Chooses the backup to restore. Refuses a folder without a backup manifest and keeps the previous choice.</summary>
+    public bool SetRestoreSource(string folder)
+    {
+        if (_disposed || IsBusy) return false;
+        if (!TryFullPath(folder, out string source) || !File.Exists(Path.Combine(source, "backup.json"))) return Refuse(NotABackupMessage);
+        RestoreSource = source;
+        return Inform($"Backup to restore: {source}. It is verified again before restoring.");
+    }
+
+    /// <summary>Shows <paramref name="message"/> as a warning without changing any choice.</summary>
+    public void Warn(string message)
+    {
+        if (_disposed) return;
+        Status = message; IsError = false; IsWarning = true; Changed?.Invoke(this, EventArgs.Empty);
+    }
+
+    /// <summary>
+    /// The path of a new child of <paramref name="parent"/> named <paramref name="name"/>: the name itself, then
+    /// "name (2)" through "name (99)", then the name with a unique suffix. Existing files and folders are skipped.
+    /// </summary>
+    internal static string UniqueChild(string parent, string name)
+    {
+        static bool Taken(string path) => Directory.Exists(path) || File.Exists(path);
+        string candidate = Path.Combine(parent, name);
+        if (!Taken(candidate)) return candidate;
+        for (int number = 2; number <= 99; number++)
+            if (!Taken(candidate = Path.Combine(parent, $"{name} ({number})"))) return candidate;
+        return Path.Combine(parent, name + " " + Guid.NewGuid().ToString("N"));
+    }
+
+    private static string DefaultBackupLocation(string profile) => Path.Combine(profile, "backups");
+    private static string DefaultRestoreLocation(string profile) => Path.GetDirectoryName(Path.TrimEndingDirectorySeparator(profile)) ?? profile;
+    private static string NewBackupDestination(string location) =>
+        UniqueChild(location, "Broiler Mail backup " + DateTime.Now.ToString("yyyy-MM-dd HHmm", System.Globalization.CultureInfo.InvariantCulture));
+    private static string NewRestoreDestination(string location) =>
+        UniqueChild(location, "Mail-restored-" + DateTime.Now.ToString("yyyy-MM-dd-HHmm", System.Globalization.CultureInfo.InvariantCulture));
+    private static bool SamePath(string left, string right) =>
+        string.Equals(Path.TrimEndingDirectorySeparator(Path.GetFullPath(left)), Path.TrimEndingDirectorySeparator(Path.GetFullPath(right)),
+            OperatingSystem.IsWindows() || OperatingSystem.IsMacOS() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal);
+    private static bool TryFullPath(string? path, out string full)
+    {
+        full = "";
+        if (string.IsNullOrWhiteSpace(path) || !Path.IsPathFullyQualified(path)) return false;
+        try { full = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path)); return true; }
+        catch (Exception error) when (error is ArgumentException or NotSupportedException or PathTooLongException) { return false; }
+    }
+    private bool Refuse(string message) { Status = message; IsError = true; IsWarning = false; Changed?.Invoke(this, EventArgs.Empty); return false; }
+    private bool Inform(string message) { Status = message; IsError = IsWarning = false; Changed?.Invoke(this, EventArgs.Empty); return true; }
     public string? RestoredProfile { get; private set; }
     public bool CanOpenRestored => !_disposed && !IsBusy && RestoredProfile is not null && openProfile is not null;
     public bool IsBusy { get; private set; }
@@ -133,7 +219,8 @@ public sealed class ProfileStorageViewModel(IProfileStorage storage, IUiDispatch
         return RunAsync(async token =>
         {
             var saved = await storage.CreateBackupAsync(destination, token).ConfigureAwait(false);
-            return () => { RestoreSource = saved; Status = $"Verified backup created at {saved}. OS credentials are not included."; };
+            return () => { RestoreSource = saved; BackupDestination = NewBackupDestination(BackupLocation);
+                Status = $"Verified backup created at {saved}. OS credentials are not included."; };
         }, "Creating and verifying profile backup…", snapshot: true);
     }
 
@@ -143,7 +230,7 @@ public sealed class ProfileStorageViewModel(IProfileStorage storage, IUiDispatch
         return RunAsync(async token =>
         {
             var restored = await storage.RestoreBackupAsync(source, destination, token).ConfigureAwait(false);
-            return () => { RestoredProfile = restored; Status = $"Backup restored as a separate profile at {restored}. The current profile is unchanged."; };
+            return () => { RestoredProfile = restored; RestoreDestination = NewRestoreDestination(RestoreLocation); Status = $"Backup restored as a separate profile at {restored}. The current profile is unchanged."; };
         }, "Verifying and restoring a separate profile…");
     }
 
@@ -155,7 +242,7 @@ public sealed class ProfileStorageViewModel(IProfileStorage storage, IUiDispatch
         return RunAsync(async token =>
         {
             var result = await storage.ClearDownloadedMailAsync(destination, token).ConfigureAwait(false);
-            return () => { Info = null; RestoreSource = result.BackupDirectory;
+            return () => { Info = null; RestoreSource = result.BackupDirectory; BackupDestination = NewBackupDestination(BackupLocation);
                 Status = $"Downloaded mail cleared. A verified recovery backup is at {result.BackupDirectory}. Drafts, accounts and server mail were kept." +
                     (result.Compacted ? "" : " The database could not be compacted; reusable space remains inside it."); };
         }, "Backing up, then clearing downloaded mail…", cleanup: true, snapshot: true);
@@ -164,9 +251,9 @@ public sealed class ProfileStorageViewModel(IProfileStorage storage, IUiDispatch
     public void OpenRestored()
     {
         if (!CanOpenRestored) return;
-        try { openProfile!(RestoredProfile!); Status = "The restored profile was opened in a separate Mail window."; IsError = false; }
+        try { openProfile!(RestoredProfile!); Status = "The restored profile was opened in a separate Mail window."; IsError = IsWarning = false; }
         catch (Exception error) when (error is IOException or InvalidOperationException or System.ComponentModel.Win32Exception)
-        { Status = "The restored profile could not be opened. " + error.Message; IsError = true; }
+        { Status = "The restored profile could not be opened. " + error.Message; IsError = true; IsWarning = false; }
         Changed?.Invoke(this, EventArgs.Empty);
     }
 
@@ -174,11 +261,11 @@ public sealed class ProfileStorageViewModel(IProfileStorage storage, IUiDispatch
     {
         if (_disposed || IsBusy) return;
         if (CanStartOperation?.Invoke() == false)
-        { Status = "Finish or cancel all account receives before local storage operations. Cancellation must finish before maintenance can start."; IsError = false; Changed?.Invoke(this, EventArgs.Empty); return; }
+        { Status = "Finish or cancel all account receives before local storage operations. Cancellation must finish before maintenance can start."; IsError = IsWarning = false; Changed?.Invoke(this, EventArgs.Empty); return; }
         if (snapshot && CanStartSnapshot?.Invoke() == false)
-        { Status = "Wait for the current compose operation to finish before backing up or clearing downloaded mail."; IsError = false; Changed?.Invoke(this, EventArgs.Empty); return; }
+        { Status = "Wait for the current compose operation to finish before backing up or clearing downloaded mail."; IsError = IsWarning = false; Changed?.Invoke(this, EventArgs.Empty); return; }
         using var cancellation = new CancellationTokenSource(); _operation = cancellation;
-        IsBusy = true; IsSnapshotBusy = snapshot; IsError = false; Status = busy;
+        IsBusy = true; IsSnapshotBusy = snapshot; IsError = IsWarning = false; Status = busy;
         if (cleanup) CleanupStarting?.Invoke();
         if (policyChange) PolicyChangeStarting?.Invoke();
         Changed?.Invoke(this, EventArgs.Empty);

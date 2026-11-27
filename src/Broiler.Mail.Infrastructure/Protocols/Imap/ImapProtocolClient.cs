@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   37
-// Annotated:        0/37
+// Relevant units:   38
+// Annotated:        0/38
 // Exempt:           10
-// Human-reviewed:   0/37
+// Human-reviewed:   0/38
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       37
+// Unverified:       38
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -331,6 +331,56 @@ public sealed class ImapProtocolClient : IAsyncDisposable, IDisposable
         return list;
     }
 
+    /// <summary>
+    /// Fetches the BODYSTRUCTURE of a bounded sequence range and returns one attachment hint per response.
+    /// Each response, literals included, is limited to <see cref="ImapBodyStructure.MaximumResponseLength"/> characters
+    /// and the whole reply to 2 MiB; a response over a limit or of an unexpected shape throws, and a structure that
+    /// is malformed or over the parse budget becomes an unknown hint for that message only.
+    /// </summary>
+    internal async Task<IReadOnlyList<ImapAttachmentHint>> FetchAttachmentHintsAsync(int start, int end, CancellationToken token)
+    {
+        if (start < 1 || end < start || end - start >= 1024) throw new ArgumentOutOfRangeException(nameof(end));
+        string tag = NextTag();
+        await _connection.WriteLineAsync($"{tag} FETCH {start}:{end} (UID BODYSTRUCTURE)", token).ConfigureAwait(false);
+        var hints = new List<ImapAttachmentHint>();
+        long characters = 0;
+        for (int responses = 0; responses < end - start + 34; responses++)
+        {
+            var response = new StringBuilder();
+            while (true)
+            {
+                string line = await _connection.ReadLineAsync(token, ImapBodyStructure.MaximumResponseLength).ConfigureAwait(false);
+                response.Append(line);
+                characters += line.Length + 2;
+                if (response.Length > ImapBodyStructure.MaximumResponseLength || characters > 2 * 1024 * 1024)
+                    throw new ImapProtocolException("Attachment hint response exceeded its reading limit.");
+                var literal = Regex.Match(line, @"\{([0-9]{1,6})\}$", RegexOptions.CultureInvariant);
+                // Only an untagged response carries literals; a tagged status line ending in {n} is just text.
+                if (!literal.Success || response.Length < 2 || response[0] != '*' || response[1] != ' ') break;
+                int length = int.Parse(literal.Groups[1].Value, System.Globalization.CultureInfo.InvariantCulture);
+                if (length > ImapBodyStructure.MaximumLiteralBytes || response.Length + 2 + length > ImapBodyStructure.MaximumResponseLength)
+                    throw new ImapProtocolException("Attachment hint literal exceeded its reading limit.");
+                using var data = new MemoryStream(length);
+                await _connection.ReadExactBytesAsync(data, length, token).ConfigureAwait(false);
+                response.Append("\r\n").Append(Encoding.Latin1.GetString(data.GetBuffer(), 0, length));
+                characters += length;
+            }
+            string text = response.ToString();
+            if (text.StartsWith(tag + " ", StringComparison.Ordinal))
+            {
+                string[] parts = text.Split(' ', 3);
+                if (parts.Length < 2 || !parts[1].Equals("OK", StringComparison.OrdinalIgnoreCase))
+                    throw new ImapCommandException(tag, parts.Length > 2 ? parts[2] : "");
+                return hints;
+            }
+            if (!text.StartsWith("* ", StringComparison.Ordinal) || text.StartsWith("* BYE", StringComparison.OrdinalIgnoreCase))
+                throw new ImapProtocolException("Unexpected attachment hint response.");
+            if (ImapBodyStructure.ParseFetchResponse(text) is { } hint && hint.SequenceNumber >= start && hint.SequenceNumber <= end)
+                hints.Add(hint);
+        }
+        throw new ImapProtocolException("Attachment hint response exceeded its line limit.");
+    }
+
     internal async Task<uint[]> GetSnapshotUidsAsync(int maximum, CancellationToken token)
     {
         var response = await SendSnapshotCommandAsync("UID SEARCH ALL", 34, token).ConfigureAwait(false);
@@ -391,10 +441,17 @@ public sealed class ImapProtocolClient : IAsyncDisposable, IDisposable
             }
             if (line.Contains("RFC822.SIZE", StringComparison.OrdinalIgnoreCase))
             {
-                var match = Regex.Match(line, @"^\* [1-9][0-9]* FETCH \((?:UID ([1-9][0-9]*) RFC822\.SIZE ([0-9]+)|RFC822\.SIZE ([0-9]+) UID ([1-9][0-9]*))\)$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
-                if (size is not null || !match.Success || !uint.TryParse(match.Groups[1].Success ? match.Groups[1].Value : match.Groups[4].Value, out uint returned) || returned != uid ||
-                    !long.TryParse(match.Groups[2].Success ? match.Groups[2].Value : match.Groups[3].Value, out long value))
+                // RFC 3501 7.4.2: data items come in any order, and a server may add unrequested ones such as FLAGS.
+                // Literals are never expected here, so a '{' still refuses the line.
+                const RegexOptions options = RegexOptions.IgnoreCase | RegexOptions.CultureInvariant;
+                var shape = Regex.Match(line, @"^\* [1-9][0-9]* FETCH \(([^{}]*)\)$", options);
+                var uidItem = shape.Success ? Regex.Matches(shape.Groups[1].Value, @"(?:^|[ (])UID ([1-9][0-9]*)(?=[ )]|$)", options) : null;
+                var sizeItem = shape.Success ? Regex.Matches(shape.Groups[1].Value, @"(?:^|[ (])RFC822\.SIZE ([0-9]+)(?=[ )]|$)", options) : null;
+                if (uidItem is not { Count: 1 } || sizeItem is not { Count: 1 } || !uint.TryParse(uidItem[0].Groups[1].Value, out uint returned) ||
+                    !long.TryParse(sizeItem[0].Groups[1].Value, out long value))
                     throw new ImapProtocolException("Unexpected message size response.");
+                if (returned != uid) continue; // another message's data, not this answer
+                if (size is not null) throw new ImapProtocolException("Unexpected message size response.");
                 size = value;
             }
             else if (!line.StartsWith("* ", StringComparison.Ordinal) || line.StartsWith("* BYE", StringComparison.OrdinalIgnoreCase)) throw new ImapProtocolException("Unexpected message size response.");

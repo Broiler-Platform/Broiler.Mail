@@ -1,5 +1,19 @@
 // SPDX-FileCopyrightText: 2026 Broiler Platform contributors
 // SPDX-License-Identifier: Apache-2.0
+//
+// HAIRS Code Assurance
+// --------------------
+// Relevant units:   109
+// Annotated:        20/109
+// Exempt:           70
+// Human-reviewed:   0/109
+// IP risk:          Low
+// Security risk:    High
+// Criteria:         18/12
+// Resource impact:  8/10 max
+// Unverified:       109
+//
+// GENERATED - DO NOT EDIT MANUALLY
 
 using System.Diagnostics;
 using System.Drawing;

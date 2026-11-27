@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   6
-// Annotated:        0/6
-// Exempt:           9
-// Human-reviewed:   0/6
+// Relevant units:   7
+// Annotated:        0/7
+// Exempt:           11
+// Human-reviewed:   0/7
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       6
+// Unverified:       7
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -75,8 +75,9 @@ public sealed class BoundedScrollArea : UiElement
 
     /// <summary>
     /// The height the area leaves of the space when it takes more than its share, less the gap below a row
-    /// it ends below to show that row whole (see <see cref="Rows"/>). Without it, the area takes no more
-    /// than its share.
+    /// it ends below to show that row whole (see <see cref="Rows"/>). Without <see cref="Rows"/>, the area
+    /// takes its content's whole height up to what leaves this, or its share where that is more, and scrolls
+    /// the rest (see <see cref="HeightIn"/>). Without it, the area takes no more than its share.
     /// </summary>
     public Func<double>? MinimumRemaining { get; init; }
 
@@ -86,6 +87,13 @@ public sealed class BoundedScrollArea : UiElement
     /// so a short notice still says something. Without it, such a row is cut at the share, as described there.
     /// </summary>
     public bool KeepsLinesWhole { get; init; }
+
+    /// <summary>
+    /// With <see cref="MinimumRemaining"/>, the area leaves that minimum even within its share: its share is
+    /// then at most the space less the minimum, so content under the share does not take what is kept below
+    /// it. Without it, the minimum applies only once the content passes the share.
+    /// </summary>
+    public bool KeepsMinimumWithinShare { get; init; }
 
     /// <summary>The scroll view that scrolls the content once it passes the cap.</summary>
     public StandardScrollView Scroll => _scroll;
@@ -100,18 +108,43 @@ public sealed class BoundedScrollArea : UiElement
     /// </summary>
     public double PaneWidth { get; private set; } = double.PositiveInfinity;
 
+    /// <summary>The height of the whole content, without bounds, as it was last measured.</summary>
+    public double NaturalHeight { get; private set; }
+
+    /// <summary>
+    /// For an area without <see cref="Rows"/>, the height it takes of <paramref name="availableHeight"/> for
+    /// content of <see cref="NaturalHeight"/>: all of it, up to its share, or up to what leaves
+    /// <see cref="MinimumRemaining"/> where that is more. So a caller can ask what the area would take in
+    /// another space without measuring it there.
+    /// </summary>
+    public double HeightIn(double availableHeight)
+    {
+        if (!double.IsFinite(availableHeight)) return NaturalHeight;
+        double cap = availableHeight * MaximumFraction;
+        if (NaturalHeight <= cap) return NaturalHeight;
+        double limit = MinimumRemaining is null ? cap : Math.Max(cap, availableHeight - MinimumRemaining());
+        return Math.Min(NaturalHeight, limit);
+    }
+
     protected override BSize MeasureCore(BSize availableSize)
     {
         AvailableHeight = availableSize.Height;
         PaneWidth = availableSize.Width;
-        double natural = _content.Measure(new BSize(availableSize.Width, double.PositiveInfinity)).Height;
+        double natural = NaturalHeight = _content.Measure(new BSize(availableSize.Width, double.PositiveInfinity)).Height;
         double cap = double.IsFinite(availableSize.Height) ? availableSize.Height * MaximumFraction : double.PositiveInfinity;
+        if (KeepsMinimumWithinShare && MinimumRemaining is not null && double.IsFinite(cap))
+            cap = Math.Min(cap, Math.Max(0, availableSize.Height - MinimumRemaining()));
         double height = Math.Min(natural, cap);
         _scroll.Measure(new BSize(availableSize.Width, height));
         if (natural > cap && Rows is not null && MaximumFraction < 1)
         {
             double limit = MinimumRemaining is null ? cap : Math.Max(cap, availableSize.Height - MinimumRemaining());
             height = EndBetweenRows(natural, cap, limit);
+            if (height != cap) _scroll.Measure(new BSize(availableSize.Width, height));
+        }
+        else if (natural > cap && Rows is null && MinimumRemaining is not null)
+        {
+            height = HeightIn(availableSize.Height);
             if (height != cap) _scroll.Measure(new BSize(availableSize.Width, height));
         }
         return new BSize(double.IsFinite(availableSize.Width) ? availableSize.Width : _content.DesiredSize.Width, height);
@@ -137,7 +170,8 @@ public sealed class BoundedScrollArea : UiElement
         if (start >= cap && !(keepsLine && next == 0)) return cap;
         double end = lineHeight > 0 ? start + (Math.Floor(Math.Max(0, cap - start) / lineHeight) * lineHeight) : start;
         if (keepsLine) return Math.Max(end, start + lineHeight);
-        return end > cap / 2 ? end : cap;
+        // Ending above the first row would show none of it.
+        return end > cap / 2 && end > rows[0].Start ? end : cap;
     }
 
     protected override void ArrangeCore(BRect finalRect)

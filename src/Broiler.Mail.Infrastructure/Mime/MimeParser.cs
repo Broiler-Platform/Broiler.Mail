@@ -153,13 +153,19 @@ public static class MimeParser
         bool attachment = disposition == "attachment" || !string.IsNullOrEmpty(filename) && disposition != "inline" && string.IsNullOrWhiteSpace(contentId) && string.IsNullOrWhiteSpace(contentLocation);
         if (attachment && message.SkipAttachmentPayloads)
         {
-            message.Parts.Add(new MimePartInfo { IsAttachment = true, Disposition = disposition, MediaType = mediaType, FileName = filename });
+            message.Parts.Add(new MimePartInfo
+            {
+                IsAttachment = true, Disposition = disposition, MediaType = mediaType, FileName = filename,
+                TransferEncoding = transferEncoding, DecodedLength = MimeTransferLength.Decoded(bodyBytes, transferEncoding),
+            });
             return;
         }
         if (attachment && mediaType.StartsWith("multipart/", StringComparison.OrdinalIgnoreCase))
         {
-            if (message.StrictAttachmentDecoding) throw new InvalidDataException("Multipart attachment containers are not supported for extraction; keep the original .eml.");
-            message.Parts.Add(new MimePartInfo { IsAttachment = true, Disposition = disposition, MediaType = mediaType, FileName = filename, TransferEncoding = transferEncoding, Data = bodyBytes.ToArray() });
+            // An attached container (a forwarded multipart) is never extracted, but it keeps its part number so the
+            // ordinary attachments beside it stay extractable; the strict export carries no bytes for it.
+            message.Parts.Add(new MimePartInfo { IsAttachment = true, Disposition = disposition, MediaType = mediaType, FileName = filename, TransferEncoding = transferEncoding,
+                Data = message.StrictAttachmentDecoding ? [] : bodyBytes.ToArray(), DecodedLength = bodyBytes.Length });
             return;
         }
         if (mediaType.StartsWith("multipart/", StringComparison.OrdinalIgnoreCase))
@@ -210,6 +216,7 @@ public static class MimeParser
                 Charset = parameters.GetValueOrDefault("charset"),
                 TransferEncoding = transferEncoding,
                 Data = rawBytes,
+                DecodedLength = rawBytes.Length,
             });
         }
     }

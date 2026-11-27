@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   5
-// Annotated:        0/5
-// Exempt:           2
-// Human-reviewed:   0/5
+// Relevant units:   6
+// Annotated:        0/6
+// Exempt:           4
+// Human-reviewed:   0/6
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       5
+// Unverified:       6
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -28,7 +28,20 @@ namespace Broiler.Mail.Application.Views;
 /// </summary>
 public sealed class FirstTakesRestStack : UiElement
 {
+    private readonly HashSet<UiElement> _bounded = [];
+
     public void Add(UiElement child) => AddChild(child);
+
+    /// <summary>
+    /// Adds a later child that is measured in the height the other later children leave, rather than at its
+    /// natural height, so a child that caps itself and scrolls, such as the reader's banners, takes its share of
+    /// that height and the first child is measured in what it leaves in turn.
+    /// </summary>
+    public void AddBounded(UiElement child)
+    {
+        AddChild(child);
+        _bounded.Add(child);
+    }
 
     /// <summary>
     /// Called with the space the stack is measured in, once its children are measured there. It may move
@@ -37,6 +50,14 @@ public sealed class FirstTakesRestStack : UiElement
     /// the space and on what the stack shows, so measuring again in the same space moves nothing.
     /// </summary>
     public Func<BSize, bool>? Fit { get; init; }
+
+    /// <summary>
+    /// The height the stack leaves below itself for what follows it, such as the rows a list keeps below the
+    /// search header: the first child is measured in the height the later children and this leave, but never in
+    /// less than half the height the later children leave, so a space too short for both still shows some of it.
+    /// Without it, the first child has all the height the later children leave.
+    /// </summary>
+    public Func<double>? Reserve { get; init; }
 
     private IEnumerable<UiElement> Shown => Children.Where(child => child.Visibility != UiVisibility.Collapsed);
 
@@ -51,13 +72,17 @@ public sealed class FirstTakesRestStack : UiElement
         var shown = Shown.ToArray();
         if (shown.Length == 0) return BSize.Empty;
         double width = availableSize.Width, below = 0, desiredWidth = 0;
-        foreach (var child in shown.Skip(1))
+        // The later children of natural height first, then the bounded ones in the height those leave.
+        foreach (var child in shown.Skip(1).Where(child => !_bounded.Contains(child)).Concat(shown.Skip(1).Where(_bounded.Contains)))
         {
-            var size = child.Measure(new BSize(width, double.PositiveInfinity));
+            double height = _bounded.Contains(child) && double.IsFinite(availableSize.Height)
+                ? Math.Max(0, availableSize.Height - below) : double.PositiveInfinity;
+            var size = child.Measure(new BSize(width, height));
             below += size.Height;
             desiredWidth = Math.Max(desiredWidth, size.Width);
         }
         double rest = double.IsFinite(availableSize.Height) ? Math.Max(0, availableSize.Height - below) : double.PositiveInfinity;
+        if (double.IsFinite(rest) && Reserve is not null) rest = Math.Max(rest / 2, rest - Math.Max(0, Reserve()));
         var first = shown[0].Measure(new BSize(width, rest));
         desiredWidth = Math.Max(desiredWidth, first.Width);
         return new BSize(double.IsFinite(width) ? width : desiredWidth, first.Height + below);

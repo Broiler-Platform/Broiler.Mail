@@ -22,7 +22,8 @@ public sealed class LocalHeaderSearchTests
         var foreign = new MailboxKey(AccountId.New(), "INBOX", 8);
         await cache.SaveSummariesAsync(foreign, [Row(foreign, 4, "match private")], DateTimeOffset.UtcNow);
         var result = await new SqliteMailCache(path).SearchHeadersAsync(new(account, "MATCH"));
-        Assert.Equal(new uint[] { 2, 3 }, result.Messages.Select(row => row.Key.Uid));
+        // All folders list newest first; with no saved dates, folders list ascending, so Archive comes before INBOX.
+        Assert.Equal(new uint[] { 3, 2 }, result.Messages.Select(row => row.Key.Uid));
         Assert.All(result.Messages, row => Assert.Equal(account, row.Key.AccountId));
         Assert.False(result.HasMore);
     }

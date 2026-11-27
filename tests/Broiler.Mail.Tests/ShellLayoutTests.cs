@@ -20,73 +20,204 @@ public sealed class ShellLayoutTests
     private static readonly string[] ViewIds = ["inbox", "compose", "account", "settings"];
 
     [Fact]
-    public async Task FileMenuOpensMessageActionsWithoutInsertingControlsIntoTheInbox()
+    public async Task MessageActionsAreInlineAndTheFileMenuOffersNoMessageActionsDialog()
     {
         using var fixture = await Fixture.OpenAsync(1100, 720);
         var shell = fixture.Shell;
         var session = fixture.Session;
+        Render(session);
         var inbox = shell.GetContent("inbox");
         var file = shell.Menu.Items[0];
         Assert.Equal("File", file.Text);
-        int groupIndex = file.Children.ToList().FindIndex(item => item.Id == "mailbox-tools");
-        Assert.True(groupIndex >= 0);
-        var group = file.Children[groupIndex];
-        int index = group.Children.ToList().FindIndex(item => item.Id == "message-actions");
-        Assert.True(index >= 0);
-        Assert.True(group.Children[index].IsEnabled);
+        // The File menu keeps the mailbox's own dialogs, but none for the open message.
+        var group = file.Children.Single(item => item.Id == "mailbox-tools");
+        Assert.DoesNotContain(group.Children, item => item.Id is "message-actions" or "find-message");
+        Assert.False(shell.ShowView("message-actions"));
+        Assert.DoesNotContain(Descendants(inbox), element => element is Broiler.UI.Button.Standard.StandardButton { Text: "Find text" });
+
+        // More message actions opens a popup menu anchored below its button, not a dialog.
+        var more = ReaderMenus.Button(inbox, "More message actions");
+        more.Trigger.Click();
+        Assert.True(more.IsExpanded);
+        Assert.IsType<Broiler.UI.Menu.Standard.StandardMenu>(session.CapturedElement);
+        Assert.Null(shell.ActiveDialog);
+        Assert.Null(session.ModalElement);
+        Assert.Equal("inbox", shell.ActiveViewId);
+        more.Trigger.Click();
+        Assert.False(more.IsExpanded);
+        Assert.Same(inbox, shell.ActiveContent);
+    }
+
+    [Fact]
+    public async Task OriginalMessageExportIsInlineAndReplacedWithTheBody()
+    {
+        using var fixture = await Fixture.OpenAsync(1100, 720, withSourceExports: true);
+        var (shell, session, model) = (fixture.Shell, fixture.Session, fixture.Model);
+        Render(session);
+        var inbox = shell.GetContent("inbox");
+        Assert.False(shell.ShowView("message-actions"));
+        var first = Descendants(inbox).OfType<Broiler.Mail.Application.Preview.MessageSourceExportActions>().Single();
+        var header = Descendants(inbox).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Message header");
+        Assert.True(first.IsDescendantOf(header));
+        var innerScrolls = Descendants(first).OfType<UiScrollView>().ToArray();
+
+        // More message actions opens the reader's own .eml section and focuses it, with no dialog.
+        ReaderMenus.Invoke(session, inbox, "More message actions", "Original message (.eml)…");
+        Render(session);
+        Assert.Null(shell.ActiveDialog);
+        Assert.Equal("inbox", shell.ActiveViewId);
+        Assert.True(session.FocusedElement?.IsDescendantOf(first), $"Focus is on {session.FocusedElement}.");
+
+        // Selecting another message replaces the section and disposes the old one's controls.
+        await model.Inbox.SelectAsync(model.Inbox.Messages[1].Key);
+        ((TestQueueDispatcher)session.Dispatcher).DrainUntil(() => !model.Inbox.IsBusy);
+        Render(session);
+        Assert.True(first.IsDisposed);
+        Assert.All(innerScrolls, scroll => Assert.True(scroll.IsDisposed));
+        Assert.True(session.FocusedElement is null || !session.FocusedElement.IsDisposed);
+        var second = Descendants(inbox).OfType<Broiler.Mail.Application.Preview.MessageSourceExportActions>().Single();
+        ReaderMenus.Invoke(session, inbox, "More message actions", "Original message (.eml)…");
+        Render(session);
+        Assert.Null(shell.ActiveDialog);
+        Assert.True(session.FocusedElement?.IsDescendantOf(second), $"Focus is on {session.FocusedElement}.");
+    }
+
+    [Fact]
+    public async Task FileMenuOffersOpenAndSaveEmlWithAcceleratorsAndEnablement()
+    {
+        using (var fixture = await Fixture.OpenAsync(1100, 720, withSourceExports: true))
+        {
+            var (shell, session, model) = (fixture.Shell, fixture.Session, fixture.Model);
+            Render(session);
+            var file = shell.Menu.Items[0];
+            var ids = file.Children.Select(item => item.Id).ToList();
+            // Right after New message, and not in the Mailbox and message group.
+            Assert.Equal(new[] { "inbox", "new", "open-eml", "save-eml", "compose", "receive" }, ids.Take(6).ToArray());
+            Assert.DoesNotContain(file.Children.Single(item => item.Id == "mailbox-tools").Children, item => item.Id is "open-eml" or "save-eml");
+            var open = file.Children.Single(item => item.Id == "open-eml");
+            var save = file.Children.Single(item => item.Id == "save-eml");
+            Assert.Equal("Open .eml file…", open.Text);
+            Assert.Equal("Ctrl+O", open.Accelerator);
+            Assert.Equal("Save message as .eml…", save.Text);
+            Assert.Equal("Ctrl+Shift+S", save.Accelerator);
+            Assert.True(open.IsEnabled);
+            Assert.True(save.IsEnabled);
+            // New and Receive keep their own enablement, now found by reference instead of position.
+            Assert.Equal(model.Compose.CanCompose, file.Children.Single(item => item.Id == "new").IsEnabled);
+            Assert.Equal(model.Inbox.CanReceive, file.Children.Single(item => item.Id == "receive").IsEnabled);
+        }
+        using (var fixture = await Fixture.OpenAsync(1100, 720))
+        {
+            // Without source exports neither is available; New and Receive still are.
+            var file = fixture.Shell.Menu.Items[0];
+            Assert.False(file.Children.Single(item => item.Id == "open-eml").IsEnabled);
+            Assert.False(file.Children.Single(item => item.Id == "save-eml").IsEnabled);
+            Assert.Equal(fixture.Model.Compose.CanCompose, file.Children.Single(item => item.Id == "new").IsEnabled);
+            Assert.Equal(fixture.Model.Inbox.CanReceive, file.Children.Single(item => item.Id == "receive").IsEnabled);
+        }
+        using (var fixture = await Fixture.OpenAsync(1100, 720, withSourceExports: true, files: UnavailableMailFilePicker.NotOnThisDeviceYet))
+        {
+            // Without a file picker (Android until UX-M5) both are unavailable.
+            var file = fixture.Shell.Menu.Items[0];
+            Assert.False(file.Children.Single(item => item.Id == "open-eml").IsEnabled);
+            Assert.False(file.Children.Single(item => item.Id == "save-eml").IsEnabled);
+        }
+    }
+
+    [Fact]
+    public async Task MoreActionsMenuOffersSaveAsEml()
+    {
+        var files = new FakeMailFilePicker();
+        using var fixture = await Fixture.OpenAsync(1100, 720, withSourceExports: true, files: files);
+        var (shell, session, model) = (fixture.Shell, fixture.Session, fixture.Model);
+        Render(session);
+        var inbox = shell.GetContent("inbox");
+        var items = ReaderMenus.Items(inbox, "More message actions");
+        var saveIndex = items.ToList().FindIndex(item => item.Id == "save-eml");
+        Assert.True(saveIndex >= 0);
+        Assert.Equal("Save as .eml…", items[saveIndex].Text);
+        Assert.Equal("Ctrl+Shift+S", items[saveIndex].Accelerator);
+        Assert.True(items[saveIndex].IsEnabled);
+        Assert.Equal("source", items[saveIndex + 1].Id);
+
+        Directory.CreateDirectory(fixture.Root);
+        string target = Path.Combine(fixture.Root, "chosen.eml");
+        files.WillSave(target);
+        ReaderMenus.Invoke(session, inbox, "More message actions", "Save as .eml…");
+        ((TestQueueDispatcher)session.Dispatcher).DrainUntil(() => File.Exists(target) && shell.Inbox.CanSaveMessageAsEml);
+        Render(session);
+        Assert.Equal("Subject: Test\r\n\r\nBody"u8.ToArray(), File.ReadAllBytes(target));
+        Assert.Equal(Broiler.Mail.Core.Services.MailFilePurpose.SaveMessage, Assert.Single(files.Requests).Request.Purpose);
+        // Saved inline, with no dialog of Mail's own, and the section says what happened.
+        Assert.Null(shell.ActiveDialog);
+        Assert.Equal("inbox", shell.ActiveViewId);
+        var actions = Descendants(inbox).OfType<Broiler.Mail.Application.Preview.MessageSourceExportActions>().Single();
+        Assert.Equal("Message saved as chosen.eml. The file was not opened.", actions.Status);
+        Assert.False(Directory.Exists(Path.Combine(fixture.Root, "source-exports")));
+        Assert.NotNull(model.Inbox.Body);
+    }
+
+    [Fact]
+    public async Task FindInMessageFromMoreMessageActionsFocusesTheInlineQuery()
+    {
+        using var fixture = await Fixture.OpenAsync(1100, 720);
+        var (shell, session) = (fixture.Shell, fixture.Session);
+        Render(session);
+        var inbox = shell.GetContent("inbox");
+        var more = ReaderMenus.Button(inbox, "More message actions");
+        var item = ReaderMenus.Items(inbox, "More message actions").Single(entry => entry.Id == "find");
+        Assert.Equal("Find in message", item.Text);
+        Assert.Equal("Ctrl+F", item.Accelerator);
+
+        ReaderMenus.Invoke(session, inbox, "More message actions", "Find in message");
+        Render(session);
+
+        // The menu gave focus back to its button before the posted command focused the query.
+        Assert.Null(shell.ActiveDialog);
+        Assert.Equal("inbox", shell.ActiveViewId);
+        var find = Descendants(inbox).OfType<Broiler.Mail.Application.Preview.MessageTextFindBar>().Single();
+        Assert.Equal(UiVisibility.Visible, find.Visibility);
+        Assert.Same(Descendants(find).OfType<Broiler.UI.Edit.Standard.StandardEdit>().Single(edit => edit.AccessibleName == "Find in message text"),
+            session.FocusedElement);
+        Assert.NotSame(more.Trigger, session.FocusedElement);
+        Assert.False(shell.ShowView("find-message"));
+    }
+
+    [Fact]
+    public async Task MessageMenuFindInMessageOpensTheInlineFindBar()
+    {
+        using var fixture = await Fixture.OpenAsync(1100, 720);
+        var (shell, session, model) = (fixture.Shell, fixture.Session, fixture.Model);
+        Render(session);
+        // The File menu no longer offers Find as a dialog; the Message menu offers it inline.
+        var file = shell.Menu.Items[0];
+        Assert.DoesNotContain(file.Children.Single(item => item.Id == "mailbox-tools").Children, item => item.Id is "find-message");
+        int messageIndex = shell.Menu.Items.ToList().FindIndex(item => item.Id == "message");
+        var message = shell.Menu.Items[messageIndex];
+        int findIndex = message.Children.ToList().FindIndex(item => item.Id == "find-message");
+        Assert.True(findIndex >= 0);
+        Assert.True(message.Children[findIndex].IsEnabled);
 
         var keyboard = shell.CreateKeyboardNavigation(session);
         keyboard.Execute(MailCommand.OpenMenu);
-        Assert.True(shell.Menu.SetSelectedPath([0, groupIndex, index]));
+        Assert.True(shell.Menu.SetSelectedPath([messageIndex, findIndex]));
         Assert.True(session.DispatchInput(UiInputEvent.FromKeyboardKey(new Broiler.Input.Keyboard.KeyboardKeyEvent(
-            new Broiler.Input.InputEventHeader(Broiler.Input.InputDeviceId.FromOpaqueValue("file-menu-test"),
+            new Broiler.Input.InputEventHeader(Broiler.Input.InputDeviceId.FromOpaqueValue("message-menu-test"),
                 new Broiler.Input.InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1),
             Broiler.Input.Keyboard.KeyboardKey.FromName("Enter"), Broiler.Input.Keyboard.KeyboardKeyTransition.Down,
             Broiler.Input.Keyboard.KeyboardModifierState.None, 0x0D, 0, 1, false, false,
             Source: Broiler.Input.InputEventSource.Synthetic))));
         ((TestQueueDispatcher)session.Dispatcher).Drain();
-
-        Assert.Equal("message-actions", shell.ActiveViewId);
-        Assert.NotNull(shell.ActiveDialog);
-        Assert.DoesNotContain(Descendants(inbox), element => element is Broiler.UI.Button.Standard.StandardButton { Text: "Find text" });
-        Assert.Contains(Descendants(shell.ActiveContent), element => element is Broiler.UI.Button.Standard.StandardButton { Text: "Find text" });
-        Assert.True(shell.CloseDialog());
-        Assert.Same(inbox, shell.ActiveContent);
-    }
-
-    [Fact]
-    public async Task ReopeningMessageActionsAfterBodyReplacementDoesNotUseDisposedScrollView()
-    {
-        using var fixture = await Fixture.OpenAsync(1100, 720, withSourceExports: true);
-        var (shell, session, model) = (fixture.Shell, fixture.Session, fixture.Model);
-        var openButton = Descendants(shell.GetContent("inbox"))
-            .OfType<Broiler.UI.Button.Standard.StandardButton>()
-            .Single(button => button.Text == "More message actions");
-
-        openButton.Click();
         Render(session);
-        Assert.Equal("message-actions", shell.ActiveViewId);
-        var outerScroll = Assert.IsAssignableFrom<UiScrollView>(shell.ActiveContent);
-        var innerScrolls = Descendants(outerScroll).OfType<UiScrollView>().Where(scroll => scroll != outerScroll).ToArray();
-        Assert.NotEmpty(innerScrolls);
-        outerScroll.SetOffset(new BPoint(0, 24));
-        Render(session);
-        var expectedOffset = outerScroll.Offset;
 
-        Assert.True(shell.CloseDialog());
+        // Not Settings, the menu's fallback, and not a dialog.
         Assert.Null(shell.ActiveDialog);
-
-        // Selecting another message (or re-selecting the current one) replaces sourceArea and disposes inner scroll views.
-        await model.Inbox.SelectAsync(model.Inbox.Messages[1].Key);
-        ((TestQueueDispatcher)session.Dispatcher).DrainUntil(() => !model.Inbox.IsBusy);
-        Assert.Contains(innerScrolls, scroll => scroll.IsDisposed);
-
-        openButton.Click();
-        Render(session);
-        Assert.Equal("message-actions", shell.ActiveViewId);
-        Assert.NotNull(shell.ActiveDialog);
-        Assert.Equal(expectedOffset, outerScroll.Offset);
-        Assert.True(shell.CloseDialog());
+        Assert.Equal("inbox", shell.ActiveViewId);
+        var find = Descendants(shell.GetContent("inbox")).OfType<Broiler.Mail.Application.Preview.MessageTextFindBar>().Single();
+        Assert.Equal(UiVisibility.Visible, find.Visibility);
+        Assert.Same(Descendants(find).OfType<Broiler.UI.Edit.Standard.StandardEdit>().Single(edit => edit.AccessibleName == "Find in message text"),
+            session.FocusedElement);
+        Assert.NotNull(model.Inbox.Body);
     }
 
     [Theory]
@@ -314,8 +445,9 @@ public sealed class ShellLayoutTests
         public MailShellViewModel Model { get; } = model;
         public UiSession Session { get; } = session;
         public Host Host { get; } = host;
+        public string Root => directory.Root;
 
-        public static async Task<Fixture> OpenAsync(int width, int height, bool withSourceExports = false)
+        public static async Task<Fixture> OpenAsync(int width, int height, bool withSourceExports = false, IMailFilePicker? files = null)
         {
             var directory = new TestDirectory();
             var account = TestDirectory.Profile();
@@ -340,7 +472,7 @@ public sealed class ShellLayoutTests
                 new(new JsonSettingsStore(directory.File("settings.json")), dispatcher, new(), null),
                 new(receiver, dispatcher, cache, sourceExports: exports),
                 new ComposerViewModel(dispatcher: dispatcher));
-            var shell = new MailShellView(model);
+            var shell = new MailShellView(model, files: files);
             var host = new Host(width, height);
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
             shell.Attach(session);

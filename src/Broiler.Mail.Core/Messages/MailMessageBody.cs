@@ -5,7 +5,7 @@
 // --------------------
 // Relevant units:   2
 // Annotated:        1/2
-// Exempt:           7
+// Exempt:           9
 // Human-reviewed:   0/2
 // IP risk:          None
 // Security risk:    Medium
@@ -34,4 +34,12 @@ public sealed record MailMessageBody(MailMessageKey Key, string PlainText, strin
     public string? CompositionUnavailableReason { get; init; }
     public IReadOnlyDictionary<string, MailEmbeddedImage> EmbeddedImages { get; init; } =
         new Dictionary<string, MailEmbeddedImage>(StringComparer.OrdinalIgnoreCase);
+    /// <summary>Regular attachment parts, at most <see cref="MailAttachmentDescriptor.MaximumCount"/>.
+    /// Null when unknown (a body decoded or cached before the inventory existed); empty when the message has none.
+    /// Inline cid:/Content-Location images are not listed.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingNull)]
+    public IReadOnlyList<MailAttachmentDescriptor>? Attachments { get; init; }
+    /// <summary>True when more attachment parts exist than were listed, or the MIME structure was incomplete.</summary>
+    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
+    public bool IsAttachmentListIncomplete { get; init; }
 }

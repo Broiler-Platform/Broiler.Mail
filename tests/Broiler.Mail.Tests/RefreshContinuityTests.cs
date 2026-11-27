@@ -153,8 +153,7 @@ public sealed class RefreshContinuityTests
         await model.SelectAsync(open.Key);
         _ = session.RenderFrame();
 
-        Descendants(content).OfType<StandardButton>().Single(button => button.Text == "More message actions").Click();
-        session.RenderFrame();
+        // The HTML/Plain text toggle is in the reader's header, without opening anything first.
         Descendants(content).OfType<StandardButton>().Single(button => button.Text == "Plain text").Click();
         _ = session.RenderFrame();
 
@@ -186,6 +185,19 @@ public sealed class RefreshContinuityTests
         Assert.Equal(readerOffset, scroll.VerticalOffset);
         Assert.Equal(selection, reader.Editor.Selection);
         Assert.Equal(1, preview.Created);
+
+        // An open More message actions popup belongs to the open message, so receiving again keeps it open.
+        var more = ReaderMenus.Button(content, "More message actions");
+        Assert.True(more.Expand());
+        receiver.Inbox = (_, _) => Task.FromResult(new MailInboxPage([Message(account, 43), Message(account, 42), Message(account, 41), .. messages], null));
+        await model.ReceiveAsync();
+        _ = session.RenderFrame();
+        Assert.Equal(43, list.Items.Count);
+        Assert.True(more.IsExpanded);
+        Assert.Same(more.Menu, session.CapturedElement);
+        Assert.Equal(1, preview.Created);
+        Assert.True(more.Collapse());
+        Assert.Same(more.Trigger, session.FocusedElement);
     }
 
     private static TestMailReceiver Receiver(IReadOnlyList<MailMessageSummary> newest, MailInboxCursor? older) => new()

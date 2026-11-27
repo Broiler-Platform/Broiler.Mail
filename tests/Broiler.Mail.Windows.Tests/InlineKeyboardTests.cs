@@ -26,7 +26,10 @@ public sealed class InlineKeyboardTests
         var surface = Assert.IsType<ScrollableHtmlView>(html.Surface); session.SetFocus(surface.Content);
         bool Dispatch(UiInputEvent input) => keyboard.Handle(input) || session.DispatchInput(input);
         Assert.True(Dispatch(Key(0x46, KeyboardModifierState.Control))); session.RenderFrame(); Assert.Equal(UiVisibility.Collapsed, surface.Visibility);
-        var content = shell.GetContent("inbox"); Assert.Equal("find-message", shell.ActiveViewId); var find = Descendants(shell.ActiveContent).OfType<MessageTextFindBar>().Single();
+        var content = shell.GetContent("inbox"); Assert.Equal("inbox", shell.ActiveViewId); Assert.Null(shell.ActiveDialog); var find = Descendants(content).OfType<MessageTextFindBar>().Single();
+        var reader = Descendants(content).OfType<ScrollableMessageText>().Single();
+        // The bar docks above the message text and never covers it.
+        Assert.True(find.Bounds.Height > 0 && find.Bounds.Bottom <= reader.Bounds.Top + 0.5, $"find {find.Bounds}, text {reader.Bounds}");
         string needle = new(model.Inbox.Body!.PlainText.SkipWhile(c => !char.IsLetter(c)).TakeWhile(char.IsLetter).Take(20).ToArray()); Assert.NotEmpty(needle);
         var query = Descendants(find).OfType<Broiler.UI.Edit.Standard.StandardEdit>().Single(); query.Text = needle;
         Assert.True(Dispatch(Key(0x0D))); session.RenderFrame(); Assert.Contains("Match", find.Status);
@@ -80,16 +83,15 @@ public sealed class InlineKeyboardTests
         Assert.False(keyboard.Handle(Wheel(list.Bounds.Left + 10, list.Bounds.Top + 10, 1, InputModifiers.Control))); Assert.Equal(1.1, view.Zoom);
         shell.ShowView("settings"); Assert.False(keyboard.Handle(Key(0xBB, KeyboardModifierState.Control)));
         shell.CloseDialog(); session.SetFocus(view.Content);
-        Descendants(shell.GetContent("inbox")).OfType<Broiler.UI.Button.Standard.StandardButton>()
-            .Single(button => button.Text == "More message actions").Click();
-        session.RenderFrame();
-        Assert.Equal("message-actions", shell.ActiveViewId);
-        var toggle = Descendants(shell.ActiveContent).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Plain text");
+        // The HTML/Plain text toggle is in the reader's header, reached from the message with Shift+Tab, no dialog.
+        var toggle = Descendants(shell.GetContent("inbox")).OfType<Broiler.UI.Button.Standard.StandardButton>().Single(button => button.Text == "Plain text");
         for (int i = 0; i < 30 && session.FocusedElement != toggle; i++) keyboard.Execute(MailCommand.PreviousField);
         Assert.Same(toggle, session.FocusedElement);
+        Assert.Null(shell.ActiveDialog);
+        Assert.Equal("inbox", shell.ActiveViewId);
         Assert.True(Dispatch(Key(0x0D))); Assert.False(keyboard.Handle(Key(0xBB, KeyboardModifierState.Control)));
         Assert.True(Dispatch(Key(0x0D))); // Restore HTML using the same focused toggle.
-        Assert.True(shell.CloseDialog());
+        Assert.Null(shell.ActiveDialog);
         uiHost.ViewportSize = new(640, 480); shell.Window.InvalidateMeasure(); session.RenderFrame();
         Assert.True(shell.Inbox.GoBackToList()); session.RenderFrame();
         Assert.False(keyboard.Handle(Wheel(view.Bounds.Left + 10, view.Bounds.Top + 10, 1, InputModifiers.Control)));

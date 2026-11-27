@@ -28,7 +28,8 @@ public sealed class SavedDraftsViewTests
         var section = All(surface).OfType<FormSection>().Single(item => item.Toggle?.Text.Contains("Saved drafts", StringComparison.Ordinal) == true);
         Assert.False(section.IsExpanded); section.Toggle!.Click(); session.RenderFrame();
         Assert.True(All(surface).OfType<StandardRichEdit>().Single().Bounds.Height >= 120);
-        var picker = All(surface).OfType<StandardComboBox>().Single(item => item.AccessibleName == "Saved drafts for selected account"); picker.SelectedIndex = 0;
+        var picker = All(surface).OfType<StandardComboBox>().Single(item => item.AccessibleName == "Saved drafts for selected account");
+        Assert.StartsWith("First fixture · ", picker.Items[0].Text, StringComparison.Ordinal); Assert.Equal(model.SavedDrafts[0].Draft.Id.ToString(), picker.Items[0].Id); picker.SelectedIndex = 0;
         var request = All(surface).OfType<StandardButton>().Single(item => item.Text == "Remove selected saved draft…"); request.Click(); Assert.NotNull(model.SavedDraftRemoval);
         var confirm = All(surface).OfType<StandardButton>().Single(item => item.Text == "Confirm permanent local draft removal"); Assert.False(confirm.IsDefault); Assert.True(confirm.IsEnabled);
         All(surface).OfType<StandardButton>().Single(item => item.Text == "Keep saved draft").Click(); Assert.Null(model.SavedDraftRemoval); Assert.Single(model.SavedDrafts);

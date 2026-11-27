@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   12
-// Annotated:        0/12
+// Relevant units:   13
+// Annotated:        0/13
 // Exempt:           7
-// Human-reviewed:   0/12
+// Human-reviewed:   0/13
 // IP risk:          not assessed
 // Security risk:    not assessed
 // Criteria:         0/0
 // Resource impact:  not assessed
-// Unverified:       12
+// Unverified:       13
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -78,9 +78,33 @@ internal static class SavedOriginalLibrarySmokeCheck
         string removalRestored = await storage.RestoreBackupAsync(removalBackup, directory + "-removal-restored");
         if (!(await new JsonLocalMessageOriginals(removalRestored).ReadImportAsync(imported)).Bytes.AsSpan().SequenceEqual(original))
             throw new InvalidOperationException("Published removed import did not restore exactly.");
+        // UX-M2: a 12 MiB .eml opens decoded by default and its raw source stays one toggle away; one byte more is refused.
+        string large = directory + "-large.eml"; byte[] largeOriginal = LargeOriginal(IStreamingMessageSourceExports.MaximumBytes);
+        await File.WriteAllBytesAsync(large, largeOriginal); await local.OpenFileAsync(large); session.RenderFrame();
+        if (!local.ShowsDecoded || !local.PreviewText.Contains("Subject: Native twelve MiB") || !local.PreviewText.Contains("Large saved body"))
+            throw new InvalidOperationException("Published 12 MiB .eml did not open decoded.");
+        local.ShowSource();
+        if (local.ShowsDecoded || !local.PreviewText.Contains("Content-Disposition: attachment"))
+            throw new InvalidOperationException("Published 12 MiB .eml raw source toggle failed.");
+        await File.WriteAllBytesAsync(large, [.. largeOriginal, (byte)'\n']); await local.OpenFileAsync(large);
+        if (!local.Status.Contains("12 MiB") || !File.ReadAllBytes(input).AsSpan().SequenceEqual(original))
+            throw new InvalidOperationException("Published .eml over 12 MiB was not refused.");
         shell.CloseDialog();
         if (local.Imports.Count != 0 || local.PreviewText.Length != 0) throw new InvalidOperationException("Published local-original close guard failed.");
         if(library.Exports.Count!=0 || All(library).OfType<MessageSourceInspection>().Any())throw new InvalidOperationException("Published library retained details after closing.");
+    }
+    /// <summary>An .eml of exactly <paramref name="total"/> octets: a short text part and one base64 attachment.</summary>
+    private static byte[] LargeOriginal(int total)
+    {
+        const string head = "Subject: Native twelve MiB\r\nMIME-Version: 1.0\r\nContent-Type: multipart/mixed; boundary=x\r\n\r\n--x\r\nContent-Type: text/plain\r\n\r\nLarge saved body\r\n";
+        const string part = "--x\r\nContent-Type: application/octet-stream\r\nContent-Disposition: attachment; filename=large.bin\r\nContent-Transfer-Encoding: base64\r\n\r\n";
+        const string tail = "--x--\r\n";
+        // Whole lines of 76 base64 characters, and a filler line in the text part takes up the rest.
+        int lines = (total - head.Length - part.Length - tail.Length - 100) / 78;
+        int filler = total - head.Length - part.Length - tail.Length - lines * 78;
+        var text = new StringBuilder(total).Append(head).Append('.', filler - 2).Append("\r\n").Append(part);
+        for (int line = 0; line < lines; line++) text.Append('A', 76).Append("\r\n");
+        return Encoding.ASCII.GetBytes(text.Append(tail).ToString());
     }
     private static IEnumerable<UiElement> All(UiElement root){yield return root;foreach(var child in root.Children)foreach(var nested in All(child))yield return nested;}
     private sealed class Receiver:IMailReceiver

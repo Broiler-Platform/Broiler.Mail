@@ -64,7 +64,7 @@ internal static class SavedRecipientsView
             var selected = Selected(); var rows = model.Suggest(prefix.Text).ToArray();
             if (!shown.SequenceEqual(rows))
             {
-                shown = rows; choices.SetItems(rows.Select(row => new UiComboBoxItem(row.Label, row.Address)));
+                shown = rows; choices.SetItems(rows.Select(row => new UiComboBoxItem(row.Address, row.Label)));
                 choices.SelectedIndex = selected is null ? -1 : Array.FindIndex(rows, row => row.Address.Equals(selected.Address, StringComparison.OrdinalIgnoreCase));
             }
             bool ready = composer.CanEdit && model.IsReady && !model.IsBusy;

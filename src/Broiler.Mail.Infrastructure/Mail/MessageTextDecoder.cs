@@ -3,15 +3,15 @@
 //
 // HAIRS Code Assurance
 // --------------------
-// Relevant units:   12
-// Annotated:        7/12
+// Relevant units:   14
+// Annotated:        7/14
 // Exempt:           0
-// Human-reviewed:   0/12
+// Human-reviewed:   0/14
 // IP risk:          Low
 // Security risk:    High
 // Criteria:         7/7
 // Resource impact:  7/10 max
-// Unverified:       12
+// Unverified:       14
 //
 // GENERATED - DO NOT EDIT MANUALLY
 
@@ -69,6 +69,7 @@ internal static class MessageTextDecoder
         string? compositionError = null;
         try { composition = CompositionHeaders(message); }
         catch (ArgumentException) { compositionError = "Reply headers are invalid or exceed the composition limits. Start a new message instead."; }
+        var attachments = Attachments(message);
         return new(key, decoded.Text,
             htmlBody is { Length: <= HtmlPreviewPolicy.MaximumHtmlCharacters } ? htmlBody : null)
         {
@@ -77,18 +78,44 @@ internal static class MessageTextDecoder
             IsHtmlFallback = decoded.Fallback, IsTruncated = decoded.Truncated,
             Composition = composition, CompositionUnavailableReason = compositionError,
             EmbeddedImages = message.EmbeddedImages,
+            Attachments = attachments.List, IsAttachmentListIncomplete = attachments.Incomplete,
         };
     }
+
+    /// <summary>Lists regular attachment parts (the parser's classification: inline cid:/Content-Location parts are not attachments).
+    /// Never throws; names are sanitized and an unusable media type becomes application/octet-stream.</summary>
+    private static (IReadOnlyList<MailAttachmentDescriptor> List, bool Incomplete) Attachments(ParsedMimeMessage message)
+    {
+        var list = new List<MailAttachmentDescriptor>();
+        bool incomplete = message.HasIncompleteParts;
+        for (int index = 0; index < message.Parts.Count; index++)
+        {
+            var part = message.Parts[index];
+            if (!part.IsAttachment) continue;
+            if (list.Count == MailAttachmentDescriptor.MaximumCount) { incomplete = true; break; }
+            list.Add(new(index + 1, MimeAttachmentCatalog.SafeFileName(part.FileName ?? "attachment.bin"),
+                ValidMediaType(part.MediaType) ?? "application/octet-stream", Math.Max(0, part.DecodedLength)));
+        }
+        return (list.AsReadOnly(), incomplete);
+    }
+
+    private static string? ValidMediaType(string? mediaType) =>
+        mediaType is { Length: > 0 and <= 127 } && mediaType.Count(c => c == '/') == 1 && mediaType[0] != '/' && mediaType[^1] != '/' &&
+        mediaType.All(c => char.IsAsciiLetterOrDigit(c) || "/!#$&^_.+-".Contains(c)) ? mediaType : null;
 
     internal static async Task<Broiler.Mail.Core.Services.LocalOriginalPreview> DecodeLocalAsync(Stream stream, CancellationToken token)
     {
         var message = await MimeParser.ParseAsync(stream, token).ConfigureAwait(false);
         var text = DecodeText(message, token);
+        var attachments = Attachments(message);
         return new(Header(message.Subject, "(No subject)"), Header(string.Join(", ", message.From.Take(20)), "(Unknown sender)"),
             text.Text, text.Fallback, text.Truncated, message.HasIncompleteParts)
         {
             HtmlText = message.HtmlBody is { Length: > 0 and <= Broiler.Mail.Core.Services.LocalOriginalPreview.MaximumHtmlCharacters } html ? html : null,
             HtmlExceedsLimit = message.HtmlBody?.Length > Broiler.Mail.Core.Services.LocalOriginalPreview.MaximumHtmlCharacters,
+            To = message.To.Count == 0 ? null : Header(string.Join(", ", message.To.Take(20)), "") is { Length: > 0 } to ? to : null,
+            Date = message.Date,
+            Attachments = attachments.List, IsAttachmentListIncomplete = attachments.Incomplete,
         };
     }
     private static (string Text, bool Fallback, bool Truncated) DecodeText(ParsedMimeMessage message, CancellationToken token,

@@ -389,9 +389,16 @@ public sealed class DemoGalleryTests
                 var text = Descendants(reader).OfType<ScrollableMessageText>().Single();
                 Assert.Equal(divider.Bottom, text.Bounds.Top, 0.5);
                 // The text keeps its lines and their margins. Only where the header scrolls and ends with Reply's
-                // row may the gap below that row narrow the margin below the lines, by that gap at most.
+                // row may the gap below that row narrow the margin below the lines, by that gap at most. And where
+                // the header's rows leave the lines but the margin below its last row would not, it shows that
+                // margin without a scroll bar that would scroll only the margin and narrow every row (as
+                // TheReaderHeaderShowsTheMarginBelowItsLastRowWithoutAScrollBar asserts): the margin, and only
+                // it, may take from the lines.
                 bool endsWithReply = inHeader && header.Scroll.HasVerticalScrollbar && Math.Abs(shown.Bottom - reply.Parent!.Bounds.Bottom - gap) < 0.5;
-                Assert.True(text.Bounds.Height >= text.HeightOfLines(textLines) - (endsWithReply ? gap : 0) - 0.5, $"{where}: the text has {text.Bounds.Height}, less than {textLines} lines.");
+                double lastRow = header.Scroll.Children.Single().Children.Single().Children.Where(row => row.Visibility == UiVisibility.Visible && row.Bounds.Height > 0).Max(row => row.Bounds.Bottom);
+                bool endsWithMargin = !header.Scroll.HasVerticalScrollbar && lastRow - shown.Top <= header.AvailableHeight - text.HeightOfLines(textLines) + 0.5;
+                double allowed = endsWithReply ? gap : endsWithMargin ? Math.Max(0, shown.Bottom - lastRow) : 0;
+                Assert.True(text.Bounds.Height >= text.HeightOfLines(textLines) - allowed - 0.5, $"{where}: the text has {text.Bounds.Height}, less than {textLines} lines.");
                 // Beside the list, the subject's first line is whole.
                 if (width >= 680)
                 {

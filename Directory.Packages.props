@@ -48,6 +48,8 @@
     <PackageVersion Include="Broiler.UI.Dialog.Standard" Version="0.1.0-preview.36" />
     <PackageVersion Include="Broiler.UI.Menu.Standard" Version="0.1.0-preview.36" />
     <PackageVersion Include="Broiler.UI.Edit.Standard" Version="0.1.0-preview.36" />
+    <PackageVersion Include="Broiler.UI.FileDialog" Version="0.1.0-preview.36" />
+    <PackageVersion Include="Broiler.UI.FileDialog.Standard" Version="0.1.0-preview.36" />
     <PackageVersion Include="Broiler.UI.Label.Standard" Version="0.1.0-preview.36" />
     <PackageVersion Include="Broiler.UI.ListView.Standard" Version="0.1.0-preview.36" />
     <PackageVersion Include="Broiler.UI.Panel.Standard" Version="0.1.0-preview.36" />
@@ -57,6 +59,7 @@
     <PackageVersion Include="Broiler.UI.TabView.Standard" Version="0.1.0-preview.36" />
     <PackageVersion Include="Broiler.UI.Toolbar.Standard" Version="0.1.0-preview.36" />
     <PackageVersion Include="Broiler.UI.Window.Standard" Version="0.1.0-preview.36" />
+    <PackageVersion Include="Broiler.UI.Tooltip.Standard" Version="0.1.0-preview.36" />
     <PackageVersion Include="Microsoft.NET.Test.Sdk" Version="18.12.0" />
     <PackageVersion Include="xunit.v3" Version="4.0.3" />
     <PackageVersion Include="xunit.runner.visualstudio" Version="4.0.1" />

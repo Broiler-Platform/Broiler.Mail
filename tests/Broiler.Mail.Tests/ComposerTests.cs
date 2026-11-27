@@ -236,7 +236,6 @@ public sealed class ComposerTests
         var expected = new Dictionary<string, string>
         {
             ["Cc and Bcc"] = "Cc and Bcc fields",
-            ["Attachments"] = "Draft attachment controls",
             ["Keyboard shortcuts"] = "Keyboard shortcut list",
             ["Sent-copy settings"] = "Sent-copy handling and folder",
             ["Sender aliases"] = "Configured sender addresses",
@@ -274,7 +273,6 @@ public sealed class ComposerTests
         var expected = new Dictionary<string, (string Show, string Hide)>
         {
             ["Cc and Bcc"] = ("Show Cc and Bcc", "Hide Cc and Bcc"),
-            ["Attachments"] = ("Show attachments", "Hide attachments"),
             ["Keyboard shortcuts"] = ("Show keyboard shortcuts", "Hide keyboard shortcuts"),
             ["Sent-copy settings"] = ("Show Sent-copy settings", "Hide Sent-copy settings"),
             ["Sender aliases"] = ("Show sender aliases", "Hide sender aliases"),

@@ -920,54 +920,47 @@ public sealed class ResponsiveInboxTests
     /// made for it.
     /// </summary>
     /// <summary>
-    /// The compact reader's parsed-headers toggle shares Back's row while both fit on one line, and otherwise
-    /// has its own row below the date, so the first row never wraps taller than the header's share and is cut.
-    /// Where the two fit depends on the platform's fonts, so the rule is checked at every compact width.
+    /// Show parsed headers is an item of the reader's More message actions popup: it shows the parsed headers in
+    /// place of the sender and recipients, in the shell's reader, and the header still ends between its rows. Back
+    /// has its row to itself, so that row never wraps.
     /// </summary>
     [Theory]
-    [InlineData(1.0)]
-    [InlineData(2.0)]
-    public async Task TheParsedHeadersToggleSharesBacksRowOnlyWhereBothFitOnOneLine(double textScale)
+    [InlineData(640, 480, 1.0)]
+    [InlineData(640, 480, 2.0)]
+    [InlineData(1100, 720, 1.0)]
+    [InlineData(1100, 720, 2.0)]
+    public async Task ParsedHeadersMenuItemShowsHeadersInline(int width, int height, double textScale)
     {
         StandardThemeTokens previous = StandardControlPaint.Theme;
         StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
         try
         {
-            using var reader = await ReaderFixture.OpenAsync(640, 480);
-            var back = reader.Button(InboxView.BackText);
-            var toggle = reader.Button("Show parsed headers");
-            var backRow = Assert.IsType<StandardToolbar>(back.Parent);
-            var date = Descendants(reader.Header).OfType<StandardLabel>().Single(label => label.Text.StartsWith("Received", StringComparison.Ordinal));
-            int beside = 0, apart = 0;
-            for (int width = 679; width >= 300; width -= 3)
+            using var reader = await ReaderFixture.OpenAsync(width, height);
+            string where = $"At {width}x{height}, text {textScale:P0}";
+            Assert.DoesNotContain(Descendants(reader.Pane).OfType<StandardButton>(), button => button.Text is "Show parsed headers" or "Hide parsed headers");
+            var details = Descendants(reader.Header).OfType<StandardRichEdit>().Single();
+            Assert.Equal("Sender and recipients", details.AccessibleName);
+            if (reader.Layout.ShowsReaderOnly)
             {
-                reader.Resize(width, 480);
-                Assert.True(reader.Layout.ShowsReaderOnly);
-                string where = $"At {width}x480, text {textScale:P0}, Back at {back.Bounds}, the toggle at {toggle.Bounds}";
-                if (toggle.Parent == backRow)
-                {
-                    beside++;
-                    Assert.True(Math.Abs(toggle.Bounds.Top - back.Bounds.Top) < 0.5, $"{where}: they wrap.");
-                    continue;
-                }
-                apart++;
-                // Its own row below the date, only where the two would not fit on one line, also beside a scroll bar.
-                Assert.True(toggle.Bounds.Top >= date.Bounds.Bottom, $"{where}: the toggle is above the date at {date.Bounds}.");
+                var backRow = Assert.IsType<StandardToolbar>(reader.Button(InboxView.BackText).Parent);
                 Assert.Equal(1, backRow.Children.Count(child => child.Visibility != UiVisibility.Collapsed));
-                double pane = reader.Header.Bounds.Width, bar = reader.Header.Scroll.ScrollbarThickness + reader.Header.Scroll.ScrollbarGap;
-                double column = Math.Min(ReadingColumn.ContentWidthIn(pane, pane), ReadingColumn.ContentWidthIn(pane, pane - bar));
-                double row = back.DesiredSize.Width + backRow.Spacing + toggle.DesiredSize.Width + (2 * backRow.Padding);
-                Assert.True(row > column, $"{where}: they need {row} of {column} and would fit on one line.");
             }
-            // Both placements occur where the text is small enough to share a row in a wider compact reader.
-            Assert.True(apart > 0, $"beside {beside}, apart {apart}");
-            if (textScale == 1.0) Assert.True(beside > 0, $"beside {beside}, apart {apart}");
 
-            // In its own row it still shows the parsed headers.
-            toggle.Click();
-            reader.Session.RenderFrame();
-            Assert.Contains(Descendants(reader.Header).OfType<StandardRichEdit>(), edit => edit.AccessibleName == "Parsed message headers");
-            Assert.Equal("Hide parsed headers", toggle.Text);
+            var content = reader.Shell.GetContent("inbox");
+            ReaderMenus.Invoke(reader.Session, content, "More message actions", "Show parsed headers");
+            reader.Render();
+            Assert.Null(reader.Shell.ActiveDialog);
+            Assert.Equal("inbox", reader.Shell.ActiveViewId);
+            Assert.Equal("Parsed message headers", details.AccessibleName);
+            Assert.Contains("Message-ID: message@example.test", details.GetPlainText());
+            Assert.True(ReaderMenus.Items(content, "More message actions").Single(item => item.Id == "headers").IsChecked, where);
+            AssertEndsBetweenRows(reader.Header, where);
+            AssertLineBetweenHeaderAndText(reader, where);
+
+            ReaderMenus.Invoke(reader.Session, content, "More message actions", "Show parsed headers");
+            reader.Render();
+            Assert.Equal("Sender and recipients", details.AccessibleName);
+            Assert.DoesNotContain("Message-ID:", details.GetPlainText());
         }
         finally
         {
@@ -975,26 +968,394 @@ public sealed class ResponsiveInboxTests
         }
     }
 
-    [Fact]
-    public async Task AFocusedParsedHeadersToggleKeepsFocusWhenItMovesToItsOwnRow()
+    /// <summary>
+    /// The triage fixture opens the same message as the plain one, but on an account that can archive, trash,
+    /// mark read, star and permanently delete, so reader layout tests can see those controls.
+    /// </summary>
+    [Theory]
+    [InlineData(1100, 720)]
+    [InlineData(640, 480)]
+    public async Task TheTriageReaderFixtureOpensAMessageThatCanBeTriaged(int width, int height)
     {
-        using var reader = await ReaderFixture.OpenAsync(640, 480);
-        var back = reader.Button(InboxView.BackText);
-        var toggle = reader.Button("Show parsed headers");
-        Assert.Same(back.Parent, toggle.Parent);
-        reader.Session.SetFocus(toggle);
+        using var reader = await ReaderFixture.OpenAsync(width, height, triage: true);
+        Assert.NotNull(reader.Triage);
+        Assert.NotNull(reader.Inbox.Body);
+        Assert.True(reader.Inbox.CanArchive);
+        Assert.True(reader.Inbox.CanTrash);
+        Assert.Empty(reader.Triage!.Moves);
+        Assert.Empty(reader.Triage.Deletions);
 
-        // Beside the list Back is hidden, and the toggle has its own row below the date.
-        reader.Resize(1100, 720);
-        Assert.False(reader.Layout.IsCompact);
-        Assert.NotSame(back.Parent, toggle.Parent);
-        Assert.True(toggle.Bounds.Width > 0);
-        Assert.Same(toggle, reader.Session.FocusedElement);
+        using var plain = await ReaderFixture.OpenAsync(width, height);
+        Assert.Null(plain.Triage);
+        Assert.False(plain.Inbox.CanArchive);
+        Assert.False(plain.Inbox.CanTrash);
+    }
+
+    private static UiInputEvent FindKey(int code, KeyboardModifierState modifiers = KeyboardModifierState.None) =>
+        UiInputEvent.FromKeyboardKey(new KeyboardKeyEvent(
+            new Broiler.Input.InputEventHeader(Broiler.Input.InputDeviceId.FromOpaqueValue("reader-find"), new Broiler.Input.InputTimestamp(1, TimeSpan.TicksPerSecond, "test"), 1),
+            KeyboardKey.FromName("VirtualKey:" + code), KeyboardKeyTransition.Down, modifiers, code, 0, 0, false, false,
+            Source: Broiler.Input.InputEventSource.Synthetic));
+
+    /// <summary>
+    /// Ctrl+F docks the find bar in the reader, below the line under the header and above the message text,
+    /// which keeps the rest of the reader and its six lines: no dialog opens, and the query has focus.
+    /// </summary>
+    [Theory]
+    [InlineData(1100, 720, 1.0)]
+    [InlineData(1100, 720, 2.0)]
+    [InlineData(640, 480, 1.0)]
+    [InlineData(640, 480, 2.0)]
+    public async Task CtrlFDocksTheFindBarBetweenTheLineAndTheText(int width, int height, double textScale)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(width, height);
+            var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+            Assert.Equal(UiVisibility.Collapsed, reader.Banners.Visibility);
+            reader.Session.SetFocus(reader.Text.Editor);
+            double closedText = reader.Text.Bounds.Height;
+
+            Assert.True(keyboard.Handle(FindKey(0x46, KeyboardModifierState.Control)));
+            reader.Render();
+
+            string where = $"{width}x{height} at {textScale}";
+            Assert.Null(reader.Shell.ActiveDialog);
+            Assert.Equal("inbox", reader.Shell.ActiveViewId);
+            Assert.Same(reader.FindQuery, reader.Session.FocusedElement);
+            Assert.Equal(UiVisibility.Visible, reader.Banners.Visibility);
+            // The bar is in the banner slot, which scrolls where it is shorter than the bar.
+            BRect bar = reader.Banners.Bounds, line = reader.Divider.Bounds, text = reader.Text.Bounds, pane = reader.Pane.Bounds;
+            Assert.True(bar.Height > 0 && reader.Find.Bounds.Height > 0, $"{where}: the find bar was not arranged.");
+            Assert.True(line.Bottom <= bar.Top + 0.5, $"{where}: the find bar at {bar} is above the line at {line}.");
+            Assert.True(bar.Bottom <= text.Top + 0.5, $"{where}: the find bar at {bar} covers the text at {text}.");
+            foreach (var control in Descendants(reader.Find).Where(element => element.CanFocus).ToArray())
+                Reachability.Assert(reader.Session, reader.Render, control, $"{where}: {control.AccessibleName ?? (control as StandardButton)?.Text}");
+            text = reader.Text.Bounds;
+            Assert.Equal(pane.Bottom, text.Bottom, 0.5);
+            // The header's share is of the height the bar leaves, so the text keeps its six lines, or where the
+            // reader is too short for them, the rest of the header's share, as it does without the bar.
+            double kept = Math.Min(reader.Text.HeightOfLines(6), (1 - 0.45) * reader.Header.AvailableHeight);
+            Assert.True(text.Height >= kept - 0.5, $"{where}: the text keeps {text.Height}, less than {kept}; closed it had {closedText}.");
+            Assert.Equal(pane.Height - (text.Top - reader.Header.Bounds.Bottom), reader.Header.AvailableHeight, 0.5);
+            // At 200 % in 640x480 the bar leaves the header only about one line of its share, and the header's
+            // line rule is checked only at 100 % here.
+            if (textScale == 1.0) AssertEndsBetweenRows(reader.Header, where);
+
+            // Escape closes it, the text takes its place again below the line, and has focus.
+            Assert.True(keyboard.Handle(FindKey(0x1B)));
+            reader.Render();
+            Assert.Equal(UiVisibility.Collapsed, reader.Banners.Visibility);
+            Assert.Same(reader.Text.Editor, reader.Session.FocusedElement);
+            Assert.Equal(reader.Divider.Bounds.Bottom, reader.Text.Bounds.Top, 0.5);
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>Enter searches the query and then, while it is unchanged, moves on as F3 does; Shift moves back.</summary>
+    [Fact]
+    public async Task EnterF3AndShiftMoveTheFindSelectionWithoutADialog()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720);
+        var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+        bool Dispatch(UiInputEvent input) => keyboard.Handle(input) || reader.Session.DispatchInput(input);
+        reader.Session.SetFocus(reader.Text.Editor);
+        Assert.True(Dispatch(FindKey(0x46, KeyboardModifierState.Control)));
+        reader.Render();
+        reader.FindQuery.Text = "paragraph";
+        string Selected() => reader.Text.Editor.Document.Slice(reader.Text.Editor.Selection).PlainText;
+
+        Assert.True(Dispatch(FindKey(0x0D))); reader.Render();
+        Assert.Contains("Match 1 of 20", reader.Find.Status);
+        Assert.Equal("paragraph", Selected());
+        Assert.True(Dispatch(FindKey(0x0D))); Assert.Contains("Match 2 of 20", reader.Find.Status);
+        Assert.True(Dispatch(FindKey(0x0D, KeyboardModifierState.Shift))); Assert.Contains("Match 1 of 20", reader.Find.Status);
+        Assert.True(Dispatch(FindKey(0x72))); Assert.Contains("Match 2 of 20", reader.Find.Status);
+        Assert.True(Dispatch(FindKey(0x72, KeyboardModifierState.Shift))); Assert.Contains("Match 1 of 20", reader.Find.Status);
+        Assert.True(Dispatch(FindKey(0x72, KeyboardModifierState.Shift))); Assert.Contains("Match 20 of 20", reader.Find.Status);
+        Assert.Contains("Wrapped", reader.Find.Status);
+        Assert.Equal("paragraph", Selected());
+        Assert.Null(reader.Shell.ActiveDialog);
+
+        // An edited query is searched again from its first match.
+        reader.FindQuery.Text = "message body";
+        Assert.True(Dispatch(FindKey(0x0D))); Assert.Contains("Match 1 of 20", reader.Find.Status);
+        Assert.Equal("message body", Selected());
+        Assert.Same(reader.FindQuery, reader.Session.FocusedElement);
     }
 
     /// <summary>
-    /// In a narrow compact reader whose header scrolls, the column gives way to the scroll bar; the toggle shares
-    /// Back's row only where both still fit on one line there, so that first row never wraps.
+    /// In the compact reader Escape first closes Find, with focus on the text, and only then goes back to the
+    /// list; Android's Back does the same.
+    /// </summary>
+    [Fact]
+    public async Task EscapeClosesFindBeforeItLeavesTheCompactReader()
+    {
+        using var reader = await ReaderFixture.OpenAsync(640, 480);
+        var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+        Assert.True(reader.Layout.ShowsReaderOnly);
+        Assert.True(reader.Shell.Inbox.ShowFindInMessage());
+        reader.Render();
+        Assert.Same(reader.FindQuery, reader.Session.FocusedElement);
+
+        Assert.True(keyboard.Handle(FindKey(0x1B)));
+        reader.Render();
+        Assert.Equal(UiVisibility.Collapsed, reader.Find.Visibility);
+        Assert.True(reader.Layout.ShowsReaderOnly);
+        Assert.Same(reader.Text.Editor, reader.Session.FocusedElement);
+
+        Assert.True(keyboard.Handle(FindKey(0x1B)));
+        reader.Render();
+        Assert.False(reader.Layout.ShowsReaderOnly);
+        Assert.Same(reader.List, reader.Session.FocusedElement);
+    }
+
+    /// <summary>Beside the list, Escape with focus in the list closes an open Find before anything else.</summary>
+    [Fact]
+    public async Task EscapeFromTheListClosesAnOpenFind()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720);
+        var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+        Assert.False(reader.Layout.IsCompact);
+        Assert.True(reader.Shell.Inbox.ShowFindInMessage());
+        reader.Render();
+        reader.Session.SetFocus(reader.List);
+
+        Assert.True(keyboard.Handle(FindKey(0x1B)));
+        reader.Render();
+        Assert.Equal(UiVisibility.Collapsed, reader.Find.Visibility);
+        Assert.Equal(UiVisibility.Collapsed, reader.Banners.Visibility);
+        Assert.Null(reader.Shell.ActiveDialog);
+        Assert.False(reader.Shell.Inbox.CloseFindInMessage());
+    }
+
+    /// <summary>
+    /// Leaving the compact reader with Back to inbox closes its find bar: Escape afterwards is not taken by a bar the
+    /// user cannot see, and focus stays on the list, out of the hidden reader.
+    /// </summary>
+    [Fact]
+    public async Task BackToInboxClosesTheCompactReadersFindBar()
+    {
+        using var reader = await ReaderFixture.OpenAsync(640, 480);
+        var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+        Assert.True(reader.Layout.ShowsReaderOnly);
+        Assert.True(reader.Shell.Inbox.ShowFindInMessage());
+        reader.Render();
+        Assert.Equal(UiVisibility.Visible, reader.Find.Visibility);
+
+        Assert.True(reader.Shell.Inbox.GoBackToList());
+        reader.Render();
+        Assert.False(reader.Layout.ShowsReaderOnly);
+        Assert.Equal(UiVisibility.Collapsed, reader.Find.Visibility);
+        Assert.False(reader.Shell.Inbox.CloseFindInMessage());
+        Assert.Same(reader.List, reader.Session.FocusedElement);
+
+        // Escape has nothing to go back from and nothing to close, so focus stays on the list.
+        Assert.True(keyboard.Handle(FindKey(0x1B)));
+        reader.Render();
+        Assert.Same(reader.List, reader.Session.FocusedElement);
+    }
+
+    /// <summary>
+    /// While work runs, Escape cancels it first, with focus in the find query as with focus in the list, and the
+    /// bar stays open; once nothing runs, Escape closes the bar.
+    /// </summary>
+    [Theory]
+    [InlineData(false)]
+    [InlineData(true)]
+    public async Task EscapeCancelsRunningWorkBeforeItClosesFind(bool focusInList)
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720);
+        var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+        bool Dispatch(UiInputEvent input) => keyboard.Handle(input) || reader.Session.DispatchInput(input);
+        Assert.True(reader.Shell.Inbox.ShowFindInMessage());
+        reader.Render();
+        if (focusInList) reader.Session.SetFocus(reader.List);
+        else Assert.Same(reader.FindQuery, reader.Session.FocusedElement);
+
+        var receive = reader.Inbox.ReceiveAsync();
+        Assert.True(reader.Inbox.IsBusy);
+        Assert.False(reader.Find.HandleFindInput(FindKey(0x1B)));
+        Assert.True(Dispatch(FindKey(0x1B)));
+        Assert.Equal(UiVisibility.Visible, reader.Find.Visibility);
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        try { await receive; } catch (OperationCanceledException) { }
+        reader.Render();
+        Assert.Equal(UiVisibility.Visible, reader.Find.Visibility);
+
+        Assert.True(Dispatch(FindKey(0x1B)));
+        reader.Render();
+        Assert.Equal(UiVisibility.Collapsed, reader.Find.Visibility);
+    }
+
+    /// <summary>Receiving again keeps the open message, so its find bar, query and counter stay as they were.</summary>
+    [Fact]
+    public async Task FindSurvivesReceivingAgain()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720);
+        Assert.True(reader.Shell.Inbox.ShowFindInMessage());
+        reader.Render();
+        var find = reader.Find;
+        reader.FindQuery.Text = "paragraph";
+        find.Search();
+        string status = find.Status;
+        Assert.Contains("Match 1 of 20", status);
+
+        var receive = reader.Inbox.ReceiveAsync();
+        reader.Render();
+        await receive;
+        reader.Render();
+
+        Assert.Same(find, reader.Find);
+        Assert.False(find.IsDisposed);
+        Assert.Equal(UiVisibility.Visible, find.Visibility);
+        Assert.Equal(UiVisibility.Visible, reader.Banners.Visibility);
+        Assert.Equal("paragraph", reader.FindQuery.Text);
+        Assert.Equal(status, find.Status);
+    }
+
+    /// <summary>
+    /// Opening another message replaces the find bar; focus that was in its query moves to the new message's
+    /// text, never to a disposed control.
+    /// </summary>
+    [Fact]
+    public async Task OpeningAnotherMessageMovesFocusFromFindToTheReader()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720);
+        Assert.True(reader.Shell.Inbox.ShowFindInMessage());
+        reader.Render();
+        var find = reader.Find;
+        Assert.Same(reader.FindQuery, reader.Session.FocusedElement);
+
+        var select = reader.Inbox.SelectAsync(reader.Inbox.Messages[1].Key);
+        reader.Render();
+        await select;
+        reader.Render();
+
+        Assert.True(find.IsDisposed);
+        Assert.Equal(UiVisibility.Collapsed, reader.Find.Visibility);
+        Assert.Equal(UiVisibility.Collapsed, reader.Banners.Visibility);
+        Assert.Same(reader.Text.Editor, reader.Session.FocusedElement);
+        Assert.False(reader.Session.FocusedElement!.IsDisposed);
+    }
+
+    /// <summary>AltGr arrives as Ctrl+Alt: it types a character and never opens or drives Find.</summary>
+    [Fact]
+    public async Task AltGrNeverOpensOrDrivesFind()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720);
+        var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+        reader.Session.SetFocus(reader.Text.Editor);
+        Assert.False(keyboard.Handle(FindKey(0x46, KeyboardModifierState.Control | KeyboardModifierState.Alt)));
+        Assert.Equal(UiVisibility.Collapsed, reader.Find.Visibility);
+
+        Assert.True(reader.Shell.Inbox.ShowFindInMessage());
+        reader.Render();
+        Assert.False(reader.Shell.Inbox.HandleReaderInput(FindKey(0x72, KeyboardModifierState.Alt)));
+        Assert.False(reader.Shell.Inbox.HandleReaderInput(FindKey(0x1B, KeyboardModifierState.RightAlt)));
+        Assert.Equal(UiVisibility.Visible, reader.Find.Visibility);
+    }
+
+    /// <summary>
+    /// Beside the list, where Reply stays pinned below the header, an open Find takes its height from the
+    /// header's budget: the commands stay pinned only while the text still keeps six lines.
+    /// </summary>
+    [Theory]
+    [InlineData(1100, 720)]
+    [InlineData(1100, 480)]
+    [InlineData(900, 400)]
+    public async Task AnOpenFindKeepsTheTextsLinesWhereTheCommandsArePinned(int width, int height)
+    {
+        using var reader = await ReaderFixture.OpenAsync(width, height);
+        Assert.False(reader.Layout.IsCompact);
+        Assert.True(reader.Shell.Inbox.ShowFindInMessage());
+        reader.Render();
+        var reply = reader.Button("Reply");
+        bool pinned = !reply.IsDescendantOf(reader.Header);
+        double lines = reader.Text.HeightOfLines(6);
+        if (pinned)
+            Assert.True(reader.Text.Bounds.Height >= lines - 0.5, $"{width}x{height}: pinned commands leave the text {reader.Text.Bounds.Height}, less than {lines}.");
+        Assert.True(reader.Banners.Bounds.Bottom <= reader.Text.Bounds.Top + 0.5);
+    }
+
+    /// <summary>
+    /// The find bar keeps a line for its feedback while it is open, and keeps the room the feedback has needed since it
+    /// opened, so the text below does not move as the feedback appears, changes and clears while the user types and
+    /// searches, and the commands stay where they are.
+    /// </summary>
+    [Theory]
+    [InlineData(1100, 720, 1.0)]
+    [InlineData(1100, 720, 2.0)]
+    [InlineData(640, 480, 2.0)]
+    public async Task TheFindFeedbackKeepsItsRoomWhileTheUserTypes(int width, int height, double textScale)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(width, height);
+            var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+            reader.Session.SetFocus(reader.Text.Editor);
+            Assert.True(keyboard.Handle(FindKey(0x46, KeyboardModifierState.Control)));
+            reader.Render();
+            string where = $"{width}x{height} at {textScale}";
+            double top = reader.Text.Bounds.Top;
+            var strip = reader.Button("Reply").Parent;
+            void Unmoved(string step)
+            {
+                reader.Render();
+                Assert.True(Math.Abs(reader.Text.Bounds.Top - top) <= 0.5, $"{where}, {step}: the text moved from {top} to {reader.Text.Bounds.Top} ({reader.Find.Status}).");
+                Assert.Same(strip, reader.Button("Reply").Parent);
+            }
+            reader.FindQuery.Text = "p"; Unmoved("first character");
+            reader.FindQuery.Text = "paragraph"; Unmoved("typing");
+            Assert.True(keyboard.Handle(FindKey(0x0D)) || reader.Session.DispatchInput(FindKey(0x0D)));
+            Assert.Contains("Match 1 of 20", reader.Find.Status);
+            Unmoved("a match");
+            // A longer result may take more room once; what follows keeps it.
+            reader.FindQuery.Text = "absent";
+            reader.Find.Search();
+            Assert.Contains("No matches", reader.Find.Status);
+            reader.Render();
+            top = reader.Text.Bounds.Top;
+            reader.FindQuery.Text = "paragraph"; Unmoved("typing after no match");
+            reader.Find.Search(); Unmoved("a match after no match");
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>
+    /// The strip, with More message actions, moves between the header and its place below it as the window is
+    /// resized; a focused More message actions keeps focus, and its open popup closes rather than float where
+    /// the strip was.
+    /// </summary>
+    [Fact]
+    public async Task AFocusedMoreMessageActionsKeepsFocusWhenTheStripMoves()
+    {
+        using var reader = await ReaderFixture.OpenAsync(640, 480);
+        var more = ReaderMenus.Button(reader.Pane, "More message actions");
+        Assert.True(more.IsDescendantOf(reader.Header));
+        Assert.True(more.Expand());
+        Assert.Same(more.Menu, reader.Session.CapturedElement);
+
+        reader.Resize(1100, 720);
+        Assert.False(reader.Layout.IsCompact);
+        Assert.False(more.IsDescendantOf(reader.Header));
+        Assert.False(more.IsExpanded);
+        Assert.Null(reader.Session.CapturedElement);
+        Assert.Same(more.Trigger, reader.Session.FocusedElement);
+        Assert.True(more.Trigger.Bounds.Width > 0);
+
+        reader.Resize(640, 480);
+        Assert.True(more.IsDescendantOf(reader.Header));
+        Assert.Same(more.Trigger, reader.Session.FocusedElement);
+    }
+
+    /// <summary>
+    /// In a narrow compact reader whose header scrolls, Back has its row to itself (the parsed headers are a menu
+    /// item now), so that first row is one line however narrow the reader is.
     /// </summary>
     [Theory]
     [InlineData(1.0, 260)]
@@ -1008,27 +1369,350 @@ public sealed class ResponsiveInboxTests
         {
             using var reader = await ReaderFixture.OpenAsync(479, height, "long");
             var back = reader.Button(InboxView.BackText);
-            var toggle = reader.Button("Show parsed headers");
-            int beside = 0, apart = 0, scrolled = 0;
-            for (int width = 479; width >= 300; width--)
+            var backRow = Assert.IsType<StandardToolbar>(back.Parent);
+            int scrolled = 0;
+            for (int width = 479; width >= 300; width -= 3)
             {
                 reader.Resize(width, height);
                 Assert.True(reader.Layout.ShowsReaderOnly);
                 if (reader.Header.Scroll.HasVerticalScrollbar) scrolled++;
-                if (toggle.Parent == back.Parent)
-                {
-                    beside++;
-                    Assert.True(Math.Abs(toggle.Bounds.Top - back.Bounds.Top) < 0.5, $"At {width}x{height}, text {textScale:P0}, Back at {back.Bounds} and the toggle at {toggle.Bounds} wrap.");
-                }
-                else apart++;
+                string where = $"At {width}x{height}, text {textScale:P0}, Back at {back.Bounds} in its row at {backRow.Bounds}";
+                Assert.Equal(1, backRow.Children.Count(child => child.Visibility != UiVisibility.Collapsed));
+                Assert.True(Math.Abs(backRow.Bounds.Bottom - back.Bounds.Bottom - backRow.Padding) < 0.5, $"{where}: the row wraps.");
             }
-            // The sweep crosses the point where the two stop fitting, with the header scrolling.
-            Assert.True(beside > 0 && apart > 0 && scrolled > 0, $"beside {beside}, apart {apart}, scrolled {scrolled}");
+            Assert.True(scrolled > 0, $"scrolled {scrolled}");
         }
         finally
         {
             StandardControlPaint.ApplyTheme(previous);
         }
+    }
+
+    /// <summary>
+    /// With an account that can triage, the reader's strip has Reply, Reply all and Forward; Archive, Trash and
+    /// Move; and More message actions, with separators between the groups; the star is beside the subject. None
+    /// of them opens a dialog.
+    /// </summary>
+    [Theory]
+    [InlineData(1100, 720)]
+    [InlineData(640, 480)]
+    public async Task TriageAndRespondCommandsAreInlineWithoutADialog(int width, int height)
+    {
+        using var reader = await ReaderFixture.OpenAsync(width, height, triage: true);
+        var content = reader.Shell.GetContent("inbox");
+        var reply = reader.Button("Reply");
+        var strip = Assert.IsType<StandardToolbar>(reply.Parent);
+        foreach (var text in new[] { "Reply all", "Forward", "Archive", "Trash", "Move ▾", "More message actions" })
+        {
+            var button = reader.Button(text);
+            Assert.True(button.IsDescendantOf(strip), $"{text} is not in the strip.");
+            Assert.True(button.Bounds.Width > 0 && button.Bounds.Height > 0, $"{text} is at {button.Bounds}.");
+        }
+        Assert.Equal(UiVisibility.Collapsed, reader.Button("Delete permanently…").Visibility);
+        Assert.Equal("Move to trash", reader.Button("Trash").ToolTipText);
+        Assert.Equal(Broiler.UI.Toolbar.UiToolbarBreak.Separator, strip.GetBreakBefore(reader.Button("Archive")));
+        Assert.Equal(Broiler.UI.Toolbar.UiToolbarBreak.Separator, strip.GetBreakBefore(ReaderMenus.Button(content, "More message actions")));
+        var star = reader.Button("Star message");
+        var subject = Assert.IsType<SubjectRow>(star.Parent);
+        Assert.True(star.Bounds.Top >= subject.Bounds.Top - 0.5 && star.Bounds.Bottom <= subject.Bounds.Top + BTextMeasurer.GetLineHeight(subject.Label.Font) + 0.5,
+            $"The star at {star.Bounds} is not on the subject's first line at {subject.Bounds}.");
+
+        star.Click();
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        reader.Render();
+        Assert.Single(reader.Triage!.StarChanges);
+        Assert.Null(reader.Shell.ActiveDialog);
+
+        var more = ReaderMenus.Button(content, "More message actions");
+        more.Trigger.Click();
+        Assert.True(more.IsExpanded);
+        Assert.Null(reader.Shell.ActiveDialog);
+        Assert.Null(reader.Session.ModalElement);
+        Assert.Equal(["Mark read", "Find in message", "Show parsed headers", "Top of message", "End of message"],
+            more.Menu.GetSemanticNode().Children.Select(child => child.Name).ToArray());
+        more.Collapse();
+
+        reader.Button("Archive").Click();
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        reader.Render();
+        Assert.Equal("Archive", Assert.Single(reader.Triage.Moves).Destination);
+        Assert.Null(reader.Shell.ActiveDialog);
+        Assert.Equal("inbox", reader.Shell.ActiveViewId);
+        Assert.False(reader.Shell.ShowView("message-actions"));
+    }
+
+    /// <summary>
+    /// More message actions opens its popup below its button (or above it near the window's bottom); Escape closes
+    /// it and focus returns to the button, as a click outside it does.
+    /// </summary>
+    [Theory]
+    [InlineData(1100, 720)]
+    [InlineData(640, 480)]
+    public async Task OverflowMenuOpensAnchoredToItsTriggerAndRestoresFocus(int width, int height)
+    {
+        using var reader = await ReaderFixture.OpenAsync(width, height, triage: true);
+        var more = ReaderMenus.Button(reader.Pane, "More message actions");
+        reader.Session.SetFocus(reader.Text.Editor);
+        more.Trigger.Click();
+        reader.Render();
+        Assert.Same(more.Menu, reader.Session.CapturedElement);
+        BRect popup = more.Menu.OverlayBounds, trigger = more.Trigger.Bounds;
+        Assert.True(popup.Height > 0, $"The popup is at {popup}.");
+        Assert.True(popup.Top >= trigger.Bottom - 0.5 || popup.Bottom <= trigger.Top + 0.5, $"The popup at {popup} covers its button at {trigger}.");
+        Assert.True(popup.Left >= -0.5 && popup.Right <= width + 0.5 && popup.Bottom <= height + 0.5, $"The popup at {popup} leaves the window.");
+        Assert.All(more.Menu.GetSemanticNode().Children, child => Assert.Equal(UiSemanticRole.MenuItem, child.Role));
+
+        Assert.True(reader.Session.DispatchInput(ReaderMenus.Key(0x1B, "Escape")));
+        Assert.False(more.IsExpanded);
+        Assert.Same(more.Trigger, reader.Session.FocusedElement);
+
+        more.Trigger.Click();
+        Assert.True(more.IsExpanded);
+        var outside = reader.Text.Bounds;
+#pragma warning disable CS0618
+        var pointer = new StandardLegacyGraphicsInputAdapter("strip-test");
+        reader.Session.DispatchInput(pointer.FromPointerButton(new BPointerEventArgs(new BPoint(outside.Left + 20, outside.Bottom - 20), BMouseButtons.Left, BMouseButtons.Left)));
+#pragma warning restore CS0618
+        Assert.False(more.IsExpanded);
+        Assert.Null(reader.Session.CapturedElement);
+        Assert.Same(more.Trigger, reader.Session.FocusedElement);
+    }
+
+    /// <summary>
+    /// Move offers the folders with a role (and pinned ones) as quick targets, and Choose folder… opens the full
+    /// folder picker inline below the strip; another message closes it.
+    /// </summary>
+    [Fact]
+    public async Task MovePopupOffersQuickTargetsAndChooseFolderRevealsTheInlinePicker()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720, triage: true);
+        var content = reader.Shell.GetContent("inbox");
+        var items = ReaderMenus.Items(content, "Move ▾");
+        Assert.Equal(["to:Archive", "to:Trash", "choose-separator", "choose"], items.Select(item => item.Id).ToArray());
+        Assert.Equal("Archive — Archive", items[0].Text);
+
+        ReaderMenus.Invoke(reader.Session, content, "Move ▾", "Trash — Trash");
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        reader.Render();
+        Assert.Equal("Trash", Assert.Single(reader.Triage!.Moves).Destination);
+        Assert.Null(reader.Shell.ActiveDialog);
+
+        var picker = Descendants(reader.Pane).OfType<Broiler.UI.ComboBox.Standard.StandardComboBox>().Single(combo => combo.AccessibleName == "Move destination");
+        Assert.False(picker.CanFocus);
+        ReaderMenus.Invoke(reader.Session, content, "Move ▾", "Choose folder…");
+        reader.Render();
+        Assert.Same(picker, reader.Session.FocusedElement);
+        Assert.True(reader.Button("Move message").Bounds.Height > 0);
+        Assert.Null(reader.Shell.ActiveDialog);
+
+        await reader.Inbox.SelectAsync(reader.Inbox.Messages[1].Key);
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        reader.Render();
+        Assert.False(picker.CanFocus);
+    }
+
+    /// <summary>
+    /// A popup belongs to the message it was opened for: selecting another message closes it and nothing it
+    /// offered runs; Mark read in a popup opened for the new message marks that message.
+    /// </summary>
+    [Fact]
+    public async Task APopupClosesWhenAnotherMessageIsSelected()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720, triage: true);
+        var content = reader.Shell.GetContent("inbox");
+        var more = ReaderMenus.Button(content, "More message actions");
+        Assert.True(more.Expand());
+        var other = reader.Inbox.Messages[1].Key;
+        await reader.Inbox.SelectAsync(other);
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        reader.Render();
+        Assert.False(more.IsExpanded);
+        Assert.Null(reader.Session.CapturedElement);
+        Assert.Empty(reader.Triage!.ReadChanges);
+
+        ReaderMenus.Invoke(reader.Session, content, "More message actions", "Mark read");
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        Assert.Equal((other, true), Assert.Single(reader.Triage.ReadChanges));
+        Assert.Null(reader.Shell.ActiveDialog);
+    }
+
+    /// <summary>
+    /// Tab and Shift+Tab with a reader popup open close it and move to the next or previous control, as they do
+    /// from its button, with the window's keyboard navigation running first as it does in the app.
+    /// </summary>
+    [Theory]
+    [InlineData("More message actions", false)]
+    [InlineData("More message actions", true)]
+    [InlineData("Move ▾", false)]
+    [InlineData("Move ▾", true)]
+    public async Task TabWithAPopupOpenClosesItAndMovesOn(string trigger, bool shift)
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720, triage: true);
+        var button = ReaderMenus.Button(reader.Pane, trigger);
+        reader.Session.SetFocus(button.Trigger);
+        reader.Navigation.MoveFocus(shift ? -1 : 1);
+        var expected = reader.Session.FocusedElement;
+        Assert.NotSame(button.Trigger, expected);
+
+        reader.Session.SetFocus(reader.Text.Editor);
+        button.Trigger.Click();
+        Assert.Same(button.Menu, reader.Session.CapturedElement);
+        var tab = ReaderMenus.Key(0x09, "Tab", shift ? KeyboardModifierState.Shift : KeyboardModifierState.None);
+        Assert.True(reader.Navigation.Handle(tab) || reader.Session.DispatchInput(tab));
+        Assert.False(button.IsExpanded);
+        Assert.Null(reader.Session.CapturedElement);
+        Assert.Same(expected, reader.Session.FocusedElement);
+    }
+
+    /// <summary>
+    /// The reader popups' rows are as tall as their text, as the menu bar's are, and follow a change of text size.
+    /// </summary>
+    [Theory]
+    [InlineData("More message actions")]
+    [InlineData("Move ▾")]
+    public async Task PopupRowsFollowTheTextSize(string trigger)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(2));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(1100, 720, triage: true);
+            var button = ReaderMenus.Button(reader.Pane, trigger);
+            Assert.True(button.Expand());
+            double line = BTextMeasurer.GetLineHeight(button.Menu.Font);
+            Assert.True(line + 6 > 26, $"The line height {line} at 200% does not need taller rows.");
+            Assert.Equal(line + 6, button.Menu.ItemHeight, 0.01);
+            Assert.True(button.Collapse());
+
+            StandardControlPaint.ApplyTheme(StandardThemeTokens.Light);
+            reader.Render();
+            Assert.True(button.Expand());
+            Assert.Equal(Math.Max(26, BTextMeasurer.GetLineHeight(button.Menu.Font) + 6), button.Menu.ItemHeight, 0.01);
+            Assert.True(button.Collapse());
+        }
+        finally
+        {
+            StandardControlPaint.ApplyTheme(previous);
+        }
+    }
+
+    /// <summary>
+    /// Mark read does what its label said when the popup opened: when the message became read while the popup
+    /// was open, choosing it leaves the message read rather than marking it unread.
+    /// </summary>
+    [Fact]
+    public async Task MarkReadDoesWhatItsLabelSaidWhenTheStateChangedWhileOpen()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720, triage: true);
+        var content = reader.Shell.GetContent("inbox");
+        var more = ReaderMenus.Button(content, "More message actions");
+        reader.Triage!.FlagStatus = MailFlagChangeStatus.Confirmed;
+        Assert.False(reader.Inbox.SelectedMessage!.IsRead);
+        Assert.True(more.Expand());
+        Assert.Equal("Mark read", more.Menu.Items.Single(item => item.Id == "read").Text);
+
+        // The message becomes read while the popup is open, as a Receive that brings it back read does.
+        await reader.Inbox.SetSelectedReadStateAsync(true);
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        reader.Render();
+        Assert.True(reader.Inbox.SelectedMessage!.IsRead);
+        reader.Triage.ReadChanges.Clear();
+        Assert.True(more.IsExpanded);
+
+        int index = more.Menu.Items.ToList().FindIndex(item => item.Id == "read");
+        more.Menu.SetSelectedPath([index]);
+        Assert.True(reader.Session.DispatchInput(ReaderMenus.Key(0x0D, "Enter")));
+        reader.Dispatcher.DrainUntil(() => !reader.Inbox.IsBusy);
+        Assert.DoesNotContain(reader.Triage.ReadChanges, change => !change.IsRead);
+        Assert.True(reader.Inbox.SelectedMessage!.IsRead);
+    }
+
+    /// <summary>
+    /// The star sits beside the subject without making its row taller than its lines, so the header still ends
+    /// between them, at either text size, beside the list and in the compact reader.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 480, 1.0)]
+    [InlineData(640, 480, 2.0)]
+    [InlineData(1100, 720, 1.0)]
+    [InlineData(1100, 720, 2.0)]
+    public async Task StarBesideSubjectKeepsHeaderRowsWhole(int width, int height, double textScale)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(width, height, "long", triage: true);
+            string where = $"At {width}x{height}, text {textScale:P0}";
+            var subject = Descendants(reader.Header).OfType<SubjectRow>().Single();
+            double line = BTextMeasurer.GetLineHeight(subject.Label.Font);
+            double lines = subject.Bounds.Height / line;
+            Assert.True(lines >= 0.99 && Math.Abs(lines - Math.Round(lines)) < 0.01, $"{where}: the subject row at {subject.Bounds} is not lines of {line}.");
+            Assert.True(subject.Star.Bounds.Height <= line + 0.5 && subject.Star.Bounds.Top >= subject.Bounds.Top - 0.5, $"{where}: the star is at {subject.Star.Bounds}.");
+            Assert.True(subject.Label.Bounds.Right <= subject.Star.Bounds.Left + 0.5, $"{where}: the subject at {subject.Label.Bounds} runs under the star at {subject.Star.Bounds}.");
+            AssertEndsBetweenRows(reader.Header, where);
+            if (!reader.Layout.IsCompact)
+                Assert.True(reader.Text.Bounds.Height >= reader.Text.HeightOfLines(2) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>
+    /// Beside the list, the strip with its triage group and separators is pinned below the header only where it
+    /// fits on one row; otherwise it ends the header, as in the compact reader.
+    /// </summary>
+    [Theory]
+    [InlineData(1100, 720, 1.0)]
+    [InlineData(1100, 720, 2.0)]
+    [InlineData(1400, 800, 1.0)]
+    [InlineData(820, 720, 1.0)]
+    public async Task StripPinsBelowHeaderOnlyWhenItFitsOnOneRow(int width, int height, double textScale)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(width, height, triage: true);
+            string where = $"At {width}x{height}, text {textScale:P0}";
+            var reply = reader.Button("Reply");
+            var strip = Assert.IsType<StandardToolbar>(reply.Parent);
+            var shown = strip.Children.Where(child => child.Visibility != UiVisibility.Collapsed).ToArray();
+            if (!reply.IsDescendantOf(reader.Header))
+            {
+                foreach (var child in shown)
+                    Assert.True(Math.Abs(child.Bounds.Top - reply.Bounds.Top) < 0.5, $"{where}: the pinned strip wraps at {child.Bounds}.");
+                Assert.True(reader.Text.Bounds.Height >= reader.Text.HeightOfLines(6) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
+            }
+            // A wide reader has room for the whole strip on one row.
+            if (width >= 1400) Assert.False(reply.IsDescendantOf(reader.Header), $"{where}: the strip is in the header.");
+            AssertEndsBetweenRows(reader.Header, where);
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>AltGr arrives as Ctrl+Alt: with a popup open, it drives none of the reader's commands.</summary>
+    [Fact]
+    public async Task AltGrDoesNotTriggerReaderCommands()
+    {
+        using var reader = await ReaderFixture.OpenAsync(1100, 720, triage: true);
+        var keyboard = reader.Shell.CreateKeyboardNavigation(reader.Session);
+        var more = ReaderMenus.Button(reader.Pane, "More message actions");
+        reader.Session.SetFocus(more.Trigger);
+        foreach (int code in new[] { 0x45, 0x4B, 0x46, 0x52 })
+            Assert.False(keyboard.Handle(FindKey(code, KeyboardModifierState.Control | KeyboardModifierState.Alt)));
+        Assert.True(more.Expand());
+        foreach (int code in new[] { 0x45, 0x4B, 0x46, 0x52 })
+        {
+            var key = FindKey(code, KeyboardModifierState.Control | KeyboardModifierState.Alt);
+            Assert.False(keyboard.Handle(key));
+            reader.Session.DispatchInput(key);
+        }
+        reader.Dispatcher.Drain();
+        Assert.True(more.IsExpanded);
+        Assert.Empty(reader.Triage!.ReadChanges);
+        Assert.Equal(UiVisibility.Collapsed, reader.Find.Visibility);
+        Assert.Null(reader.Shell.ActiveDialog);
+        more.Collapse();
     }
 
     [Theory]
@@ -1038,12 +1722,12 @@ public sealed class ResponsiveInboxTests
     [InlineData(640, 520, 1.0, "plain", false, true)]
     [InlineData(640, 540, 1.0, "plain", false, true)]
     [InlineData(640, 640, 1.0, "long", false, true)]
-    [InlineData(640, 552, 1.25, "html", false, true)]
     [InlineData(640, 480, 2.0, "plain", false, false)]
     [InlineData(640, 640, 2.0, "long", false, false)]
     [InlineData(700, 480, 2.0, "plain", false, false)]
     [InlineData(700, 520, 2.0, "long", false, false)]
-    [InlineData(700, 1000, 2.0, "plain", true, true)]
+    // Labeled Reply, Reply all and Forward need more than one row in this 412-DIP pane, so they end the header.
+    [InlineData(700, 1000, 2.0, "plain", false, true)]
     [InlineData(1100, 720, 1.0, "plain", true, true)]
     [InlineData(1100, 720, 1.0, "longer", true, true)]
     [InlineData(1100, 720, 2.0, "plain", true, true)]
@@ -1109,6 +1793,46 @@ public sealed class ResponsiveInboxTests
                 Assert.True(shown.Bottom >= subject.Bounds.Top + BTextMeasurer.GetLineHeight(((StandardLabel)subject).Font) - 0.5, $"{where}: the subject at {subject.Bounds} is cut.");
                 Assert.True(reader.Text.Bounds.Height >= reader.Text.HeightOfLines(2) - 0.5, $"{where}; the text has {reader.Text.Bounds.Height}.");
             }
+        }
+        finally { StandardControlPaint.ApplyTheme(previous); }
+    }
+
+    /// <summary>
+    /// In the compact reader, the header shows Reply past its share exactly where that leaves the text six
+    /// lines, and scrolls it away one pixel shorter. The window is made from where the rows were laid out, as
+    /// how the shell's toolbar wraps, and so where the reader starts, depends on the platform's fonts. The gap
+    /// below Reply's row may take from the six lines, so it is not counted.
+    /// </summary>
+    [Theory]
+    [InlineData(640, 552, 1.25, "html")]
+    [InlineData(640, 480, 1.0, "plain")]
+    public async Task TheCompactReaderShowsReplyExactlyWhereThatLeavesTheTextSixLines(int width, int height, double textScale, string message)
+    {
+        StandardThemeTokens previous = StandardControlPaint.Theme;
+        StandardControlPaint.ApplyTheme(StandardThemeTokens.Light.WithTextScale(textScale));
+        try
+        {
+            using var reader = await ReaderFixture.OpenAsync(width, height, message);
+            var header = reader.Header;
+            var reply = reader.Button("Reply");
+            var row = Assert.IsType<StandardToolbar>(reply.Parent);
+            double needed = row.Bounds.Bottom - header.Scroll.ContentBounds.Top + reader.Text.HeightOfLines(6);
+            int tall = height + (int)Math.Ceiling(needed - header.AvailableHeight);
+            reader.Resize(width, tall);
+            string where = $"At {width}x{tall}, text {textScale:P0}, the header shows {header.Scroll.ContentBounds} of {header.AvailableHeight}";
+            Assert.True(reader.Layout.ShowsReaderOnly, where);
+            // Reply's row is past the share, so the six lines, not the share, decide whether it is shown.
+            Assert.True(row.Bounds.Bottom - header.Scroll.ContentBounds.Top > (header.AvailableHeight * header.MaximumFraction) + 0.5, $"{where}: Reply's row ends at {row.Bounds.Bottom}, within the share.");
+            Assert.True(reply.Bounds.Bottom <= header.Scroll.ContentBounds.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
+            AssertEndsBetweenRows(header, where);
+            AssertLineBetweenHeaderAndText(reader, where);
+
+            reader.Resize(width, tall - 1);
+            where = $"At {width}x{tall - 1}, text {textScale:P0}, the header shows {header.Scroll.ContentBounds} of {header.AvailableHeight}";
+            Assert.False(reply.Bounds.Bottom <= header.Scroll.ContentBounds.Bottom + 0.5, $"{where}: Reply is at {reply.Bounds}.");
+            Assert.True(header.Scroll.HasVerticalScrollbar, $"{where}: the header does not scroll.");
+            AssertEndsBetweenRows(header, where);
+            AssertLineBetweenHeaderAndText(reader, where);
         }
         finally { StandardControlPaint.ApplyTheme(previous); }
     }
@@ -1506,16 +2230,20 @@ public sealed class ResponsiveInboxTests
 
     /// <summary>
     /// Each row of the header is on screen whole, or scrolled below the header whole, or, for the subject,
-    /// the sender and recipients, and the date, cut between two of its lines.
+    /// the sender and recipients, and the date, cut between two of its lines. A row so near the top that
+    /// ending above it would leave less than half the share, such as Back to inbox in a very short window,
+    /// may be cut exactly at the share, as <see cref="BoundedScrollArea.Rows"/> says.
     /// </summary>
     private static void AssertEndsBetweenRows(BoundedScrollArea header, string where)
     {
         BRect shown = header.Scroll.ContentBounds;
+        double share = header.AvailableHeight * header.MaximumFraction;
         foreach (var row in HeaderRows(header))
         {
             double line = row switch
             {
                 StandardLabel label => BTextMeasurer.GetLineHeight(label.Font),
+                SubjectRow subject => BTextMeasurer.GetLineHeight(subject.Label.Font),
                 FocusRingFrame { Content: StandardRichEdit edit } => BTextMeasurer.GetLineHeight(edit.Font),
                 _ => 0,
             };
@@ -1523,6 +2251,7 @@ public sealed class ResponsiveInboxTests
             if (line > 0)
                 Assert.True(IsWhole(row.Bounds.Height / line), $"{where}: the {row.GetType().Name} at {row.Bounds} is not lines of {line}.");
             if (row.Bounds.Bottom <= shown.Bottom + 0.5 || row.Bounds.Top >= shown.Bottom - 0.5) continue;
+            if (row.Bounds.Top - shown.Top <= (share / 2) + 0.5 && Math.Abs(shown.Height - share) < 0.5) continue;
             Assert.True(line > 0 && IsWhole((shown.Bottom - row.Bounds.Top) / line), $"{where}: the {row.GetType().Name} at {row.Bounds} is cut.");
         }
 
@@ -1546,7 +2275,7 @@ public sealed class ResponsiveInboxTests
     }
 
     /// <summary>The shell's inbox with a message open in the reader: its sender, its recipient, and Reply.</summary>
-    private sealed class ReaderFixture(MailShellView shell, UiSession session, TestDirectory directory, Host host, TestQueueDispatcher dispatcher) : IDisposable
+    private sealed class ReaderFixture(MailShellView shell, UiSession session, TestDirectory directory, Host host, TestQueueDispatcher dispatcher, MailShellViewModel model, TriageReceiver? triage = null) : IDisposable
     {
         private const string LongSender = "Maximilian Alexander von Langenstein-Habsburg <maximilian.alexander.von.langenstein-habsburg.office@subdomain.example.test>";
         private const string LongSubject = "Re: Fwd: Agenda, travel arrangements, accessibility requirements, and the revised budget spreadsheet for the cross-team planning workshop in Zürich";
@@ -1559,9 +2288,30 @@ public sealed class ResponsiveInboxTests
         public UiElement Pane => Descendants(shell.Window).OfType<StandardSplitContainer>().Single().SecondPane!;
         public Divider Divider => Descendants(Pane).OfType<Divider>().Single();
         public UiSession Session => session;
+        /// <summary>The receiver that records triage, when the fixture was opened with <c>triage: true</c>.</summary>
+        public TriageReceiver? Triage => triage;
+        public InboxViewModel Inbox => model.Inbox;
+        /// <summary>The shell's keyboard navigation, which the window runs before it dispatches a key.</summary>
+        public MailKeyboardNavigation Navigation { get; } = new(session, shell, model);
         public StandardButton Button(string text) => Descendants(Pane).OfType<StandardButton>().Single(button => button.Text == text);
         /// <summary>A command of the inbox outside the reader, such as Receive mail on the toolbar.</summary>
         public StandardButton InboxButton(string text) => Descendants(shell.Window).OfType<StandardButton>().Single(button => button.Text == text);
+        public MailShellView Shell => shell;
+        public TestQueueDispatcher Dispatcher => dispatcher;
+        public StandardListView List => Descendants(shell.Window).OfType<StandardListView>().Single();
+        /// <summary>The open message's find bar, which docks in the reader's banner slot below the line.</summary>
+        public MessageTextFindBar Find => Descendants(Pane).OfType<MessageTextFindBar>().Single();
+        public Broiler.UI.Edit.Standard.StandardEdit FindQuery => Descendants(Find).OfType<Broiler.UI.Edit.Standard.StandardEdit>().Single(edit => edit.AccessibleName == "Find in message text");
+        /// <summary>The slot below the line that holds the reader's banners, collapsed while none is shown.</summary>
+        public BoundedScrollArea Banners => Descendants(Pane).OfType<BoundedScrollArea>().Single(area => area.Scroll.AccessibleName == "Reader notices");
+
+        /// <summary>Lays the window out again and runs what its layout posted, as the next frame would.</summary>
+        public void Render()
+        {
+            session.RenderFrame();
+            dispatcher.Drain();
+            session.RenderFrame();
+        }
 
         public void Resize(int width)
         {
@@ -1588,7 +2338,12 @@ public sealed class ResponsiveInboxTests
         /// When the message was received, which the reader shows as the gallery does, in US English ("9/28/2026
         /// 10:00 AM"); without it, the date is unknown.
         /// </param>
-        public static async Task<ReaderFixture> OpenAsync(int width, int height, string message = "plain", DateTimeOffset? received = null)
+        /// <param name="triage">
+        /// Whether the account can triage: the receiver then discovers INBOX, Archive and Trash and can move,
+        /// mark read, star and permanently delete, so the reader shows those controls as production does. The
+        /// default keeps the plain receiver, which offers none of them.
+        /// </param>
+        public static async Task<ReaderFixture> OpenAsync(int width, int height, string message = "plain", DateTimeOffset? received = null, bool triage = false)
         {
             bool html = message == "html";
             var directory = new TestDirectory();
@@ -1597,8 +2352,8 @@ public sealed class ResponsiveInboxTests
             if (message == "longer") messages[0] = messages[0] with { Subject = LongerSubject };
             else if (message.StartsWith("long", StringComparison.Ordinal)) messages[0] = messages[0] with { Subject = LongSubject, Sender = LongSender };
             if (received is not null) messages[0] = messages[0] with { ReceivedAt = received };
-            var receiver = Fixture.CreateReceiver(messages);
-            receiver.Body = (key, _) => message.EndsWith("error", StringComparison.Ordinal)
+            var plain = Fixture.CreateReceiver(messages);
+            plain.Body = (key, _) => message.EndsWith("error", StringComparison.Ordinal)
                 ? throw new MailConnectionException(message == "error" ? "The connection closed."
                     : "The server closed the connection while sending this message. It may be busy or restarting. Check the connection, then retry.")
                 : Task.FromResult(new MailMessageBody(key, string.Join("\n\n", Enumerable.Repeat("A paragraph of the message body.", 20)), null)
@@ -1606,6 +2361,8 @@ public sealed class ResponsiveInboxTests
                     HtmlUnavailableReason = html ? "HTML exceeds the preview limits. The text reader remains available." : null,
                     Composition = new MailCompositionSource { From = ["sender@example.test"], To = [account.EmailAddress], Subject = "Subject", MessageId = "message@example.test" },
                 });
+            var triageReceiver = triage ? new TriageReceiver(plain) : null;
+            IMailReceiver receiver = (IMailReceiver?)triageReceiver ?? plain;
             var dispatcher = new TestQueueDispatcher();
             var model = new MailShellViewModel(
                 new(new JsonAccountStore(directory.File("accounts.json")), new TestCredentialStore(), receiver, dispatcher, account, null),
@@ -1618,6 +2375,12 @@ public sealed class ResponsiveInboxTests
             var session = new StandardUiSessionBuilder().WithDispatcher(dispatcher).Build(host);
             shell.Attach(session);
             shell.ShowView("inbox");
+            if (triage)
+            {
+                // Discover the folders first, so Archive and Trash are known targets when the message opens.
+                await model.Inbox.RefreshFoldersAsync();
+                dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
+            }
             await model.Inbox.ReceiveAsync();
             dispatcher.DrainUntil(() => !model.Inbox.IsBusy);
             await model.Inbox.SelectAsync(messages[0].Key);
@@ -1628,7 +2391,7 @@ public sealed class ResponsiveInboxTests
             // What the frame's layout posted, as the window drains it before the next frame.
             dispatcher.Drain();
             session.RenderFrame();
-            return new(shell, session, directory, host, dispatcher);
+            return new(shell, session, directory, host, dispatcher, model, triageReceiver);
         }
 
         public void Dispose()
@@ -1636,6 +2399,57 @@ public sealed class ResponsiveInboxTests
             session.Dispose();
             shell.Dispose();
             directory.Dispose();
+        }
+    }
+
+    /// <summary>
+    /// A receiver that can triage, as an IMAP account can: it discovers INBOX, Archive and Trash, reads INBOX
+    /// through the plain receiver it wraps, and records every move, read, star and permanent delete. Each change
+    /// answers with the status its property names, NotApplied unless a test sets another.
+    /// </summary>
+    private sealed class TriageReceiver(TestMailReceiver inner)
+        : IMailFolderReceiver, IMailMover, IMailReadStateWriter, IMailStarStateWriter, IMailPermanentDeleter
+    {
+        public List<(MailMessageKey Key, string Destination)> Moves { get; } = [];
+        public List<(MailMessageKey Key, bool IsRead)> ReadChanges { get; } = [];
+        public List<(MailMessageKey Key, bool IsStarred)> StarChanges { get; } = [];
+        public List<MailMessageKey> Deletions { get; } = [];
+        public MailMoveStatus MoveStatus { get; set; } = MailMoveStatus.NotApplied;
+        public MailFlagChangeStatus FlagStatus { get; set; } = MailFlagChangeStatus.NotApplied;
+        public MailDeleteStatus DeleteStatus { get; set; } = MailDeleteStatus.NotApplied;
+
+        public Task TestConnectionAsync(AccountProfile account, CancellationToken cancellationToken = default) => inner.TestConnectionAsync(account, cancellationToken);
+        public Task<IReadOnlyList<MailFolder>> GetFoldersAsync(AccountProfile account, CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<MailFolder>>([new("INBOX", "/", true, []), new("Archive", "/", true, ["\\Archive"]), new("Trash", "/", true, ["\\Trash"])]);
+        public Task<MailInboxPage> GetInboxAsync(AccountProfile account, int maximumCount, MailInboxCursor? older = null, CancellationToken cancellationToken = default) =>
+            inner.GetInboxAsync(account, maximumCount, older, cancellationToken);
+        public Task<MailInboxPage> GetMailboxAsync(AccountProfile account, string mailboxId, int maximumCount, MailInboxCursor? older = null, CancellationToken cancellationToken = default) =>
+            mailboxId == "INBOX" ? inner.GetInboxAsync(account, maximumCount, older, cancellationToken) : Task.FromResult(new MailInboxPage([], null));
+        public Task<MailMessageBody> GetBodyAsync(AccountProfile account, MailMessageKey message, CancellationToken cancellationToken = default) =>
+            inner.GetBodyAsync(account, message, cancellationToken);
+
+        public Task<MailMoveResult> MoveAsync(AccountProfile account, MailMessageKey source, string destinationMailboxId, CancellationToken cancellationToken = default)
+        {
+            Moves.Add((source, destinationMailboxId));
+            return Task.FromResult(new MailMoveResult(source, destinationMailboxId, MoveStatus, null, "Fixture move " + MoveStatus));
+        }
+
+        public Task<ReadStateChangeResult> SetReadStateAsync(AccountProfile account, MailMessageKey key, bool isRead, CancellationToken cancellationToken = default)
+        {
+            ReadChanges.Add((key, isRead));
+            return Task.FromResult(new ReadStateChangeResult(key, isRead, FlagStatus, "Fixture read state " + FlagStatus));
+        }
+
+        public Task<MailFlagChangeResult> SetStarStateAsync(AccountProfile account, MailMessageKey key, bool isStarred, CancellationToken cancellationToken = default)
+        {
+            StarChanges.Add((key, isStarred));
+            return Task.FromResult(new MailFlagChangeResult(key, isStarred, FlagStatus, "Fixture star state " + FlagStatus));
+        }
+
+        public Task<MailDeleteResult> PermanentlyDeleteAsync(AccountProfile account, MailMessageKey key, CancellationToken cancellationToken = default)
+        {
+            Deletions.Add(key);
+            return Task.FromResult(new MailDeleteResult(key, DeleteStatus, "Fixture deletion " + DeleteStatus));
         }
     }
 
