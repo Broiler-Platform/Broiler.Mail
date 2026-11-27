@@ -186,22 +186,22 @@ public sealed class MailFileDialogsTests
         using var fixture = ShellFixture.Open();
         var pick = fixture.Shell.Files.PickSaveFileAsync(new(MailFilePurpose.ExportOriginal, "Export as .eml")
         {
-            Types = [MailFileType.Email], SuggestedFileName = "Grüße", AcceptText = "Export", InitialDirectory = fixture.Directory.Root,
+            Types = [MailFileType.Email], SuggestedFileName = "GrÃ¼ÃŸe", AcceptText = "Export", InitialDirectory = fixture.Directory.Root,
         });
         var dialog = Assert.IsType<StandardFileDialog>(fixture.Shell.ActiveFileDialog);
 
         Assert.Equal(UiFileDialogMode.Save, dialog.Mode);
         Assert.Equal("Export as .eml", dialog.Title);
         Assert.Equal("Export", dialog.OkButton.Text);
-        Assert.Equal("Grüße", dialog.FileName);
-        Assert.Equal("Grüße", dialog.FileNameEdit.Text);
-        Assert.EndsWith("Grüße.eml", dialog.SelectedPath, StringComparison.Ordinal);
+        Assert.Equal("GrÃ¼ÃŸe", dialog.FileName);
+        Assert.Equal("GrÃ¼ÃŸe", dialog.FileNameEdit.Text);
+        Assert.EndsWith("GrÃ¼ÃŸe.eml", dialog.SelectedPath, StringComparison.Ordinal);
 
         Assert.True(dialog.AcceptSelection());
         fixture.Dispatcher.Drain();
         var result = await pick;
         Assert.Equal(MailFilePickStatus.Picked, result.Status);
-        Assert.Equal(fixture.Directory.File("Grüße.eml"), result.Item!.LocalPath);
+        Assert.Equal(fixture.Directory.File("GrÃ¼ÃŸe.eml"), result.Item!.LocalPath);
         Assert.False(File.Exists(result.Item.LocalPath));
     }
 
@@ -243,7 +243,6 @@ public sealed class MailFileDialogsTests
     [Fact]
     public async Task AFolderReachedThroughAJunctionIsASaveTargetUnlessItLeadsNowhere()
     {
-        Assert.SkipUnless(OperatingSystem.IsWindows(), "Directory junctions are a Windows file-system feature.");
         using var fixture = ShellFixture.Open();
         string real = fixture.Directory.File("real");
         Directory.CreateDirectory(real);
@@ -263,7 +262,7 @@ public sealed class MailFileDialogsTests
         await picked.Item!.WriteNewAsync((stream, token) => stream.WriteAsync(new byte[] { 5, 6 }, token).AsTask());
         Assert.Equal([5, 6], File.ReadAllBytes(Path.Combine(real, "kept.eml")));
 
-        // Save all… into the same junction is allowed too.
+        // Save allâ€¦ into the same junction is allowed too.
         var all = fixture.Shell.Files.PickDirectoryAsync(new(MailFilePurpose.SaveAttachment, "Save all attachments") { InitialDirectory = linked });
         var folder = MailFolderDialogTests.Content(Assert.IsType<StandardDialog>(fixture.Shell.ActiveFileDialog));
         Assert.Equal(linked, folder.CurrentDirectory);
@@ -280,7 +279,6 @@ public sealed class MailFileDialogsTests
     [Fact]
     public async Task NothingIsWrittenThroughALinkAtTheFileNameItself()
     {
-        Assert.SkipUnless(OperatingSystem.IsWindows(), "Directory junctions are a Windows file-system feature.");
         using var directory = new TestDirectory();
         directory.Create();
         string elsewhere = directory.File("elsewhere");
@@ -291,8 +289,10 @@ public sealed class MailFileDialogsTests
         Directory.Delete(elsewhere);
 
         Assert.True(MailFileDialogs.IsTaken(taken));
-        // Windows still reports the dangling junction as a folder, so the refusal says that.
-        Assert.Equal("'taken.eml' is a folder. Type a file name.", MailFileDialogs.SaveProblem(taken));
+        // Windows still reports the dangling junction as a folder, so the refusal says that; elsewhere the
+        // dangling link is refused as a taken name.
+        if (OperatingSystem.IsWindows()) Assert.Equal("'taken.eml' is a folder. Type a file name.", MailFileDialogs.SaveProblem(taken));
+        else Assert.NotNull(MailFileDialogs.SaveProblem(taken));
         await Assert.ThrowsAsync<IOException>(() => new LocalMailWritableFile(taken).WriteNewAsync((stream, token) => stream.WriteAsync(new byte[] { 1 }, token).AsTask()));
 
         var written = await new LocalMailDirectory(directory.Root).WriteNewFileAsync("taken.eml", (stream, token) => stream.WriteAsync(new byte[] { 2 }, token).AsTask());
@@ -325,6 +325,12 @@ public sealed class MailFileDialogsTests
 
         public static Junction Create(string link, string target)
         {
+            if (!OperatingSystem.IsWindows())
+            {
+                // Elsewhere a directory symbolic link is the folder link an account can make without privilege.
+                Directory.CreateSymbolicLink(link, target);
+                return new Junction(link);
+            }
             var start = new System.Diagnostics.ProcessStartInfo("cmd.exe")
             {
                 UseShellExecute = false, CreateNoWindow = true, RedirectStandardOutput = true, RedirectStandardError = true,
@@ -340,7 +346,11 @@ public sealed class MailFileDialogsTests
 
         public void Dispose()
         {
-            try { Directory.Delete(_link); }
+            try
+            {
+                if (OperatingSystem.IsWindows()) Directory.Delete(_link);
+                else File.Delete(_link); // unlinks the symbolic link itself, even when it leads nowhere
+            }
             catch (DirectoryNotFoundException) { }
         }
     }
